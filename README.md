@@ -1,12 +1,9 @@
-# agentspine
+# AgentSpine
 
 A local-first, **mostly-automated** agentic loop for macOS. It wakes itself on a
 heartbeat, reasons with your local MLX-LM model (falling back to an OpenAI-spec cloud
 model only when needed), and acts on your behalf through tools — but every action is
 gated by a **capability broker** that is deny-by-default and tiered by reversibility.
-
-> This is the v0.2 rebuild. The earlier propose-only version ("the agent proposes, you
-> act, it cannot act") is preserved in `_archive/` and `agentspine-node.zip`.
 
 ## The one idea that matters
 

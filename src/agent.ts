@@ -19,7 +19,7 @@ const toolDocs = (): string =>
     .map((t) => `- ${t.name}: ${t.description}\n    args: ${t.argsSchema}`)
     .join("\n");
 
-const system = (): string => `You are agentspine, a careful local agent that acts on the user's behalf.
+const system = (): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
 You work in a loop. Each turn, reply with EXACTLY ONE JSON object and nothing else.
 
