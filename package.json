@@ -1,0 +1,26 @@
+{
+  "name": "agentspine",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first, mostly-automated agentic loop with a reversibility-tiered capability broker.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "tick": "node src/spine.ts once",
+    "loop": "node src/spine.ts loop",
+    "confirm": "node src/confirm.ts",
+    "auth": "node src/google/auth.ts",
+    "do": "node src/do.ts",
+    "dashboard": "node src/server.ts",
+    "watcher": "node src/watcher.ts",
+    "digest": "node src/digest.ts",
+    "browser:check": "node src/browser-check.ts"
+  },
+  "dependencies": {
+    "openai": "^4.104.0",
+    "playwright-core": "^1.48.0"
+  }
+}

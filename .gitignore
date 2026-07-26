@@ -1,0 +1,21 @@
+node_modules/
+.env
+spine.db
+spine.db-*
+data/
+audit/
+# Approved drafts — unsent mail and event proposals, i.e. your correspondence.
+drafts/
+# Never commit credentials that were left in this directory.
+client_secret_*.json
+google-token.json
+_archive/
+# Internal design docs — not for the public repo.
+SPEC.md
+MIGRATION.md
+
+# OS files
+.DS_Store
+
+# IDE / editor settings
+.claude/

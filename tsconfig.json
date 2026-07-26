@@ -1,0 +1,15 @@
+{
+  "//": "Node 26 strips types at runtime and ignores this file. It exists for your editor. Keep the code 'erasable' (no enums, namespaces, or parameter properties) so `node src/*.ts` keeps working with no build step.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

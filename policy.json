@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "//": "The security boundary. Everything is deny-by-default; you grant surfaces here explicitly. Edit freely — it is re-read every heartbeat.",
+
+  "autoExecute": {
+    "//": "reversible: auto-run reversible allowlisted actions without asking. irreversibleAlwaysConfirm: queue every irreversible action for your confirmation even if it is allowlisted. dryRun: report what every call WOULD do and do neither — how to read a new schedule's task before letting it touch anything.",
+    "reversible": true,
+    "irreversibleAlwaysConfirm": true,
+    "dryRun": false
+  },
+
+  "budgets": {
+    "//": "Call caps counted from the actions audit log. 'default' applies to any tool without its own entry; 'tools' overrides per tool. Absent or 0 = unlimited. Only executed/queued calls count — a denial cost nothing and shouldn't eat the allowance. Example: { \"perRun\": { \"default\": 8 }, \"perDay\": { \"tools\": { \"web_search\": 50 } } }",
+    "perRun": {},
+    "perDay": {}
+  },
+
+  "apps": {
+    "//": "Bundle IDs the mac_control tool may touch. Empty = the agent can control no apps. Find an id with: osascript -e 'id of app \"Notes\"'",
+    "allow": []
+  },
+
+  "web": {
+    "searchEnabled": true,
+    "//": "Domains a future read-only web_fetch tool may read.",
+    "fetchAllowlist": ["en.wikipedia.org", "developer.mozilla.org"]
+  },
+
+  "browser": {
+    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless.",
+    "enabled": true,
+    "navigateAllowlist": []
+  },
+
+  "google": {
+    "//": "Read-only Gmail + Calendar (gmail_search, calendar_upcoming). Requires a read-only token: npm run auth. The OAuth scopes are read-only by construction and must never be widened.",
+    "enabled": true
+  },
+
+  "fs": {
+    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]",
+    "readableDirs": []
+  },
+
+  "weather": {
+    "//": "The weather tool (Open-Meteo, no API key). Gated not because the data is risky but because asking about your home town, on a schedule, tells a third party where you live. Set DEFAULT_LOCATION in .env so the location isn't restated in every run.",
+    "enabled": true
+  },
+
+  "drafts": {
+    "//": "SPEC §5, preferred path: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. This grants NO new OAuth scope — the Google token stays read-only by construction and still cannot send or modify anything.",
+    "enabled": true,
+    "dir": "./drafts"
+  },
+
+  "git": {
+    "//": "Absolute repo directories git_status may read. Read-only: branch, uncommitted files, recent commits. Empty = no repo access. e.g. [\"~/Developer\"]",
+    "repoDirs": ["~/Developer"]
+  }
+}

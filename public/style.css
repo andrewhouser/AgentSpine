@@ -1,0 +1,271 @@
+:root {
+    --accent: #2563eb;
+    --bad: #dc2626;
+    --bg: #f7f7f8;
+    --chip: #eef2ff;
+    --dim: #6b7280;
+    --ink: #1a1a1a;
+    --line: #e5e7eb;
+    --ok: #16a34a;
+    --panel: #fff;
+    --warn: #d97706;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --accent: #5b9dff;
+        --bad: #f87171;
+        --bg: #0f1115;
+        --chip: #1e2536;
+        --dim: #9aa4b2;
+        --ink: #e6e6e6;
+        --line: #262b36;
+        --ok: #4ade80;
+        --panel: #171a21;
+        --warn: #fbbf24;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 -apple-system, system-ui, sans-serif;
+    margin: 0;
+}
+
+header {
+    align-items: center;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 14px;
+    padding: 12px 18px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+header h1 {
+    font-size: 15px;
+    letter-spacing: .3px;
+    margin: 0;
+}
+
+header .status {
+    color: var(--dim);
+    font-size: 12px;
+    margin-left: auto;
+}
+
+.dot {
+    background: var(--dim);
+    border-radius: 50%;
+    display: inline-block;
+    height: 8px;
+    margin-right: 5px;
+    vertical-align: middle;
+    width: 8px;
+}
+
+.dot.busy {
+    background: var(--warn);
+}
+
+.dot.idle {
+    background: var(--ok);
+}
+
+nav {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 14px;
+}
+
+nav button {
+    background: transparent;
+    border-radius: 7px;
+    border: 0;
+    color: var(--dim);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+nav button.active {
+    background: var(--chip);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+main {
+    margin: 0 auto;
+    max-width: 1000px;
+    padding: 18px;
+}
+
+.card {
+    background: var(--panel);
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    margin-bottom: 12px;
+    padding: 14px 16px;
+}
+
+h2 {
+    color: var(--dim);
+    font-size: 13px;
+    letter-spacing: .5px;
+    margin: 0 0 10px;
+    text-transform: uppercase;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+th,
+td {
+    border-bottom: 1px solid var(--line);
+    padding: 7px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    color: var(--dim);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+tr.click {
+    cursor: pointer;
+}
+
+tr.click:hover td {
+    background: var(--chip);
+}
+
+.tag {
+    background: var(--chip);
+    border-radius: 20px;
+    color: var(--dim);
+    font-size: 11px;
+    padding: 1px 7px;
+}
+
+.s-ok {
+    color: var(--ok);
+}
+
+.s-failed {
+    color: var(--bad);
+}
+
+.s-running {
+    color: var(--warn);
+}
+
+button.act {
+    background: var(--panel);
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 5px 11px;
+}
+
+button.act:hover {
+    border-color: var(--accent);
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+button.danger:hover {
+    border-color: var(--bad);
+    color: var(--bad);
+}
+
+input,
+textarea {
+    background: var(--bg);
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font: inherit;
+    padding: 8px 10px;
+    width: 100%;
+}
+
+.row {
+    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.row>div {
+    flex: 1;
+    min-width: 120px;
+}
+
+label {
+    color: var(--dim);
+    display: block;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+pre {
+    background: var(--bg);
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    font: 12px/1.5 ui-monospace, Menlo, monospace;
+    margin: 0;
+    padding: 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.trace .msg {
+    border-left: 3px solid var(--line);
+    padding: 4px 0 4px 10px;
+}
+
+.trace .role {
+    color: var(--dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+.muted {
+    color: var(--dim);
+}
+
+.mono {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12px;
+}
+
+.empty {
+    color: var(--dim);
+    padding: 16px 0;
+    text-align: center;
+}
+
+.msg {
+    margin: 8px 0 32px;
+}
