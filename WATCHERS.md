@@ -68,9 +68,30 @@ npm run watcher state                    # what the watchers have observed so fa
 npm run watcher template                 # print the template, for writing your own
 ```
 
-Starters included: `model-releases` (new MLX releases of the model family you run),
+Starters included: `weather-alerts` (dangerous heat/cold, cold snaps, 4″+ snow, storms,
+damaging gusts), `model-releases` (new MLX releases of the model family you run),
 `calendar-tomorrow` (tomorrow's schedule changed since the last check), `inbox-urgent` (a
 genuinely new urgent message appeared).
+
+### The `weather-alerts` starter is the pattern done properly
+
+Worth reading its task text as a model for your own. It barely asks the model to judge
+anything: `weather_alerts` applies every threshold in code and hands back a ready-made
+`fingerprint:` line, so the task is *call this, compare two strings, relay the lines
+verbatim*. That division is the point — the tool does the arithmetic, the model does the
+prose, and neither is asked to do the other's job.
+
+It also shows two refinements the bare template doesn't cover:
+
+**A "cleared" branch.** When alerts go away the fingerprint becomes `NONE`. That's a change,
+so the naive template would notify you that the weather is fine now. The task updates state
+silently instead. Any watcher whose interesting state is "something is wrong" wants this.
+
+**Bucketed fingerprints.** Sources jitter — a snow total wanders between 4.1″ and 4.6″ across
+forecast runs, all of which mean the same thing. The tool buckets values coarsely (snow to
+2″, temps to 5°F, gusts to 10 mph) before they reach the fingerprint, so you're alerted when
+an event is new or materially worse, not when the source was refreshed. If your watcher
+tracks a number rather than a discrete version or title, bucket it.
 
 They're plain schedules once installed, so you can edit the task text in the dashboard.
 The first run only seeds state; seed it immediately rather than waiting for the clock:

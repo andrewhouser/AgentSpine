@@ -36,6 +36,24 @@ interface Starter {
 
 const STARTERS: Starter[] = [
   {
+    id: "weather-alerts",
+    name: "Weather alerts",
+    schedule: "every 6 hours",
+    blurb: "Heat/cold, cold snaps, 6\"+ snow, storms, damaging gusts. Two severity tiers.",
+    // Note how little judgement this task asks for. weather_alerts applies the thresholds
+    // in code and hands back a ready-made fingerprint, so the model only has to compare
+    // two strings and relay the lines — which is exactly the work it's reliable at.
+    task: `Call weather_alerts (no arguments — it uses the configured default location).
+Its output ends with a line beginning "fingerprint:". Take the value after that prefix; that is the fingerprint.
+Call state_get with key "watch:weather-alerts".
+- If it is unset, this is the first observation: call state_set with the fingerprint and finish silently. Do not notify.
+- If the stored value matches the fingerprint exactly, finish immediately with a one-line summary. Do not notify, do not call any other tool.
+- If the fingerprint is "NONE" and the stored value was not "NONE", the previous alerts have cleared: call state_set with "NONE" and finish silently. Do not notify about weather returning to normal.
+- Otherwise: call state_set with the new fingerprint, then notify with title "Weather alert" and a body listing the alert lines exactly as weather_alerts reported them, one per line, nothing added.
+The output also ends with a "severity:" line. Use priority 4 when it says "severe", priority 3 when it says "notable".
+Report only what weather_alerts returned. Do not add events it did not report, do not drop ones it did, and do not soften or embellish the numbers.`,
+  },
+  {
     id: "model-releases",
     name: "MLX model releases",
     schedule: "every 6 hours",

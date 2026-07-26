@@ -17,6 +17,7 @@
     "dashboard": "node src/server.ts",
     "watcher": "node src/watcher.ts",
     "digest": "node src/digest.ts",
+    "test": "node test/weather-alerts.test.mjs",
     "browser:check": "node src/browser-check.ts"
   },
   "dependencies": {

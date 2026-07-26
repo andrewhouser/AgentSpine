@@ -20,6 +20,20 @@ import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts
 const GEOCODE = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST = "https://api.open-meteo.com/v1/forecast";
 
+/** Daily fields both the forecast and the alert checker need. */
+const DAILY_FIELDS = [
+  "weather_code",
+  "temperature_2m_max",
+  "temperature_2m_min",
+  "apparent_temperature_max",
+  "apparent_temperature_min",
+  "precipitation_probability_max",
+  "precipitation_sum",
+  "snowfall_sum",
+  "wind_speed_10m_max",
+  "wind_gusts_10m_max",
+].join(",");
+
 /** WMO weather codes. Open-Meteo returns a number; this is the human meaning. */
 const WMO: Record<number, string> = {
   0: "clear",
@@ -52,7 +66,10 @@ const WMO: Record<number, string> = {
   99: "thunderstorm with heavy hail",
 };
 
-const describe = (code: unknown): string => WMO[Number(code)] ?? `code ${code}`;
+export const describe = (code: unknown): string => WMO[Number(code)] ?? `code ${code}`;
+
+/** WMO codes that mean thunderstorm. */
+export const STORM_CODES = new Set([95, 96, 99]);
 
 interface Args {
   location?: string;
@@ -60,12 +77,56 @@ interface Args {
   days?: number;
 }
 
-const place = (a: Args): string => String(a?.location ?? "").trim() || DEFAULT_LOCATION;
+export const place = (a: { location?: string }): string =>
+  String(a?.location ?? "").trim() || DEFAULT_LOCATION;
 
 const getJson = async (url: string): Promise<any> => {
   const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(url).host}`);
   return res.json();
+};
+
+export interface Place {
+  label: string;
+  latitude: number;
+  longitude: number;
+}
+
+/** Resolve a place name to coordinates. Returns null when nothing matches. */
+export const geocode = async (name: string): Promise<Place | null> => {
+  const geo = await getJson(`${GEOCODE}?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+  const hit = geo?.results?.[0];
+  if (!hit) return null;
+  return {
+    label: [hit.name, hit.admin1, hit.country_code].filter(Boolean).join(", "),
+    latitude: hit.latitude,
+    longitude: hit.longitude,
+  };
+};
+
+/** Fetch current conditions + a daily forecast, in °F / mph / inches. */
+export const fetchForecast = async (p: Place, days: number): Promise<any> =>
+  getJson(
+    `${FORECAST}?latitude=${p.latitude}&longitude=${p.longitude}` +
+      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
+      `&daily=${DAILY_FIELDS}` +
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch` +
+      `&timezone=auto&forecast_days=${days}`,
+  );
+
+/**
+ * Snowfall in inches, whatever the API chose to send.
+ *
+ * Open-Meteo reports `snowfall_sum` in cm by default and *usually* honours
+ * `precipitation_unit=inch` for it — but a 4-inch threshold silently comparing against
+ * centimetres would fire at 1.6 inches, which is exactly the kind of bug that makes a
+ * watcher untrustworthy. So read the unit the response declares instead of assuming.
+ */
+export const snowInches = (forecast: any, index: number): number => {
+  const raw = Number(forecast?.daily?.snowfall_sum?.[index] ?? 0);
+  if (!Number.isFinite(raw)) return 0;
+  const unit = String(forecast?.daily_units?.snowfall_sum ?? "inch");
+  return unit.startsWith("cm") ? raw / 2.54 : unit.startsWith("mm") ? raw / 25.4 : raw;
 };
 
 export const weather: Tool = {
@@ -100,33 +161,28 @@ export const weather: Tool = {
     const days = Math.min(7, Math.max(1, Math.round(Number(a?.days ?? 3)) || 3));
 
     try {
-      const geo = await getJson(
-        `${GEOCODE}?name=${encodeURIComponent(where)}&count=1&language=en&format=json`,
-      );
-      const hit = geo?.results?.[0];
-      if (!hit) return `No place found matching ${JSON.stringify(where)}. Try adding a region, e.g. "Springfield, IL".`;
+      const p = await geocode(where);
+      if (!p) return `No place found matching ${JSON.stringify(where)}. Try adding a region, e.g. "Springfield, IL".`;
 
-      const label = [hit.name, hit.admin1, hit.country_code].filter(Boolean).join(", ");
-      const fc = await getJson(
-        `${FORECAST}?latitude=${hit.latitude}&longitude=${hit.longitude}` +
-          `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
-          `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
-          `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch` +
-          `&timezone=auto&forecast_days=${days}`,
-      );
+      const fc = await fetchForecast(p, days);
 
       const c = fc?.current ?? {};
       const lines = [
-        `${label} — now: ${Math.round(c.temperature_2m)}°F (feels ${Math.round(c.apparent_temperature)}°F), ` +
+        `${p.label} — now: ${Math.round(c.temperature_2m)}°F (feels ${Math.round(c.apparent_temperature)}°F), ` +
           `${describe(c.weather_code)}, wind ${Math.round(c.wind_speed_10m)} mph`,
       ];
 
       const d = fc?.daily;
       if (d?.time?.length) {
         for (let i = 0; i < d.time.length; i++) {
+          const snow = snowInches(fc, i);
+          const gust = Math.round(Number(d.wind_gusts_10m_max?.[i] ?? 0));
           lines.push(
-            `  ${d.time[i]}: ${Math.round(d.temperature_2m_min[i])}–${Math.round(d.temperature_2m_max[i])}°F, ` +
-              `${describe(d.weather_code[i])}, ${d.precipitation_probability_max[i] ?? 0}% chance of precipitation`,
+            `  ${d.time[i]}: ${Math.round(d.temperature_2m_min[i])}–${Math.round(d.temperature_2m_max[i])}°F` +
+              ` (feels ${Math.round(d.apparent_temperature_min[i])}–${Math.round(d.apparent_temperature_max[i])}°F), ` +
+              `${describe(d.weather_code[i])}, ${d.precipitation_probability_max[i] ?? 0}% precip` +
+              (snow >= 0.1 ? `, ${snow.toFixed(1)}" snow` : "") +
+              (gust >= 25 ? `, gusts ${gust} mph` : ""),
           );
         }
       }

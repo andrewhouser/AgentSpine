@@ -80,6 +80,62 @@ export const PROFILE_MAX_CHARS = Number(env.PROFILE_MAX_CHARS ?? "4000");
 // isn't sitting in a tool argument in the audit log on every single call.
 export const DEFAULT_LOCATION = env.DEFAULT_LOCATION ?? "";
 
+/**
+ * Thresholds for `weather_alerts`. Defaults are aligned with NWS advisory levels rather
+ * than picked to feel about right, so an alert corresponds to something the weather service
+ * would also consider notable.
+ *
+ * Deliberately env config and not policy.json: policy is the security boundary, and "how
+ * cold before you want a text" is a preference, not a permission.
+ */
+export const WEATHER_ALERTS = {
+  // Two tiers per class. The lower one is "worth knowing" (priority 3); the upper one is
+  // "worth waking you" (priority 4). One threshold can't serve both — a 93°F day and a
+  // 103°F day are not the same message, and collapsing them means either over-alerting on
+  // the first or under-alerting on the second.
+  //
+  // Calibrated for New Hampshire, NOT to national NWS advisory levels: 92°F is genuinely
+  // hot here, where the same number is an unremarkable summer day further south.
+
+  /** Apparent high at/above this = HEAT. */
+  heatF: Number(env.WEATHER_ALERT_HEAT_F ?? "92"),
+  /** Apparent high at/above this = SEVERE HEAT. */
+  severeHeatF: Number(env.WEATHER_ALERT_SEVERE_HEAT_F ?? "100"),
+  /** Apparent low at/below this = COLD. */
+  coldF: Number(env.WEATHER_ALERT_COLD_F ?? "10"),
+  /** Apparent low at/below this = SEVERE COLD. */
+  severeColdF: Number(env.WEATHER_ALERT_SEVERE_COLD_F ?? "-5"),
+  /** Day-over-day drop in the high at/above this = COLD SNAP. Catches the swing absolute
+   *  thresholds miss — 58°F to 28°F trips neither end and is still the night pipes freeze. */
+  swingF: Number(env.WEATHER_ALERT_SWING_F ?? "25"),
+
+  /** Single-day snowfall in inches at/above this = SNOW. */
+  snowIn: Number(env.WEATHER_ALERT_SNOW_IN ?? "6"),
+  /** Snowfall across two CONSECUTIVE days at/above this = SNOW. A storm dropping 4" either
+   *  side of midnight is one 8" event; per-day thresholds alone would miss it entirely. */
+  snow2DayIn: Number(env.WEATHER_ALERT_SNOW_2DAY_IN ?? "6"),
+  /** Snowfall at/above this = SEVERE SNOW. */
+  severeSnowIn: Number(env.WEATHER_ALERT_SEVERE_SNOW_IN ?? "12"),
+
+  /** Peak gusts in mph at/above this = WIND. NWS wind advisory level. */
+  gustMph: Number(env.WEATHER_ALERT_GUST_MPH ?? "46"),
+  /** Peak gusts at/above this = SEVERE WIND. NWS high wind warning level. */
+  severeGustMph: Number(env.WEATHER_ALERT_SEVERE_GUST_MPH ?? "58"),
+
+  // Lookahead windows, deliberately unequal. Forecast skill holds for temperature TRENDS
+  // well past a week, but skill for specific amounts — inches of snow, peak gust — falls
+  // off sharply after about day 3. Alerting on "6 inches on Tuesday" from 7 days out is
+  // reporting model noise as if it were news, and that is how a watcher loses your trust.
+  /** Heat, cold, cold snap. Trends are trustworthy this far. */
+  tempDays: Number(env.WEATHER_ALERT_TEMP_DAYS ?? "5"),
+  /** Snow. Tight, because amounts firm up late. Widen if you want more planning notice. */
+  snowDays: Number(env.WEATHER_ALERT_SNOW_DAYS ?? "2"),
+  /** Thunderstorms. */
+  stormDays: Number(env.WEATHER_ALERT_STORM_DAYS ?? "3"),
+  /** Damaging gusts — a single-day event, forecast reliably only at short range. */
+  windDays: Number(env.WEATHER_ALERT_WIND_DAYS ?? "2"),
+};
+
 // When the agent asks for a priority 4-5 notification (one that overrides Do Not Disturb),
 // second-guess it with a cloud-preferring judgment call first. Off by default: it costs a
 // model round-trip per urgent notification, and only earns that once the agent runs

@@ -16,6 +16,7 @@ import { memorySave, memoryRecall } from "./memory.ts";
 import { notifyTool } from "./notify.ts";
 import { stateGet, stateSet } from "./state.ts";
 import { weather } from "./weather.ts";
+import { weatherAlerts } from "./weather-alerts.ts";
 import { gitStatus } from "./git-status.ts";
 import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
@@ -35,6 +36,7 @@ export const tools: Tool[] = [
   stateGet,
   stateSet,
   weather,
+  weatherAlerts,
   gitStatus,
   digestTool,
   draft,

@@ -94,6 +94,7 @@ src/
     notify.ts      notify — reach the user's phone (or a Mac banner)
     state.ts       state_get / state_set — exact values, for watcher change detection
     weather.ts     weather — Open-Meteo forecast, keyless
+    weather-alerts.ts  weather_alerts — thresholds applied in code, not by the model
     git-status.ts  git_status — read-only branch/dirty/recent-commits
     digest.ts      digest — computed summary of its own recent activity
     draft.ts       draft — composes mail/events for YOU to send; adds no OAuth scope
@@ -203,6 +204,72 @@ it's yours.
 # .env — so the location isn't restated in every run, or logged on every call
 DEFAULT_LOCATION=Asheville, NC
 ```
+
+**`weather_alerts`** is the proactive half, and the reason it exists as a separate tool is
+that the thresholds are applied **in code**. The tempting design is to hand the model a
+seven-day forecast and ask "anything concerning?" — which gives you a watcher that alerts on
+an ordinary rainy Tuesday, misses five inches of snow sitting in a column it skimmed, and
+answers differently tomorrow given identical data. Comparing numbers to thresholds is what
+code is good at, so it happens in `weather-alerts.ts`; the model only relays the result.
+
+Thresholds are calibrated for **New Hampshire**, not to national advisory levels — 92°F is
+genuinely hot here and unremarkable in Texas. Temperatures are the *feels-like* value, since
+92°F at high humidity is what flattens you and 25°F in a gale is the cold one.
+
+| Alert | Notable (priority 3) | Severe (priority 4) | Looks ahead |
+|---|---|---|---|
+| Heat | apparent high ≥ 92°F | ≥ 100°F | 5 days |
+| Cold | apparent low ≤ 10°F | ≤ −5°F | 5 days |
+| `COLD SNAP` | daily high drops ≥ 25°F day-over-day | — | 5 days |
+| Snow | ≥ 6″ in a day, **or** ≥ 6″ across two consecutive days | ≥ 12″ | 3 days |
+| `STORM` | thunderstorm (WMO 95/96/99) | — | 3 days |
+| Wind | gusts ≥ 46 mph | ≥ 58 mph | 2 days |
+
+Three of those rules exist because the obvious version misses real events:
+
+**Two tiers, not one.** A 93°F day and a 103°F day are not the same message. Only the higher
+tier is emitted when both match, so one hot day never produces two alerts, and only `severe`
+overrides Do Not Disturb.
+
+**Two-day snow.** A nor'easter that starts at 6pm and ends at noon puts 4″ in one calendar
+column and 4″ in the next — an 8″ event that a per-day threshold misses entirely. Reported
+only when neither day fires on its own, so one storm gives one alert.
+
+**Cold snap.** 58°F dropping to 28°F trips neither absolute threshold and is still the night
+the pipes are at risk.
+
+**Why the windows are unequal.** Forecast skill holds well past a week for temperature
+*trends*, but skill for specific *amounts* — inches of snow, peak gust — [falls off sharply
+after about day 3](https://www.weather.gov/akq/winter). Alerting on "6 inches Tuesday" from
+seven days out reports model noise as news, which is how a watcher loses your trust and then
+gets muted. So temperature looks further ahead than snow does, on purpose.
+
+Every threshold and window is set explicitly in `.env` (`WEATHER_ALERT_*`) rather than left
+implicit in code, so what you get alerted about is visible in one place. Snow is at 3 days —
+about two days' notice on a real storm. Raising it buys planning time at the cost of alerts
+for storms that later evaporate; dropping it to 2 means you hear about a storm the day
+before it lands.
+
+`.env.example` ships the same block commented out, with a warning to recalibrate: these
+numbers are tuned for New England and would be badly wrong in a hotter climate.
+
+Install the watcher and it checks every six hours:
+
+```bash
+npm run watcher add weather-alerts
+```
+
+It emits a `fingerprint:` line with each value bucketed coarsely — snow to 2″, temps to 5°F,
+gusts to 10 mph — and that's what the watcher stores and diffs. Forecasts jitter, so Sunday's
+snow total will wander between 6.1″ and 6.6″ across model runs; without bucketing you'd get
+alerted on every wobble until you muted the thing. You hear about a *new or materially worse*
+event, not about the forecast being refreshed. A severity-tier change always shows as new,
+since going from 47 mph to 58 mph gusts genuinely is news. When alerts clear it updates state
+silently rather than telling you the weather is fine again.
+
+`npm test` covers all of this — 57 assertions: every threshold at both tiers and at its exact
+boundary, every day-window checked just outside it, the split-storm cases including the
+"don't double-alert" rule, cm/mm-to-inch conversion, and the jitter fingerprints.
 
 **`git_status`** reports branch, uncommitted files, and recent commits for repos inside
 `policy.git.repoDirs`. No network at all, and it cannot modify anything — the read-only
@@ -409,6 +476,7 @@ npm run auth           # one-time Google read-only OAuth
 npm run browser:check  # verify Chrome link
 npm run tick | loop    # legacy single-goal heartbeat against goals.md
 npm run start          # prints config, then one legacy tick
+npm test               # weather alert threshold tests (no framework, no deps)
 ```
 
 The scheduler inside `npm run dashboard` supersedes the heartbeat commands; they still work.
