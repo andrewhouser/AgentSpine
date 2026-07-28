@@ -1,0 +1,104 @@
+.page {
+  margin: 0 auto;
+  max-width: 62rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.empty {
+  color: var(--text-faint);
+  padding: 24px 0;
+  text-align: center;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+.table th {
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0 10px 7px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.row {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--bg-inset);
+}
+
+.row td {
+  padding: 7px 10px;
+  vertical-align: top;
+}
+
+.mono {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.kind {
+  background: var(--bg-inset);
+  border-radius: 100px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.task {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.failed {
+  color: var(--danger);
+}
+
+.running,
+.queued {
+  color: var(--accent);
+}
+
+/* Reclaim the horizontal padding once the viewport is narrow — at 375px, 28px a side is
+   15% of the screen spent on nothing. */
+@media (width <= 640px) {
+  .page {
+    padding: 18px 14px 48px;
+  }
+}
+
+/* The run table has five columns; below this the timestamp is the first to go. */
+@media (width <= 720px) {
+  .table th:nth-child(5),
+  .table td:nth-child(5) {
+    display: none;
+  }
+
+  .task {
+    max-width: 14rem;
+  }
+}
+
+/* The table keeps its natural column widths and scrolls within this box, so a long task
+   string can never widen the page itself. */
+.tableScroll {
+  overflow-x: auto;
+}

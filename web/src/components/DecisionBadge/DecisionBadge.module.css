@@ -1,0 +1,41 @@
+.badge {
+  border: 1px solid transparent;
+  border-radius: 100px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.executed {
+  background: var(--ok-soft);
+  border-color: var(--ok-line);
+  color: var(--ok);
+}
+
+.queued {
+  background: var(--warn-soft);
+  border-color: var(--warn-line);
+  color: var(--warn);
+}
+
+.denied,
+.error {
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+.dryrun {
+  background: var(--bg-inset);
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.pending {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}

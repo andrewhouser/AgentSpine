@@ -20,6 +20,7 @@ import { weatherAlerts } from "./weather-alerts.ts";
 import { gitStatus } from "./git-status.ts";
 import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
+import { subagent } from "./subagent.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -40,6 +41,7 @@ export const tools: Tool[] = [
   gitStatus,
   digestTool,
   draft,
+  subagent,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

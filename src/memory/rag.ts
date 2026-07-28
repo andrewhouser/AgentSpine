@@ -84,13 +84,20 @@ const loadEmbedder = async (): Promise<Embedder | null> => {
   return null;
 };
 
-const getEmbedder = (): Promise<Embedder | null> => (embedderPromise ??= loadEmbedder());
+/**
+ * Exported so project indexing embeds through exactly the same path memories do. Two
+ * embedders in one process would be two chances to disagree about the model — and mixing
+ * vector dimensions corrupts cosine ranking silently, which is the failure mode this
+ * project already warns about in the README.
+ */
+export const getEmbedder = (): Promise<Embedder | null> => (embedderPromise ??= loadEmbedder());
+export type { Embedder };
 
-const toBlob = (v: Float32Array): Buffer => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
-const fromBlob = (b: Buffer): Float32Array =>
+export const toBlob = (v: Float32Array): Buffer => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
+export const fromBlob = (b: Buffer): Float32Array =>
   new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4);
 
-const cosine = (a: Float32Array, b: Float32Array): number => {
+export const cosine = (a: Float32Array, b: Float32Array): number => {
   let dot = 0;
   const n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) dot += a[i] * b[i];
@@ -139,7 +146,7 @@ export const recallScored = async (query: string, k = 5): Promise<Recalled[]> =>
   }
 
   const q = await embedder(query);
-  const rows = rawDb.prepare("SELECT id, text, embedding FROM memories").all() as MemRow[];
+  const rows = rawDb.prepare("SELECT id, text, embedding FROM memories").all() as unknown as MemRow[];
   return rows
     .filter((r) => r.embedding)
     .map((r) => ({ text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))

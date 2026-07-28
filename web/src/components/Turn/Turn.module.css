@@ -1,0 +1,25 @@
+.turn {
+  margin-bottom: 8px;
+}
+
+.tools {
+  margin: 10px 0;
+}
+
+.error {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 13.5px;
+  margin: 10px 0;
+  padding: 9px 12px;
+  white-space: pre-wrap;
+}
+
+/* The tier badge sits under the answer, quiet but always present — see TierBadge. */
+.footer {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 4px;
+}

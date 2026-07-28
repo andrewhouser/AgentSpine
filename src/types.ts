@@ -52,6 +52,13 @@ export interface Policy {
    * entry; `tools` overrides per tool. Absent or 0 means no limit — budgets are a rail you
    * opt into, not a default that would surprise you mid-run.
    */
+  /**
+   * Delegation to units defined in agents/*.md. Denied when absent, like every other
+   * optional surface — a policy written before subagents existed cannot silently grant
+   * them. A subagent's tools are the intersection of its declaration and its caller's, and
+   * every call it makes still passes through this same broker and this same policy.
+   */
+  subagents?: { enabled: boolean };
   budgets?: {
     perRun?: { default?: number; tools?: Record<string, number> };
     perDay?: { default?: number; tools?: Record<string, number> };

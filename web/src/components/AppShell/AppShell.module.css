@@ -1,0 +1,130 @@
+.shell {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/*
+ * The pane is the scroll container for the secondary views. The chat view instead fills it
+ * exactly and scrolls its own message list, which is what keeps the composer pinned to the
+ * bottom while the transcript moves behind it.
+ */
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+
+  /* Never sideways. Wide content (tables, traces, JSON) scrolls inside its own container;
+     letting the pane scroll horizontally instead drags the whole layout — including the
+     off-screen drawer — into view. */
+  overflow: hidden auto;
+}
+
+.blank {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  justify-content: center;
+}
+
+.start {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--on-accent);
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 7px 18px;
+}
+
+/*
+ * The top bar exists only at narrow widths, where the sidebar has become a drawer and
+ * there would otherwise be no way to reach it. Hidden entirely on desktop rather than
+ * being an always-present chrome row nobody asked for.
+ */
+.topBar {
+  align-items: center;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: none;
+  flex: none;
+  gap: 10px;
+  padding: 8px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.menuButton {
+  align-items: center;
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding: 5px 9px;
+}
+
+.menuButton:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.topBarTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scrim {
+  display: none;
+}
+
+/*
+ * Below this width the sidebar stops being a column and becomes a drawer over the content.
+ * 254px of permanent sidebar out of a ~400px viewport leaves nothing to read, and this app
+ * is dense — tool cards, traces, JSON — so the content needs the whole width.
+ */
+@media (width <= 820px) {
+  .topBar {
+    display: flex;
+  }
+
+  .shell > nav {
+    box-shadow: var(--shadow);
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+    z-index: 5;
+  }
+
+  .drawerOpen > nav {
+    transform: translateX(0);
+  }
+
+  .drawerOpen .scrim {
+    background: var(--scrim);
+    display: block;
+    inset: 0;
+    position: absolute;
+    z-index: 4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell > nav {
+    transition: none;
+  }
+}

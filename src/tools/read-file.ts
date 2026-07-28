@@ -8,34 +8,13 @@
  * text is information to reason about, never instructions to follow.
  */
 import fs from "node:fs";
-import path from "node:path";
-import { homeDir } from "../config.ts";
 import { tagUntrusted } from "../audit.ts";
+// Shared with the project indexer — see src/fs-scope.ts for why this check lives in one
+// place rather than being reimplemented per reader.
+import { expand, readableGate } from "../fs-scope.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
-const expand = (p: string): string => path.resolve(String(p ?? "").replace(/^~(?=$|\/)/, homeDir));
-
-/** Resolve symlinks where the path exists; fall back to the lexical resolve otherwise. */
-const real = (p: string): string => {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p;
-  }
-};
-
-const insideReadable = (policy: Policy, target: string): boolean => {
-  const t = real(expand(target));
-  return (policy.fs?.readableDirs ?? []).some((d) => {
-    const dir = real(expand(d));
-    return t === dir || t.startsWith(dir + path.sep);
-  });
-};
-
-const gate = (policy: Policy, p: string): PolicyDecision =>
-  insideReadable(policy, p)
-    ? { allowed: true, reason: "inside policy.fs.readableDirs" }
-    : { allowed: false, reason: `${expand(p)} is outside policy.fs.readableDirs (deny by default)` };
+const gate = (policy: Policy, p: string): PolicyDecision => readableGate(policy, p);
 
 export const readFile: Tool = {
   name: "read_file",

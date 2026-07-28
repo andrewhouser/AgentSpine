@@ -1,0 +1,21 @@
+.header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.subtitle {
+  color: var(--text-dim);
+  font-size: 13.5px;
+  margin: 4px 0 0;
+  max-width: 46rem;
+}

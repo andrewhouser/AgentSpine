@@ -19,6 +19,31 @@ const env = process.env;
 export const LOCAL_BASE_URL = env.LOCAL_LLM_URL ?? "http://192.168.0.145:8080/v1";
 export const LOCAL_MODEL = env.LOCAL_MODEL ?? "local";
 
+// The `fast` tier: a SECOND, separately-pinned model server holding a small model
+// permanently resident. It must be its own endpoint, not another model id on the standard
+// server — one server swaps models, and the swap costs more than the tier saves. See
+// src/tiers.ts for the measurements. Empty = the fast tier resolves to standard, which is
+// a safe no-op.
+export const FAST_BASE_URL = env.FAST_LLM_URL ?? "";
+export const FAST_MODEL = env.FAST_MODEL ?? "mlx-community/Llama-3.2-3B-Instruct-4bit";
+// Size each task and send it to the cheapest tier that can close it. The sizing is
+// regex-based and costs nothing; see src/dispatch.ts for why it is not a model call.
+export const AUTO_ROUTE = (env.AUTO_ROUTE ?? "true") !== "false";
+// Let a cheap model second-guess whether a deliberative-looking task deserves the cloud
+// tier. Costs one round-trip (~0.8s) on tasks that read like a decision, and nothing on
+// anything else. This is the one routing call worth paying for — it buys answer quality,
+// not speed.
+export const JUDGE_ESCALATION = (env.JUDGE_ESCALATION ?? "true") !== "false";
+
+// --- Subagents ---
+// How deep delegation may nest. 1 means the top-level run may delegate, but a subagent
+// cannot delegate further — enough for fan-out, short of a tree that can run away.
+export const SUBAGENT_MAX_DEPTH = Number(env.SUBAGENT_MAX_DEPTH ?? "1");
+// Default step cap for a delegated unit; an agent file may lower it. Tighter than
+// MAX_STEPS because a subagent has one job, and a child that loops is a child whose
+// output the parent then has to pay to read.
+export const SUBAGENT_MAX_STEPS = Number(env.SUBAGENT_MAX_STEPS ?? "6");
+
 export const CLOUD_BASE_URL = env.CLOUD_LLM_URL ?? "https://api.openai.com/v1";
 export const CLOUD_MODEL = env.CLOUD_MODEL ?? "gpt-4o";
 export const CLOUD_API_KEY = env.OPENAI_API_KEY ?? "";
@@ -73,6 +98,18 @@ export const REFLECT_MEMORY_MAX = Number(env.REFLECT_MEMORY_MAX ?? "500");
 // Largest profile.md we will inject, in characters. Guards against a runaway file
 // eating the whole context window on every single step.
 export const PROFILE_MAX_CHARS = Number(env.PROFILE_MAX_CHARS ?? "4000");
+
+// --- Conversations ---
+// How many earlier turns of a chat are replayed into the next one. Each turn costs context
+// on EVERY step of the loop, not once, so this is smaller than it looks — and what gets
+// replayed is the compacted turn (what was asked, what was concluded), never the tool trace.
+export const CHAT_HISTORY_TURNS = Number(env.CHAT_HISTORY_TURNS ?? "8");
+// Hard ceiling on that history in characters, oldest dropped first. The turn cap alone
+// isn't enough: one run that summarized a long document could otherwise crowd out the
+// tools prompt on a small local model.
+export const CHAT_HISTORY_MAX_CHARS = Number(env.CHAT_HISTORY_MAX_CHARS ?? "6000");
+// Name a conversation from its first exchange. Local-only by construction (see runner.ts).
+export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";
 
 // --- Senses ---
 // Where `weather` looks when the agent doesn't name a place. Keeping your home location
@@ -168,9 +205,14 @@ export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true"
 
 // --- Paths ---
 export const BASE = path.resolve(import.meta.dirname, "..");
-export const DB_PATH = path.join(BASE, "spine.db");
-export const POLICY_PATH = path.join(BASE, "policy.json");
+// Overridable so a test can point at a scratch file instead of writing rows into the
+// ledger you actually use. Unset in normal operation.
+export const DB_PATH = env.SPINE_DB_PATH ?? path.join(BASE, "spine.db");
+// Overridable so a test can run against a scratch policy instead of the one you actually
+// grant capabilities with. Unset in normal operation.
+export const POLICY_PATH = env.POLICY_PATH ?? path.join(BASE, "policy.json");
 export const GOALS_PATH = path.join(BASE, "goals.md");
+export const AGENTS_DIR = env.AGENTS_DIR ?? path.join(BASE, "agents");
 export const PROFILE_PATH = env.PROFILE_PATH ?? path.join(BASE, "profile.md");
 
 /** Re-read the policy from disk every time it is needed, so edits take effect live. */

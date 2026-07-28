@@ -1,7 +1,8 @@
 /**
  * SQLite ledger via the built-in node:sqlite (no external dependency).
  *
- *   runs          one row per agent cycle (do / heartbeat / scheduled job)
+ *   conversations a chat thread; an ordered list of runs
+ *   runs          one row per agent cycle (do / chat turn / heartbeat / scheduled job)
  *   messages      the full conversation trace per run (for the dashboard)
  *   actions       the audit log — every broker decision, forever
  *   confirmations irreversible actions waiting for approval
@@ -19,6 +20,14 @@ import type { Msg } from "../llm.ts";
 const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    title TEXT,
+    created TEXT NOT NULL,
+    updated TEXT NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0
+  );
   CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started TEXT NOT NULL,
@@ -27,6 +36,7 @@ db.exec(`
     kind TEXT,
     task TEXT,
     schedule_id INTEGER,
+    conversation_id INTEGER,
     note TEXT
   );
   CREATE TABLE IF NOT EXISTS messages (
@@ -86,33 +96,170 @@ const addColumn = (table: string, col: string, decl: string) => {
 addColumn("runs", "kind", "TEXT");
 addColumn("runs", "task", "TEXT");
 addColumn("runs", "schedule_id", "INTEGER");
+addColumn("runs", "conversation_id", "INTEGER");
+addColumn("runs", "tier", "TEXT");
+addColumn("runs", "parent_run_id", "INTEGER");
+addColumn("runs", "agent", "TEXT");
+addColumn("conversations", "tier", "TEXT");
 addColumn("confirmations", "run_id", "INTEGER");
 addColumn("confirmations", "token", "TEXT");
 addColumn("schedules", "spec", "TEXT");
 
+// A conversation's thread is "its runs, in order", read on every thread load.
+db.exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs (conversation_id, id)");
+
 const now = () => new Date().toISOString();
+
+// --- conversations ---
+/**
+ * A chat thread. Runs stay the unit of execution — a conversation is just an ordered list
+ * of them, which is why nothing about scheduling, watchers, or the CLI had to change to
+ * add one. A run with a null `conversation_id` is exactly what it always was.
+ */
+export interface ConversationRow {
+  archived: number;
+  created: string;
+  id: number;
+  project_id: number | null;
+  /** A pinned tier for this thread, or null to let the dispatcher size each turn. */
+  tier: null | string;
+  title: string | null;
+  updated: string;
+}
+
+export const createConversation = (title: string | null = null, projectId: number | null = null): number => {
+  const ts = now();
+  const r = db
+    .prepare("INSERT INTO conversations (project_id, title, created, updated) VALUES (?,?,?,?)")
+    .run(projectId, title, ts, ts);
+  return Number(r.lastInsertRowid);
+};
+
+export const listConversations = (limit = 100, includeArchived = false): ConversationRow[] =>
+  db
+    .prepare(
+      `SELECT * FROM conversations ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY updated DESC LIMIT ?`,
+    )
+    .all(limit) as unknown as ConversationRow[];
+
+export const getConversation = (id: number): ConversationRow | undefined =>
+  db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as ConversationRow | undefined;
+
+export interface ConversationFields {
+  archived?: boolean | number;
+  projectId?: number | null;
+  /** Pin every turn in this thread to one tier, overriding the dispatcher. Null = auto. */
+  tier?: null | string;
+  title?: string;
+}
+
+export const updateConversation = (id: number, fields: ConversationFields): void => {
+  const cur = getConversation(id);
+  if (!cur) return;
+  db.prepare("UPDATE conversations SET title=?, project_id=?, tier=?, archived=?, updated=? WHERE id=?").run(
+    fields.title ?? cur.title,
+    fields.projectId !== undefined ? fields.projectId : cur.project_id,
+    fields.tier !== undefined ? fields.tier : cur.tier,
+    (fields.archived ?? cur.archived) ? 1 : 0,
+    now(),
+    id,
+  );
+};
+
+/** Bump `updated` so the sidebar orders by recency of activity, not of rename. */
+export const touchConversation = (id: number): void => {
+  db.prepare("UPDATE conversations SET updated = ? WHERE id = ?").run(now(), id);
+};
+
+/**
+ * Delete a conversation. Its runs are deliberately left in place with a dangling
+ * `conversation_id`: they carry the audit trail, and this project does not delete the
+ * record of what it did because someone tidied up a chat list.
+ */
+export const deleteConversation = (id: number): void => {
+  db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
+};
+
+export const runsForConversation = (conversationId: number): any[] =>
+  db.prepare("SELECT * FROM runs WHERE conversation_id = ? ORDER BY id").all(conversationId);
 
 // --- runs ---
 export interface StartRunOpts {
-  kind?: string; // "do" | "heartbeat" | "schedule"
-  task?: string;
+  /** Which agent definition ran this, when it was a subagent. */
+  agent?: null | string;
+  conversationId?: number | null;
+  kind?: string; // "do" | "chat" | "heartbeat" | "schedule" | "subagent"
+  /** The run that delegated this one, for nesting a subagent under its caller. */
+  parentRunId?: number | null;
   scheduleId?: number | null;
+  task?: string;
+  /** The model tier this run was sized to. Recorded so a slow turn can be explained. */
+  tier?: null | string;
 }
+/**
+ * Create the run row. Starts as 'queued', not 'running' — agent cycles are serialized
+ * (see queue.ts), so a chat message sent while a schedule is mid-cycle genuinely is
+ * waiting, and a UI that showed it as running would be lying about which of the two is
+ * using the model. `beginRun` flips it when the queue actually reaches it.
+ *
+ * The row exists before the work is enqueued so the caller has an id to hand back
+ * immediately and stream events against, rather than holding an HTTP socket open until
+ * the queue drains.
+ */
 export const startRun = (opts: StartRunOpts = {}): number => {
   const r = db
-    .prepare("INSERT INTO runs (started, status, kind, task, schedule_id) VALUES (?, 'running', ?, ?, ?)")
-    .run(now(), opts.kind ?? "do", opts.task ?? null, opts.scheduleId ?? null);
+    .prepare(
+      "INSERT INTO runs (started, status, kind, task, schedule_id, conversation_id, tier, parent_run_id, agent) " +
+        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      now(),
+      opts.kind ?? "do",
+      opts.task ?? null,
+      opts.scheduleId ?? null,
+      opts.conversationId ?? null,
+      opts.tier ?? null,
+      opts.parentRunId ?? null,
+      opts.agent ?? null,
+    );
+  if (opts.conversationId != null) touchConversation(opts.conversationId);
   return Number(r.lastInsertRowid);
+};
+
+/** Child runs a given run delegated to, oldest first — for nesting them in the thread. */
+export const childRuns = (parentRunId: number): any[] =>
+  db.prepare("SELECT * FROM runs WHERE parent_run_id = ? ORDER BY id").all(parentRunId);
+
+/** Record which tier the dispatcher sized this run to, once it has been decided. */
+export const setRunTier = (id: number, tier: string): void => {
+  db.prepare("UPDATE runs SET tier = ? WHERE id = ?").run(tier, id);
+};
+
+/** The queue has reached this run and the model is now working on it. */
+export const beginRun = (id: number): void => {
+  db.prepare("UPDATE runs SET status = 'running', started = ? WHERE id = ?").run(now(), id);
 };
 
 export const finishRun = (id: number, status: string, note = ""): void => {
   db.prepare("UPDATE runs SET finished = ?, status = ?, note = ? WHERE id = ?").run(now(), status, note, id);
+  const row = db.prepare("SELECT conversation_id FROM runs WHERE id = ?").get(id) as
+    | { conversation_id: number | null }
+    | undefined;
+  if (row?.conversation_id != null) touchConversation(row.conversation_id);
 };
 
-/** Resolve runs left "running" by a process that died mid-run. Call on startup. */
+/**
+ * Resolve runs left mid-flight by a process that died. Call on startup.
+ *
+ * 'queued' counts as interrupted too: the queue lives in memory, so a run that was waiting
+ * its turn when the process died is never coming back.
+ */
 export const markInterruptedRuns = (): number => {
   const r = db
-    .prepare("UPDATE runs SET status='failed', finished=?, note='interrupted (process restarted mid-run)' WHERE status='running'")
+    .prepare(
+      "UPDATE runs SET status='failed', finished=?, note='interrupted (process restarted mid-run)' " +
+        "WHERE status IN ('running','queued')",
+    )
     .run(now());
   return Number(r.changes);
 };
@@ -245,10 +392,22 @@ export const listConfirmations = (state?: string): ConfirmationRow[] =>
   state
     ? (db
         .prepare(`SELECT ${CONFIRMATION_COLS} FROM confirmations WHERE state = ? ORDER BY id DESC`)
-        .all(state) as ConfirmationRow[])
+        .all(state) as unknown as ConfirmationRow[])
     : (db
         .prepare(`SELECT ${CONFIRMATION_COLS} FROM confirmations ORDER BY id DESC LIMIT 100`)
-        .all() as ConfirmationRow[]);
+        .all() as unknown as ConfirmationRow[]);
+
+/**
+ * Still-pending confirmations raised by one run.
+ *
+ * A chat turn renders its own approval prompts inline, and they have to survive a reload:
+ * the run that raised one is over, but the question is still open, and sending the user
+ * off to a separate queue to answer it is the behaviour this interface exists to replace.
+ */
+export const pendingConfirmationsForRun = (runId: number): ConfirmationRow[] =>
+  db
+    .prepare(`SELECT ${CONFIRMATION_COLS} FROM confirmations WHERE run_id = ? AND state = 'pending' ORDER BY id`)
+    .all(runId) as unknown as ConfirmationRow[];
 
 export const getConfirmation = (id: number): ConfirmationRow | undefined =>
   db.prepare("SELECT * FROM confirmations WHERE id = ?").get(id) as ConfirmationRow | undefined;
@@ -314,7 +473,7 @@ export const kvSet = (key: string, value: string): void => {
 export const kvList = (prefix = ""): KvRow[] =>
   db
     .prepare("SELECT key, value, updated FROM kv WHERE key LIKE ? ORDER BY key")
-    .all(`${prefix}%`) as KvRow[];
+    .all(`${prefix}%`) as unknown as KvRow[];
 
 export const kvDelete = (key: string): void => {
   db.prepare("DELETE FROM kv WHERE key = ?").run(key);
@@ -346,7 +505,7 @@ const computeNext = (spec: string | null, intervalMinutes: number): string => {
 };
 
 export const listSchedules = (): ScheduleRow[] =>
-  db.prepare("SELECT * FROM schedules ORDER BY id").all() as ScheduleRow[];
+  db.prepare("SELECT * FROM schedules ORDER BY id").all() as unknown as ScheduleRow[];
 
 export const getSchedule = (id: number): ScheduleRow | undefined =>
   db.prepare("SELECT * FROM schedules WHERE id = ?").get(id) as ScheduleRow | undefined;
@@ -405,7 +564,7 @@ export const deleteSchedule = (id: number): void => {
 export const dueSchedules = (): ScheduleRow[] =>
   db
     .prepare("SELECT * FROM schedules WHERE enabled = 1 AND (next_run IS NULL OR next_run <= ?)")
-    .all(now()) as ScheduleRow[];
+    .all(now()) as unknown as ScheduleRow[];
 
 export const markScheduleRan = (id: number): void => {
   const s = getSchedule(id);

@@ -1,0 +1,86 @@
+.form {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  margin-top: 22px;
+  padding: 15px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.row {
+  display: flex;
+  gap: 9px;
+}
+
+.input,
+.textarea {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  width: 100%;
+}
+
+.textarea {
+  margin-top: 9px;
+  resize: vertical;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.example {
+  background: var(--bg-inset);
+  border: 1px solid transparent;
+  border-radius: 100px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 2px 9px;
+}
+
+.example:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+
+.create {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 11px;
+  padding: 6px 16px;
+}
+
+.create:disabled {
+  background: var(--border-strong);
+  color: var(--bg);
+  cursor: default;
+}
+
+@media (width <= 560px) {
+  .row {
+    flex-direction: column;
+  }
+}

@@ -8,18 +8,25 @@
  */
 import { MAX_STEPS } from "./config.ts";
 import { route } from "./router.ts";
+import type { RouteOpts } from "./router.ts";
+import type { Tier } from "./tiers.ts";
 import { extractJson } from "./llm.ts";
 import type { Msg } from "./llm.ts";
 import { executeCall } from "./broker.ts";
+import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
-import type { Policy, ToolCall } from "./types.ts";
+import type { Policy, Tool, ToolCall } from "./types.ts";
 
-const toolDocs = (): string =>
-  Object.values(registry)
+/** The tools this loop may see. A subagent's registry is a subset of its parent's. */
+const visibleTools = (allowed?: string[]): Record<string, Tool> =>
+  allowed ? Object.fromEntries(Object.entries(registry).filter(([name]) => allowed.includes(name))) : registry;
+
+const toolDocs = (tools: Record<string, Tool>): string =>
+  Object.values(tools)
     .map((t) => `- ${t.name}: ${t.description}\n    args: ${t.argsSchema}`)
     .join("\n");
 
-const system = (): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
+const system = (tools: Record<string, Tool>): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
 You work in a loop. Each turn, reply with EXACTLY ONE JSON object and nothing else.
 
@@ -30,7 +37,7 @@ To finish:
 {"action":"final","summary":"<what you did and what you left for the user to confirm>"}
 
 Available tools:
-${toolDocs()}
+${toolDocs(tools)}
 
 Rules:
 - A capability broker gates every tool call. It may reply DENIED (not permitted) or
@@ -51,6 +58,12 @@ export interface AgentResult {
 
 export interface AgentOpts {
   /**
+   * Which run's id budgets are counted against. Differs from `runId` only inside a
+   * subagent, where audit rows belong to the child but per-run caps must be counted across
+   * the whole tree — otherwise delegating would silently reset every per-run budget.
+   */
+  budgetRunId?: number | null;
+  /**
    * Standing context injected as system messages ahead of the goal — the user profile
    * and auto-recalled memories. Assembled by the caller (`runner.ts`) so every run kind
    * gets it, and so this module stays a pure loop with no opinion about memory.
@@ -59,10 +72,45 @@ export interface AgentOpts {
    * Anything fetched from the outside world belongs in a tool result, tagged UNTRUSTED.
    */
   context?: string[];
+  /**
+   * Earlier turns of the same conversation, as alternating user/assistant messages, placed
+   * between the standing context and the current goal.
+   *
+   * This is NOT the stored trace of those runs. Replaying prior tool traffic would exhaust
+   * the local model's context within a few turns, so `runner.ts` compacts each past turn to
+   * what was asked and what was concluded. The full trace of every run stays in the
+   * `messages` table — this is a compaction for the next turn, not a lossy write.
+   */
+  history?: Msg[];
+  /**
+   * Knowledge retrieved for this task from a project's indexed documents.
+   *
+   * Kept separate from `context` because the trust tier is different and must stay visible
+   * in the code: `context` is human-curated and becomes SYSTEM messages, while this is file
+   * content — which `read_file` already treats as hostile, since a local file may be
+   * something you downloaded. So it arrives UNTRUSTED-tagged and enters as a USER message.
+   */
+  knowledge?: string;
+  /** Step cap for this loop. Subagents get a tighter one than the top-level run. */
+  maxSteps?: number;
+  /**
+   * Which model tier drives this loop. The broker gates every call identically whatever
+   * this says — a cheaper tier buys a worse plan, never a wider permission.
+   */
+  tier?: Tier;
+  /**
+   * Restrict the loop to a subset of the registry. Used by subagents, where the child's
+   * tools are the INTERSECTION of what it declares and what its parent could reach.
+   * Undefined means the whole registry.
+   */
+  tools?: string[];
 }
 
-const parseOr = async (messages: Msg[], preferCloud: boolean) => {
-  const { text } = await route(messages, preferCloud ? { prefer: "cloud" } : {});
+/** One tier up, for the retry after a malformed reply. `deep` has nowhere further to go. */
+const escalate = (tier: Tier): Tier => (tier === "fast" ? "standard" : "deep");
+
+const parseOr = async (messages: Msg[], opts: RouteOpts) => {
+  const { text } = await route(messages, opts);
   return { text, parsed: safeJson(text) };
 };
 
@@ -80,18 +128,31 @@ export const runAgent = async (
   runId: number | null,
   opts: AgentOpts = {},
 ): Promise<AgentResult> => {
+  const tools = visibleTools(opts.tools);
+  const tier = opts.tier ?? "standard";
+
   const messages: Msg[] = [
-    { role: "system", content: system() },
+    { role: "system", content: system(tools) },
     ...(opts.context ?? []).map((content): Msg => ({ role: "system", content })),
+    ...(opts.history ?? []),
+    // Project knowledge is file content, so it enters as an untrusted USER message rather
+    // than joining the trusted system context above. See AgentOpts.knowledge.
+    ...(opts.knowledge ? [{ role: "user", content: opts.knowledge } as Msg] : []),
     { role: "user", content: goal },
   ];
 
-  for (let step = 0; step < MAX_STEPS; step++) {
-    let { text, parsed } = await parseOr(messages, false);
+  const maxSteps = opts.maxSteps ?? MAX_STEPS;
 
-    // One cloud retry if the local model produced non-JSON.
+  for (let step = 0; step < maxSteps; step++) {
+    publish(runId, { step: step + 1, type: "step_start" });
+
+    let { text, parsed } = await parseOr(messages, { tier });
+
+    // A malformed reply gets one retry a tier up. This is where small-model unreliability
+    // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
+    // failing the run, which is what makes routing cheap work to a cheap tier safe.
     if (!parsed) {
-      ({ text, parsed } = await parseOr(messages, true));
+      ({ text, parsed } = await parseOr(messages, tier === "deep" ? { prefer: "cloud" } : { tier: escalate(tier) }));
     }
     messages.push({ role: "assistant", content: text });
 
@@ -101,16 +162,50 @@ export const runAgent = async (
     }
 
     if (parsed.action === "final") {
-      return { summary: String(parsed.summary ?? "(no summary)"), steps: step + 1, trace: messages };
+      const summary = String(parsed.summary ?? "(no summary)");
+      publish(runId, { steps: step + 1, summary, type: "final" });
+      return { summary, steps: step + 1, trace: messages };
     }
 
-    // Accept both {action:"tool", tool:"x"} and the shorthand {action:"x"} that local
-    // models often emit, where x is itself a tool name. Saves wasted "unknown action" steps.
+    /**
+     * The forgiving parser. Local models reliably produce three shapes, and rejecting two
+     * of them just burns steps re-asking for the third:
+     *
+     *   {"action":"tool","tool":"weather","args":{"location":"Boston"}}   the documented one
+     *   {"action":"weather","args":{"location":"Boston"}}                 tool name as action
+     *   {"action":"weather","location":"Boston"}                          args inlined
+     *
+     * The third is what a 30B emits most often for multi-argument tools, and without it a
+     * two-argument tool like `subagent` is effectively uncallable — every attempt arrives
+     * with empty args and gets denied. So when there is no `args` object, the leftover
+     * top-level keys ARE the arguments.
+     *
+     * Resolved against `tools`, never the registry: the shorthand must not become a way
+     * around a restricted tool set.
+     */
+    const inlined = (obj: any): any => {
+      const { action: _action, args, tool: _tool, ...rest } = obj;
+      if (args && typeof args === "object") return args;
+      return Object.keys(rest).length ? rest : undefined;
+    };
+
     let call: ToolCall | null = null;
-    if (parsed.action === "tool") call = { tool: String(parsed.tool), args: parsed.args };
-    else if (registry[parsed.action]) call = { tool: parsed.action, args: parsed.args };
+    if (parsed.action === "tool") call = { tool: String(parsed.tool), args: inlined(parsed) };
+    else if (tools[parsed.action]) call = { tool: parsed.action, args: inlined(parsed) };
+
     if (call) {
-      const result = await executeCall(call, policy, runId);
+      // Enforced here as well as in the prompt, because a prompt is a request and this is
+      // a rule. A restricted loop can name a tool it was not given — it just can't reach it.
+      if (!tools[call.tool]) {
+        messages.push({
+          role: "user",
+          content:
+            `tool result [denied]:\nDENIED: ${JSON.stringify(call.tool)} is not available to you. ` +
+            `You may only use: ${Object.keys(tools).join(", ")}.`,
+        });
+        continue;
+      }
+      const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId);
       messages.push({ role: "user", content: `tool result [${result.status}]:\n${result.output}` });
       continue;
     }
@@ -121,5 +216,7 @@ export const runAgent = async (
     });
   }
 
-  return { summary: "Reached the step cap without concluding.", steps: MAX_STEPS, trace: messages };
+  const capped = "Reached the step cap without concluding.";
+  publish(runId, { steps: MAX_STEPS, summary: capped, type: "final" });
+  return { summary: capped, steps: MAX_STEPS, trace: messages };
 };

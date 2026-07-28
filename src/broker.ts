@@ -25,9 +25,10 @@
  * Nothing here trusts the model's own claim about its intent; the classification
  * comes from code in the tool, and the decision comes from code here.
  */
-import type { BrokerResult, Policy, ToolCall } from "./types.ts";
+import type { BrokerResult, ClassifiedAction, Policy, ToolCall } from "./types.ts";
 import { registry } from "./tools/index.ts";
 import * as store from "./memory/store.ts";
+import { publish } from "./events.ts";
 import { notify, confirmationActions } from "./notify.ts";
 import { NOTIFY_ON_CONFIRMATION } from "./config.ts";
 
@@ -65,44 +66,75 @@ const overBudget = (policy: Policy, tool: string, runId: number | null): string 
   return null;
 };
 
+/**
+ * Pairs a `tool_call` event with its `tool_result`, so a UI can match them up even when
+ * the same tool is called twice in one run. Process-wide and monotonic; it identifies a
+ * card on screen, nothing more.
+ */
+let callSeq = 0;
+
+/**
+ * @param runId       the run this call belongs to — what the audit row records.
+ * @param budgetRunId the run per-RUN budgets are counted against. Identical to `runId`
+ *   except inside a subagent, where the child has its own run row but must spend from the
+ *   ROOT run's allowance. Without this split, `countToolCallsInRun` keys on the child's id
+ *   and delegating silently resets every per-run cap — "budget: 3 web searches" would mean
+ *   three per subagent, which is not a budget.
+ */
 export const executeCall = async (
   call: ToolCall,
   policy: Policy,
   runId: number | null,
+  budgetRunId: number | null = runId,
 ): Promise<BrokerResult> => {
   const tool = registry[call.tool];
+  const callId = ++callSeq;
 
-  if (!tool) {
-    const out = `DENIED: unknown tool ${JSON.stringify(call.tool)}.`;
-    store.logAction(runId, call, null, "denied", out);
-    return { status: "denied", output: out };
-  }
+  /**
+   * Log the decision and tell any watcher about it, in that order — the audit log is the
+   * record, the event is a view of it. Every exit from this function goes through here,
+   * which is what guarantees the two can't disagree.
+   */
+  const record = (
+    classified: ClassifiedAction | null,
+    status: BrokerResult["status"],
+    output: string,
+  ): BrokerResult => {
+    store.logAction(runId, call, classified, status, output);
+    publish(runId, {
+      callId,
+      output: output.slice(0, 4000),
+      reversibility: classified?.reversibility ?? null,
+      status,
+      summary: classified?.summary ?? null,
+      target: classified?.target ?? null,
+      tool: call.tool,
+      type: "tool_result",
+    });
+    return { output, status };
+  };
+
+  // Announced before anything is decided, so a slow call (a browser fetch, a search) shows
+  // up as in-flight rather than as nothing at all — the reason this bus exists.
+  publish(runId, { args: call.args ?? null, callId, tool: call.tool, type: "tool_call" });
+
+  if (!tool) return record(null, "denied", `DENIED: unknown tool ${JSON.stringify(call.tool)}.`);
 
   let classified;
   try {
     classified = tool.classify(call.args);
   } catch (err) {
-    const out = `ERROR: could not classify args: ${err instanceof Error ? err.message : String(err)}`;
-    store.logAction(runId, call, null, "error", out);
-    return { status: "error", output: out };
+    return record(null, "error", `ERROR: could not classify args: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Gate 1: allowlist.
   const decision = tool.checkPolicy(policy, call.args);
-  if (!decision.allowed) {
-    const out = `DENIED: ${decision.reason}`;
-    store.logAction(runId, call, classified, "denied", out);
-    return { status: "denied", output: out };
-  }
+  if (!decision.allowed) return record(classified, "denied", `DENIED: ${decision.reason}`);
 
   // Budget rail. After the allowlist (a denied call shouldn't consume allowance) and
   // before anything happens, so an exhausted budget neither runs nor queues.
-  const budgetDenial = overBudget(policy, call.tool, runId);
-  if (budgetDenial) {
-    const out = `DENIED: ${budgetDenial}`;
-    store.logAction(runId, call, classified, "denied", out);
-    return { status: "denied", output: out };
-  }
+  const budgetDenial = overBudget(policy, call.tool, budgetRunId);
+  if (budgetDenial) return record(classified, "denied", `DENIED: ${budgetDenial}`);
 
   // Gate 2: reversibility tier.
   const mustConfirm =
@@ -114,20 +146,33 @@ export const executeCall = async (
   // executing and queueing — a dry run that filled the confirm queue would defeat its own
   // purpose. Logged as "dry-run" so the audit log never implies something happened.
   if (policy.autoExecute.dryRun) {
-    const out =
+    return record(
+      classified,
+      "dry-run",
       `DRY RUN — nothing happened. This call would have been ${canAutoRun ? "EXECUTED" : "QUEUED for your confirmation"}: ` +
-      `${classified.summary}. Continue planning as if it succeeded, but do not claim it is done.`;
-    store.logAction(runId, call, classified, "dry-run", out);
-    return { status: "dry-run", output: out };
+        `${classified.summary}. Continue planning as if it succeeded, but do not claim it is done.`,
+    );
   }
 
   if (!canAutoRun) {
     const cid = store.queueConfirmation(call, classified.summary, runId);
-    const out =
+    const result = record(
+      classified,
+      "queued",
       `QUEUED for your confirmation (#${cid}): ${classified.summary}. ` +
-      `It will not run until you approve it (npm run confirm approve ${cid}). ` +
-      `Continue with other work; do not claim this action is done.`;
-    store.logAction(runId, call, classified, "queued", out);
+        `It will not run until you approve it (npm run confirm approve ${cid}). ` +
+        `Continue with other work; do not claim this action is done.`,
+    );
+
+    // A separate event from the tool_result above, because it renders as a different
+    // thing: not a record of what the agent tried, but a question waiting on you. This is
+    // what puts an Approve/Reject card inline in the thread instead of behind a tab.
+    publish(runId, {
+      confirmationId: cid,
+      summary: classified.summary,
+      tool: call.tool,
+      type: "confirmation",
+    });
 
     // Reach the user. A queued action is the one thing that genuinely blocks progress
     // while you're away, so this is the highest-value push in the system. Deliberately
@@ -141,17 +186,13 @@ export const executeCall = async (
       });
     }
 
-    return { status: "queued", output: out };
+    return result;
   }
 
   // Execute.
   try {
-    const output = await tool.run(call.args, { policy });
-    store.logAction(runId, call, classified, "executed", output);
-    return { status: "executed", output };
+    return record(classified, "executed", await tool.run(call.args, { policy }));
   } catch (err) {
-    const out = `ERROR: ${err instanceof Error ? err.message : String(err)}`;
-    store.logAction(runId, call, classified, "error", out);
-    return { status: "error", output: out };
+    return record(classified, "error", `ERROR: ${err instanceof Error ? err.message : String(err)}`);
   }
 };

@@ -2,6 +2,8 @@ node_modules/
 .env
 spine.db
 spine.db-*
+# Build output of the web client (source lives in web/). `npm run web:build` regenerates it.
+public/
 data/
 audit/
 # Approved drafts — unsent mail and event proposals, i.e. your correspondence.

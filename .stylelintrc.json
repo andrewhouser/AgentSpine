@@ -1,0 +1,12 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "plugins": ["stylelint-order"],
+  "rules": {
+    "order/properties-alphabetical-order": true,
+    "selector-class-pattern": [
+      "^[a-z][a-zA-Z0-9]+$",
+      { "message": "CSS Module class names are camelCase, so they read as identifiers in TSX" }
+    ],
+    "custom-property-pattern": null
+  }
+}

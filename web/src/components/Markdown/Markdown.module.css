@@ -1,0 +1,93 @@
+.body {
+  overflow-wrap: anywhere;
+}
+
+.body > :first-child {
+  margin-top: 0;
+}
+
+.body > :last-child {
+  margin-bottom: 0;
+}
+
+.body p,
+.body ul,
+.body ol,
+.body blockquote {
+  margin: 0 0 0.75em;
+}
+
+.body ul,
+.body ol {
+  padding-left: 1.4em;
+}
+
+.body li {
+  margin-bottom: 0.2em;
+}
+
+.body h1,
+.body h2,
+.body h3,
+.body h4 {
+  font-size: 1.05em;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 1.2em 0 0.5em;
+}
+
+.body a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+.body code {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+}
+
+.body pre {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0 0 0.75em;
+  overflow-x: auto;
+  padding: 12px 14px;
+}
+
+.body pre code {
+  background: none;
+  border: 0;
+  font-size: 0.85em;
+  padding: 0;
+}
+
+.body blockquote {
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-dim);
+  padding-left: 1em;
+}
+
+.body table {
+  border-collapse: collapse;
+  display: block;
+  margin-bottom: 0.75em;
+  overflow-x: auto;
+}
+
+.body th,
+.body td {
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  text-align: left;
+}
+
+.body hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.2em 0;
+}

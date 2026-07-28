@@ -1,0 +1,165 @@
+.page {
+  margin: 0 auto;
+  max-width: 62rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.back {
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-bottom: 14px;
+  padding: 0;
+}
+
+.back:hover {
+  color: var(--accent);
+}
+
+.title {
+  align-items: center;
+  display: flex;
+  font-size: 19px;
+  font-weight: 600;
+  gap: 9px;
+  margin: 0;
+}
+
+.kind {
+  background: var(--bg-inset);
+  border-radius: 100px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 9px;
+}
+
+.task {
+  color: var(--text-dim);
+  margin: 8px 0 2px;
+}
+
+.meta {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  margin: 0;
+}
+
+.summary {
+  background: var(--bg-inset);
+  border-radius: var(--radius);
+  margin-top: 14px;
+  overflow-wrap: anywhere;
+  padding: 11px 13px;
+  white-space: pre-wrap;
+}
+
+.subhead {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 10px;
+  letter-spacing: 0.04em;
+  margin: 26px 0 10px;
+  padding-top: 18px;
+  text-transform: uppercase;
+}
+
+.toggle {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 0;
+  text-transform: none;
+}
+
+.action,
+.message {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  padding: 10px 12px;
+}
+
+.actionHead {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  margin-bottom: 7px;
+}
+
+.tool {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.target {
+  color: var(--text-dim);
+  flex: 1;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role {
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.pre {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin: 0 0 6px;
+  max-height: 300px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+}
+
+.pre:last-child {
+  margin-bottom: 0;
+}
+
+.ok {
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.failed {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.running,
+.queued {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Reclaim the horizontal padding once the viewport is narrow — at 375px, 28px a side is
+   15% of the screen spent on nothing. */
+@media (width <= 640px) {
+  .page {
+    padding: 18px 14px 48px;
+  }
+}

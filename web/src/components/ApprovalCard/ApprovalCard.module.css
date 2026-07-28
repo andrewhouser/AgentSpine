@@ -1,0 +1,112 @@
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin: 12px 0;
+  padding: 12px 14px 14px;
+}
+
+.head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pill {
+  background: var(--warn-soft);
+  border-radius: 100px;
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 9px;
+}
+
+.tool {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.id {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* A draft's summary IS the proposed text — it has to keep its line breaks to be reviewable. */
+.summary {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  margin-bottom: 12px;
+  max-height: 380px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
+.actions,
+.rejectRow {
+  display: flex;
+  gap: 8px;
+}
+
+.reason {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.primary,
+.danger,
+.plain {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.danger {
+  background: var(--danger);
+  color: var(--on-accent);
+}
+
+.plain {
+  background: none;
+  border-color: var(--border-strong);
+  color: var(--text-dim);
+}
+
+.plain:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.primary:disabled,
+.danger:disabled {
+  opacity: 0.6;
+}
+
+.resolved {
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+  padding: 4px 0 4px 12px;
+  white-space: pre-wrap;
+}

@@ -30,7 +30,8 @@ Neither gate is a prompt the model could be talked out of — both are code.
 ```bash
 npm install
 cp .env.example .env      # then edit: LOCAL_LLM_URL, optional OPENAI_API_KEY, TAVILY_API_KEY
-npm run tick              # run a single heartbeat cycle
+npm run web:build         # build the interface (once; only needed again when web/ changes)
+npm run dashboard         # http://localhost:8787 — chat, scheduler, API
 ```
 
 Grant it powers by editing `policy.json` (everything starts empty/denied). To let it
@@ -47,6 +48,212 @@ osascript -e 'id of app "Notes"'   # -> com.apple.Notes
 macOS will also prompt for Automation/Accessibility permission the first time — a second
 enforcement layer the OS owns.
 
+## The interface
+
+`npm run dashboard` serves a chat interface at `http://localhost:8787`. You talk to it; it
+works; you watch it work.
+
+**Tool calls appear as they happen**, each with the broker's verdict on it — `ran`, `denied`,
+`needs approval`, `dry run` — expandable to the exact arguments and the exact output. That
+badge is not decoration: the claim this project makes is that *code, not the model,* decides
+what happens, and this is where you see that claim exercised on every call.
+
+**Approvals happen where you are.** An irreversible action queues, and the question appears
+inline in the thread with the full proposed text — for a draft, the entire draft, not a
+summary of it, because a one-line preview makes approving a rubber stamp. Reject with a reason
+and it becomes a `preference` memory that gets recalled before similar work.
+
+**Conversations have memory of themselves.** Each turn sees what was asked and concluded in
+earlier turns of the same thread — not the prior tool traces, which would exhaust a local
+model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
+`CHAT_HISTORY_MAX_CHARS`.
+
+Everything else lives one click away in the sidebar: **Approvals** (the whole queue, including
+what a 3am scheduled job asked for), **Automations** (schedules and watchers), **Activity**
+(every run — chat, scheduled, watcher — with its full trace and audit log), and **Settings**
+(memory and the current policy).
+
+A message posts and returns a run id immediately; the browser then follows the run's event
+stream. So a five-minute cycle doesn't hold an HTTP request open, and reloading mid-run
+reconnects and resumes rather than losing the middle. Cycles are still serialized on the local
+model, so a message sent while a scheduled job is running says it is waiting, and for what.
+
+Working on the interface itself:
+
+```bash
+npm run web:dev    # Vite on :5173, proxying /api to the dashboard on :8787
+npm run check      # typecheck (server + client) + eslint + stylelint + tests
+```
+
+The **server has no build step and gains none** — `node src/*.ts` still just runs, and `src/`
+still depends on nothing but `openai` and `playwright-core`. The client's toolchain is entirely
+`devDependencies`, so `npm audit --omit=dev` stays at 0. `public/` is build output and is
+gitignored; the source is `web/`.
+
+## Model tiers — and the measurement that shaped them
+
+Three tiers, each a **separate always-warm endpoint**:
+
+| tier | what runs there | what it's for |
+|---|---|---|
+| `fast` | a small local model on its own port | short factual lookups, `tracker` / `runner` / `inspector` units |
+| `standard` | your main local model | everything with tools in it — the default |
+| `deep` | the cloud model | the rare genuine judgment call |
+
+**A tier is an endpoint, not a model name, and that is the whole design.** `mlx_lm.server`
+holds one model resident, so asking one server for a different model swaps it. Measured on
+this setup:
+
+```
+alternating between two models .... 1.7s to reach a 3B, 7.9s to get back to the 30B
+staying on one model ............. 0.6s
+```
+
+Routing a simple question to the small model saves ~0.2s of generation and then pays ~8s
+to switch back. On one server, tier routing is *worse than not routing at all*. Two pinned
+servers never swap, and it finally pays.
+
+### Setting up the fast tier on the model host
+
+> Full setup — launchd plists, which models to delete, and the measurements behind all of
+> it — is in [MODELS.md](MODELS.md).
+
+`Qwen3-Coder-30B-A3B-4bit` is ~17GB and `Llama-3.2-3B-4bit` is ~2GB, so both sit
+comfortably in 32GB:
+
+```bash
+mlx_lm.server --model mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ --port 8080 --host 0.0.0.0
+```
+
+```bash
+mlx_lm.server --model mlx-community/Llama-3.2-3B-Instruct-4bit --port 8081 --host 0.0.0.0
+```
+
+Then point AgentSpine at the second one:
+
+```bash
+# .env
+FAST_LLM_URL=http://192.168.0.145:8081/v1
+FAST_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit
+```
+
+Leave `FAST_LLM_URL` empty and the fast tier silently resolves to standard — nothing
+breaks, and turning it on later is one variable, not a code change. `npm run dashboard`
+prints the live tiers on boot so what's running is never a guess.
+
+### Why the 30B is the *default* and not the "slow" one
+
+Qwen3-Coder-30B-A3B is a mixture-of-experts with ~3B active parameters per token:
+
+| model | simple question | tool call | throughput | drives the loop |
+|---|---|---|---|---|
+| Llama-3.2-3B-4bit | 0.60s | 1.0s | 39.1 tok/s | 3/3 |
+| **Qwen3-Coder-30B-A3B-4bit** | 0.82s | 1.4s | **32.7 tok/s** | 3/3 |
+| Qwen3-4B-8bit | 1.57s | 6.9s | 12.8 tok/s | 3/3 |
+| Qwen2.5-Coder-14B-8bit | 1.35s | 6.6s | **5.6 tok/s** | 3/3 |
+
+It is within 20% of a dense 3B while being far more capable, so there is no speed tax for
+making it the default. Two consequences worth acting on:
+
+- **`Qwen2.5-Coder-14B-8bit` has no role.** 5.6 tok/s — about six times slower than the
+  30B — and less capable. A dense 14B at 8-bit is ~15GB of weights and is
+  memory-bandwidth bound. Worth deleting.
+- **`Qwen3-4B-8bit` is a *thinking* model.** It emits `<think>` blocks, which is why its
+  tool calls take 6.9s against the 30B's 1.4s. Wrong shape for a fast tier; use the
+  Llama 3B, or a non-thinking `Qwen3-4B-Instruct`.
+- **`Qwen3.5-4B-8bit` doesn't load** — `Model type qwen3_5 not supported`. Your `mlx-lm`
+  predates that architecture. `pip install -U mlx-lm`, or drop it.
+
+### Sizing, and why it costs nothing
+
+Each task is sized before it runs, and the common path is a regex, not a model call. That
+is a measurement too: with both tiers warm, classify-then-answer came to ~1484ms against
+873ms answering directly. **A classifier that picks the cheaper model costs four times what
+the cheaper model saves.**
+
+So automatic routing earns its keep *escalating*, not economising. A short factual lookup
+goes to `fast` for free; anything mentioning tools or files goes to `standard` for free;
+only a task that reads like a decision ("should", "trade-offs", "versus") pays ~0.8s to ask
+whether it deserves the cloud tier. Set `AUTO_ROUTE=false` or `JUDGE_ESCALATION=false` to
+turn either half off, and `npm test` covers the rules.
+
+Every turn shows which tier answered, because when an answer is unexpectedly shallow the
+first useful question is what ran it — and `cloud` also means that turn left the machine.
+
+## Projects — focused context
+
+A project is a workspace: standing instructions, a set of indexed documents, its own
+conversations, and optionally a narrower policy.
+
+```
+Sidebar → Projects → +
+```
+
+**Documents come from paths already on disk**, indexed only if they sit inside
+`policy.fs.readableDirs` — the same gate `read_file` uses, resolved through symlinks, so a
+link inside an allowed folder cannot reach outside it. The check is re-run per file during
+the walk, not once on the root.
+
+**Formats**: plain text and code directly; rtf, doc, docx, odt and html through **`textutil`**,
+which ships with macOS; PDF through **`pdftotext`** if you `brew install poppler`. Both are
+external binaries run with `execFile` — no shell, so a filename with `;` in it is an argument
+and nothing else — rather than npm parsers, because a document parser is a large attack
+surface pointed straight at untrusted input and `npm audit` = 0 is a maintained value here.
+A format with no converter is skipped with a status naming the exact command that fixes it.
+
+**Re-indexing is incremental.** A file is re-read only when its size or timestamp changed;
+files you deleted have their excerpts dropped. That last part is the one that matters — an
+index that keeps answering from a document you removed is worse than no index, because
+nothing in the answer tells you it is stale. *Rebuild all* forces a full re-embed, which is
+what you want after changing `EMBEDDINGS_MODEL` — timestamps cannot see that.
+
+The important part is how the two kinds of project context enter the prompt, because they
+are not equally trustworthy:
+
+- **Instructions** are yours, like `profile.md` → injected as a **system** message.
+- **Document excerpts** are file contents — a repo you cloned, a PDF someone sent you →
+  `UNTRUSTED`-tagged and injected as a **user** message, never system.
+
+Putting indexed file contents into the system prompt would mean any document you index can
+issue instructions for every step of every run in that project. That split is why
+`AgentOpts` has both `context` and `knowledge`.
+
+A project may also carry a **policy overlay**, which can only ever *narrow*: remove domains
+or directories, lower budgets, force dry-run on. It cannot add anything. That is enforced
+by `narrowPolicy()` and covered by 23 assertions in `npm test` — a project row is writable
+through the API the agent itself can reach, so "create a project" must not become a way to
+widen the allowlist.
+
+## Delegation — the Dispatch board
+
+`agents/*.md` defines units, each pinned to a tier:
+
+| unit | tier | for |
+|---|---|---|
+| `tracker` | fast | pure lookup — where does X live |
+| `runner` | fast | fully-specified, no-judgment work |
+| `inspector` | fast | checking finished work against its brief |
+| `hauler` | standard | a normal job with a workable brief |
+| `chief` | deep | the call that's genuinely close |
+
+Enable with `"subagents": { "enabled": true }` in `policy.json`. The assistant then has a
+`subagent` tool, and delegated units render as collapsible cards nested under the turn that
+sent them.
+
+**The real win is context, not model tier.** A child runs its own loop and returns only its
+summary, so eight pages of fetched text are read once by the child instead of riding in the
+parent's context for every remaining step. Five constraints make that safe:
+
+1. **A subagent calls the agent loop directly, never `runTask`** — the parent already holds
+   the serial queue, so re-entering it would deadlock on a lock the caller owns.
+2. **Tools are an intersection, never a grant** — what the unit declares ∩ what its caller
+   could already reach. Delegation moves work, not permission.
+3. **Same broker, same policy.** `policy.json` neither knows nor cares that a unit is running.
+4. **Budgets count across the tree.** The root run's id is billed, so "3 web searches per
+   run" doesn't quietly become three *per unit*.
+5. **The child's summary returns `UNTRUSTED`** — it is model text derived from whatever the
+   child read, and must not become a laundering step for a poisoned page.
+
 ## Running
 
 ```bash
@@ -57,9 +264,12 @@ npm run confirm        # list actions awaiting your approval
 npm run browser:check  # verify the Chrome link (attach/headless) on its own
 ```
 
-Two ways to give it work:
+Ways to give it work:
+- **The chat interface** — the usual one. Multi-turn, streamed, with approvals inline.
 - **`npm run do "<task>"`** — hand it a single task on demand. Runs one agent cycle and
   exits. Best for one-offs; no repetition.
+- **Automations** — a named task on a schedule. See Watchers below for the ones that should
+  only speak up when something changed.
 - **`goals.md`** — the standing goal read on every `tick`/`loop` heartbeat. Keep it
   idempotent (a task left there runs every tick). With no `goals.md` it does a harmless
   low-risk check-in.
@@ -67,10 +277,11 @@ Two ways to give it work:
 ## Layout
 
 ```
-src/
+src/                 the agent — no build step, two runtime dependencies
   config.ts        env + live policy loader
   llm.ts           raw openai SDK: local + cloud clients
   router.ts        local-first routing; sensitivity="private" never leaves the box
+  events.ts        run event bus — what lets the UI watch a cycle instead of awaiting it
   broker.ts    ★   the two-gate capability broker
   audit.ts         injection scanner + UNTRUSTED tagging (salvaged from v1)
   agent.ts         plan → tool → observe loop
@@ -102,9 +313,16 @@ src/
     auth.ts        one-time read-only OAuth (npm run auth)
     client.ts      read-only Gmail + Calendar REST (no SDK)
   memory/
-    store.ts       SQLite ledger: runs, actions (audit log), confirmations
+    store.ts       SQLite ledger: conversations, runs, actions (audit log), confirmations
     rag.ts         local embeddings via EMBEDDINGS_URL, with a keyword fallback
     profile.ts     loads profile.md as trusted standing context
+
+web/                 the interface — Vite + React + TypeScript + CSS Modules
+  src/components/  one component per file, each with its own .module.css
+  src/hooks/       useRunStream (SSE), useConversations, useResource, useStatus
+  src/lib/         api client, route table, markdown (html:false — see below)
+public/              build output of web/. Gitignored; `npm run web:build` regenerates it.
+_archive/            the previous vanilla-JS dashboard, kept for reference
 ```
 
 ## Active memory
@@ -467,7 +685,10 @@ my unread inbox and save anything urgent to memory"* work.
 ## Commands
 
 ```
-npm run dashboard      # server + scheduler; http://localhost:8787
+npm run dashboard      # chat interface + API + scheduler; http://localhost:8787
+npm run web:build      # build the interface into ./public (needed once, and after web/ changes)
+npm run web:dev        # Vite dev server on :5173, proxying /api to :8787
+npm run check          # typecheck + eslint + stylelint + tests
 npm run do "<task>"    # one-off cycle
 npm run watcher        # install/inspect change watchers
 npm run digest         # what it did in the last 24h (add --push to send it)

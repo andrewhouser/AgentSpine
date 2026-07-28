@@ -1,0 +1,185 @@
+.page {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 26px 0 8px;
+  padding-top: 18px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.note code {
+  background: var(--bg-inset);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+}
+
+.textarea,
+.input {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 8px 11px;
+  width: 100%;
+}
+
+.textarea {
+  margin-bottom: 10px;
+  resize: vertical;
+}
+
+.primary,
+.plain,
+.danger {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.primary:disabled {
+  background: var(--border-strong);
+  color: var(--bg);
+  cursor: default;
+}
+
+.plain {
+  background: none;
+  border-color: var(--border-strong);
+  color: var(--text-dim);
+}
+
+.plain:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.danger {
+  background: none;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.danger:hover {
+  background: var(--danger-soft);
+}
+
+.source {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+/* The path is the source's identity, so it keeps a floor of readable width and the
+   status line — which can get long — is what gives way instead. */
+.path {
+  flex: 2 1 14rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.good {
+  color: var(--ok);
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bad {
+  color: var(--danger);
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counts {
+  color: var(--text-faint);
+  flex: none;
+  font-size: 11.5px;
+}
+
+.addRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+
+.conversation {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  display: block;
+  font-size: 13.5px;
+  padding: 5px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.conversation:hover {
+  background: var(--bg-inset);
+}
+
+/* Reclaim the horizontal padding once the viewport is narrow — at 375px, 28px a side is
+   15% of the screen spent on nothing. */
+@media (width <= 640px) {
+  .page {
+    padding: 18px 14px 48px;
+  }
+}
+
+@media (width <= 640px) {
+  .addRow,
+  .source {
+    flex-wrap: wrap;
+  }
+
+  .path {
+    flex-basis: 100%;
+  }
+
+  .input {
+    flex-basis: 100%;
+  }
+}

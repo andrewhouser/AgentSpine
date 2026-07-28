@@ -1,0 +1,87 @@
+.wrap {
+  background: linear-gradient(to top, var(--bg) 65%, transparent);
+  bottom: 0;
+  padding: 8px 0 14px;
+  position: sticky;
+}
+
+.box {
+  align-items: flex-end;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+}
+
+.box:focus-within {
+  border-color: var(--accent);
+}
+
+.input {
+  background: none;
+  border: 0;
+  color: var(--text);
+  flex: 1;
+  line-height: 1.55;
+  max-height: 220px;
+  min-width: 0;
+  outline: none;
+  padding: 4px 0;
+  resize: none;
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.send {
+  background: var(--accent);
+  border: 0;
+  border-radius: 9px;
+  color: var(--on-accent);
+  flex: none;
+  font-size: 16px;
+  height: 32px;
+  line-height: 1;
+  width: 32px;
+}
+
+.send:disabled {
+  background: var(--border-strong);
+  color: var(--bg);
+  cursor: default;
+}
+
+.hint {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  padding-top: 8px;
+  text-align: center;
+}
+
+.hintRow {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.hintRow .hint {
+  padding-top: 0;
+  text-align: left;
+}
+
+/* The broker hint is the first thing to drop; the tier picker is interactive and stays. */
+@media (width <= 620px) {
+  .hintRow .hint {
+    display: none;
+  }
+
+  .hintRow {
+    justify-content: flex-end;
+  }
+}

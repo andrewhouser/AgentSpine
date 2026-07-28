@@ -1,0 +1,33 @@
+.bar {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  display: flex;
+  flex: none;
+  font-size: 12px;
+  gap: 7px;
+  padding: 9px 14px;
+}
+
+.dot {
+  border-radius: 50%;
+  flex: none;
+  height: 7px;
+  width: 7px;
+}
+
+.idle {
+  background: var(--ok);
+}
+
+.busy {
+  background: var(--accent);
+}
+
+.down {
+  background: var(--danger);
+}
+
+.meta {
+  margin-left: auto;
+}

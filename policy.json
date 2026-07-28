@@ -39,7 +39,7 @@
 
   "fs": {
     "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]",
-    "readableDirs": []
+    "readableDirs": ["~/Desktop", "~/Developer"]
   },
 
   "weather": {
@@ -51,6 +51,11 @@
     "//": "SPEC §5, preferred path: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. This grants NO new OAuth scope — the Google token stays read-only by construction and still cannot send or modify anything.",
     "enabled": true,
     "dir": "./drafts"
+  },
+
+  "subagents": {
+    "//": "Delegation to the units in agents/*.md. A subagent's tools are the INTERSECTION of what its file declares and what its caller could already reach, so this grants no capability the agent did not already have — it only lets work be split up. Every call a unit makes still passes through this same broker and this same policy, and per-run budgets are counted across the whole tree rather than reset per unit.",
+    "enabled": true
   },
 
   "git": {

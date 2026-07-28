@@ -1,0 +1,96 @@
+.page {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 26px 0 8px;
+  padding-top: 18px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.note code {
+  background: var(--bg-inset);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+}
+
+.search {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  margin-bottom: 12px;
+  padding: 7px 11px;
+  width: 100%;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.memory {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  font-size: 13px;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+.kind {
+  background: var(--bg-inset);
+  border-radius: 100px;
+  color: var(--text-dim);
+  flex: none;
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.text {
+  flex: 1;
+}
+
+.when {
+  color: var(--text-faint);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.policy {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  margin: 0;
+  max-height: 460px;
+  overflow: auto;
+  padding: 12px 14px;
+}
+
+/* Reclaim the horizontal padding once the viewport is narrow — at 375px, 28px a side is
+   15% of the screen spent on nothing. */
+@media (width <= 640px) {
+  .page {
+    padding: 18px 14px 48px;
+  }
+}

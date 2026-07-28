@@ -1,0 +1,69 @@
+.page {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.empty {
+  color: var(--text-faint);
+  padding: 28px 0;
+  text-align: center;
+}
+
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin: 28px 0 10px;
+  padding-top: 20px;
+  text-transform: uppercase;
+}
+
+.past {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  font-size: 13px;
+  gap: 9px;
+  padding: 5px 0;
+}
+
+.state {
+  border-radius: 100px;
+  flex: none;
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.done {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.rejected,
+.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tool {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reclaim the horizontal padding once the viewport is narrow — at 375px, 28px a side is
+   15% of the screen spent on nothing. */
+@media (width <= 640px) {
+  .page {
+    padding: 18px 14px 48px;
+  }
+}

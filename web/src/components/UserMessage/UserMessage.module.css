@@ -1,0 +1,15 @@
+.row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 20px 0 4px;
+}
+
+.bubble {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 85%;
+  overflow-wrap: anywhere;
+  padding: 9px 14px;
+  white-space: pre-wrap;
+}

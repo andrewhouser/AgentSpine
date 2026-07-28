@@ -1,0 +1,142 @@
+/*
+ * Global theme. Everything else is a CSS Module; this file holds only the reset and the
+ * custom properties those modules consume, so there is exactly one place to retune the
+ * palette and no module knows a literal colour.
+ *
+ * ## The palette
+ *
+ * Cool slate neutrals with an indigo accent. Two constraints shaped it:
+ *
+ *   - **The accent must not read as any of the semantic colours.** Green/amber/red carry
+ *     real meaning here — they are the broker's verdict on every tool call — so the accent
+ *     has to sit clearly outside that family or a badge starts looking like a button. That
+ *     rules out teal (too near ok-green) and orange (too near warn-amber); indigo is the
+ *     safe distance from all three.
+ *   - **Every tint is a variable.** `--*-soft` and `--*-line` exist so a component never
+ *     hardcodes `rgb(… / 12%)` of a colour it would then have to be hunted down and
+ *     changed in. Retheming is this file and nothing else.
+ *
+ * `--on-accent` is a variable rather than `#fff` because the accent inverts between modes:
+ * light mode puts white on a mid indigo, dark mode puts near-black on a pale one. White
+ * text on the dark-mode accent would fail contrast.
+ *
+ * Light and dark both come from prefers-color-scheme. There is no theme toggle because
+ * this runs on your own machine, where the OS already knows the answer.
+ */
+
+:root {
+  --accent: #4b5bd7;
+  --accent-line: rgb(75 91 215 / 28%);
+  --accent-soft: rgb(75 91 215 / 11%);
+  --bg: #fff;
+  --bg-elevated: #fff;
+  --bg-inset: #f2f4f7;
+  --bg-sidebar: #f7f8fa;
+  --border: #e3e6eb;
+  --border-strong: #c3c9d4;
+  --danger: #b3261e;
+  --danger-line: rgb(179 38 30 / 28%);
+  --danger-soft: rgb(179 38 30 / 10%);
+  --focus: rgb(75 91 215 / 45%);
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", menlo, monospace;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --ok: #16794f;
+  --ok-line: rgb(22 121 79 / 25%);
+  --ok-soft: rgb(22 121 79 / 12%);
+  --on-accent: #fff;
+  --radius: 10px;
+  --scrim: rgb(15 20 32 / 38%);
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 12px rgb(16 24 40 / 5%);
+  --text: #171a1f;
+  --text-dim: #596072;
+  --text-faint: #878e9e;
+  --warn: #8a6216;
+  --warn-line: rgb(138 98 22 / 30%);
+  --warn-soft: rgb(138 98 22 / 13%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #8493f7;
+    --accent-line: rgb(132 147 247 / 32%);
+    --accent-soft: rgb(132 147 247 / 15%);
+    --bg: #15171c;
+    --bg-elevated: #1e2128;
+    --bg-inset: #1a1d23;
+    --bg-sidebar: #111318;
+    --border: #2b2f38;
+    --border-strong: #3e434f;
+    --danger: #f0776a;
+    --danger-line: rgb(240 119 106 / 30%);
+    --danger-soft: rgb(240 119 106 / 12%);
+    --focus: rgb(132 147 247 / 50%);
+    --ok: #5fc98d;
+    --ok-line: rgb(95 201 141 / 26%);
+    --ok-soft: rgb(95 201 141 / 12%);
+
+    /* Near-black on the pale dark-mode accent — white would be unreadable. */
+    --on-accent: #12141a;
+    --scrim: rgb(0 0 0 / 55%);
+    --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 4px 14px rgb(0 0 0 / 25%);
+    --text: #e6e8ed;
+    --text-dim: #9aa2b1;
+    --text-faint: #6d7482;
+    --warn: #e0b256;
+    --warn-line: rgb(224 178 86 / 32%);
+    --warn-soft: rgb(224 178 86 / 13%);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  margin: 0;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

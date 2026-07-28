@@ -1,0 +1,25 @@
+.picker {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.option {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 100px;
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.option:hover {
+  background: var(--bg-inset);
+  color: var(--text-dim);
+}
+
+.active {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}

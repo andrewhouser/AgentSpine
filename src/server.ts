@@ -17,8 +17,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { loadAgents } from "./agents.ts";
 import { loadPolicy } from "./config.ts";
-import { runTask } from "./runner.ts";
+import { converterStatus } from "./projects/extract.ts";
+import { indexProject, indexSource } from "./projects/ingest.ts";
+import * as projects from "./projects/store.ts";
+import { runTask, startTask } from "./runner.ts";
+import { describeTiers } from "./tiers.ts";
+import type { Tier } from "./tiers.ts";
+import { hasEnded, replay, subscribe } from "./events.ts";
+import type { RunEvent } from "./events.ts";
 import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation } from "./confirmations.ts";
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
@@ -109,17 +117,115 @@ const readBody = (req: http.IncomingMessage): Promise<any> =>
     });
   });
 
+const MIME: Record<string, string> = {
+  ".css": "text/css",
+  ".html": "text/html",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript",
+  ".json": "application/json",
+  ".map": "application/json",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+};
+
+/**
+ * Serve the built frontend. Hashed asset filenames get a long cache; index.html never
+ * does, or a deploy would leave browsers pinned to the old asset manifest.
+ */
+const sendFile = (res: Res, file: string, immutable: boolean): boolean => {
+  const ext = path.extname(file);
+  res.writeHead(200, {
+    "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+    "Content-Type": MIME[ext] ?? "text/plain",
+  });
+  res.end(fs.readFileSync(file));
+  return true;
+};
+
+/**
+ * Static files, with an SPA fallback.
+ *
+ * The client routes on the path (/c/12, /activity, /settings), so a reload or a pasted
+ * link asks this server for a path that has no file behind it. Anything without a file
+ * extension falls back to index.html and lets the client router sort it out; a request
+ * for a missing *asset* still 404s, because silently answering `main.js` with HTML turns
+ * a bad build into a baffling syntax error in the console.
+ */
 const serveStatic = (res: Res, urlPath: string): boolean => {
   if (!fs.existsSync(PUBLIC_DIR)) return false;
   const rel = urlPath === "/" ? "index.html" : urlPath.replace(/^\/+/, "");
-  const file = path.join(PUBLIC_DIR, rel);
-  if (!file.startsWith(PUBLIC_DIR) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
-  const ext = path.extname(file);
-  const type =
-    ext === ".html" ? "text/html" : ext === ".js" ? "text/javascript" : ext === ".css" ? "text/css" : "text/plain";
-  res.writeHead(200, { "Content-Type": type });
-  res.end(fs.readFileSync(file));
-  return true;
+  const file = path.resolve(PUBLIC_DIR, rel);
+  if (file === PUBLIC_DIR || file.startsWith(PUBLIC_DIR + path.sep)) {
+    if (fs.existsSync(file) && !fs.statSync(file).isDirectory())
+      return sendFile(res, file, rel.startsWith("assets/"));
+  }
+
+  const index = path.join(PUBLIC_DIR, "index.html");
+  if (!path.extname(rel) && fs.existsSync(index)) return sendFile(res, index, false);
+  return false;
+};
+
+/**
+ * Server-sent events for one run: the tool calls, the broker's decision on each, anything
+ * that landed in the confirm queue, and the final summary — as they happen.
+ *
+ * Two details that are easy to get wrong and both produce a thread with a hole in it:
+ *
+ *   - **Subscribe before replaying.** An event published between reading the buffer and
+ *     attaching the listener would otherwise vanish. So the listener goes on first and its
+ *     events are held; the backlog is written; then the held ones are flushed, with `seq`
+ *     dropping anything the backlog already covered.
+ *   - **`?after=` resumes.** A browser that reloads mid-run reconnects with the last `seq`
+ *     it saw and gets only what it missed.
+ *
+ * A run that has already ended is served entirely from the replay buffer and the stream is
+ * closed immediately, so a client that connects late still renders the full turn.
+ */
+const SSE_KEEPALIVE_MS = 20_000;
+
+const streamRun = (req: http.IncomingMessage, res: Res, runId: number, after: number): void => {
+  res.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream",
+    // Tells a reverse proxy (should one ever sit in front of this) not to buffer.
+    "X-Accel-Buffering": "no",
+  });
+
+  const write = (event: RunEvent): void => {
+    res.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+  };
+
+  let held: RunEvent[] | null = [];
+  const onEvent = (event: RunEvent): void => {
+    if (held) held.push(event);
+    else write(event);
+  };
+  const unsubscribe = subscribe(runId, onEvent);
+
+  const backlog = replay(runId, after);
+  for (const e of backlog) write(e);
+
+  const highest = backlog.length ? backlog[backlog.length - 1].seq : after;
+  for (const e of held) if (e.seq > highest) write(e);
+  held = null;
+
+  const finish = (): void => {
+    unsubscribe();
+    clearInterval(keepalive);
+    res.end();
+  };
+
+  // A comment line keeps the connection warm without being delivered as an event.
+  const keepalive = setInterval(() => res.write(": keepalive\n\n"), SSE_KEEPALIVE_MS);
+  req.on("close", finish);
+
+  // Close rather than hang for a run that is already over. The buffer answers for a run
+  // that finished moments ago; the run row answers for one whose buffer has been swept, or
+  // that belongs to a previous process — otherwise a client asking about an old run would
+  // hold an open connection waiting for events that can never arrive.
+  const row = store.getRun(runId);
+  if (hasEnded(runId) || !row || (row.status !== "running" && row.status !== "queued")) finish();
 };
 
 // --- router ---
@@ -182,13 +288,100 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       return sendJson(res, 200, { queue: queueStatus(), schedules: store.listSchedules().length, time: new Date().toISOString() });
     }
 
-    // /api/runs , /api/runs/:id
+    // /api/runs , /api/runs/:id , /api/runs/:id/stream
     if (m === "GET" && seg[1] === "runs") {
       if (seg.length === 2) return sendJson(res, 200, store.listRuns(Number(url.searchParams.get("limit") ?? 50)));
       const id = Number(seg[2]);
+      if (seg.length === 4 && seg[3] === "stream") return streamRun(req, res, id, Number(url.searchParams.get("after") ?? -1));
       const run = store.getRun(id);
       if (!run) return sendJson(res, 404, { error: "no such run" });
       return sendJson(res, 200, { run, trace: store.getTrace(id), actions: store.listActions(id) });
+    }
+
+    // /api/conversations ...
+    if (seg[1] === "conversations") {
+      if (m === "GET" && seg.length === 2)
+        return sendJson(res, 200, store.listConversations(Number(url.searchParams.get("limit") ?? 100)));
+
+      if (m === "POST" && seg.length === 2) {
+        const b = await readBody(req);
+        const id = store.createConversation(b.title ?? null, b.projectId ?? null);
+        return sendJson(res, 200, store.getConversation(id));
+      }
+
+      const id = Number(seg[2]);
+      if (seg.length >= 3 && !store.getConversation(id)) return sendJson(res, 404, { error: "no such conversation" });
+
+      // The whole thread, ready to render: one turn per run, each with the tool calls that
+      // happened during it. This is what a browser reload rebuilds the page from.
+      if (m === "GET" && seg.length === 3) {
+        const turns = store.runsForConversation(id).map((r: any) => ({
+          actions: store.listActions(r.id),
+          // Units this turn delegated to, each with its own trace — rendered nested under
+          // the turn rather than as separate rows in the thread.
+          children: store.childRuns(r.id).map((c: any) => ({
+            actions: store.listActions(c.id),
+            agent: c.agent,
+            id: c.id,
+            status: c.status,
+            summary: c.note,
+            task: c.task,
+            tier: c.tier,
+          })),
+          tier: r.tier,
+          // Still-open approvals belong with the turn that raised them, so they survive a
+          // reload and don't strand the user in a separate queue to answer them.
+          confirmations: store.pendingConfirmationsForRun(r.id),
+          finished: r.finished,
+          id: r.id,
+          started: r.started,
+          status: r.status,
+          summary: r.note,
+          task: r.task,
+        }));
+        return sendJson(res, 200, { conversation: store.getConversation(id), turns });
+      }
+
+      if (m === "PATCH" && seg.length === 3) {
+        const b = await readBody(req);
+        const patch: store.ConversationFields = {};
+        if (typeof b.title === "string") patch.title = b.title;
+        if ("archived" in b) patch.archived = !!b.archived;
+        if ("projectId" in b) patch.projectId = b.projectId ?? null;
+        // null pins nothing and hands the thread back to the dispatcher.
+        if ("tier" in b) patch.tier = b.tier ?? null;
+        store.updateConversation(id, patch);
+        return sendJson(res, 200, store.getConversation(id));
+      }
+
+      if (m === "DELETE" && seg.length === 3) {
+        store.deleteConversation(id);
+        return sendJson(res, 200, { ok: true });
+      }
+
+      /**
+       * Send a message. Returns the run id IMMEDIATELY rather than holding the socket for
+       * the length of a cycle — the client then watches /api/runs/:id/stream. That split is
+       * what makes the interface a conversation instead of a form submission: a cycle can
+       * take minutes on the local model, and the tool calls are the interesting part.
+       */
+      if (m === "POST" && seg.length === 4 && seg[3] === "messages") {
+        const b = await readBody(req);
+        const task = String(b.task ?? "").trim();
+        if (!task) return sendJson(res, 400, { error: "task required" });
+        // A thread pinned to a tier overrides the dispatcher for every turn in it — the
+        // escape hatch for "I know this one is hard, use the good model".
+        const pinned = store.getConversation(id)?.tier;
+        const { done, runId } = startTask(task, {
+          conversationId: id,
+          kind: "chat",
+          tier: (pinned as Tier | undefined) ?? undefined,
+        });
+        // The failure is already recorded on the run row and published to the stream; this
+        // handler exists so an unattended rejection doesn't crash the process.
+        done.catch((e) => console.error(`[chat] run ${runId} failed: ${e instanceof Error ? e.message : e}`));
+        return sendJson(res, 202, { conversationId: id, runId });
+      }
     }
 
     // /api/confirmations , approve, reject
@@ -213,6 +406,90 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
     // /api/policy
     if (m === "GET" && seg[1] === "policy" && seg.length === 2) return sendJson(res, 200, loadPolicy());
+
+    // /api/projects ...
+    if (seg[1] === "projects") {
+      if (m === "GET" && seg.length === 2)
+        return sendJson(
+          res,
+          200,
+          projects.listProjects().map((p) => ({ ...p, chunks: projects.countChunks(p.id) })),
+        );
+
+      if (m === "POST" && seg.length === 2) {
+        const b = await readBody(req);
+        if (!b.name) return sendJson(res, 400, { error: "name required" });
+        const id = projects.createProject(String(b.name), String(b.instructions ?? ""));
+        return sendJson(res, 200, projects.getProject(id));
+      }
+
+      const id = Number(seg[2]);
+      const project = seg.length >= 3 ? projects.getProject(id) : undefined;
+      if (seg.length >= 3 && !project) return sendJson(res, 404, { error: "no such project" });
+
+      if (m === "GET" && seg.length === 3)
+        return sendJson(res, 200, {
+          chunks: projects.countChunks(id),
+          conversations: store.listConversations(200).filter((c) => c.project_id === id),
+          project,
+          sources: projects.listSources(id),
+        });
+
+      if (m === "PATCH" && seg.length === 3) {
+        const b = await readBody(req);
+        const patch: projects.ProjectFields = {};
+        if (typeof b.name === "string") patch.name = b.name;
+        if (typeof b.instructions === "string") patch.instructions = b.instructions;
+        // Stored as given; `narrowPolicy` is what guarantees it can only ever restrict, so
+        // there is nothing to validate away here — an overlay asking for more simply
+        // doesn't get it at run time.
+        if ("policyOverlay" in b) patch.policyOverlay = b.policyOverlay ?? null;
+        projects.updateProject(id, patch);
+        return sendJson(res, 200, projects.getProject(id));
+      }
+
+      if (m === "DELETE" && seg.length === 3) {
+        projects.deleteProject(id);
+        return sendJson(res, 200, { ok: true });
+      }
+
+      // Sources: add a path, re-index it, or remove it.
+      if (m === "POST" && seg.length === 4 && seg[3] === "sources") {
+        const b = await readBody(req);
+        const ref = String(b.path ?? "").trim();
+        if (!ref) return sendJson(res, 400, { error: "path required" });
+        const sourceId = projects.addSource(id, ref);
+        // Indexed inline: it is local file reading and embedding, and the caller wants to
+        // know whether the path was even allowed.
+        const result = await indexSource(sourceId, loadPolicy());
+        return sendJson(res, 200, { result, source: projects.getSource(sourceId) });
+      }
+
+      if (m === "POST" && seg.length === 5 && seg[3] === "sources" && seg[4] === "reindex") {
+        const b = await readBody(req);
+        const result = await indexProject(id, loadPolicy(), { force: !!b.force });
+        return sendJson(res, 200, { result, sources: projects.listSources(id) });
+      }
+
+      if (m === "POST" && seg.length === 5 && seg[3] === "sources") {
+        const b = await readBody(req);
+        const result = await indexSource(Number(seg[4]), loadPolicy(), { force: !!b.force });
+        return sendJson(res, 200, { result, source: projects.getSource(Number(seg[4])) });
+      }
+
+      if (m === "DELETE" && seg.length === 5 && seg[3] === "sources") {
+        projects.removeSource(Number(seg[4]));
+        return sendJson(res, 200, { ok: true });
+      }
+    }
+
+    // /api/formats — which document converters this machine actually has
+    if (m === "GET" && seg[1] === "formats" && seg.length === 2)
+      return sendJson(res, 200, await converterStatus());
+
+    // /api/agents — the Dispatch units, read-only (they are files on disk)
+    if (m === "GET" && seg[1] === "agents" && seg.length === 2)
+      return sendJson(res, 200, Object.values(loadAgents()));
 
     // /api/schedules ...
     if (seg[1] === "schedules") {
@@ -300,6 +577,7 @@ http.createServer(handle).listen(PORT, HOST, () => {
   console.log(`  auth: ${TOKEN ? "token required on /api" : IS_LOCAL ? "none (localhost only)" : "NONE"}`);
   console.log(fs.existsSync(PUBLIC_DIR) ? "  serving static frontend from ./public" : "  API only (no ./public) — point your frontend here");
   console.log(`  scheduler: checking due jobs every ${SCHEDULER_TICK_MS / 1000}s`);
+  console.log(`  tiers: ${describeTiers()}`);
   console.log(
     `  push: ${
       remoteApprovalConfigured()

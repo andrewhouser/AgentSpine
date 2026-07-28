@@ -58,7 +58,7 @@ const num = (v: unknown): number => {
 /** Round down to a multiple of `step` — the bucketing that absorbs forecast jitter. */
 const bucketize = (value: number, step: number): number => Math.floor(value / step) * step;
 
-export type Thresholds = typeof T;
+export type Thresholds = typeof defaults;
 
 /**
  * Evaluate every threshold over the forecast.
