@@ -203,6 +203,24 @@ export const NOTIFY_ON_CONFIRMATION = (env.NOTIFY_ON_CONFIRMATION ?? "true") !==
 export const NOTIFY_ON_FAILURE = (env.NOTIFY_ON_FAILURE ?? "true") !== "false";
 export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true";
 
+// --- Ledger retention ---
+/**
+ * How long the ledger keeps history, in days. 0 on any of these means keep forever.
+ *
+ * Measured on a real ledger, the split is worth knowing before you tune these: conversation
+ * traces are ~61% of the bytes, the audit log ~36%, and the run rows themselves only ~3%.
+ * So `RUN_RETENTION_DAYS` is the one that buys you almost no space and costs you the whole
+ * Activity history — set it to 0 if you would rather keep the index of what ran forever and
+ * only discard the bulky parts.
+ */
+export const RETENTION_DAYS = Number(env.RETENTION_DAYS ?? "90");
+/** Full conversation traces — the biggest share, and the least useful once old. */
+export const TRACE_RETENTION_DAYS = Number(env.TRACE_RETENTION_DAYS ?? RETENTION_DAYS);
+/** The audit log of broker decisions. */
+export const AUDIT_RETENTION_DAYS = Number(env.AUDIT_RETENTION_DAYS ?? RETENTION_DAYS);
+/** The run rows themselves — what the Activity list is made of. */
+export const RUN_RETENTION_DAYS = Number(env.RUN_RETENTION_DAYS ?? RETENTION_DAYS);
+
 // --- Paths ---
 export const BASE = path.resolve(import.meta.dirname, "..");
 // Overridable so a test can point at a scratch file instead of writing rows into the

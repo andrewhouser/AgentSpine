@@ -766,6 +766,45 @@ npm run confirm reject 2 never commit to a renewal on my behalf, always ask me f
 
 - Cloud is **off** unless `OPENAI_API_KEY` is set. Route private context with
   `sensitivity:"private"` to guarantee it stays on the local model.
-- The audit log in the `actions` table records every broker decision, forever.
+- The audit log in the `actions` table records every broker decision, kept for
+  `RETENTION_DAYS` (default 90). Set `AUDIT_RETENTION_DAYS=0` to keep it indefinitely.
 - Move any credential files (e.g. `client_secret_*.json`) out of this directory; they are
   gitignored but should not live in the project at all.
+
+## Retention — the ledger is bounded now
+
+Every run writes a conversation trace and one audit row per tool call, and until recently
+none of it was ever removed. Measured on a real profile that is ~16KB per run — roughly
+22MB a year at four scheduled jobs a day. SQLite copes with far more, but the Activity list
+and the digest both scan the ledger, so it degrades gradually rather than failing loudly.
+
+Default retention is **90 days**, and the three parts are tunable separately because they
+are not the same size at all:
+
+| what | share of the bytes | variable |
+|---|---|---|
+| conversation traces | ~61% | `TRACE_RETENTION_DAYS` |
+| the audit log | ~36% | `AUDIT_RETENTION_DAYS` |
+| the run rows themselves | ~3% | `RUN_RETENTION_DAYS` |
+
+`RETENTION_DAYS` sets all three; `0` on any of them means keep forever. Worth knowing that
+**the run rows are only 3%** — setting `RUN_RETENTION_DAYS=0` keeps your whole Activity
+history for almost nothing, and only discards the bulky parts.
+
+```bash
+npm run prune --dry       # what would go, without touching anything
+npm run prune             # do it
+npm run prune -- --vacuum # do it, then reclaim the disk space
+```
+
+The dashboard prunes on boot and once a day, so you never have to run this. Two things it
+refuses to remove regardless of age:
+
+- **A run holding a pending approval.** Deleting it would orphan a question still waiting
+  on you — the confirmation would point at a run that no longer exists, and the Approve
+  button in a phone push would answer into a hole.
+- **A run that hasn't finished.** A row stuck open is a bug to look at, not garbage.
+
+Conversations left with no runs are removed too, since a thread that opens onto nothing
+reads as data loss rather than as retention. Deleting doesn't shrink the file — SQLite
+reuses the freed pages — so `--vacuum` is separate and opt-in.

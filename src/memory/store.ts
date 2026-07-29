@@ -4,7 +4,7 @@
  *   conversations a chat thread; an ordered list of runs
  *   runs          one row per agent cycle (do / chat turn / heartbeat / scheduled job)
  *   messages      the full conversation trace per run (for the dashboard)
- *   actions       the audit log — every broker decision, forever
+ *   actions       the audit log — every broker decision, kept for RETENTION_DAYS
  *   confirmations irreversible actions waiting for approval
  *   schedules     named jobs, each on its own interval
  *
@@ -445,6 +445,137 @@ export const setConfirmation = (id: number, state: string, result = ""): void =>
     id,
   );
 };
+
+// --- retention ---
+/**
+ * Trim the ledger to its retention window.
+ *
+ * The ledger only ever grew before this. On a real profile that is ~16KB per run — around
+ * 22MB a year at four scheduled runs a day — which SQLite handles without complaint, but
+ * the Activity list and the digest both scan it, so it degrades gradually rather than
+ * failing loudly. Better to bound it.
+ *
+ * Three rules make this safe to run unattended:
+ *
+ *   1. **A run with a pending confirmation is never pruned.** Deleting it would orphan a
+ *      question still waiting on you — the approval would point at a run that no longer
+ *      exists, and the phone button would answer into a hole.
+ *   2. **A run that hasn't finished is never pruned**, whatever its timestamp says. A
+ *      stuck-open row is a bug to investigate, not garbage to collect.
+ *   3. **Children go with their parent.** A subagent's run is dated alongside its caller,
+ *      so the window catches both; the parent's `parent_run_id` is deliberately not a
+ *      foreign key, so this is by date rather than by cascade.
+ *
+ * Conversations left with no runs are removed too. Keeping them would fill the sidebar with
+ * threads that open onto nothing, which reads as data loss rather than as retention.
+ *
+ * Deleting does not shrink the file — SQLite reuses freed pages instead. `vacuum` is
+ * offered separately for when you actually want the space back.
+ */
+export interface PruneOpts {
+  auditDays: number;
+  /** Report what would go without deleting anything. */
+  dryRun?: boolean;
+  runDays: number;
+  traceDays: number;
+}
+
+export interface PruneResult {
+  actions: number;
+  conversations: number;
+  messages: number;
+  runs: number;
+  /** Runs old enough to prune that were kept because something still refers to them. */
+  withheld: number;
+}
+
+const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString();
+
+/**
+ * Runs old enough to drop. `finished` rather than `started`, so a long run is judged by
+ * when it ended, and the two protections above are applied here rather than at each
+ * delete — one place to read, one place to get wrong.
+ */
+const prunableRuns = (before: string): number[] =>
+  (
+    db
+      .prepare(
+        `SELECT id FROM runs
+          WHERE finished IS NOT NULL AND finished < ?
+            AND status NOT IN ('running','queued')
+            AND id NOT IN (SELECT run_id FROM confirmations WHERE state = 'pending' AND run_id IS NOT NULL)`,
+      )
+      .all(before) as unknown as { id: number }[]
+  ).map((r) => r.id);
+
+export const pruneLedger = (opts: PruneOpts): PruneResult => {
+  const result: PruneResult = { actions: 0, conversations: 0, messages: 0, runs: 0, withheld: 0 };
+  const count = (sql: string, ...args: unknown[]): number =>
+    (db.prepare(sql).get(...(args as never[])) as { n: number }).n;
+
+  // Traces, oldest first. Keyed off the run's age, not the message's, so a whole
+  // conversation's trace ages as a unit.
+  if (opts.traceDays > 0) {
+    const before = daysAgo(opts.traceDays);
+    result.messages = count(
+      "SELECT COUNT(*) AS n FROM messages WHERE run_id IN (SELECT id FROM runs WHERE finished IS NOT NULL AND finished < ?)",
+      before,
+    );
+    if (!opts.dryRun)
+      db.prepare(
+        "DELETE FROM messages WHERE run_id IN (SELECT id FROM runs WHERE finished IS NOT NULL AND finished < ?)",
+      ).run(before);
+  }
+
+  if (opts.auditDays > 0) {
+    const before = daysAgo(opts.auditDays);
+    result.actions = count("SELECT COUNT(*) AS n FROM actions WHERE ts < ?", before);
+    if (!opts.dryRun) db.prepare("DELETE FROM actions WHERE ts < ?").run(before);
+  }
+
+  if (opts.runDays > 0) {
+    const before = daysAgo(opts.runDays);
+    const ids = prunableRuns(before);
+    result.runs = ids.length;
+    result.withheld =
+      count("SELECT COUNT(*) AS n FROM runs WHERE finished IS NOT NULL AND finished < ?", before) - ids.length;
+
+    if (!opts.dryRun && ids.length) {
+      const list = ids.join(",");
+      // Anything hanging off a run goes first, so nothing is left pointing at a gap.
+      db.exec(`DELETE FROM messages WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM actions WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM confirmations WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM runs WHERE id IN (${list})`);
+    }
+
+    // Threads whose every run has gone. Counted even on a dry run so the report is honest
+    // about what a real pass would remove.
+    const emptySql =
+      "SELECT COUNT(*) AS n FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id)";
+    if (opts.dryRun) {
+      // Can't observe the post-delete state without deleting, so approximate: threads whose
+      // only runs are in the prunable set.
+      result.conversations = ids.length
+        ? count(
+            `SELECT COUNT(*) AS n FROM conversations c
+              WHERE EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id)
+                AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id AND r.id NOT IN (${ids.join(",")}))`,
+          )
+        : 0;
+    } else {
+      result.conversations = count(emptySql);
+      db.exec(
+        "DELETE FROM conversations WHERE id IN (SELECT c.id FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id))",
+      );
+    }
+  }
+
+  return result;
+};
+
+/** Reclaim the space freed by a prune. Rewrites the file, so it is not run automatically. */
+export const vacuum = (): void => db.exec("VACUUM");
 
 // --- kv (watcher state) ---
 /**

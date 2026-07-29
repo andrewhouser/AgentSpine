@@ -23,6 +23,7 @@ import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { runTask, startTask } from "./runner.ts";
+import { AUDIT_RETENTION_DAYS, RUN_RETENTION_DAYS, TRACE_RETENTION_DAYS } from "./config.ts";
 import { describeTiers } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
 import { hasEnded, replay, subscribe } from "./events.ts";
@@ -545,6 +546,33 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
   }
 };
 
+/**
+ * Trim the ledger. Run on boot and once a day thereafter, because the ledger otherwise only
+ * ever grows and both the Activity list and the digest scan it. Never throws: a failed
+ * prune is a tidy-up that didn't happen, not a reason to take the dashboard down with it.
+ */
+const PRUNE_INTERVAL_MS = 24 * 60 * 60_000;
+
+const prune = (): void => {
+  try {
+    const r = store.pruneLedger({
+      auditDays: AUDIT_RETENTION_DAYS,
+      runDays: RUN_RETENTION_DAYS,
+      traceDays: TRACE_RETENTION_DAYS,
+    });
+    const total = r.messages + r.actions + r.runs;
+    if (total) {
+      console.log(
+        `pruned: ${r.messages} trace messages, ${r.actions} audit rows, ${r.runs} runs` +
+          (r.conversations ? `, ${r.conversations} empty conversations` : "") +
+          (r.withheld ? ` (${r.withheld} kept — pending or unfinished)` : ""),
+      );
+    }
+  } catch (err) {
+    console.error("prune failed:", err instanceof Error ? err.message : err);
+  }
+};
+
 // --- scheduler ---
 const SCHEDULER_TICK_MS = 60_000;
 const runScheduler = async (): Promise<void> => {
@@ -590,3 +618,5 @@ http.createServer(handle).listen(PORT, HOST, () => {
 });
 runScheduler();
 setInterval(runScheduler, SCHEDULER_TICK_MS);
+prune();
+setInterval(prune, PRUNE_INTERVAL_MS).unref();
