@@ -13,7 +13,6 @@ client_secret_*.json
 google-token.json
 _archive/
 # Internal design docs — not for the public repo.
-SPEC.md
 MIGRATION.md
 
 # OS files
