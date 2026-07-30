@@ -1,6 +1,6 @@
 # AgentSpine — Anticipatory Assistant: Build Spec
 
-Status: **§1–§6 built.** §5 took the draft-not-send path by explicit decision on
+Status: **§1–§6 and §11–§14 built.** §5 took the draft-not-send path by explicit decision on
 2026-07-25; the Google scopes remain read-only and are not to be widened without a new one. This spec turns AgentSpine from a capable *reactive*
 tool-runner into an assistant that **understands you, notices when your world changes, and
 can reach you and act while you're away** — without abandoning its security-first, local-first
@@ -8,6 +8,29 @@ posture.
 
 Read this top-to-bottom before starting. The **Orientation** and **Conventions & Gotchas**
 sections are load-bearing; skipping them will cause rework.
+
+> ### ▶ Work in flight — read this first if you are picking the project back up
+>
+> **§15 Meetings — all four phases built (2026-07-30).** Capture, live transcript, storage,
+> project filing, work-item extraction, the live context sidecar and the coaching hotkey are
+> done and tested. §15 carries the benchmark numbers, the Phase 0 finding that changed the
+> plan, and the decisions not worth relitigating — **read it before writing any meeting code.**
+>
+> Two things a new session must not rediscover the hard way: work items are ~5/5 false
+> positives out of a single extraction pass and go to the confirmation queue rather than
+> straight into RAG; and the meeting prompt must be append-only with volatile context **last**,
+> which is 1.1s versus ~26s on this hardware.
+>
+> Live microphone capture was verified on 2026-07-30 and is no longer a gap. What is left is
+> use rather than construction, in order: (1) create a project and index something into it —
+> the sidecar and the coach are built and measured, but with zero projects and zero chunks two
+> of the three cards have nothing to retrieve from and the coach works from transcript alone,
+> so both are gated on a corpus existing; (2) do one dashboard Record → Stop → extract run,
+> which is the last end-to-end ordering gap and the only way to see the sidecar and the hotkey
+> against live speech rather than a replayed transcript; (3) re-run the Phase 2 numbers against
+> a real multi-person meeting, since both samples so far were a conference talk and a synthetic
+> transcript and neither measures **recall**; (4) re-check the "flat ~1.1s" prefill claim in
+> the coaching table, which did not reproduce.
 
 ---
 
@@ -688,6 +711,298 @@ npm run tick | loop    # legacy single-goal heartbeat
 
 ---
 
+## 15. Meetings — listen, transcribe, extract  🟡 **PHASES 1–2 BUILT, 2026-07-30**
+
+> **Goal.** Sit a Mac in the room where a meeting is happening, transcribe it locally, show
+> the words live, pull work items out afterwards, and answer questions about it a few seconds
+> later. The work laptop is locked down and cannot run any of this; a second Mac hears the
+> room acoustically, which means **no meeting bot, no system-audio driver, no software on the
+> work machine at all** — and also means the work laptop's speakers must be on. Headphones
+> and the whole thing captures only one side.
+>
+> ### The measurements, taken 2026-07-30 — these drove every decision below
+>
+> **Transcription** (M3 Pro, 18 GB, whisper.cpp 1.9.1, against a real 27-minute recording):
+>
+> | | Model | Result |
+> |---|---|---|
+> | Full recording | `large-v3-turbo` | 2m28s — **11x realtime** |
+> | 5s chunk | `large-v3-turbo` | 1.72s |
+> | 5s chunk | `base.en` | **0.35s** |
+> | 30s chunk | `base.en` | 1.03s |
+>
+> Whisper always processes a 30-second window internally, so a 5s chunk costs nearly what a
+> 30s chunk does. That is a floor, not something a smaller chunk size buys back — hence
+> `MEETING_CHUNK_SECONDS` defaulting to 5 rather than 1.
+>
+> **The LLM** (Mac Mini M4, 32 GB, `Qwen3-Coder-30B-A3B-4bit-DWQ`):
+>
+> | | |
+> |---|---|
+> | Generation | 35 tok/s |
+> | Prefill, cold | ~340 tok/s |
+> | Prefill, append-only prefix | **flat ~1.1s regardless of length** |
+> | Model swap | 7.8s |
+> | 3B fast tier | 42 tok/s, 0.5s round trip |
+>
+> **Retrieval** (M3 Pro): embed one query 63ms; cosine over 50,000 chunks 101ms. ~165ms end
+> to end, so the always-on lane costs nothing worth measuring.
+>
+> ### The finding that shapes the coaching feature
+>
+> Same model, same information, only the **order** of the prompt changed:
+>
+> | Transcript | Volatile context at the FRONT | Volatile context at the END |
+> |---|---|---|
+> | 900 tok | 2.7s | 2.6s |
+> | 1,700 tok | 4.4s | **1.1s** |
+> | ~9,000 tok (45-min meeting) | ~26s | **~1.1s** |
+>
+> A stable, append-only prefix lets MLX-LM reuse its KV cache and prefill only the delta.
+> Freshly-recalled memories inserted at the front — which is exactly what `agent.ts:136` does
+> today, correctly, for the general agent loop — invalidate everything after them.
+>
+> **So the meeting path must invert the normal layout**: stable prefix first (system prompt,
+> tools, transcript-so-far), volatile retrieved context last, immediately before the query.
+> Do not "fix" `agent.ts` to match; front-loading trusted context is right for ordinary runs.
+>
+> ### Phase 0 result — run before building, and it changed the plan
+>
+> Extraction over the real transcript: summary, topics and decisions were **good**, with
+> every quote verified as real and correctly located; it even caught a `Java`→`Jira`
+> transcription error unprompted.
+>
+> Work items were **5 out of 5 false positives**, every one stamped `confidence: high`. Each
+> quote was real; each described something already *finished* — "we **came up with**
+> guidelines", "we **went** git native", "we **created** templates". The model converts past
+> accomplishments into future tasks and is completely confident doing it. **Its self-reported
+> confidence carries no information** and must not be surfaced as if it does.
+>
+> A strict second pass — re-read the surrounding passage, ask "future commitment or already
+> done?" — correctly rejected **3 of the 5** at ~2.3s each. Better, not sufficient.
+>
+> **Therefore work items must land in the confirmation queue, never straight into RAG.**
+> Extraction proposes; the human disposes. Summary, topics and decisions may auto-save.
+>
+> Caveat on the sample: the test recording is a *conference talk*, so the correct answer was
+> near-zero work items. It measures over-extraction well and says nothing about recall.
+> **Re-run Phase 0 against a real multi-person meeting before building Phase 2.**
+>
+> ### Machine split
+>
+> The 30B MoE needs ~17 GB resident, so a 16 GB Mini cannot host it and neither can the
+> 18 GB MacBook. Transcription and inference must also not share a GPU or they stutter
+> together at the worst moment.
+>
+> - **Mac Mini 16 GB — the ears.** Capture, Whisper, embeddings, dashboard. ~4 GB.
+> - **Mac Mini 32 GB — the brain.** Unchanged.
+> - **MacBook Pro 18 GB — the viewer.**
+>
+> ### Phase 1, built
+>
+> `src/senses/listen.ts` (ffmpeg avfoundation → chunked Whisper → segment events),
+> `src/meetings/store.ts`, `src/meetings/session.ts`, `/api/meetings/*` including an SSE
+> stream, a `MeetingsView`, `npm run listen`, and 34 assertions in `test/meetings.test.mjs`.
+>
+> Decisions worth not relitigating:
+>
+> 1. **`policy.audio` inverts the allowlist convention.** `devices: []` means **no**
+>    microphone, not any. An empty allowlist is a fine default for reading public web pages
+>    and a bad one for a microphone, where the cost of being wrong lands on people who never
+>    agreed to be recorded. `announce` speaks a line on start for the same reason.
+> 2. **The UI click is the consent; the tool call is not.** Starting capture from the
+>    dashboard runs directly — a human pressing Record has already given the only consent the
+>    queue collects, and routing it through an approval they must then go and grant is
+>    theatre. A `meeting_start` *tool* has no human in it and must be queued.
+> 3. **One microphone, one session.** `active` is a module-level singleton, so a second
+>    concurrent capture is impossible in the data model rather than merely discouraged. This
+>    is why meetings are a top-level section and not a Record button inside each project.
+> 4. **Both transcription passes are kept.** Overwriting the live rows would be tidier and
+>    would mean a failed final pass leaves *no* transcript. A rough transcript beats a clean
+>    error.
+> 5. **Filing is separate from capture, and happens after.** A finished meeting becomes a
+>    `project_sources` row of kind `meeting` — a column that existed since projects were
+>    built and had never had a second value. Its chunks go in the same `chunks` table, so
+>    project recall picks it up with no second retrieval path. Verified: 33 chunks in 2.8s,
+>    and a query about traceability returned the right passage.
+> 6. **Name corrections are substitution, not a decoder prompt.** Measured: a glossary prompt
+>    fixed `chat GPT`→`ChatGPT` and still produced **"PLOD"** for *Claude* in both passes.
+> 7. **Audio is never *retained*.** Held in memory, bounded by `MEETING_MAX_MINUTES`; each
+>    chunk touches disk only as a temp WAV unlinked in a `finally`, because `whisper-cli` has
+>    no stdin mode. Point `TMPDIR` at a RAM disk if that distinction matters to you.
+> 8. **Transcripts prune on their own 30-day window** while meeting rows outlive them.
+>
+> Also fixed here: `indexSource` would have walked `meeting:12` as a relative path, failed the
+> allowlist, and overwritten a good status with a denial. It now skips non-`path` kinds.
+>
+> ### Verified live, 2026-07-30
+>
+> **Live microphone capture runs.** The ffmpeg-to-avfoundation path was the one link never
+> exercised — everything downstream was proven against the real recording, but the microphone
+> itself was left untested rather than record the room unprompted. `npm run listen record`
+> closed it, with `policy.audio.enabled` true and `MacBook Pro Microphone` allowlisted.
+>
+> Note what that smoke test does and does not cover. It exercises ffmpeg → chunking → the
+> live Whisper pass → segment events. It does **not** touch the meeting row lifecycle, the
+> final pass, the SSE stream, or extraction — those are proven against the file-based path
+> instead. A dashboard Record → Stop → extract run is the one remaining end-to-end gap, and
+> it is now a small one: every piece in it has been exercised, just not in that order.
+>
+> ### Phase 2, built
+>
+> `src/meetings/extract.ts`, two new tables (`meeting_extractions`, `meeting_work_items`),
+> `POST /api/meetings/:id/extract`, the extraction panel in `MeetingsView`, and 60 assertions
+> in `test/meeting-extract.test.mjs`. Extraction runs detached after the final pass so it
+> never holds the retained audio, and carries its own status: a meeting whose extraction fails
+> is still `done`, because the words are the part that cannot be recovered.
+>
+> **Three gates, cheapest first.** Anchoring (free) rejects a quote that is not in the
+> transcript — the model writing its own evidence — and runs before the expensive gate so a
+> fabrication costs no inference. The strict second pass (~2.3s) asks the one question the
+> first pass gets wrong. A human is the last gate, not the fallback.
+>
+> **Measured after building, both directions:**
+>
+> | Sample | Correct answer | Result |
+> |---|---|---|
+> | The 27-min conference talk | ≈ zero work items | **4 of 4 rejected**, each citing the deciding words |
+> | Synthetic sprint review, 2 real commitments + 3 accomplishments | 2 | **2 of 2 queued** with owners; the accomplishments were never proposed |
+>
+> 1,978 words extracted in 53s — comfortably inside the ~1 minute per half hour estimate.
+> Neither sample measures **recall**; that still needs a real multi-person meeting.
+>
+> Decisions worth not relitigating:
+>
+> 1. **Anchoring is loose on purpose, and asymmetrically so.** A model retyping a line drops
+>    filler and repunctuates, so matching is on words alone, and a quote missing an exact
+>    match still anchors if **eight consecutive words** of it appear. Eight is far more than
+>    invention lands by accident and far less than a faithful retype needs.
+> 2. **An unreadable verdict means rejection.** `parseVerdict` defaults to `neither`, never
+>    `commitment`. A garbled reply is not permission to spend a human's attention.
+> 3. **Unverified candidates are not queued.** If the strict pass could not run — the call
+>    failed, or the per-meeting cap hit — the item is stored and shown, not proposed. Given a
+>    measured 5-in-5 false-positive rate, an item nobody checked is noise with a timestamp.
+> 4. **Rejected candidates stay on screen, greyed, with the reason.** Showing only survivors
+>    would be tidier and would hide the number that justifies this whole design. It is also
+>    the fastest way to notice the verifier starting to reject real work.
+> 5. **Quotes prune with the transcript; everything else outlives it.** A summary describes a
+>    meeting, a quote is a copy of it. Keeping quotes past the 30-day window would leave the
+>    sharpest sentences on disk precisely because a model found them notable.
+> 6. **Windows do not overlap.** An item split across a boundary is worth less than the same
+>    item proposed twice with two different quotes; the merge dedupes either way.
+> 7. **Decisions and work items are told apart in the prompt.** Without that line the model
+>    listed every assignment as both. Auto-saving a decision is fine; auto-saving a task
+>    wearing a decision's hat is the rule being routed around.
+>
+> Still worth trying: plain `Qwen3-30B-A3B-Instruct` via `MEETING_EXTRACT_BASE_URL`. The
+> current `LOCAL_MODEL` is a *Coder* fine-tune doing conversation analysis — the wrong tool at
+> identical cost, and the knob to compare them is now in place. All the numbers above are the
+> Coder tune's, so that comparison has a baseline.
+>
+> ### Phase 3, built
+>
+> `src/meetings/context.ts`, a `context` event on the meeting stream, a sidecar beside the
+> live transcript, `GET /api/meetings/:id/context`, and 18 assertions in
+> `test/meeting-context.test.mjs`. Refreshes on a timer while capture runs; measured **22ms**
+> end to end against a 15-chunk corpus, so the ~165ms budget holds with room to spare.
+>
+> Verified: a live meeting saying *"how do we link a requirement to the test cases that cover
+> it"* surfaced, from an earlier meeting filed under the same project, the passage *"We managed
+> many-to-many traceability. So one requirement can have many test cases."* That is the feature
+> working.
+>
+> Decisions worth not relitigating:
+>
+> 1. **One embed, three cards.** `scoreChunks` and `recallScored` both take an optional
+>    pre-computed vector. Embedding is 63ms and a cosine sweep is 101ms, so ranking three
+>    corpora against one question pays for the embed once. A fourth card costs a sweep.
+> 2. **Past meetings and project documents are one retrieval, partitioned after.** A filed
+>    meeting is a `project_sources` row of kind `meeting` in the same `chunks` table. Slicing
+>    to a top-k before partitioning would let a run of strong document hits starve the meetings
+>    card of a transcript sitting just below the cut. `chunksForProject` joins `kind` in rather
+>    than sniffing the `meeting:12` prefix, which would misfile a directory named `meeting:`.
+> 3. **Two thresholds, because one does not work.** Measured noise floor with
+>    `nomic-embed-text`: off-topic 0.41–0.45, generic software chatter 0.55, on-topic
+>    0.60–0.74 — hence an absolute floor of **0.58**. That floor cannot separate same-domain
+>    also-rans: a passage about screenshots scored **0.618** against a traceability question
+>    purely for being in the same talk, against **0.708** for the right one. So a **relative
+>    gap** (0.9 × best) runs as well. Both numbers belong to the embedding model, not the idea.
+> 4. **An empty card renders as nothing.** No placeholder, no padding to k. A ranking always
+>    returns something, so a card that always has content teaches you to stop reading it.
+> 5. **No embedder means no cards at all.** The keyword fallback returns word-overlap *counts*,
+>    not cosine similarities — an overlap of 3 sails past a threshold meant for [0,1]. Rather
+>    than teach the filters two scales, the panel stays dark.
+> 6. **Context events do not accumulate in the replay buffer.** Cards are current state, not a
+>    log; a three-hour meeting refreshing every 15s would push 720 of them through a 500-event
+>    buffer and evict the transcript a reconnecting browser needs.
+> 7. **Retrieval only, and this is a hardware fact.** 165ms can run behind a live transcript;
+>    35 tok/s cannot. The moment a "just summarise the cards" call lands here the feature stops
+>    being always-on and becomes a queue of stale summaries.
+>
+> Caught by the tests, worth knowing: `Math.max` of anything and NaN is NaN, so one unscored
+> hit made the relative gap NaN and silently emptied a card that also held a good one.
+>
+> ### Phase 4, built
+>
+> `src/meetings/coach.ts`, `POST /api/meetings/:id/coach`, a `coach` event, a ⌘/ hotkey and an
+> answer panel at the top of the sidecar, and 20 assertions in `test/meeting-coach.test.mjs`.
+> Prompt order is **system → transcript-so-far → retrieved context → the question**, per the
+> finding above, and the tests assert that order directly because a tidy-up that "fixed" it to
+> match `agent.ts` would break nothing any other test can see.
+>
+> **Re-measured 2026-07-30, and the original table needs qualifying.**
+>
+> The first attempt showed *no* difference between the orders. That run was wrong: it held the
+> retrieved context constant between presses, which makes **both** orders append-only. In real
+> use retrieval runs again on every press and the context text differs — which is the entire
+> point, because a changed block at the front invalidates the transcript behind it.
+>
+> With the context varying per press, at ~2,631 tokens of transcript, averaging presses 2–3:
+>
+> | | Prefill (`max_tokens=8`) | End to end (`max_tokens=220`) |
+> |---|---|---|
+> | Context LAST (built) | **3,608ms** | 5,910ms |
+> | Context FIRST | 9,238ms | 4,679ms |
+>
+> Two corrections to carry forward:
+>
+> 1. **The effect is real and large — 2.6× — but it lives in *prefill*.** End-to-end is noisy
+>    because generation length varies per answer and swamps the difference at this transcript
+>    size. Measure prefill when testing this, not wall clock. The prefill saving grows with
+>    the transcript while generation does not, so on a 45-minute meeting the ordering becomes
+>    the dominant term — which is what the original table was showing.
+> 2. **"Flat ~1.1s regardless of length" did not reproduce.** Context-last measured 3.6s at
+>    2,631 tokens, not 1.1s. The *ratio* holds; the absolute floor is higher than recorded.
+>    Treat the 1.1s figure as unverified until someone re-runs it.
+>
+> Decisions worth not relitigating:
+>
+> 1. **The transcript is trimmed in blocks, never by a sliding window.** A sliding cap moves
+>    the first byte of the prompt every few seconds and destroys exactly the property this is
+>    built on. Blocks mean one expensive re-prefill per `MEETING_COACH_BLOCK` segments instead
+>    of one per keypress, and the tests assert the prefix holds still between jumps.
+> 2. **Single-flight.** Three presses in five seconds produce one answer, not three queued
+>    ones arriving after the moment has passed. The second press is told the first is working.
+> 3. **The previous answer stays on screen while the next generates.** Blanking it would clear
+>    the panel for exactly the five seconds you are most likely to be reading it.
+> 4. **Notes, not a script.** The prompt asks for 2–4 bullets leading with a number, a name or
+>    a decision already made, and explicitly permits "nothing on this". Five seconds is a long
+>    silence and reading off a second screen is visible on camera; the useful artefact is the
+>    card you would have written beforehand, not a sentence to recite.
+> 5. **The answer shows the question it answered.** The transcript is rough, and an answer to
+>    a misheard question should be obvious at a glance rather than merely puzzling.
+>
+> ### Standing constraint
+>
+> Meeting work is **local-only**. `CLOUD_ENABLED` plus `JUDGE_ESCALATION` means a
+> deliberative-looking task can escalate to `gpt-4o`, and the temptation to allow it arrives
+> exactly when you are mid-meeting and impatient. Pin it with a project policy overlay
+> (`narrow-policy.ts`) before that moment, not after. Recording other people is also the one
+> capability here whose risk lands on someone who is not the operator; consent law varies by
+> state and employer policy is a separate question from the law.
+
+---
+
 **Original phase 2/3 sketch, kept for reference:**
 - **Projects** — per-project instructions plus documents indexed from allowlisted paths into
   scoped chunks. Two trust tiers, and they must not enter the prompt the same way: instructions
@@ -708,6 +1023,14 @@ npm run tick | loop    # legacy single-goal heartbeat
 - `conversations` table (§11): `id, project_id, title, created, updated, archived`; `runs` gains
   `conversation_id` (indexed) and a `queued` status.
 - `kv` table (state watchers): `key TEXT PRIMARY KEY, value TEXT, updated TEXT`.
+- `meetings` + `meeting_segments` tables (§15): a capture session and its transcript, the
+  latter carrying a `pass` (`live` | `final`) so both survive. `project_sources.kind` gains
+  its first non-`path` value, `meeting`.
+- `meeting_extractions` + `meeting_work_items` (§15 Phase 2): what was made of a transcript.
+  Work items keep their `verdict` — including the refusals — so the extraction's
+  false-positive rate stays visible rather than being edited out of the record. A queued item
+  holds the `confirmation_id` it raised; approving that confirmation is what runs
+  `memory_save`, and is the only path from a meeting into long-term memory.
 - `memories` gains heavier use (kinds: `reflection`, `preference`, `profile`); consider an index on
   `kind`.
 - No schema change needed for push/auth/digest (use existing `actions`/`confirmations`).

@@ -103,10 +103,154 @@ export interface ProjectSource {
   chunk_count: number;
   file_count: number;
   id: number;
+  /** `path` for an indexed directory, `meeting` for a transcript. */
   kind: string;
   last_indexed: null | string;
   ref: string;
   status: null | string;
+}
+
+// --- meetings ---
+
+/** Mirrors MeetingStatus in src/meetings/store.ts. */
+export type MeetingStatus = "abandoned" | "done" | "failed" | "recording" | "transcribing";
+
+export interface Meeting {
+  device: string;
+  ended: null | string;
+  id: number;
+  note: null | string;
+  project_id: null | number;
+  started: string;
+  status: MeetingStatus;
+  title: null | string;
+  transcribed_at: null | string;
+  word_count: number;
+}
+
+export interface MeetingSegment {
+  end_ms: number;
+  id: number;
+  ord: number;
+  start_ms: number;
+  text: string;
+}
+
+/** One audio input, and whether policy.audio.devices lists it. */
+export interface AudioDevice {
+  allowed: boolean;
+  name: string;
+}
+
+export interface AudioDevices {
+  allowed: string[];
+  devices: AudioDevice[];
+  enabled: boolean;
+}
+
+export interface LiveStatus {
+  device: null | string;
+  elapsedMs: number;
+  meetingId: null | number;
+  /** Chunks captured but not yet transcribed. Non-zero means transcription is behind. */
+  pendingChunks: number;
+  recording: boolean;
+}
+
+/** Mirrors MeetingEvent in src/meetings/session.ts. */
+export interface MeetingEvent {
+  answer?: CoachAnswer;
+  cards?: ContextCards;
+  kind: "coach" | "context" | "error" | "extraction" | "segment" | "status";
+  meetingId: number;
+  note?: string;
+  segment?: { endMs: number; startMs: number; text: string };
+  seq: number;
+  status?: MeetingStatus;
+  thinking?: boolean;
+}
+
+/** Mirrors DictationStatus in src/senses/dictate.ts. */
+export interface DictationStatus {
+  device: null | string;
+  listening: boolean;
+  maxSeconds: number;
+  model: string;
+  /** False when the Whisper model file is missing — both microphones fail the same way. */
+  modelReady: boolean;
+  /** Whether the server's own microphone can be used right now. */
+  serverMic: boolean;
+  serverMicReason: string;
+}
+
+/** Mirrors CoachAnswer in src/meetings/coach.ts. */
+export interface CoachAnswer {
+  cards: ContextCards;
+  elapsedMs: number;
+  /** The model's notes. Empty when it had nothing to offer. */
+  notes: string;
+  /** The recent transcript the answer was responding to. */
+  question: string;
+}
+
+// --- live context cards (mirrors src/meetings/context.ts) ---
+
+export interface ContextCard {
+  score: number;
+  /** Where this came from — a file path, an earlier meeting's title, or "memory". */
+  source: string;
+  text: string;
+}
+
+export interface ContextCards {
+  documents: ContextCard[];
+  meetings: ContextCard[];
+  memories: ContextCard[];
+  /** The rolling transcript window these were retrieved for. */
+  query: string;
+}
+
+// --- what was made of the transcript (mirrors src/meetings/store.ts) ---
+
+export type ExtractionStatus = "done" | "failed" | "running";
+
+export interface MeetingDecision {
+  /** Null once the retention window has taken the transcript this was quoted from. */
+  quote: null | string;
+  start_ms: number;
+  text: string;
+}
+
+export interface MeetingExtraction {
+  created: string;
+  decisions: MeetingDecision[];
+  elapsed_ms: number;
+  meeting_id: number;
+  model: null | string;
+  note: null | string;
+  status: ExtractionStatus;
+  summary: null | string;
+  topics: string[];
+  windows: number;
+}
+
+/**
+ * What became of one candidate work item. Only `queued` reached the confirmation queue;
+ * the rest are kept so the extraction's false-positive rate stays visible rather than
+ * being quietly edited out of the record.
+ */
+export type WorkItemVerdict = "already-done" | "not-a-task" | "queued" | "unanchored" | "unverified";
+
+export interface MeetingWorkItem {
+  confirmation_id: null | number;
+  id: number;
+  meeting_id: number;
+  owner: null | string;
+  quote: null | string;
+  start_ms: null | number;
+  task: string;
+  verdict: WorkItemVerdict;
+  verdict_note: null | string;
 }
 
 /** A unit a turn delegated to, with its own tool calls. */

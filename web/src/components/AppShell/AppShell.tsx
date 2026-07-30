@@ -13,6 +13,7 @@ import { ActivityView } from "../ActivityView/ActivityView.tsx";
 import { AutomationsView } from "../AutomationsView/AutomationsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { ConfirmationsView } from "../ConfirmationsView/ConfirmationsView.tsx";
+import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
 import { SettingsView } from "../SettingsView/SettingsView.tsx";
 import { Sidebar } from "../Sidebar/Sidebar.tsx";
@@ -24,6 +25,7 @@ const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
   automations: "Automations",
   confirmations: "Approvals",
+  meetings: "Meetings",
   settings: "Settings",
 };
 
@@ -141,6 +143,7 @@ export const AppShell = () => {
         {route.view === "activity" && <ActivityView />}
         {route.view === "automations" && <AutomationsView />}
         {route.view === "confirmations" && <ConfirmationsView />}
+        {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}
         {route.view === "project" && route.projectId !== null && (
           <ProjectView

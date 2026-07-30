@@ -61,5 +61,12 @@
   "git": {
     "//": "Absolute repo directories git_status may read. Read-only: branch, uncommitted files, recent commits. Empty = no repo access. e.g. [\"~/Developer\"]",
     "repoDirs": ["~/Developer"]
+  },
+
+  "audio": {
+    "//": "Microphone capture for meeting transcription. NOTE the inverted convention: devices is an allowlist and [] means NO device, not any device — an empty list is a safe default for reading web pages and an unsafe one for a microphone. List avfoundation input names exactly as `npm run listen devices` prints them. announce speaks a line out loud when capture starts, because the people being recorded cannot object to something they don't know about. macOS will also prompt for microphone permission the first time — a second enforcement layer the OS owns.",
+    "enabled": true,
+    "devices": ["MacBook Pro Microphone"],
+    "announce": true
   }
 }

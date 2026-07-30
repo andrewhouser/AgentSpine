@@ -11,7 +11,7 @@
   border: 1px solid var(--danger-line);
   border-radius: var(--radius);
   color: var(--danger);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   margin: 10px 0;
   padding: 9px 12px;
   white-space: pre-wrap;

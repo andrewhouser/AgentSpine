@@ -22,7 +22,7 @@
   border: 0;
   color: var(--text-dim);
   flex: 1;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   min-width: 0;
   overflow: hidden;
   padding: 6px 4px 6px 9px;
@@ -42,7 +42,7 @@
   border-radius: 4px;
   color: var(--text-faint);
   flex: none;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1;
   opacity: 0;
   padding: 4px 5px;
@@ -67,7 +67,7 @@
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   padding: 5px 9px;
   width: 100%;
 }

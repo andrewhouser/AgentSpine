@@ -251,7 +251,7 @@ export const weatherAlerts: Tool = {
     if (!where) {
       return (
         "ERROR: no location given and DEFAULT_LOCATION is not set in .env. " +
-        'Pass one explicitly, e.g. { "location": "Farmington, NH" }.'
+        'Pass one explicitly, e.g. { "location": "Concord, NH" }.'
       );
     }
     try {

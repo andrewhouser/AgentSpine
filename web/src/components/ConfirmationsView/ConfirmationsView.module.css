@@ -13,7 +13,7 @@
 
 .subhead {
   border-top: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   margin: 28px 0 10px;
@@ -25,7 +25,7 @@
   align-items: center;
   color: var(--text-dim);
   display: flex;
-  font-size: 13px;
+  font-size: 0.8125rem;
   gap: 9px;
   padding: 5px 0;
 }
@@ -33,7 +33,7 @@
 .state {
   border-radius: 100px;
   flex: none;
-  font-size: 11px;
+  font-size: 0.6875rem;
   padding: 1px 8px;
 }
 
@@ -51,7 +51,7 @@
 .tool {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .summary {

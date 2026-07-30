@@ -59,6 +59,21 @@ export interface Policy {
    * every call it makes still passes through this same broker and this same policy.
    */
   subagents?: { enabled: boolean };
+  /**
+   * Microphone capture for meeting transcription. Absent = denied, like every other
+   * optional surface.
+   *
+   * `devices` is an allowlist of avfoundation input names, and [] means NO device rather
+   * than any device. That inverts the convention `browser.navigateAllowlist` uses, and the
+   * inversion is deliberate: an empty allowlist that means "everything" is a reasonable
+   * default for reading public web pages and an unreasonable one for a microphone, where
+   * the failure mode is recording a room nobody agreed to record.
+   *
+   * `announce` makes the capture say so out loud when it starts. Recording other people is
+   * the one capability here whose risk lands on someone who is not the operator, and they
+   * cannot object to something they do not know is happening.
+   */
+  audio?: { enabled: boolean; devices: string[]; announce?: boolean };
   budgets?: {
     perRun?: { default?: number; tools?: Record<string, number> };
     perDay?: { default?: number; tools?: Record<string, number> };

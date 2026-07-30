@@ -29,10 +29,16 @@ Neither gate is a prompt the model could be talked out of — both are code.
 
 ```bash
 npm install
-cp .env.example .env      # then edit: LOCAL_LLM_URL, optional OPENAI_API_KEY, TAVILY_API_KEY
-npm run web:build         # build the interface (once; only needed again when web/ changes)
-npm run dashboard         # http://localhost:8787 — chat, scheduler, API
+cp .env.example .env              # then edit: LOCAL_LLM_URL, optional OPENAI_API_KEY, TAVILY_API_KEY
+cp profile.example.md profile.md  # who you are — see "Active memory" below
+npm run web:build                 # build the interface (once; only needed again when web/ changes)
+npm run dashboard                 # http://localhost:8787 — chat, scheduler, API
 ```
+
+Both copies are gitignored. `.env` holds your keys; `profile.md` holds standing facts about
+you and is injected as trusted context on every run, which makes it useful to the assistant
+and nobody else's business. AgentSpine runs fine without a profile — it just starts each run
+knowing less.
 
 Grant it powers by editing `policy.json` (everything starts empty/denied). To let it
 control Notes, find the bundle id and add it:
@@ -63,6 +69,30 @@ inline in the thread with the full proposed text — for a draft, the entire dra
 summary of it, because a one-line preview makes approving a rubber stamp. Reject with a reason
 and it becomes a `preference` memory that gets recalled before similar work.
 
+**You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
+say the thing, press again. Whisper transcribes it locally and drops the words into the
+composer **for you to read and edit** — nothing is ever sent automatically, because the text is
+about to become an instruction to an agent that can call tools and Whisper mishears names.
+Dictated text is inserted at the cursor, so it never overwrites what you had already typed.
+
+There are two microphones, and which ones you can use depends on how you reached the page:
+
+| Source | Works when | Notes |
+|---|---|---|
+| **This browser** | on `localhost` or over HTTPS | Records where you're sitting. `getUserMedia` doesn't exist on a plain-http LAN address — a browser rule, not something the server can grant. |
+| **Server mic** | `policy.audio` allows it | Records the room the *server* is in. Refused while a meeting is recording — one microphone, one session. |
+
+The picker only appears when both are actually available. Dictation uses the **accurate**
+Whisper model rather than the fast one: 14 seconds of speech takes about 1.4s, and that is a
+cheap price for not sending a misheard command.
+
+One measured detail worth keeping: `large-v3-turbo` returns lowercase, unpunctuated text on
+short clips — and a dictation is always a short clip. `DICTATION_PROMPT` steers it back, and
+the difference is stark: *"great um i by profession and choice uh i'm a tester"* becomes
+*"Great. I, by profession and choice, am a tester."* Note this is the **opposite** lesson from
+`MEETING_CORRECTIONS`, where a prompt was measured *not* to fix a misheard name. A prompt
+biases style reliably and vocabulary poorly; the two knobs exist because those differ.
+
 **Conversations have memory of themselves.** Each turn sees what was asked and concluded in
 earlier turns of the same thread — not the prior tool traces, which would exhaust a local
 model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
@@ -71,7 +101,24 @@ model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
 Everything else lives one click away in the sidebar: **Approvals** (the whole queue, including
 what a 3am scheduled job asked for), **Automations** (schedules and watchers), **Activity**
 (every run — chat, scheduled, watcher — with its full trace and audit log), and **Settings**
-(memory and the current policy).
+(appearance, memory, and the current policy).
+
+**Appearance is per-browser, not per-server.** Settings → Appearance has a theme (System,
+Light, Dark) and a text-size slider from 85% to 140%. These live in `localStorage` rather than
+on the server because they describe *the screen you are reading on*, not the assistant — this
+dashboard is designed to be opened from more than one machine, and a server-side preference
+would force the laptop's answer onto the monitor across the room. It also means no API surface
+and no way for the agent's own API to change how its dashboard looks.
+
+System is the default and follows the OS, including switching underneath you at sunset while
+the page is open. The stored choice is applied by a small inline script in `index.html` before
+the first paint, so there is no flash of the wrong theme on load.
+
+The slider scales **text only** — every font size in every module is a `rem` driven by one
+custom property, while spacing stays in `px`. So the layout gets denser as text grows rather
+than merely larger, which is the honest behaviour for something labelled "font size" instead
+of quietly becoming a zoom. It starts from your browser's own font setting rather than
+overriding it.
 
 A message posts and returns a run id immediately; the browser then follows the run's event
 stream. So a five-minute cycle doesn't hold an HTTP request open, and reloading mid-run
@@ -96,7 +143,7 @@ Three tiers, each a **separate always-warm endpoint**:
 
 | tier | what runs there | what it's for |
 |---|---|---|
-| `fast` | a small local model on its own port | short factual lookups, `tracker` / `runner` / `inspector` units |
+| `fast` | a small local model on its own port | `tracker` / `runner` / `inspector` units — reached by declaring it, never by auto-routing |
 | `standard` | your main local model | everything with tools in it — the default |
 | `deep` | the cloud model | the rare genuine judgment call |
 
@@ -112,6 +159,25 @@ staying on one model ............. 0.6s
 Routing a simple question to the small model saves ~0.2s of generation and then pays ~8s
 to switch back. On one server, tier routing is *worse than not routing at all*. Two pinned
 servers never swap, and it finally pays.
+
+**Sizing only ever routes UP.** There used to be a rule sending short factual questions down
+to `fast`, written for "what is the capital of France". It got *"What is my name?"* —
+grammatically identical, semantically the opposite, since only your profile can answer it. The
+3B invented an argument for `state_get`, wrote state on a read-only question, searched memory
+using the answer as its query, and finished by describing its own context instead of answering
+from it. `profile.md` had said `Name: Andrew.` the whole time.
+
+A narrower regex (exclude first-person pronouns) was tried and is still wrong: *"What's the
+wifi password?"*, *"Who is Priya?"* and *"When is the standup?"* all need your context and
+contain no pronoun. Telling those apart from general knowledge is a semantic judgment, and a
+classifier to make it costs more than the ~190ms it protects — so the rule is gone rather than
+patched, and `standard` is the floor for every task.
+
+The tier itself is untouched, and that distinction is the point: `runner`, `inspector` and
+`tracker` still declare `tier: fast`, and the escalation classifier still runs there. Every
+remaining use is narrow, mechanical and **opted into by a file someone wrote**. The failure
+was never "a 3B is bad" — it was handing one an open-ended turn with the entire tool registry
+and your profile in context, which no declared-tier caller does.
 
 ### Setting up the fast tier on the model host
 
@@ -224,6 +290,155 @@ by `narrowPolicy()` and covered by 23 assertions in `npm test` — a project row
 through the API the agent itself can reach, so "create a project" must not become a way to
 widen the allowlist.
 
+## Meetings — the ears
+
+Capture a meeting through this Mac's microphone, transcribe it locally, and file the
+transcript into a project.
+
+```
+Sidebar → Meetings
+```
+
+**Nothing works until you allowlist a device.** `policy.audio` is deny-by-default like every
+other surface, and note the inverted convention: `devices: []` means **no** microphone, not
+any microphone. An empty allowlist is a reasonable default for reading public web pages and
+an unreasonable one for a microphone, where the cost of being wrong lands on people who never
+agreed to be recorded. `npm run listen devices` prints the exact snippet.
+
+```bash
+npm run listen devices      # what ffmpeg sees, and which are allowlisted
+npm run listen status       # models, retention, what recorded recently
+npm run listen record 20    # capture 20s and print the transcript — also surfaces
+                            # macOS's own mic prompt at a moment you chose
+```
+
+**Two Whisper models, because one cannot do both jobs.** Measured on an M3 Pro:
+
+| | Model | Speed |
+|---|---|---|
+| Live view, every 5s | `base.en` | 0.35s per chunk |
+| Final pass, once at the end | `large-v3-turbo` | 11x realtime — 27 min in 2m28s |
+
+Nothing downstream reads the live pass; it exists so you can see it working. The final pass
+produces the transcript that gets stored, indexed and extracted from. **Both are kept** — if
+the final pass fails, the rough one is still there, and a rough transcript is worth far more
+than a clean error.
+
+**Audio is never retained.** It is held in memory (~1.9 MB/minute, bounded by
+`MEETING_MAX_MINUTES`) and each chunk touches disk only as a temp WAV that is unlinked in a
+`finally`, because `whisper-cli` has no stdin mode. That is "never *retained* on disk" rather
+than "never touches disk" — if the distinction matters to you, point `TMPDIR` at a RAM disk.
+
+**Names need substitution, not a prompt.** Measured on a real recording: feeding Whisper a
+glossary fixed `chat GPT` → `ChatGPT` and still transcribed *Claude* as **"PLOD"** in both
+passes. A prompt biases the decoder; it does not correct a word the model simply did not
+hear. `MEETING_CORRECTIONS` is a find-and-replace list applied to the final transcript.
+
+**A meeting belongs to the machine; filing it belongs to a project.** There is one
+microphone, so "is something recording right now" is global state — which is why capture has
+its own section rather than a Record button inside each project, where you could press two.
+Assigning a project is separate and can happen *after*, because you often do not know which
+project a meeting was about until it is over. Choosing one files the transcript as a
+`project_sources` row of kind `meeting`; its excerpts land in the same `chunks` table as
+indexed documents, so project recall picks it up with no separate retrieval path.
+
+Transcripts are pruned on their own shorter window (`TRANSCRIPT_RETENTION_DAYS`, default 30)
+while the meeting rows outlive them — after the words are gone you can still see that a
+meeting happened and what was extracted from it, which is the index you want without the
+content you don't. Extractions follow the same rule with one wrinkle: a summary *describes* a
+meeting and stays, a verbatim quote is a *copy* of it and is blanked with the transcript.
+
+### What the transcript becomes
+
+When the final pass finishes, the meeting is extracted from: a summary, topics and decisions,
+which save automatically, and candidate work items, which **go to Approvals instead**. That
+split is a measurement, not caution. On a real recording, one extraction pass produced **5
+work items and all 5 were false positives**, every one stamped `confidence: high`. The quotes
+were real; each described something already *finished* — "we **came up with** guidelines", "we
+**went** git native". The model turns past accomplishments into future tasks and is completely
+sure while doing it, so its self-reported confidence is not stored and not shown.
+
+Every candidate passes three gates, cheapest first:
+
+| Gate | Cost | Rejects |
+|---|---|---|
+| **Anchoring** — is this quote actually in the transcript? | free | a quote the model wrote itself |
+| **Strict second pass** — future commitment, or already done? | ~2.3s each | past achievements phrased as tasks |
+| **You** | Approvals | everything else |
+
+Measured after this was built: on the conference talk (correct answer ≈ zero work items) the
+second pass rejected **4 of 4**, citing the deciding words each time. On a sprint review with
+two genuine commitments and three accomplishments, both commitments reached the queue with
+their owners and the accomplishments were never proposed. A half-hour meeting takes ~30-60s.
+
+Approving a work item runs `memory_save` — that is the *only* way one reaches long-term
+memory. Rejecting it with a reason saves the reason as a preference, so "stop turning our
+retrospectives into tasks" is something the assistant carries rather than something you say
+again next week. Rejected candidates stay visible on the meeting with the verifier's reason,
+because a UI that hides its own error rate is asking for trust it has not earned.
+
+Extraction is **local only** by construction: every call is `sensitivity: "private"`, which
+`resolveTier` refuses to resolve to the cloud tier whatever `CLOUD_ENABLED` says. Point
+`MEETING_EXTRACT_BASE_URL` at a second local server to run it on a different model — the
+default `LOCAL_MODEL` is a *Coder* fine-tune doing conversation analysis. Re-run any time from
+the meeting's **Re-run** button; a transcript cannot be re-recorded, an extraction is free.
+
+### The sidecar — context while you are still in the room
+
+Beside the running transcript, three cards show what you already know about whatever is being
+said right now: passages from **earlier meetings** filed under the same project, excerpts from
+the project's **indexed documents**, and relevant **memories**. It refreshes every 15 seconds
+against a rolling 60-second window of what was just said.
+
+**It retrieves and never generates**, and that is a hardware fact rather than a preference.
+Embedding the window is ~63ms and scoring 50,000 chunks is ~101ms, so the lane costs ~165ms
+and can run continuously. Generation is 35 tok/s — fine for one deliberate ask, impossible for
+a panel that refreshes while people are talking. Measured end to end: **22ms**.
+
+**A card with nothing strong in it renders as nothing.** No placeholder, no padding. Two
+filters decide: an absolute floor, and a gap relative to the best hit. Both are needed —
+measured with `nomic-embed-text`, off-topic chatter tops out at 0.45 and generic software talk
+at 0.55, so a floor of 0.58 excludes them; but inside a single-domain corpus everything scores
+high, and a passage about screenshots hit 0.618 against a question about traceability while
+the right passage scored 0.708. Only a relative gap separates those. Tune with
+`MEETING_CARDS_MIN_SCORE` and `MEETING_CARDS_RELATIVE` — **both belong to your embedding
+model**, not to the idea.
+
+With no project assigned only the memories card is searched, which is the assign-after design
+working rather than a degraded mode. The cards are also only as good as what you have indexed:
+with no projects, two of the three have nothing to retrieve from.
+
+### The hotkey — ⌘/ when someone asks you something
+
+Press **⌘/** (Ctrl+/ elsewhere), or the **Help me** button in the sidecar, and the local model
+writes 2–4 bullets on what was just said, using the last 45 seconds of transcript plus whatever
+retrieval turns up. About five seconds. It shows the question it answered underneath, because
+the transcript is rough and an answer to a *misheard* question should be obvious rather than
+merely puzzling.
+
+**Notes, not a script.** Five seconds is a long silence and reading off a second screen is
+visible on camera, so the model is asked for the card you would have written beforehand — a
+number, a name, a decision already made — and is explicitly allowed to say "nothing on this"
+rather than invent a plausible figure. It is not a teleprompter and nothing on this hardware
+is one.
+
+**The prompt is built backwards from every other prompt here**, and that is the feature. The
+transcript goes in *before* the retrieved context, not after, because MLX-LM reuses its KV
+cache for any byte-identical prefix and a transcript only ever grows at the end. Freshly
+retrieved context placed in front of it invalidates the whole meeting on every keypress.
+Measured at ~2,631 tokens with context re-retrieved per press: **prefill 3.6s with context
+last against 9.2s with it first**, and the gap widens as the meeting runs on. `agent.ts`
+front-loads its context and is right to — there is no prefix worth keeping in a one-shot run.
+
+That also dictates how the transcript is capped: in **blocks**, never by a sliding window. A
+window that advances every few seconds moves the first byte of the prompt and throws the whole
+saving away. Tune with `MEETING_COACH_MAX_SEGMENTS` and `MEETING_COACH_BLOCK`.
+
+Pressing three times in five seconds gets you one answer, not three arriving late; the
+previous notes stay on screen while the next generate.
+
+Requires `brew install whisper-cpp ffmpeg` and two model files; see `.env.example`.
+
 ## Delegation — the Dispatch board
 
 `agents/*.md` defines units, each pinned to a tier:
@@ -330,12 +545,17 @@ _archive/            the previous vanilla-JS dashboard, kept for reference
 Every run starts knowing who you are. Two sources feed it, and the difference between them
 is the whole design:
 
-**`profile.md`** (repo root) is yours. Standing facts — name, timezone, working setup, how
-you like things done. Nothing automated ever writes to it, which is exactly why it can be
-trusted: it's injected verbatim as standing context, and when the assistant gets you wrong
-you fix it in a text editor. Re-read from disk each run, so edits take effect immediately
-with no restart. HTML comments are stripped before injection, so you can leave notes to
-yourself in it for free. Keep it under ~40 lines — it costs context on every step.
+**`profile.md`** (repo root, `cp profile.example.md profile.md`) is yours. Standing facts —
+name, timezone, working setup, how you like things done. Nothing automated ever writes to it,
+which is exactly why it can be trusted: it's injected verbatim as standing context, and when
+the assistant gets you wrong you fix it in a text editor. Re-read from disk each run, so edits
+take effect immediately with no restart. HTML comments are stripped before injection, so you
+can leave notes to yourself in it for free. Keep it under ~40 lines — it costs context on
+every step.
+
+It is **gitignored**, and only the example is tracked. A file whose whole job is to be
+specific about you is a file you do not want to push by accident, and the version that is
+useful is exactly the version that is too personal to share.
 
 **Reflections** are learned. After each run, one pass over the trace extracts durable facts
 about you and files them in the same RAG store the `memory_*` tools use; before each run,
@@ -691,6 +911,7 @@ npm run web:dev        # Vite dev server on :5173, proxying /api to :8787
 npm run check          # typecheck + eslint + stylelint + tests
 npm run do "<task>"    # one-off cycle
 npm run watcher        # install/inspect change watchers
+npm run listen         # meeting capture: devices | status | record <secs> | prune
 npm run digest         # what it did in the last 24h (add --push to send it)
 npm run confirm        # approve/reject queued actions; `reject <id> [why]` teaches it
 npm run auth           # one-time Google read-only OAuth

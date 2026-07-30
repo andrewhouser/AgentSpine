@@ -167,6 +167,13 @@ export const removeSource = (id: number): void => {
 export interface ChunkRow {
   embedding: Buffer | null;
   id: number;
+  /**
+   * The kind of source this chunk came from — `path` for an indexed file, `meeting` for a
+   * transcript. Joined in rather than inferred from `path`, which for a meeting is the
+   * synthetic ref `meeting:12`: a prefix check would work today and would silently start
+   * misfiling the day someone indexes a directory called `meeting:`.
+   */
+  kind: string;
   path: string;
   text: string;
 }
@@ -216,7 +223,11 @@ export const insertChunk = (
 
 export const chunksForProject = (projectId: number): ChunkRow[] =>
   rawDb
-    .prepare("SELECT id, path, text, embedding FROM chunks WHERE project_id = ?")
+    .prepare(
+      `SELECT c.id, c.path, c.text, c.embedding, COALESCE(s.kind, 'path') AS kind
+       FROM chunks c LEFT JOIN project_sources s ON s.id = c.source_id
+       WHERE c.project_id = ?`,
+    )
     .all(projectId) as unknown as ChunkRow[];
 
 export const countChunks = (projectId: number): number =>

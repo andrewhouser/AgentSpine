@@ -26,11 +26,39 @@
  * should go up to the cloud tier. That is a *quality* call, not a speed one — which is the
  * general lesson. Auto-routing earns its keep escalating, not economising.
  *
+ * ## Sizing never routes DOWN any more. Removed 2026-07-30, after it failed in the open.
+ *
+ * There used to be a third rule here: a short question matching a lookup pattern
+ * (`^(what|who|when|…)…\?$`), with no tool verbs and no deliberative language, went to
+ * `fast`. It was written for "what is the capital of France".
+ *
+ * It got "What is my name?", which is grammatically identical and semantically the
+ * opposite — answerable *only* from the profile and memories wrapped around it. The 3B
+ * called `state_get` with an invented `summary` argument containing a verbatim fragment of
+ * the profile preamble, wrote `state_set name=…` on a read-only question, recalled three
+ * memories using the answer as its query, and finished by describing its own context block
+ * instead of answering from it. `profile.md` had said `Name: Andrew.` the whole time.
+ *
+ * The first fix was another regex — exclude first-person pronouns. That is genuinely
+ * narrower and still wrong, because "What's the wifi password?", "Who is Priya?" and
+ * "When is the standup?" all need personal context and contain no pronoun at all. Separating
+ * "needs to know about you" from "general knowledge" is a semantic judgment, and paying a
+ * classifier to make it costs more than the ~190ms it would protect.
+ *
+ * So the branch is gone rather than patched. **Nothing is auto-routed to `fast`.** The tier
+ * is very much alive — `agents/runner.md`, `inspector.md` and `tracker.md` declare it, and
+ * the escalation classifier below runs on it — but every remaining use is *opted into* by a
+ * file someone wrote, and is narrow, mechanical and single-purpose. The failure mode was
+ * never "3B is bad"; it was handing one an open-ended turn with the whole tool registry and
+ * the user's profile in context, which no declared-tier caller does.
+ *
  * ## Why a misroute is cheap
  *
  * Every tier runs the same agent loop through the same broker against the same
  * `policy.json`. A small model that misjudges a task produces a worse *answer*, not a
- * wider *permission*. That asymmetry is what makes it safe to size tasks with a regex.
+ * wider *permission*. That asymmetry is what makes it safe to size tasks with a regex — and
+ * it is also why the failure above cost a bad answer and one stray `kv` row, not an
+ * incident.
  */
 import { AUTO_ROUTE, JUDGE_ESCALATION } from "./config.ts";
 import { extractJson } from "./llm.ts";
@@ -52,12 +80,8 @@ export interface Sizing {
 const TOOL_SHAPED =
   /\b(search|google|look up|browse|fetch|read|open|file|email|e-?mail|inbox|gmail|calendar|schedule|weather|forecast|draft|write|create|send|notify|remind|remember|save|note|repo|git|commit|branch|run|check|watch|monitor|summari[sz]e|digest|delegate|subagent)\b/i;
 
-/**
- * A short, self-contained factual question. Kept deliberately tight — this is the only
- * path that reaches the small model without anything smarter having looked at it, so it
- * should catch "what's the capital of France" and decline anything with room to be hard.
- */
-const LOOKUP = /^(what|who|when|where|which|how many|how much|how long|is|are|was|were|does|do|did)\b[^?]{0,110}\?$/i;
+// A LOOKUP pattern used to live here, matching short factual questions and sending them to
+// `fast`. See the header for what it did to "What is my name?" and why no regex replaced it.
 
 /**
  * Language of a decision rather than a task. Only these are worth paying a classifier call
@@ -87,20 +111,11 @@ export const sizeTask = async (task: string, override?: Tier): Promise<Sizing> =
 
   const trimmed = task.trim();
   const usesTools = TOOL_SHAPED.test(trimmed);
-  // Checked BEFORE the lookup rule, not after. "Is it worth switching to a monorepo, or are
-  // the trade-offs too steep?" is grammatically a yes/no question ending in "?" and sails
-  // straight through the lookup pattern — which would hand a genuine judgment call to the
-  // smallest model in the system. Deliberative language disqualifies a task from `fast`
-  // whatever its shape.
   const deliberative = DELIBERATIVE.test(trimmed);
 
-  // Down to `fast`: free, and only for a short question that is plainly a lookup. Skipped
-  // entirely when there is no separate fast server, since routing to the same endpoint
-  // under a different model name would pay a model-swap for nothing (see tiers.ts).
-  if (tierIsDistinct("fast") && LOOKUP.test(trimmed) && !usesTools && !deliberative) {
-    return { reason: "short factual lookup", tier: "fast", via: "heuristic" };
-  }
-
+  // The only automatic move left is UP. `standard` is the floor for every task that arrives
+  // here, and `fast` is reached solely by an explicit override or an agent file declaring it.
+  //
   // Up to `deep`: the only place a model's opinion is worth its latency. Gated on the task
   // actually looking like a decision, so ordinary work never pays for the call.
   const worthAsking = JUDGE_ESCALATION && tierIsDistinct("deep") && deliberative && !usesTools;

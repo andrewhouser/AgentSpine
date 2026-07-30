@@ -11,7 +11,7 @@
  *     npm i @huggingface/transformers
  */
 import { rawDb } from "./store.ts";
-import { EMBEDDINGS_URL, EMBEDDINGS_MODEL, EMBEDDINGS_API_KEY } from "../config.ts";
+import { EMBEDDINGS_URL, EMBEDDINGS_MODEL, EMBEDDINGS_API_KEY, MEMORY_DEDUPE_THRESHOLD } from "../config.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS memories (
@@ -106,13 +106,78 @@ export const cosine = (a: Float32Array, b: Float32Array): number => {
 
 const now = () => new Date().toISOString();
 
-/** Save a fact to long-term memory. */
-export const remember = async (text: string, kind = "note"): Promise<void> => {
+/**
+ * Save a fact to long-term memory, unless we already know it. Returns false when skipped.
+ *
+ * ## Why the dedupe lives HERE and not in the caller
+ *
+ * It used to live in `reflect.ts`, which checked the nearest memory before saving and
+ * skipped anything too similar. That worked — reflections have no duplicates. But it left
+ * the check in the *caller*, so every other writer bypassed it, and the `memory_save` tool
+ * is a writer. Observed: 20 identical copies of "User's full name is Dana Whitfield. Married
+ * to Sam Okafor…" written in under two minutes, one per run, because nothing on that
+ * path looked first.
+ *
+ * The cost was not disk. `MEMORY_RECALL_K` is 5, and every one of those five slots came back
+ * holding the same sentence — a run asking "what is my son's birthday" spent its entire
+ * memory budget on one fact repeated five times, and genuinely relevant memories could not
+ * get in. A duplicate does not sit quietly next to the original; it evicts something else.
+ *
+ * So the guard belongs in the function every writer must call, not in the one caller that
+ * happened to remember. A safety check that each new caller has to opt into is a safety
+ * check that new callers will forget.
+ *
+ * ## Two checks, because the embedder is optional
+ *
+ * Exact text match runs in SQL and works with no embedder at all — it is the floor. Vector
+ * similarity above `MEMORY_DEDUPE_THRESHOLD` catches the rephrasings a model produces when
+ * asked the same thing twice, and is skipped silently under the keyword fallback, where
+ * scores are NaN and every comparison is false anyway.
+ *
+ * Deliberately NOT scoped by kind: the same sentence saved as a `note` and as a
+ * `reflection` is the same sentence, and it will crowd recall exactly as hard either way.
+ */
+export const remember = async (text: string, kind = "note"): Promise<boolean> => {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const exact = rawDb
+    .prepare("SELECT id FROM memories WHERE lower(trim(text)) = ? LIMIT 1")
+    .get(trimmed.toLowerCase());
+  if (exact) return false;
+
   const embedder = await getEmbedder();
-  const vec = embedder ? await embedder(text) : null;
+  const vec = embedder ? await embedder(trimmed) : null;
+
+  if (vec) {
+    // Reuses the vector we already computed rather than embedding the same text twice.
+    const [nearest] = await recallScored(trimmed, 1, vec);
+    if (nearest && nearest.score > MEMORY_DEDUPE_THRESHOLD) return false;
+  }
+
   rawDb
     .prepare("INSERT INTO memories (ts, kind, text, embedding) VALUES (?,?,?,?)")
-    .run(now(), kind, text, vec ? toBlob(vec) : null);
+    .run(now(), kind, trimmed, vec ? toBlob(vec) : null);
+  return true;
+};
+
+/**
+ * Collapse memories that are already duplicated, keeping the oldest of each exact-text
+ * group. For the backlog that accumulated before `remember` started checking.
+ *
+ * Exact-text only, on purpose. Near-duplicate collapsing needs a threshold, and a threshold
+ * applied retroactively to everything you have ever learned is a good way to silently delete
+ * a fact that merely *resembled* another one. New writes are guarded by similarity; existing
+ * rows only go when they are provably the same sentence.
+ */
+export const dedupeMemories = (dryRun = false): number => {
+  const sql = `SELECT id FROM memories WHERE id NOT IN (
+                 SELECT MIN(id) FROM memories GROUP BY lower(trim(text))
+               )`;
+  const doomed = rawDb.prepare(sql).all() as { id: number }[];
+  if (dryRun || !doomed.length) return doomed.length;
+  rawDb.prepare(`DELETE FROM memories WHERE id IN (${doomed.map((r) => r.id).join(",")})`).run();
+  return doomed.length;
 };
 
 interface MemRow {
@@ -134,18 +199,22 @@ export interface Recalled {
  * Under the keyword fallback there is no meaningful similarity, so `score` is NaN.
  * Compare against it accordingly: `NaN > threshold` is false, so a scoreless hit is
  * never mistaken for a confident match.
+ *
+ * `vector` supplies an already-embedded query. Embedding costs ~63ms against ~101ms to score
+ * 50,000 chunks, so a caller ranking several corpora against one question — the live meeting
+ * sidecar does exactly this — should pay for the embed once and pass the vector to each.
  */
-export const recallScored = async (query: string, k = 5): Promise<Recalled[]> => {
-  const embedder = await getEmbedder();
+export const recallScored = async (query: string, k = 5, vector?: Float32Array): Promise<Recalled[]> => {
+  const embedder = vector ? null : await getEmbedder();
 
-  if (!embedder) {
+  if (!embedder && !vector) {
     const rows = rawDb
       .prepare("SELECT text FROM memories WHERE text LIKE ? ORDER BY id DESC LIMIT ?")
       .all(`%${query}%`, k) as { text: string }[];
     return rows.map((r) => ({ text: r.text, score: NaN }));
   }
 
-  const q = await embedder(query);
+  const q = vector ?? (await embedder!(query));
   const rows = rawDb.prepare("SELECT id, text, embedding FROM memories").all() as unknown as MemRow[];
   return rows
     .filter((r) => r.embedding)

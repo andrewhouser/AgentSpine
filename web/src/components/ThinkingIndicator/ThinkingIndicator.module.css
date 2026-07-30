@@ -2,7 +2,7 @@
   align-items: center;
   color: var(--text-dim);
   display: flex;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   gap: 8px;
   margin: 12px 0;
 }

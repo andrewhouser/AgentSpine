@@ -147,6 +147,16 @@ export const indexSource = async (
   const source = projects.getSource(sourceId);
   if (!source) return { ...result, error: "no such source" };
 
+  // Not every source is a path. A meeting transcript lives in SQLite and is indexed by
+  // src/meetings/session.ts when the recording ends; walking it here would resolve
+  // "meeting:12" as a relative filename, fail the allowlist, and overwrite a perfectly good
+  // status with a denial. Leaving its chunks untouched is the correct no-op.
+  if (source.kind !== "path") {
+    result.unchanged = 1;
+    result.chunks = projects.countChunksForPath(sourceId, source.ref);
+    return result;
+  }
+
   const root = expand(source.ref);
 
   if (!insideReadable(policy, root)) {

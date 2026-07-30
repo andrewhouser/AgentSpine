@@ -7,7 +7,7 @@
 
 .subhead {
   border-top: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   margin: 26px 0 8px;
@@ -17,7 +17,7 @@
 
 .note {
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin: 0 0 12px;
 }
 
@@ -27,6 +27,96 @@
   font-family: var(--font-mono);
   font-size: 0.88em;
   padding: 1px 5px;
+}
+
+/* --- appearance --- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.fieldLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.fieldHint {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.segmented {
+  align-self: start;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  padding: 2px;
+}
+
+.segment {
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  padding: 5px 14px;
+}
+
+.segment:hover {
+  color: var(--text);
+}
+
+.segmentOn {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.sliderRow {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.slider {
+  accent-color: var(--accent);
+  flex: 1;
+  max-width: 18rem;
+}
+
+/* The two ends of the slider, shown at the size they actually mean. */
+.scaleMark {
+  color: var(--text-faint);
+  flex: none;
+  font-size: 0.6875rem;
+}
+
+.scaleMarkLarge {
+  color: var(--text-faint);
+  flex: none;
+  font-size: 1.125rem;
+}
+
+.scaleValue {
+  color: var(--text-dim);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  min-width: 3rem;
+}
+
+.reset {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+  padding: 0;
 }
 
 .search {
@@ -41,7 +131,7 @@
 
 .empty {
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: 0.8125rem;
   padding: 12px 0;
 }
 
@@ -49,7 +139,7 @@
   align-items: baseline;
   border-bottom: 1px solid var(--border);
   display: flex;
-  font-size: 13px;
+  font-size: 0.8125rem;
   gap: 10px;
   padding: 7px 0;
 }
@@ -59,7 +149,7 @@
   border-radius: 100px;
   color: var(--text-dim);
   flex: none;
-  font-size: 11px;
+  font-size: 0.6875rem;
   padding: 1px 8px;
 }
 
@@ -71,7 +161,7 @@
   color: var(--text-faint);
   flex: none;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .policy {
@@ -79,7 +169,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   line-height: 1.55;
   margin: 0;
   max-height: 460px;

@@ -37,7 +37,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   color: var(--on-accent);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   font-weight: 500;
   padding: 7px 18px;
 }
@@ -78,7 +78,7 @@
 }
 
 .topBarTitle {
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
