@@ -9,9 +9,16 @@
  */
 import type {
   Agent,
+  AudioDevices,
   Confirmation,
   Conversation,
+  DictationStatus,
   IngestResult,
+  LiveStatus,
+  Meeting,
+  MeetingExtraction,
+  MeetingSegment,
+  MeetingWorkItem,
   Memory,
   Project,
   ProjectSource,
@@ -54,6 +61,17 @@ export const runStreamUrl = (runId: number, after: number): string => {
   return `/api/runs/${runId}/stream?${params}`;
 };
 
+/**
+ * The live meeting stream. Takes no meeting id on purpose — there is one microphone, so
+ * there is one stream, and it stays open across the gap between meetings.
+ */
+export const meetingStreamUrl = (after: number): string => {
+  const params = new URLSearchParams({ after: String(after) });
+  const token = getToken();
+  if (token) params.set("token", token);
+  return `/api/meetings/stream?${params}`;
+};
+
 export const api = {
   addProjectSource: (projectId: number, path: string) =>
     post<{ result: IngestResult; source: ProjectSource }>(
@@ -69,6 +87,12 @@ export const api = {
       method: "PATCH",
     }),
 
+  /**
+   * Ask for notes on what was just said. Returns as soon as generation starts — the answer
+   * lands on the meeting stream about five seconds later.
+   */
+  coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
+
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
 
   createProject: (name: string, instructions = "") =>
@@ -83,6 +107,24 @@ export const api = {
 
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
+  /**
+   * Upload a recording made in the browser and get the words back.
+   *
+   * Sends the blob as the raw body with its own content type, rather than multipart — there
+   * is exactly one field, and the server hands the bytes straight to ffmpeg.
+   */
+  dictate: (audio: Blob) =>
+    request<{ text: string }>("/api/dictate", {
+      body: audio,
+      headers: { "Content-Type": audio.type || "application/octet-stream" },
+      method: "POST",
+    }),
+
+  dictationStatus: () => request<DictationStatus>("/api/dictate"),
+
+  /** Re-run extraction. Returns as soon as it has started; the event stream reports the end. */
+  extractMeeting: (id: number) => post<{ meetingId: number; started: boolean }>(`/api/meetings/${id}/extract`),
+
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
   listAgents: () => request<Agent[]>("/api/agents"),
@@ -90,6 +132,8 @@ export const api = {
   listConfirmations: () => request<Confirmation[]>("/api/confirmations"),
 
   listConversations: () => request<Conversation[]>("/api/conversations"),
+
+  listMeetings: (limit = 50) => request<Meeting[]>(`/api/meetings?limit=${limit}`),
 
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
@@ -99,6 +143,18 @@ export const api = {
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
   listSchedules: () => request<Schedule[]>("/api/schedules"),
+
+  meeting: (id: number, pass: "final" | "live" = "final") =>
+    request<{
+      extraction: MeetingExtraction | null;
+      meeting: Meeting;
+      segments: MeetingSegment[];
+      workItems: MeetingWorkItem[];
+    }>(`/api/meetings/${id}?pass=${pass}`),
+
+  meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
+
+  meetingLive: () => request<LiveStatus>("/api/meetings/live"),
 
   policy: () => request<Record<string, unknown>>("/api/policy"),
 
@@ -129,7 +185,23 @@ export const api = {
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
 
+  /** File a finished meeting under a project — this is what indexes its transcript. */
+  setMeetingProject: (id: number, projectId: null | number) =>
+    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ projectId }), method: "PATCH" }),
+
+  setMeetingTitle: (id: number, title: string) =>
+    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
+
+  startDictation: () => post<{ device: string }>("/api/dictate/start"),
+
+  startMeeting: (device: string, projectId: null | number, title?: string) =>
+    post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
+
   status: () => request<{ queue: { depth: number; running: boolean }; schedules: number }>("/api/status"),
+
+  stopDictation: () => post<{ text: string }>("/api/dictate/stop"),
+
+  stopMeeting: () => post<{ meetingId: number }>("/api/meetings/stop"),
 
   thread: (id: number) => request<Thread>(`/api/conversations/${id}`),
 

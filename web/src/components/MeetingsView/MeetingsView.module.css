@@ -1,0 +1,521 @@
+.page {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.blocked {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+  color: var(--warn);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+}
+
+.blocked code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.deck {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* Recording is a state worth seeing from across the room. */
+.deckLive {
+  border-color: var(--danger-line);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.record,
+.stop {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 8px 16px;
+}
+
+.record {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.record:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.stop {
+  align-items: center;
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger);
+  display: flex;
+  gap: 8px;
+}
+
+.dot {
+  animation: pulse 1.4s ease-in-out infinite;
+  background: var(--danger);
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+  }
+}
+
+.select,
+.assign {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  padding: 7px 9px;
+}
+
+.select:disabled {
+  color: var(--text-faint);
+}
+
+.problem {
+  color: var(--danger);
+  font-size: 0.8125rem;
+  margin-top: 12px;
+}
+
+.note {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-top: 12px;
+}
+
+/* Transcript and sidecar share the deck. The sidecar drops below on a narrow screen —
+   a two-column layout at 600px would give both halves too little to be readable. */
+.liveArea {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20rem);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.transcript {
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.sidecar {
+  border-left: 1px solid var(--border);
+  max-height: 22rem;
+  overflow-y: auto;
+  padding-left: 16px;
+}
+
+.sidecarTop {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.sidecarHead {
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.coachButton {
+  align-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  display: flex;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  gap: 6px;
+  padding: 4px 8px;
+}
+
+.coachButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.kbd {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+}
+
+/* The answer sits above the cards: it is what you pressed a key for, and the cards are the
+   material it drew on. */
+.coach {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  padding: 10px;
+}
+
+.coachHead {
+  align-items: baseline;
+  color: var(--accent);
+  display: flex;
+  font-size: 0.625rem;
+  font-weight: 700;
+  gap: 8px;
+  letter-spacing: 0.06em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.coachTime {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Preserved newlines: the model returns bullets, and reflowing them into a paragraph would
+   undo the one thing that makes this glanceable. */
+.coachNotes {
+  font-size: 0.75rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.coachQuestion {
+  border-top: 1px solid var(--accent-line);
+  color: var(--text-faint);
+  font-size: 0.625rem;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  padding-top: 6px;
+}
+
+.cardGroup {
+  margin-bottom: 14px;
+}
+
+.cardHead {
+  color: var(--text-dim);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.card {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  padding: 8px 10px;
+}
+
+.cardText {
+  font-size: 0.75rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.cardSource {
+  color: var(--text-faint);
+  display: block;
+  font-size: 0.625rem;
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line {
+  display: flex;
+  font-size: 0.875rem;
+  gap: 10px;
+  line-height: 1.65;
+  margin: 0 0 4px;
+}
+
+.stamp {
+  color: var(--text-faint);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding-top: 3px;
+  width: 3.2rem;
+}
+
+.waiting {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin: 32px 0 10px;
+  padding-top: 20px;
+  text-transform: uppercase;
+}
+
+.empty {
+  color: var(--text-faint);
+  padding: 20px 0;
+  text-align: center;
+}
+
+.row {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.rowHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rowTitle {
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0;
+  text-align: left;
+}
+
+.rowTitle:hover {
+  color: var(--accent);
+}
+
+.badge {
+  border-radius: 100px;
+  flex: none;
+  font-size: 0.6875rem;
+  padding: 1px 8px;
+}
+
+.done {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.recording,
+.transcribing {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.abandoned,
+.failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.meta {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
+.assign {
+  font-size: 0.75rem;
+  margin-left: auto;
+  padding: 4px 7px;
+}
+
+.rowNote {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.full {
+  border-left: 2px solid var(--border);
+  margin: 10px 0 4px;
+  max-height: 26rem;
+  overflow-y: auto;
+  padding-left: 12px;
+}
+
+/* --- what was made of the transcript --- */
+
+.extraction {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.extract {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 6px 12px;
+}
+
+.extract:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.hint {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-weight: 400;
+  margin-left: 10px;
+}
+
+.summary {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  margin: 0 0 10px;
+}
+
+.topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.topic {
+  background: var(--bg-inset);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+  padding: 3px 10px;
+}
+
+.extractHead {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 14px 0 6px;
+  text-transform: uppercase;
+}
+
+.queueLink {
+  color: var(--accent);
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+  margin-left: 10px;
+  text-decoration: none;
+  text-transform: none;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  border-left: 2px solid var(--border);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  padding-left: 10px;
+}
+
+.owner {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-left: 8px;
+}
+
+.quote {
+  color: var(--text-faint);
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  margin-top: 2px;
+}
+
+/* Rejected candidates are legible but plainly secondary — present as evidence, not as work. */
+.rejects .item {
+  color: var(--text-faint);
+}
+
+.verdict {
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+  margin-left: 8px;
+  text-transform: uppercase;
+}
+
+.extractFoot {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+@media (width <= 900px) {
+  .liveArea {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidecar {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 12px;
+  }
+}
+
+@media (width <= 640px) {
+  .page {
+    padding: 20px 16px 48px;
+  }
+
+  .assign {
+    margin-left: 0;
+  }
+}

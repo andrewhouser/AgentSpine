@@ -14,7 +14,14 @@
  */
 import fs from "node:fs";
 
-import { AUDIT_RETENTION_DAYS, DB_PATH, RUN_RETENTION_DAYS, TRACE_RETENTION_DAYS } from "./config.ts";
+import {
+  AUDIT_RETENTION_DAYS,
+  DB_PATH,
+  NOTE_MEMORY_MAX,
+  RUN_RETENTION_DAYS,
+  TRACE_RETENTION_DAYS,
+} from "./config.ts";
+import { dedupeMemories, pruneMemories } from "./memory/rag.ts";
 import { pruneLedger, vacuum } from "./memory/store.ts";
 
 const args = process.argv.slice(2);
@@ -53,6 +60,15 @@ if (result.withheld) {
     `\n  ${result.withheld} run(s) were old enough but kept — still running, or holding a pending confirmation.`,
   );
 }
+
+/**
+ * Memories are bounded by count, not age — a fact does not stop being true because it is
+ * old. Duplicates are collapsed first so the ceiling is not spent holding copies.
+ */
+const duplicates = dedupeMemories(dryRun);
+const notes = dryRun || NOTE_MEMORY_MAX <= 0 ? 0 : pruneMemories("note", NOTE_MEMORY_MAX);
+console.log(`  ${String(duplicates).padStart(6)} duplicate memories`);
+console.log(`  ${String(notes).padStart(6)} note memories past the ${NOTE_MEMORY_MAX} ceiling`);
 
 if (dryRun) {
   console.log("\nDry run — nothing was deleted.");

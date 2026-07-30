@@ -21,12 +21,8 @@
 import { route } from "./router.ts";
 import { extractJson } from "./llm.ts";
 import type { Msg } from "./llm.ts";
-import { remember, recallScored, countMemories, pruneMemories } from "./memory/rag.ts";
-import {
-  REFLECT_MAX_FACTS,
-  REFLECT_DEDUPE_THRESHOLD,
-  REFLECT_MEMORY_MAX,
-} from "./config.ts";
+import { remember, countMemories, pruneMemories } from "./memory/rag.ts";
+import { REFLECT_MAX_FACTS, REFLECT_MEMORY_MAX } from "./config.ts";
 
 export const REFLECTION_KIND = "reflection";
 
@@ -135,19 +131,11 @@ export const reflect = async (task: string, trace: Msg[]): Promise<ReflectResult
     const saved: string[] = [];
     let skipped = 0;
     for (const fact of candidates) {
-      // Dedupe against what we already know. Under the keyword fallback score is NaN,
-      // so this comparison is false and we fall through to the exact-text check.
-      const [nearest] = await recallScored(fact, 1);
-      const tooSimilar =
-        nearest &&
-        (nearest.score > REFLECT_DEDUPE_THRESHOLD ||
-          nearest.text.trim().toLowerCase() === fact.toLowerCase());
-      if (tooSimilar) {
-        skipped++;
-        continue;
-      }
-      await remember(fact, REFLECTION_KIND);
-      saved.push(fact);
+      // The dedupe this loop used to do by hand now lives inside `remember`, so every
+      // writer gets it rather than only this one — see the note there about the 20 copies
+      // the `memory_save` tool managed to store by not asking. `false` means already known.
+      if (await remember(fact, REFLECTION_KIND)) saved.push(fact);
+      else skipped++;
     }
 
     if (saved.length && countMemories(REFLECTION_KIND) > REFLECT_MEMORY_MAX) {

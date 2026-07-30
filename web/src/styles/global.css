@@ -20,11 +20,31 @@
  * light mode puts white on a mid indigo, dark mode puts near-black on a pale one. White
  * text on the dark-mode accent would fail contrast.
  *
- * Light and dark both come from prefers-color-scheme. There is no theme toggle because
- * this runs on your own machine, where the OS already knows the answer.
+ * ## How a theme gets chosen
+ *
+ * The OS answer is the default and still the common case, but it is no longer the only one:
+ * Settings can pin light or dark explicitly. That pin is a `data-theme` attribute on the
+ * root element, and **the media query has moved into JavaScript to set it** — see
+ * `lib/preferences.ts` and the pre-paint script in `index.html`.
+ *
+ * That looks like the wrong place for it until you try the alternative. Keeping
+ * `prefers-color-scheme` here *and* supporting an override means four blocks — base light,
+ * media-query dark, explicit light, explicit dark — which is two copies of each palette and
+ * exactly the "hunt it down and change it in every place" problem the variables exist to
+ * prevent. Resolving `system` to a concrete attribute before the first paint costs one small
+ * script and leaves one copy of each palette here. There is no unstyled flash, and no CSS
+ * fallback is needed for JS being off, because with JS off this app does not render at all.
+ *
+ * ## Text scale
+ *
+ * `--ui-scale` multiplies the root font size, and every font size in every module is in
+ * `rem` so that one number moves all of them. Spacing stays in px on purpose: the control
+ * says "font size" and it should change the font size, not silently become a zoom.
+ * `100%` rather than `16px` as the base so the browser's own font preference still counts.
  */
 
-:root {
+:root,
+:root[data-theme="light"] {
   --accent: #4b5bd7;
   --accent-line: rgb(75 91 215 / 28%);
   --accent-soft: rgb(75 91 215 / 11%);
@@ -54,38 +74,41 @@
   --warn: #8a6216;
   --warn-line: rgb(138 98 22 / 30%);
   --warn-soft: rgb(138 98 22 / 13%);
+
+  /* Tells the browser to render native controls and scrollbars to match. */
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent: #8493f7;
-    --accent-line: rgb(132 147 247 / 32%);
-    --accent-soft: rgb(132 147 247 / 15%);
-    --bg: #15171c;
-    --bg-elevated: #1e2128;
-    --bg-inset: #1a1d23;
-    --bg-sidebar: #111318;
-    --border: #2b2f38;
-    --border-strong: #3e434f;
-    --danger: #f0776a;
-    --danger-line: rgb(240 119 106 / 30%);
-    --danger-soft: rgb(240 119 106 / 12%);
-    --focus: rgb(132 147 247 / 50%);
-    --ok: #5fc98d;
-    --ok-line: rgb(95 201 141 / 26%);
-    --ok-soft: rgb(95 201 141 / 12%);
+:root[data-theme="dark"] {
+  --accent: #8493f7;
+  --accent-line: rgb(132 147 247 / 32%);
+  --accent-soft: rgb(132 147 247 / 15%);
+  --bg: #15171c;
+  --bg-elevated: #1e2128;
+  --bg-inset: #1a1d23;
+  --bg-sidebar: #111318;
+  --border: #2b2f38;
+  --border-strong: #3e434f;
+  --danger: #f0776a;
+  --danger-line: rgb(240 119 106 / 30%);
+  --danger-soft: rgb(240 119 106 / 12%);
+  --focus: rgb(132 147 247 / 50%);
+  --ok: #5fc98d;
+  --ok-line: rgb(95 201 141 / 26%);
+  --ok-soft: rgb(95 201 141 / 12%);
 
-    /* Near-black on the pale dark-mode accent — white would be unreadable. */
-    --on-accent: #12141a;
-    --scrim: rgb(0 0 0 / 55%);
-    --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 4px 14px rgb(0 0 0 / 25%);
-    --text: #e6e8ed;
-    --text-dim: #9aa2b1;
-    --text-faint: #6d7482;
-    --warn: #e0b256;
-    --warn-line: rgb(224 178 86 / 32%);
-    --warn-soft: rgb(224 178 86 / 13%);
-  }
+  /* Near-black on the pale dark-mode accent — white would be unreadable. */
+  --on-accent: #12141a;
+  --scrim: rgb(0 0 0 / 55%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 4px 14px rgb(0 0 0 / 25%);
+  --text: #e6e8ed;
+  --text-dim: #9aa2b1;
+  --text-faint: #6d7482;
+  --warn: #e0b256;
+  --warn-line: rgb(224 178 86 / 32%);
+  --warn-soft: rgb(224 178 86 / 13%);
+
+  color-scheme: dark;
 }
 
 *,
@@ -100,11 +123,16 @@ body,
   height: 100%;
 }
 
+/* Every font size in every module is a rem, so this one number moves all of them. */
+html {
+  font-size: calc(100% * var(--ui-scale, 1));
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 0.9375rem;
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
   margin: 0;

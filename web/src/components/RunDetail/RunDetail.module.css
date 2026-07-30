@@ -9,7 +9,7 @@
   background: none;
   border: 0;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin-bottom: 14px;
   padding: 0;
 }
@@ -21,7 +21,7 @@
 .title {
   align-items: center;
   display: flex;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 600;
   gap: 9px;
   margin: 0;
@@ -31,7 +31,7 @@
   background: var(--bg-inset);
   border-radius: 100px;
   color: var(--text-dim);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   padding: 1px 9px;
 }
@@ -44,7 +44,7 @@
 .meta {
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   margin: 0;
 }
 
@@ -61,7 +61,7 @@
   align-items: center;
   border-top: 1px solid var(--border);
   display: flex;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   gap: 10px;
   letter-spacing: 0.04em;
@@ -74,7 +74,7 @@
   background: none;
   border: 0;
   color: var(--accent);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   font-weight: 500;
   letter-spacing: 0;
   padding: 0;
@@ -99,13 +99,13 @@
 
 .tool {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 0.7813rem;
 }
 
 .target {
   color: var(--text-dim);
   flex: 1;
-  font-size: 12.5px;
+  font-size: 0.7813rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -113,7 +113,7 @@
 
 .role {
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
   margin-bottom: 5px;
   text-transform: uppercase;
@@ -123,7 +123,7 @@
   background: var(--bg-inset);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   line-height: 1.5;
   margin: 0 0 6px;
   max-height: 300px;
@@ -139,20 +139,20 @@
 
 .ok {
   color: var(--ok);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
 .failed {
   color: var(--danger);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
 .running,
 .queued {
   color: var(--accent);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 

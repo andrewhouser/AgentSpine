@@ -31,7 +31,7 @@
   color: var(--text-faint);
   display: inline-block;
   flex: none;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1;
   transition: transform 120ms ease;
 }
@@ -43,7 +43,7 @@
 .label {
   color: var(--text-faint);
   flex: none;
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
@@ -52,13 +52,13 @@
   color: var(--text);
   flex: none;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 0.7813rem;
 }
 
 .state {
   color: var(--text-dim);
   flex: 1;
-  font-size: 13px;
+  font-size: 0.8125rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -71,7 +71,7 @@
 
 .sectionLabel {
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
   margin-bottom: 5px;
   text-transform: uppercase;
@@ -84,7 +84,7 @@
 .brief {
   background: var(--bg-inset);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 0.8125rem;
   overflow-wrap: anywhere;
   padding: 8px 10px;
   white-space: pre-wrap;

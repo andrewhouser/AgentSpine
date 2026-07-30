@@ -18,7 +18,7 @@
   background: var(--warn-soft);
   border-radius: 100px;
   color: var(--warn);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   padding: 2px 9px;
@@ -27,12 +27,12 @@
 .tool {
   color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 0.7813rem;
 }
 
 .id {
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 0.75rem;
   margin-left: auto;
 }
 
@@ -40,7 +40,7 @@
 .summary {
   background: var(--bg-inset);
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   margin-bottom: 12px;
   max-height: 380px;
   overflow: auto;
@@ -70,7 +70,7 @@
 .plain {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   padding: 6px 14px;
 }
@@ -104,7 +104,7 @@
 .resolved {
   border-left: 3px solid var(--border-strong);
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 0.8125rem;
   margin: 12px 0;
   overflow-wrap: anywhere;
   padding: 4px 0 4px 12px;

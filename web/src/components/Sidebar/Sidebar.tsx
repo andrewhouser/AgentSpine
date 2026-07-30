@@ -5,7 +5,7 @@ import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
 import styles from "./Sidebar.module.css";
 
-export type View = "activity" | "automations" | "chat" | "confirmations" | "project" | "settings";
+export type View = "activity" | "automations" | "chat" | "confirmations" | "meetings" | "project" | "settings";
 
 interface SidebarProps {
   activeConversation: null | number;
@@ -25,6 +25,7 @@ interface SidebarProps {
 
 const NAV: { key: View; label: string }[] = [
   { key: "confirmations", label: "Approvals" },
+  { key: "meetings", label: "Meetings" },
   { key: "automations", label: "Automations" },
   { key: "activity", label: "Activity" },
   { key: "settings", label: "Settings" },

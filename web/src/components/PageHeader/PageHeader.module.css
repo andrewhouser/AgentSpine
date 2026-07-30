@@ -7,7 +7,7 @@
 }
 
 .title {
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0;
@@ -15,7 +15,7 @@
 
 .subtitle {
   color: var(--text-dim);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   margin: 4px 0 0;
   max-width: 46rem;
 }

@@ -91,10 +91,32 @@ export const MEMORY_RECALL_K = Number(env.MEMORY_RECALL_K ?? "5");
 export const REFLECT_ENABLED = (env.REFLECT_ENABLED ?? "true") !== "false";
 // Hard cap on facts a single reflection may store, so one weird run can't flood memory.
 export const REFLECT_MAX_FACTS = Number(env.REFLECT_MAX_FACTS ?? "3");
-// A candidate fact this similar to something already stored is dropped as a duplicate.
+/**
+ * A fact this similar to something already stored is dropped as a duplicate.
+ *
+ * Enforced inside `remember()`, so every writer gets it — the tool, reflection, and the
+ * preference saved when you reject something with a reason. It used to live in reflect.ts
+ * alone, which is why the `memory_save` tool managed to store the same sentence 20 times.
+ *
+ * Defaults to REFLECT_DEDUPE_THRESHOLD so the old knob keeps working; set this to override
+ * both. Raise it toward 1.0 to allow near-duplicates through, lower it to be stricter.
+ */
+export const MEMORY_DEDUPE_THRESHOLD = Number(
+  env.MEMORY_DEDUPE_THRESHOLD ?? env.REFLECT_DEDUPE_THRESHOLD ?? "0.9",
+);
+// Kept for reflect.ts's own logging; MEMORY_DEDUPE_THRESHOLD is what actually gates a write.
 export const REFLECT_DEDUPE_THRESHOLD = Number(env.REFLECT_DEDUPE_THRESHOLD ?? "0.9");
 // Ceiling on auto-generated (reflection) memories. Oldest are pruned past this.
 export const REFLECT_MEMORY_MAX = Number(env.REFLECT_MEMORY_MAX ?? "500");
+/**
+ * Ceiling on `note` memories — the ones the `memory_save` tool writes.
+ *
+ * Reflections have had a ceiling since they were built; notes never did, so they grew
+ * without bound and nothing pruned them. Lower than the reflection cap because a note is
+ * written deliberately by the agent mid-task and there should not be thousands of them.
+ * 0 keeps them forever, matching every other retention knob.
+ */
+export const NOTE_MEMORY_MAX = Number(env.NOTE_MEMORY_MAX ?? "300");
 // Largest profile.md we will inject, in characters. Guards against a runaway file
 // eating the whole context window on every single step.
 export const PROFILE_MAX_CHARS = Number(env.PROFILE_MAX_CHARS ?? "4000");
@@ -203,6 +225,227 @@ export const NOTIFY_ON_CONFIRMATION = (env.NOTIFY_ON_CONFIRMATION ?? "true") !==
 export const NOTIFY_ON_FAILURE = (env.NOTIFY_ON_FAILURE ?? "true") !== "false";
 export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true";
 
+// --- Meetings (live transcription) ---
+/**
+ * Two Whisper models, two jobs, because one model cannot do both well.
+ *
+ * The LIVE model runs every few seconds while the meeting is happening. Nothing downstream
+ * depends on it — it exists so you can see that the thing is working. Measured on an M3
+ * Pro: base.en transcribes a 5-second chunk in 0.35s, large-v3-turbo takes 1.72s for the
+ * same audio. Whisper always processes a 30-second window internally, so a short chunk
+ * costs nearly what a long one does; that 1.72s is a floor, not something a smaller chunk
+ * size buys back.
+ *
+ * The FINAL model runs once, on the whole meeting, after it ends. This is the transcript
+ * that gets stored, searched, and extracted from, so it is worth 11x-realtime rather than
+ * 85x. A 27-minute meeting took 2m28s with large-v3-turbo.
+ */
+export const WHISPER_BIN = env.WHISPER_BIN ?? "whisper-cli";
+export const WHISPER_MODEL_DIR = env.WHISPER_MODEL_DIR ?? path.join(os.homedir(), ".whisper-models");
+/** Cheap and rough. Drives the on-screen transcript only. */
+export const WHISPER_LIVE_MODEL = env.WHISPER_LIVE_MODEL ?? "ggml-base.en.bin";
+/** Slow and good. Produces the transcript everything else is built on. */
+export const WHISPER_FINAL_MODEL = env.WHISPER_FINAL_MODEL ?? "ggml-large-v3-turbo.bin";
+/**
+ * Seconds of audio per live chunk. Below ~4s the 30-second-window floor dominates and you
+ * pay nearly a full transcription per chunk for a fraction of the words; above ~8s the
+ * transcript visibly lags the room.
+ */
+export const MEETING_CHUNK_SECONDS = Number(env.MEETING_CHUNK_SECONDS ?? "5");
+/**
+ * Hard ceiling on a single meeting, in minutes. Audio is held in memory (16kHz mono is
+ * ~1.9 MB/minute), so this is also the memory ceiling: 4 hours is ~460 MB. The real reason
+ * it exists is a capture that was never stopped — a forgotten recording is both a privacy
+ * problem and an unbounded allocation.
+ */
+export const MEETING_MAX_MINUTES = Number(env.MEETING_MAX_MINUTES ?? "180");
+/**
+ * Words a transcript must reach before the final pass bothers running. Below this the
+ * meeting was almost certainly a mis-start, and re-transcribing silence at 11x realtime is
+ * a waste of two minutes.
+ */
+export const MEETING_MIN_WORDS = Number(env.MEETING_MIN_WORDS ?? "50");
+/**
+ * Names Whisper reliably mishears, as `wrong=right` pairs, applied to the final transcript.
+ *
+ * This exists because feeding Whisper a glossary does NOT reliably fix them. Measured on a
+ * real recording: a glossary prompt fixed "chat GPT" to "ChatGPT" but left "Claude"
+ * transcribed as "PLOD" in both passes. A prompt biases; it does not correct. Substitution
+ * is the only thing that actually works on a name the model simply did not hear.
+ *
+ *   MEETING_CORRECTIONS="PLOD=Claude,Vardant=Guardant,by trading=by training"
+ */
+export const MEETING_CORRECTIONS = (env.MEETING_CORRECTIONS ?? "")
+  .split(",")
+  .map((pair) => pair.split("="))
+  .filter((parts): parts is [string, string] => parts.length === 2 && parts[0].trim().length > 0)
+  .map(([wrong, right]) => [wrong.trim(), right.trim()] as const);
+
+// --- Meeting extraction (what the transcript is turned into) ---
+/**
+ * Whether a finished transcript is automatically extracted from. Off means transcripts are
+ * still captured, stored and indexed — only the summary/decisions/work-item pass is skipped.
+ */
+export const MEETING_EXTRACT_ENABLED = (env.MEETING_EXTRACT_ENABLED ?? "true") !== "false";
+/**
+ * Point extraction at a different local server than the standard tier.
+ *
+ * The default `LOCAL_MODEL` is `Qwen3-Coder-30B-A3B` — a *coder* fine-tune being asked to do
+ * conversation analysis, which is the wrong tool at identical cost. Plain
+ * `Qwen3-30B-A3B-Instruct` on a second port is the intended comparison, and this knob exists
+ * so you can run it without moving `LOCAL_MODEL` out from under the agent loop.
+ *
+ * Local URLs only. Extraction is pinned to local by `sensitivity: "private"` regardless of
+ * what is set here — see the standing constraint in SPEC §15.
+ */
+export const MEETING_EXTRACT_BASE_URL = env.MEETING_EXTRACT_BASE_URL ?? "";
+export const MEETING_EXTRACT_MODEL = env.MEETING_EXTRACT_MODEL ?? LOCAL_MODEL;
+/**
+ * Words of transcript per extraction call.
+ *
+ * A 45-minute meeting is ~9,000 tokens and fits in one call; a three-hour one does not, and
+ * a transcript that silently overruns the context window loses its *end* — the part with the
+ * decisions in it. So long transcripts are windowed and the results merged. 3,500 words is
+ * ~4,700 tokens, which leaves room for the instructions and a long JSON reply.
+ */
+export const MEETING_EXTRACT_WINDOW_WORDS = Number(env.MEETING_EXTRACT_WINDOW_WORDS ?? "3500");
+/**
+ * Ceiling on candidate work items put through the strict second pass.
+ *
+ * The second pass costs ~2.3s each, and a model that has decided everything is a task can
+ * propose dozens. This bounds a bad extraction to about a minute rather than letting it run
+ * as long as it likes; hitting the cap is recorded in the extraction's note.
+ */
+export const MEETING_EXTRACT_MAX_ITEMS = Number(env.MEETING_EXTRACT_MAX_ITEMS ?? "40");
+
+// --- Live context cards (the meeting sidecar) ---
+/**
+ * Whether a live meeting gets context cards. Retrieval only — this lane never generates.
+ * Measured: ~63ms to embed the rolling window plus ~101ms to score 50,000 chunks, so it
+ * costs nothing worth measuring. Generation is 35 tok/s and belongs on a hotkey, not a timer.
+ */
+export const MEETING_CARDS_ENABLED = (env.MEETING_CARDS_ENABLED ?? "true") !== "false";
+/**
+ * Seconds of transcript used as the query.
+ *
+ * Cards answer "what is being discussed *now*". Querying with the whole meeting would drag
+ * every card toward whatever dominated the opening minutes and would get less responsive as
+ * the meeting ran on, which is backwards for a live panel.
+ */
+export const MEETING_CARDS_WINDOW_SECONDS = Number(env.MEETING_CARDS_WINDOW_SECONDS ?? "60");
+/**
+ * Seconds between refreshes. Not per segment: at a 5-second chunk size that would re-rank
+ * twelve times a minute to replace cards nobody had finished reading. This is the rate the
+ * panel *changes* at, and a slower one is easier to read, not merely cheaper.
+ */
+export const MEETING_CARDS_INTERVAL_SECONDS = Number(env.MEETING_CARDS_INTERVAL_SECONDS ?? "15");
+/** Hits per card. Three fits beside a transcript without becoming a second thing to read. */
+export const MEETING_CARDS_K = Number(env.MEETING_CARDS_K ?? "3");
+/**
+ * Cosine similarity a hit must reach to be shown at all.
+ *
+ * A ranking always returns something — the top three chunks of an unrelated corpus are still
+ * the top three. Showing the least-irrelevant thing in the project is worse than showing an
+ * empty card: it costs a glance to dismiss and it costs trust every time it happens.
+ *
+ * Measured against a real 15-chunk meeting corpus with `nomic-embed-text`, which runs high:
+ *
+ *   | query                          | top score |
+ *   |--------------------------------|-----------|
+ *   | groceries / weather / football | 0.41-0.45 |
+ *   | generic "refactor that module" | 0.55      |
+ *   | genuinely on-topic             | 0.60-0.74 |
+ *
+ * Hence 0.58 — clear of the off-topic ceiling and of generic chatter, below every real hit.
+ * **This number belongs to the embedding model**, not to the idea; a different one has a
+ * different floor and needs re-measuring, which is why it is a knob and not a constant.
+ */
+export const MEETING_CARDS_MIN_SCORE = Number(env.MEETING_CARDS_MIN_SCORE ?? "0.58");
+/**
+ * How close to the best hit a card must be, as a fraction of it.
+ *
+ * The absolute floor above cannot do this job alone. Within a single-domain corpus every
+ * chunk scores high against an on-topic query — measured, a passage about screenshots scored
+ * 0.618 against a question about traceability, purely for being in the same talk. The top hit
+ * was 0.708, so a relative gap separates them where a fixed threshold cannot.
+ *
+ * 1.0 would show only the single best hit; 0 disables the gap and leaves the absolute floor.
+ */
+export const MEETING_CARDS_RELATIVE = Number(env.MEETING_CARDS_RELATIVE ?? "0.9");
+
+// --- Dictation (voice into the chat composer) ---
+/** Whether the composer offers voice input at all. */
+export const DICTATION_ENABLED = (env.DICTATION_ENABLED ?? "true") !== "false";
+/**
+ * The Whisper model dictation uses — the accurate one, not the fast one.
+ *
+ * Meetings run `base.en` live because a rough transcript that keeps up beats a good one that
+ * lags. Dictation inverts every term of that trade: the utterance is seconds long, nothing is
+ * waiting on it, and the result becomes an instruction to an agent that can call tools. At
+ * 11x realtime a fifteen-second sentence costs about 1.4s, which is a cheap price for not
+ * sending a misheard command.
+ */
+export const DICTATION_MODEL = env.DICTATION_MODEL ?? WHISPER_FINAL_MODEL;
+/**
+ * Ceiling on one dictation, in seconds. Bounds the ffmpeg decode of an uploaded blob and
+ * releases the server microphone if a push-to-talk never gets its release — a closed tab
+ * should not hold the device open.
+ */
+export const DICTATION_MAX_SECONDS = Number(env.DICTATION_MAX_SECONDS ?? "120");
+/**
+ * Initial prompt for the decoder, and it is not optional in practice.
+ *
+ * Measured on a 14-second clip: `large-v3-turbo` with no prompt returns
+ * "great um i by profession and choice uh i'm a tester i worked in the industry for i don't
+ * know how many long how many years" — lowercase, unpunctuated, disfluencies intact. The same
+ * audio with this prompt returns "Great. I, by profession and choice, am a tester. I worked in
+ * the industry for, I don't know how many years". Whisper conditions its *formatting* on the
+ * preceding context, and a short clip starting mid-sentence has none — which is every
+ * dictation, since a dictation is by definition short.
+ *
+ * Note this is the opposite lesson from MEETING_CORRECTIONS, where a prompt was found *not*
+ * to fix misheard names. A prompt biases style reliably and vocabulary poorly; the two knobs
+ * exist because those are different problems.
+ */
+export const DICTATION_PROMPT =
+  env.DICTATION_PROMPT ??
+  "The following is a clearly punctuated transcript, with correct capitalisation and full stops.";
+/**
+ * Hard cap on an uploaded recording, in bytes. Opus at the browser's default runs about
+ * 12 kB/s, so 16 MB is far more audio than DICTATION_MAX_SECONDS will decode — this is here
+ * to stop a request body growing without limit, not to be reached in normal use.
+ */
+export const DICTATION_MAX_BYTES = Number(env.DICTATION_MAX_BYTES ?? String(16 * 1024 * 1024));
+
+// --- The coaching hotkey ---
+/**
+ * Whether the hotkey can ask the local model for notes on what was just said.
+ *
+ * ~5 seconds end to end, so this is a deliberate keypress and never a timer. Off means the
+ * sidecar is retrieval-only, which is the whole of Phase 3 and still useful on its own.
+ */
+export const MEETING_COACH_ENABLED = (env.MEETING_COACH_ENABLED ?? "true") !== "false";
+/**
+ * Seconds of transcript treated as "what was just asked" — both the question put to the model
+ * and the query used to retrieve context for it. Shorter than the sidecar's own window,
+ * because this one has to pinpoint a question rather than characterise a topic.
+ */
+export const MEETING_COACH_WINDOW_SECONDS = Number(env.MEETING_COACH_WINDOW_SECONDS ?? "45");
+/**
+ * Cap on the transcript carried in the prompt's stable prefix, in Whisper segments. At the
+ * usual ~8 words a segment, 600 is roughly an hour of speech.
+ */
+export const MEETING_COACH_MAX_SEGMENTS = Number(env.MEETING_COACH_MAX_SEGMENTS ?? "600");
+/**
+ * Granularity of the trim, in segments.
+ *
+ * The cap has to be enforced *in jumps*. A sliding window would move the first byte of the
+ * prompt every few seconds and destroy the KV-cache reuse the whole coaching path is built on
+ * — 1.1s becomes ~26s on a 45-minute meeting. Trimming a block at a time means one expensive
+ * re-prefill per block instead of one per keypress. Larger is cheaper and wastes more context.
+ */
+export const MEETING_COACH_BLOCK = Number(env.MEETING_COACH_BLOCK ?? "100");
+
 // --- Ledger retention ---
 /**
  * How long the ledger keeps history, in days. 0 on any of these means keep forever.
@@ -220,6 +463,14 @@ export const TRACE_RETENTION_DAYS = Number(env.TRACE_RETENTION_DAYS ?? RETENTION
 export const AUDIT_RETENTION_DAYS = Number(env.AUDIT_RETENTION_DAYS ?? RETENTION_DAYS);
 /** The run rows themselves — what the Activity list is made of. */
 export const RUN_RETENTION_DAYS = Number(env.RUN_RETENTION_DAYS ?? RETENTION_DAYS);
+/**
+ * Verbatim meeting transcripts. Deliberately SHORTER than everything else and deliberately
+ * its own knob: a transcript is the most sensitive thing this system will ever hold, and it
+ * is the one kind of record whose value decays fastest once its summary and work items have
+ * been extracted. The extracted output is not covered by this — that lives in `chunks` and
+ * `memories` and is kept until you delete it. This window governs the raw words only.
+ */
+export const TRANSCRIPT_RETENTION_DAYS = Number(env.TRANSCRIPT_RETENTION_DAYS ?? "30");
 
 // --- Paths ---
 export const BASE = path.resolve(import.meta.dirname, "..");

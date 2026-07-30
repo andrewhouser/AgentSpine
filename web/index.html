@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>AgentSpine</title>
+    <!--
+      Applies the stored theme and text scale before the first paint.
+
+      This is deliberately inline and deliberately duplicated from lib/preferences.ts: a
+      module script is deferred, so by the time it ran the page would already have painted
+      in the wrong theme. Anyone changing the storage keys must change them in both places —
+      which is the cost of not having a flash, and a fair one.
+    -->
+    <script>
+      (function () {
+        try {
+          var choice = localStorage.getItem("as_theme") || "system";
+          var dark =
+            choice === "dark" ||
+            (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+          var scale = Number(localStorage.getItem("as_scale"));
+          if (scale >= 0.85 && scale <= 1.4) {
+            document.documentElement.style.setProperty("--ui-scale", String(scale));
+          }
+        } catch (e) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

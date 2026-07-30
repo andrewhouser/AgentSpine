@@ -181,7 +181,7 @@ const noreaster = calm({
   snowfall_sum: [0, 1.2, 9.5, 0.5, 0, 0, 0, 0],
   wind_gusts_10m_max: [20, 52, 48, 25, 18, 15, 15, 15],
 });
-console.log(formatAlerts("Farmington, NH", findAlerts(noreaster)).split("\n").map((l) => "    " + l).join("\n"));
+console.log(formatAlerts("Concord, NH", findAlerts(noreaster)).split("\n").map((l) => "    " + l).join("\n"));
 check("nor'easter is severe overall", peakSeverity(findAlerts(noreaster)), "severe");
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -19,11 +19,31 @@ import { fileURLToPath } from "node:url";
 
 import { loadAgents } from "./agents.ts";
 import { loadPolicy } from "./config.ts";
+import { cardsFor } from "./meetings/context.ts";
+import * as meetings from "./meetings/session.ts";
+import * as meetingStore from "./meetings/store.ts";
+import {
+  cancelDictation,
+  dictationStatus,
+  startDictation,
+  stopDictation,
+  transcribeUpload,
+} from "./senses/dictate.ts";
+import { listDevices } from "./senses/listen.ts";
 import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { runTask, startTask } from "./runner.ts";
-import { AUDIT_RETENTION_DAYS, RUN_RETENTION_DAYS, TRACE_RETENTION_DAYS } from "./config.ts";
+import {
+  AUDIT_RETENTION_DAYS,
+  DICTATION_ENABLED,
+  DICTATION_MAX_BYTES,
+  MEETING_COACH_ENABLED,
+  NOTE_MEMORY_MAX,
+  RUN_RETENTION_DAYS,
+  TRACE_RETENTION_DAYS,
+  TRANSCRIPT_RETENTION_DAYS,
+} from "./config.ts";
 import { describeTiers } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
 import { hasEnded, replay, subscribe } from "./events.ts";
@@ -34,7 +54,7 @@ import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { DASHBOARD_PUBLIC_URL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { rawDb } from "./memory/store.ts";
-import "./memory/rag.ts"; // ensure the memories table exists for the queries below
+import { dedupeMemories, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? "8787");
 // Default binds localhost only. Set DASHBOARD_HOST=0.0.0.0 to reach it from other machines
@@ -116,6 +136,52 @@ const readBody = (req: http.IncomingMessage): Promise<any> =>
         resolve({});
       }
     });
+  });
+
+/**
+ * Read a request body as bytes, refusing anything over `limit`.
+ *
+ * `readBody` above accumulates into a string with no ceiling, which is survivable for JSON
+ * typed by a human and not for an audio upload. This destroys the request as soon as the cap
+ * is passed rather than buffering the whole thing and complaining afterwards.
+ */
+export class TooLargeError extends Error {}
+
+const readBinary = (req: http.IncomingMessage, limit: number): Promise<Buffer> =>
+  new Promise((resolve, reject) => {
+    let chunks: Buffer[] = [];
+    let size = 0;
+    let drained = 0;
+    let over = false;
+
+    req.on("data", (c: Buffer) => {
+      if (over) {
+        // Keep reading, discard, and only give up if the sender is clearly not stopping.
+        //
+        // Two wrong versions of this came first. Destroying the socket on the first
+        // oversized byte means the client sees a dropped connection instead of the sentence
+        // explaining what happened — a response cannot travel down a socket already torn
+        // down. Rejecting immediately but *not* draining is no better: Node will not flush
+        // the response while the request body is still arriving, so the client gets a reset.
+        // Reading the rest to nowhere costs bandwidth on a LAN and buys a legible 413.
+        drained += c.length;
+        if (drained > limit) req.destroy();
+        return;
+      }
+      size += c.length;
+      if (size > limit) {
+        over = true;
+        chunks = [];
+        return;
+      }
+      chunks.push(c);
+    });
+
+    req.on("end", () => {
+      if (over) reject(new TooLargeError(`upload exceeds ${Math.round(limit / 1024 / 1024)} MB`));
+      else resolve(Buffer.concat(chunks));
+    });
+    req.on("error", reject);
   });
 
 const MIME: Record<string, string> = {
@@ -227,6 +293,38 @@ const streamRun = (req: http.IncomingMessage, res: Res, runId: number, after: nu
   // hold an open connection waiting for events that can never arrive.
   const row = store.getRun(runId);
   if (hasEnded(runId) || !row || (row.status !== "running" && row.status !== "queued")) finish();
+};
+
+/**
+ * The live meeting stream. Same shape as `streamRun` above but keyed on nothing — there is
+ * one microphone, so there is one stream, and a client that connects mid-meeting gets the
+ * recent buffer rather than starting from silence.
+ *
+ * Unlike a run, this never closes itself: the browser holds it open across the gap between
+ * one meeting ending and the next beginning, so the Record button stays live without polling.
+ */
+const streamMeetings = (req: http.IncomingMessage, res: Res, after: number): void => {
+  res.writeHead(200, {
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Content-Type": "text/event-stream",
+    "X-Accel-Buffering": "no",
+  });
+
+  const write = (event: meetings.MeetingEvent): void => {
+    res.write(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+  };
+  for (const e of meetings.replay(after)) write(e);
+
+  const onEvent = (event: meetings.MeetingEvent): void => write(event);
+  meetings.bus.on("event", onEvent);
+
+  const keepalive = setInterval(() => res.write(": keepalive\n\n"), SSE_KEEPALIVE_MS);
+  req.on("close", () => {
+    meetings.bus.off("event", onEvent);
+    clearInterval(keepalive);
+    res.end();
+  });
 };
 
 // --- router ---
@@ -408,6 +506,189 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/policy
     if (m === "GET" && seg[1] === "policy" && seg.length === 2) return sendJson(res, 200, loadPolicy());
 
+    /**
+     * /api/dictate — voice into the composer.
+     *
+     * Two microphones because the dashboard is opened from more than one machine: the browser
+     * records where you are sitting, the server's own mic works however you are browsing. See
+     * `senses/dictate.ts` for why the browser path never consults `policy.audio` and the
+     * server path always does.
+     */
+    if (seg[1] === "dictate") {
+      if (!DICTATION_ENABLED) return sendJson(res, 403, { error: "DICTATION_ENABLED is false" });
+
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, dictationStatus(loadPolicy()));
+
+      // POST /api/dictate — a recording made in the browser, transcribed here.
+      if (m === "POST" && seg.length === 2) {
+        try {
+          const audio = await readBinary(req, DICTATION_MAX_BYTES);
+          if (!audio.length) return sendJson(res, 400, { error: "no audio received" });
+          const text = await transcribeUpload(audio, String(req.headers["content-type"] ?? ""));
+          return sendJson(res, 200, { text });
+        } catch (err) {
+          return sendJson(res, err instanceof TooLargeError ? 413 : 400, { error: (err as Error).message });
+        }
+      }
+
+      // POST /api/dictate/start | /stop | /cancel — the server's own microphone.
+      if (m === "POST" && seg.length === 3) {
+        try {
+          if (seg[2] === "start") return sendJson(res, 200, await startDictation(loadPolicy()));
+          if (seg[2] === "stop") return sendJson(res, 200, await stopDictation());
+          if (seg[2] === "cancel") {
+            await cancelDictation();
+            return sendJson(res, 200, { cancelled: true });
+          }
+        } catch (err) {
+          const message = (err as Error).message;
+          return sendJson(res, message.startsWith("denied:") ? 403 : 409, { error: message });
+        }
+      }
+    }
+
+    /**
+     * /api/meetings ...
+     *
+     * Note what is NOT here: no confirmation queue on start. The queue exists for actions
+     * the *model* initiates, where a human never saw the decision. A person clicking Record
+     * in their own dashboard has already given the only consent that mechanism collects, and
+     * routing it through an approval they then have to go and grant would be theatre. The
+     * `meeting_start` tool is the path that gets queued, because that one has no human in it.
+     */
+    if (seg[1] === "meetings") {
+      // /api/meetings/devices — what ffmpeg can see, and which are allowlisted
+      if (m === "GET" && seg.length === 3 && seg[2] === "devices") {
+        const policy = loadPolicy();
+        const found = await listDevices();
+        return sendJson(res, 200, {
+          allowed: policy.audio?.devices ?? [],
+          devices: found.map((name) => ({ allowed: (policy.audio?.devices ?? []).includes(name), name })),
+          enabled: policy.audio?.enabled === true,
+        });
+      }
+
+      // /api/meetings/live — is anything recording right now
+      if (m === "GET" && seg.length === 3 && seg[2] === "live") return sendJson(res, 200, meetings.liveStatus());
+
+      /**
+       * GET /api/meetings/:id/context — the context cards for a meeting, computed now.
+       *
+       * The stream pushes these on a timer, so the dashboard rarely needs this. It exists for
+       * the first render before the first tick, and because a retrieval lane you cannot ask a
+       * direct question is one you cannot debug when the cards come back empty.
+       */
+      if (m === "GET" && seg.length === 4 && seg[3] === "context") {
+        const id = Number(seg[2]);
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        return sendJson(res, 200, await cardsFor(id));
+      }
+
+      // /api/meetings/stream — SSE of segments and status changes
+      if (m === "GET" && seg.length === 3 && seg[2] === "stream")
+        return streamMeetings(req, res, Number(url.searchParams.get("after") ?? -1));
+
+      if (m === "GET" && seg.length === 2) {
+        const projectId = url.searchParams.get("project");
+        return sendJson(
+          res,
+          200,
+          meetingStore.listMeetings(
+            Number(url.searchParams.get("limit") ?? 50),
+            projectId === null ? undefined : Number(projectId),
+          ),
+        );
+      }
+
+      // POST /api/meetings — start recording
+      if (m === "POST" && seg.length === 2) {
+        const b = await readBody(req);
+        if (!b?.device) return sendJson(res, 400, { error: "device is required" });
+        try {
+          const started = await meetings.startMeeting(loadPolicy(), {
+            device: String(b.device),
+            projectId: b.projectId == null ? null : Number(b.projectId),
+            title: b.title ? String(b.title) : undefined,
+          });
+          return sendJson(res, 201, started);
+        } catch (err) {
+          // A policy denial is the caller's problem to fix, not a server fault.
+          const message = (err as Error).message;
+          return sendJson(res, message.startsWith("denied:") ? 403 : 409, { error: message });
+        }
+      }
+
+      // POST /api/meetings/stop — stop whatever is recording
+      if (m === "POST" && seg.length === 3 && seg[2] === "stop") {
+        try {
+          return sendJson(res, 200, await meetings.stopMeeting());
+        } catch (err) {
+          return sendJson(res, 409, { error: (err as Error).message });
+        }
+      }
+
+      const id = Number(seg[2]);
+      if (m === "GET" && seg.length === 3) {
+        const meeting = meetingStore.getMeeting(id);
+        if (!meeting) return sendJson(res, 404, { error: "no such meeting" });
+        const pass = url.searchParams.get("pass") === "live" ? "live" : "final";
+        return sendJson(res, 200, {
+          extraction: meetingStore.getExtraction(id) ?? null,
+          meeting,
+          segments: meetingStore.segments(id, pass),
+          workItems: meetingStore.workItems(id),
+        });
+      }
+
+      /**
+       * POST /api/meetings/:id/extract — run (or re-run) extraction.
+       *
+       * Returns immediately. A half-hour meeting takes about a minute to extract, and the
+       * event stream reports progress, so holding the response open would only teach the
+       * dashboard's fetch timeout to fire on exactly the meetings worth extracting.
+       */
+      /**
+       * POST /api/meetings/:id/coach — notes on what was just said.
+       *
+       * Returns as soon as generation starts; the answer arrives on the event stream about
+       * five seconds later. Holding the response open would tie the hotkey's feedback to a
+       * fetch that outlives the moment it was pressed in.
+       */
+      if (m === "POST" && seg.length === 4 && seg[3] === "coach") {
+        const id = Number(seg[2]);
+        if (!MEETING_COACH_ENABLED) return sendJson(res, 403, { error: "MEETING_COACH_ENABLED is false" });
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        const { busy } = meetings.askCoach(id);
+        return sendJson(res, busy ? 429 : 202, busy ? { error: "already working on the last one" } : { started: true });
+      }
+
+      if (m === "POST" && seg.length === 4 && seg[3] === "extract") {
+        const meeting = meetingStore.getMeeting(id);
+        if (!meeting) return sendJson(res, 404, { error: "no such meeting" });
+        if (!meetingStore.segments(id).length)
+          return sendJson(res, 409, { error: "no transcript to extract from" });
+        void meetings.runExtraction(id);
+        return sendJson(res, 202, { meetingId: id, started: true });
+      }
+
+      // PATCH /api/meetings/:id — retitle, or file it under a project after the fact
+      if (m === "PATCH" && seg.length === 3) {
+        const b = await readBody(req);
+        const meeting = meetingStore.getMeeting(id);
+        if (!meeting) return sendJson(res, 404, { error: "no such meeting" });
+        if (typeof b?.title === "string") meetingStore.setTitle(id, b.title);
+        if (b && "projectId" in b) {
+          const projectId = b.projectId == null ? null : Number(b.projectId);
+          meetingStore.setProject(id, projectId);
+          // Assigning a project is what files the transcript into that project's index.
+          // Doing it here rather than only at stop() is the whole point of assign-after —
+          // you often don't know which project a meeting was about until it's over.
+          if (projectId && meeting.status === "done") await meetings.indexIntoProject(id, projectId);
+        }
+        return sendJson(res, 200, meetingStore.getMeeting(id));
+      }
+    }
+
     // /api/projects ...
     if (seg[1] === "projects") {
       if (m === "GET" && seg.length === 2)
@@ -568,6 +849,20 @@ const prune = (): void => {
           (r.withheld ? ` (${r.withheld} kept — pending or unfinished)` : ""),
       );
     }
+    // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.
+    const words = meetingStore.pruneTranscripts(TRANSCRIPT_RETENTION_DAYS);
+    if (words) console.log(`pruned: ${words} meeting transcript segments past the retention window`);
+
+    // Memories are bounded by count rather than age: a fact does not stop being true. Notes
+    // had no ceiling at all until 2026-07-30, which is how 20 copies of one sentence came to
+    // occupy every recall slot. `remember` now refuses duplicates, so this is the backstop
+    // for what predates it and for near-misses that clear the similarity threshold.
+    const collapsed = dedupeMemories();
+    if (collapsed) console.log(`pruned: ${collapsed} duplicate memories`);
+    if (NOTE_MEMORY_MAX > 0) {
+      const notes = pruneMemories("note", NOTE_MEMORY_MAX);
+      if (notes) console.log(`pruned: ${notes} note memories past the ${NOTE_MEMORY_MAX} ceiling`);
+    }
   } catch (err) {
     console.error("prune failed:", err instanceof Error ? err.message : err);
   }
@@ -600,6 +895,10 @@ if (!IS_LOCAL && !TOKEN) {
 }
 const interrupted = store.markInterruptedRuns();
 if (interrupted) console.log(`marked ${interrupted} interrupted run(s) as failed`);
+// A `recording` row can outlive the process that owned it. Left alone it would block every
+// future capture, because one already claims the microphone.
+const orphaned = meetingStore.reapOrphans();
+if (orphaned) console.log(`marked ${orphaned} interrupted meeting(s) as abandoned`);
 http.createServer(handle).listen(PORT, HOST, () => {
   console.log(`agentspine dashboard API on http://${HOST}:${PORT}`);
   console.log(`  auth: ${TOKEN ? "token required on /api" : IS_LOCAL ? "none (localhost only)" : "NONE"}`);

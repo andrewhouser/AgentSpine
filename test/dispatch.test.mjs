@@ -25,11 +25,31 @@ const check = (label, actual, expected) => {
 
 const sizes = async (label, task, expected) => check(label, (await sizeTask(task)).tier, expected);
 
-console.log("\nLOOKUPS — short, factual, no tools: the only thing `fast` should ever see");
-await sizes("capital city", "What is the capital of France?", "fast");
-await sizes("authorship", "Who wrote Moby Dick?", "fast");
-await sizes("simple count", "How many days are in February?", "fast");
-await sizes("yes/no fact", "Is the Pacific bigger than the Atlantic?", "fast");
+console.log("\nNOTHING IS AUTO-ROUTED DOWN — `standard` is the floor for every task");
+// These four used to go to `fast`, as "short factual lookups". The rule was removed after
+// "What is my name?" — grammatically identical to the first one and semantically its opposite
+// — went to the 3B, which invented a `summary` argument for `state_get`, wrote state on a
+// read-only question, and then described its own context block instead of answering from it.
+//
+// No regex replaced it, and these cases are the reason: separating "answerable from the
+// model's own weights" from "answerable only from your profile" is a semantic judgment, and
+// paying a classifier to make it costs more than the ~190ms it would protect. The fast tier
+// is still there — runner, inspector and tracker declare it — but it is opted into, never
+// assigned by pattern.
+await sizes("capital city", "What is the capital of France?", "standard");
+await sizes("authorship", "Who wrote Moby Dick?", "standard");
+await sizes("simple count", "How many days are in February?", "standard");
+await sizes("yes/no fact", "Is the Pacific bigger than the Atlantic?", "standard");
+
+console.log("\nPERSONAL — the questions that broke it, and the ones a pronoun check would miss");
+await sizes("the observed failure", "What is my name?", "standard");
+await sizes("possessive", "What is my timezone?", "standard");
+await sizes("first person", "Who am I?", "standard");
+// These three carry no first-person pronoun at all, which is why the pronoun fix was not
+// enough on its own and the branch had to go.
+await sizes("no pronoun, still personal", "What is the wifi password?", "standard");
+await sizes("a name only you know", "Who is Priya?", "standard");
+await sizes("your schedule, not the world's", "When is the standup?", "standard");
 
 console.log("\nTOOL-SHAPED — anything touching the user's world stays on standard");
 await sizes("inbox", "Search my inbox for anything urgent", "standard");
@@ -39,15 +59,15 @@ await sizes("calendar", "What is on my calendar tomorrow?", "standard");
 await sizes("weather", "What is the weather in Boston?", "standard");
 await sizes("memory", "Remember that I prefer tea", "standard");
 
-console.log("\nDELIBERATIVE — must never be demoted to `fast`, whatever the grammar");
-// The regression this file exists for: these parse as lookups (start with a question word,
-// end in "?") and would otherwise hand a real trade-off to the smallest model available.
+console.log("\nDELIBERATIVE — still never demoted, and still the only thing worth a classifier");
+// With JUDGE_ESCALATION off (set at the top of this file) these land on standard rather than
+// deep. The assertion that matters is that they are never quietly sized DOWN.
 await sizes("worth-it question", "Is it worth switching to a monorepo?", "standard");
 await sizes("comparison", "Which is better, Postgres or SQLite?", "standard");
 await sizes("should", "Should I rewrite this in Rust?", "standard");
 await sizes("trade-offs", "What are the trade-offs of server components?", "standard");
 
-console.log("\nSHAPE — long or open-ended work is standard, not a lookup");
+console.log("\nSHAPE — long or open-ended work is standard, as it always was");
 await sizes("long explanation", "Explain in detail how a bicycle derailleur works, step by step", "standard");
 await sizes("imperative", "Write a haiku about autumn", "standard");
 await sizes(
@@ -60,7 +80,22 @@ console.log("\nOVERRIDE — an explicit choice always wins");
 check("explicit deep", (await sizeTask("What is 2+2?", "deep")).tier, "deep");
 check("explicit fast on tool task", (await sizeTask("Search my inbox", "fast")).tier, "fast");
 
-console.log("\nDEGRADING — with no distinct fast tier, nothing is routed to it");
+console.log("\nTHE FAST TIER IS ALIVE — opted into by a file, never assigned by a pattern");
+// Removing the auto-route-down rule is not the same as retiring the tier, and the difference
+// is easy to lose in a later tidy-up. These units are its real consumers: narrow, mechanical,
+// single-purpose work, declared deliberately — the opposite of an open-ended chat turn with
+// the whole tool registry and the user's profile in context, which is what actually failed.
+{
+  const { loadAgents } = await import("../src/agents.ts");
+  const agents = loadAgents();
+  check("runner declares fast", agents.runner?.tier, "fast");
+  check("inspector declares fast", agents.inspector?.tier, "fast");
+  check("tracker declares fast", agents.tracker?.tier, "fast");
+  check("hauler stays standard", agents.hauler?.tier, "standard");
+  check("chief stays deep", agents.chief?.tier, "deep");
+}
+
+console.log("\nDEGRADING — with no distinct fast tier, sizing still works");
 // Runs in a child process on purpose: config.ts reads the environment once at import and
 // is then cached, so flipping FAST_LLM_URL in this process would prove nothing.
 {
