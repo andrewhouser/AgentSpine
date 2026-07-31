@@ -23,6 +23,9 @@ _archive/
 # Internal design docs — not for the public repo.
 MIGRATION.md
 
+# Log files
+.log
+
 # OS files
 .DS_Store
 
