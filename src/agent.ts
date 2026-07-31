@@ -110,8 +110,8 @@ export interface AgentOpts {
 const escalate = (tier: Tier): Tier => (tier === "fast" ? "standard" : "deep");
 
 const parseOr = async (messages: Msg[], opts: RouteOpts) => {
-  const { text } = await route(messages, opts);
-  return { text, parsed: safeJson(text) };
+  const result = await route(messages, opts);
+  return { text: result.text, parsed: safeJson(result.text), actualTier: result.tier, via: result.via };
 };
 
 const safeJson = (text: string): any | null => {
@@ -143,16 +143,25 @@ export const runAgent = async (
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
 
+  let tierCorrected = false;
+
   for (let step = 0; step < maxSteps; step++) {
     publish(runId, { step: step + 1, type: "step_start" });
 
-    let { text, parsed } = await parseOr(messages, { tier });
+    let { text, parsed, actualTier, via } = await parseOr(messages, { tier });
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
     // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
     // failing the run, which is what makes routing cheap work to a cheap tier safe.
     if (!parsed) {
-      ({ text, parsed } = await parseOr(messages, tier === "deep" ? { prefer: "cloud" } : { tier: escalate(tier) }));
+      ({ text, parsed, actualTier, via } = await parseOr(messages, tier === "deep" ? { prefer: "cloud" } : { tier: escalate(tier) }));
+    }
+
+    // If the router fell back to a different tier than what dispatch sized, correct the
+    // badge so the UI never shows "local" when the answer actually came from the cloud.
+    if (!tierCorrected && actualTier !== tier) {
+      publish(runId, { reason: "fallback", tier: actualTier, type: "tier", via });
+      tierCorrected = true;
     }
     messages.push({ role: "assistant", content: text });
 

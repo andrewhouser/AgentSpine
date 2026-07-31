@@ -133,7 +133,8 @@ export const weather: Tool = {
   name: "weather",
   description:
     "Current conditions and a short forecast for a place, by name (e.g. 'Asheville, NC'). " +
-    "Omit the location to use the configured default. Useful in a morning brief, and worth " +
+    `Omit the location to use the configured default${DEFAULT_LOCATION ? ` (${DEFAULT_LOCATION})` : ""}. ` +
+    "Useful in a morning brief, and worth " +
     "checking before an outdoor or travel-involving calendar event.",
   argsSchema: '{ "location"?: string, "days"?: 1-7 }',
   classify: (a: Args): ClassifiedAction => ({
