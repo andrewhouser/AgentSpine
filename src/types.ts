@@ -60,6 +60,17 @@ export interface Policy {
    */
   subagents?: { enabled: boolean };
   /**
+   * The agent's access to AgentSpine's own scheduler — `schedule_list` / `schedule_create` /
+   * `schedule_update` / `schedule_delete`. Absent = denied, like every other optional surface.
+   *
+   * This grants no new capability to a scheduled job: a job runs through this same broker
+   * under this same policy, so it can reach exactly what a chat turn can reach. What it
+   * changes is *when* — a standing job acts while nobody is watching, and its task text is a
+   * prompt the model wrote. So every write is classified irreversible and lands in the
+   * confirmation queue with the full task shown, and nothing here can edit policy.json.
+   */
+  schedules?: { enabled: boolean };
+  /**
    * Microphone capture for meeting transcription. Absent = denied, like every other
    * optional surface.
    *

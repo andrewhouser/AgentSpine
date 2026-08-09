@@ -13,7 +13,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { DB_PATH } from "../config.ts";
-import { nextRun, parseSpec } from "../schedule-spec.ts";
+import { canonicalSpec, isOneShot, nextRun, parseSpec } from "../schedule-spec.ts";
 import type { BrokerStatus, ClassifiedAction, ToolCall } from "../types.ts";
 import type { Msg } from "../llm.ts";
 
@@ -626,11 +626,19 @@ export interface ScheduleRow {
 
 const plusMinutes = (mins: number): string => new Date(Date.now() + mins * 60_000).toISOString();
 
-/** Next fire time from a spec (preferred) or the legacy interval, as an ISO string. */
-const computeNext = (spec: string | null, intervalMinutes: number): string => {
+/**
+ * Next fire time from a spec (preferred) or the legacy interval, as an ISO string.
+ *
+ * Null means "there is no next time" — a one-shot that has already fired. That case must
+ * not reach the legacy-interval fallback below, because doing so would quietly turn
+ * "remind me once at 3pm" into "every hour, forever", which is the exact failure a one-shot
+ * exists to avoid.
+ */
+const computeNext = (spec: string | null, intervalMinutes: number): string | null => {
   if (spec) {
     const d = nextRun(spec);
     if (d) return d.toISOString();
+    if (isOneShot(spec)) return null;
   }
   return plusMinutes(intervalMinutes || 60);
 };
@@ -641,15 +649,27 @@ export const listSchedules = (): ScheduleRow[] =>
 export const getSchedule = (id: number): ScheduleRow | undefined =>
   db.prepare("SELECT * FROM schedules WHERE id = ?").get(id) as ScheduleRow | undefined;
 
-/** Create a schedule from a human-readable spec ("weekdays at 8am", "every 30 minutes"). */
+/**
+ * Create a schedule from a human-readable spec ("weekdays at 8am", "every 30 minutes",
+ * "tomorrow at 9am").
+ *
+ * The spec is stored canonically, which only matters for one-shots: a relative one ("in 30
+ * minutes") is resolved here, once, to the absolute instant it meant, so that nothing which
+ * re-reads the row later can move it. See `canonicalSpec`.
+ */
 export const createSchedule = (name: string, task: string, spec: string, enabled = true): number => {
-  const next = nextRun(spec);
-  if (!next) throw new Error(`could not parse schedule "${spec}". Try e.g. "every 30 minutes" or "weekdays at 8:00am".`);
-  const parsed = parseSpec(spec);
+  const stored = canonicalSpec(spec);
+  if (!stored)
+    throw new Error(
+      `could not parse schedule "${spec}". Try e.g. "every 30 minutes", "weekdays at 8:00am", or "tomorrow at 9am".`,
+    );
+  const next = nextRun(stored);
+  if (!next) throw new Error(`"${spec}" is already in the past.`);
+  const parsed = parseSpec(stored);
   const interval = parsed && parsed.kind === "interval" ? parsed.minutes : 0;
   const r = db
     .prepare("INSERT INTO schedules (name, task, spec, interval_minutes, enabled, created, next_run) VALUES (?,?,?,?,?,?,?)")
-    .run(name, task, spec, interval, enabled ? 1 : 0, now(), next.toISOString());
+    .run(name, task, stored, interval, enabled ? 1 : 0, now(), next.toISOString());
   return Number(r.lastInsertRowid);
 };
 
@@ -664,17 +684,34 @@ export const updateSchedule = (id: number, fields: ScheduleFields): void => {
   if (!cur) return;
   const name = fields.name ?? cur.name;
   const task = fields.task ?? cur.task;
-  const spec = fields.spec ?? cur.spec;
-  const enabled = (fields.enabled ?? cur.enabled) ? 1 : 0;
 
-  const specChanged = fields.spec != null && fields.spec !== cur.spec;
-  if (specChanged && spec && !nextRun(spec)) throw new Error(`could not parse schedule "${spec}".`);
-  const interval = specChanged ? (parseSpec(spec ?? "")?.kind === "interval" ? (parseSpec(spec ?? "") as any).minutes : 0) : cur.interval_minutes;
+  // Canonicalised before comparison, so "in 30 minutes" is resolved to an instant here for
+  // the same reason it is in createSchedule.
+  let spec = cur.spec;
+  if (fields.spec != null) {
+    const stored = canonicalSpec(fields.spec);
+    if (!stored) throw new Error(`could not parse schedule "${fields.spec}".`);
+    if (!nextRun(stored)) throw new Error(`"${fields.spec}" is already in the past.`);
+    spec = stored;
+  }
+  const specChanged = spec !== cur.spec;
+  let enabled = (fields.enabled ?? cur.enabled) ? 1 : 0;
+
+  const parsed = spec ? parseSpec(spec) : null;
+  const interval = specChanged ? (parsed?.kind === "interval" ? parsed.minutes : 0) : cur.interval_minutes;
 
   // Re-arm next_run when the spec changes, or when re-enabling with a stale time.
   let next = cur.next_run;
   if (specChanged) next = computeNext(spec, interval);
   else if (enabled && (!next || next <= now())) next = computeNext(spec, interval);
+
+  /**
+   * A job with nothing left to fire cannot be armed. This is the backstop for re-enabling a
+   * one-shot that has already run: `dueSchedules` reads a null next_run as "due now", so an
+   * enabled row with no next time would run again immediately — the one thing a one-shot
+   * must never do. Making it unrepresentable here means no caller can get it wrong.
+   */
+  if (next == null) enabled = 0;
 
   db.prepare("UPDATE schedules SET name=?, task=?, spec=?, interval_minutes=?, enabled=?, next_run=? WHERE id=?").run(
     name,
@@ -697,12 +734,21 @@ export const dueSchedules = (): ScheduleRow[] =>
     .prepare("SELECT * FROM schedules WHERE enabled = 1 AND (next_run IS NULL OR next_run <= ?)")
     .all(now()) as unknown as ScheduleRow[];
 
+/**
+ * Record that a job just ran and arm it for next time.
+ *
+ * A one-shot has no next time, so it retires itself: disabled, with next_run cleared. The
+ * row deliberately stays — Automations should still show what ran and when, and deleting it
+ * would make a fired reminder indistinguishable from one that never existed.
+ */
 export const markScheduleRan = (id: number): void => {
   const s = getSchedule(id);
   if (!s) return;
-  db.prepare("UPDATE schedules SET last_run = ?, next_run = ? WHERE id = ?").run(
+  const next = computeNext(s.spec, s.interval_minutes);
+  db.prepare("UPDATE schedules SET last_run = ?, next_run = ?, enabled = ? WHERE id = ?").run(
     now(),
-    computeNext(s.spec, s.interval_minutes),
+    next,
+    next == null ? 0 : s.enabled,
     id,
   );
 };

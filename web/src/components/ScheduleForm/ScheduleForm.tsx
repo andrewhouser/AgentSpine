@@ -7,7 +7,16 @@ interface ScheduleFormProps {
   onCreated: () => void;
 }
 
-const EXAMPLES = ["weekdays at 8:00am", "daily at 07:30", "mon,wed,fri at 6pm", "every 30 minutes"];
+// The last two are one-shots: they run once and then retire themselves. Shown alongside the
+// recurring ones because the field accepts both, and nothing else on the page says so.
+const EXAMPLES = [
+  "weekdays at 8:00am",
+  "daily at 07:30",
+  "mon,wed,fri at 6pm",
+  "every 30 minutes",
+  "tomorrow at 9am",
+  "in 2 hours",
+];
 
 export const ScheduleForm = ({ onCreated }: ScheduleFormProps) => {
   const [error, setError] = useState("");
@@ -43,7 +52,7 @@ export const ScheduleForm = ({ onCreated }: ScheduleFormProps) => {
         <input
           className={styles.input}
           onChange={(e) => setSchedule(e.target.value)}
-          placeholder="When — e.g. weekdays at 8:00am"
+          placeholder="When — e.g. weekdays at 8:00am, or tomorrow at 9am for a one-off"
           value={schedule}
         />
       </div>

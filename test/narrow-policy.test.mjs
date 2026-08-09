@@ -30,6 +30,7 @@ const base = {
   fs: { readableDirs: ["~/notes", "~/Developer"] },
   git: { repoDirs: ["~/Developer"] },
   google: { enabled: true },
+  schedules: { enabled: true },
   subagents: { enabled: true },
   version: 1,
   weather: { enabled: true },
@@ -61,6 +62,10 @@ check("cannot enable google", narrowPolicy({ ...base, google: { enabled: false }
 check("cannot enable browser", narrowPolicy({ ...base, browser: { enabled: false, navigateAllowlist: [] } }, { browser: { enabled: true } }).browser.enabled, false);
 check("cannot enable drafts", narrowPolicy({ ...base, drafts: { enabled: false } }, { drafts: { enabled: true } }).drafts.enabled, false);
 check("cannot enable subagents", narrowPolicy({ ...base, subagents: { enabled: false } }, { subagents: { enabled: true } }).subagents.enabled, false);
+// Worth its own line: this one gates the agent's access to its OWN scheduler, so an overlay
+// that could switch it on would let a project row buy the ability to write standing jobs.
+check("cannot enable the scheduler", narrowPolicy({ ...base, schedules: { enabled: false } }, { schedules: { enabled: true } }).schedules.enabled, false);
+check("can disable the scheduler", narrowPolicy(base, { schedules: { enabled: false } }).schedules.enabled, false);
 check("can disable google", narrowPolicy(base, { google: { enabled: false } }).google.enabled, false);
 
 console.log("\nSAFETY RAILS — an overlay may add caution, never remove it");

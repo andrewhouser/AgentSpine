@@ -15,6 +15,7 @@ import { calendarUpcoming } from "./calendar.ts";
 import { memorySave, memoryRecall } from "./memory.ts";
 import { notifyTool } from "./notify.ts";
 import { stateGet, stateSet } from "./state.ts";
+import { scheduleCreate, scheduleDelete, scheduleList, scheduleUpdate } from "./schedule.ts";
 import { weather } from "./weather.ts";
 import { weatherAlerts } from "./weather-alerts.ts";
 import { gitStatus } from "./git-status.ts";
@@ -36,6 +37,10 @@ export const tools: Tool[] = [
   memoryRecall,
   stateGet,
   stateSet,
+  scheduleList,
+  scheduleCreate,
+  scheduleUpdate,
+  scheduleDelete,
   weather,
   weatherAlerts,
   gitStatus,

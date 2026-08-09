@@ -58,6 +58,11 @@
     "enabled": true
   },
 
+  "schedules": {
+    "//": "Lets the agent read and change AgentSpine's OWN scheduler, so 'check for new movie trailers every day at noon' becomes a job on the Automations page instead of a thing done once. It grants a scheduled job nothing extra — a job runs through this same broker under this same policy. What it changes is when: a standing job acts while nobody is watching, and its task text is a prompt the model wrote, possibly influenced by something it read. So every create/update/delete is queued for your confirmation with the full task text shown, and nothing here can touch this file.",
+    "enabled": true
+  },
+
   "git": {
     "//": "Absolute repo directories git_status may read. Read-only: branch, uncommitted files, recent commits. Empty = no repo access. e.g. [\"~/Developer\"]",
     "repoDirs": ["~/Developer"]

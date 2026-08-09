@@ -36,6 +36,7 @@ export type PolicyOverlay = {
   fs?: { readableDirs?: string[] };
   git?: { repoDirs?: string[] };
   google?: { enabled?: boolean };
+  schedules?: { enabled?: boolean };
   subagents?: { enabled?: boolean };
   weather?: { enabled?: boolean };
   web?: { fetchAllowlist?: string[]; searchEnabled?: boolean };
@@ -116,6 +117,7 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
     fs: { readableDirs: intersect(base.fs?.readableDirs, overlay.fs?.readableDirs) },
     git: { repoDirs: intersect(base.git?.repoDirs, overlay.git?.repoDirs) },
     google: { enabled: and(base.google?.enabled, overlay.google?.enabled) },
+    schedules: { enabled: and(base.schedules?.enabled, overlay.schedules?.enabled) },
     subagents: { enabled: and(base.subagents?.enabled, overlay.subagents?.enabled) },
     weather: { enabled: and(base.weather?.enabled, overlay.weather?.enabled) },
     web: {

@@ -26,7 +26,58 @@ const toolDocs = (tools: Record<string, Tool>): string =>
     .map((t) => `- ${t.name}: ${t.description}\n    args: ${t.argsSchema}`)
     .join("\n");
 
+/**
+ * What the model knows about the application it is running inside.
+ *
+ * Without this, a model asked to "check for new trailers every day at noon" does the check
+ * once and reports back, because nothing in its context says the thing it lives in has a
+ * scheduler — the tool list alone reads as a set of ways to act on the world, not as a way
+ * to change how the assistant itself behaves. The fix is not more tool descriptions but
+ * naming the surrounding application, so a request about the app is recognisable as work
+ * rather than as something to hand back to the user.
+ *
+ * Conditional on the tools actually being visible, because a restricted loop (a subagent
+ * whose unit file doesn't declare them) must not be told about a capability it cannot
+ * reach — that just buys a step spent getting DENIED.
+ */
+const appDocs = (tools: Record<string, Tool>): string =>
+  tools.schedule_create
+    ? `
+The application you run inside:
+You are not a chat window bolted onto a model. You run inside AgentSpine, a local dashboard
+with a scheduler that wakes you on its own, a queue of actions waiting on the user's
+approval, and a log of every run. So a request about how the assistant should BEHAVE is work
+you can do, not something to hand back:
+- "every morning", "each day at noon", "weekly", "keep an eye on X" means create a repeating
+  job with schedule_create. Doing the thing once and describing it is the wrong answer.
+- "remind me tomorrow at 9", "check back in an hour", "on the 15th" means a job that runs
+  ONCE — same tool, a one-shot schedule like "tomorrow at 9am" or "in 1 hour". It retires
+  itself after it runs. Answering now for a time the user did not ask about is the wrong
+  answer here too.
+- A job's task is handed VERBATIM to a future run that has none of this conversation in
+  context. Write it as complete standing instructions, never as a reference to what was just
+  discussed.
+- Schedule changes are queued for the user's approval like any other irreversible action.
+  Say you have proposed a job, never that it is running.
+`
+    : "";
+
+/**
+ * The wall clock, stated once at the top of the prompt.
+ *
+ * A model has no clock. Without this it cannot tell you what "tomorrow" resolves to, cannot
+ * notice that a date the user named has already gone by, and answers "what's on today?"
+ * against whenever its training data stopped. The scheduler's relative forms ("in 30
+ * minutes", "next tuesday") are resolved in code precisely so they don't depend on this —
+ * but the moment the user asks *when* a job will fire, or names a bare date, the model needs
+ * to know what day it is.
+ */
+const clock = (): string =>
+  `Current local time: ${new Date().toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`;
+
 const system = (tools: Record<string, Tool>): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
+
+${clock()}
 
 You work in a loop. Each turn, reply with EXACTLY ONE JSON object and nothing else.
 
@@ -38,7 +89,7 @@ To finish:
 
 Available tools:
 ${toolDocs(tools)}
-
+${appDocs(tools)}
 Rules:
 - A capability broker gates every tool call. It may reply DENIED (not permitted) or
   QUEUED (an irreversible action awaiting the user's confirmation). If something is

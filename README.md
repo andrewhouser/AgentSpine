@@ -483,11 +483,93 @@ Ways to give it work:
 - **The chat interface** — the usual one. Multi-turn, streamed, with approvals inline.
 - **`npm run do "<task>"`** — hand it a single task on demand. Runs one agent cycle and
   exits. Best for one-offs; no repetition.
-- **Automations** — a named task on a schedule. See Watchers below for the ones that should
-  only speak up when something changed.
+- **Automations** — a named task on a schedule. Add one on the page, or just ask for it in
+  chat (see below). See Watchers below for the ones that should only speak up when
+  something changed.
 - **`goals.md`** — the standing goal read on every `tick`/`loop` heartbeat. Keep it
   idempotent (a task left there runs every tick). With no `goals.md` it does a harmless
   low-risk check-in.
+
+## Asking it to change itself
+
+> *"Schedule a task to look up new movie trailers each day at noon."*
+
+That used to be a request the assistant couldn't hear. It would look up today's trailers,
+tell you about them, and finish — because nothing in its context said the thing it was
+running in *had* a scheduler. A tool list reads as a set of ways to act on the world, not as
+a way to change how the assistant behaves, so a standing request came back as a one-off
+answer plus, at best, a suggestion that you open Automations yourself.
+
+Two things fix that, and it takes both. The `schedule_*` tools give it a handle on the
+`schedules` table — list, create, update, delete. And the system prompt now names the
+application it is running inside: that there is a scheduler which wakes it, a queue of
+actions waiting on you, and a log of every run. Without the tools it can't act; without the
+naming it doesn't recognise "every morning" as work rather than as something to hand back.
+
+```jsonc
+"schedules": { "enabled": true }     // policy.json — absent means denied, as always
+```
+
+**Every write is queued for your confirmation, and that is not politeness.** A schedule is
+not a row, it is *a prompt the model wrote for a future unattended run* — handed to an agent
+with the full registry behind it, at 3am, with nobody watching. It is the one place a
+sentence absorbed from an UNTRUSTED page could become a standing instruction that outlives
+the conversation that introduced it. So the approval card carries the task **verbatim**,
+under the schedule and the first fire time, for the same reason a draft carries its whole
+body: a summary is not something you can judge.
+
+Nothing in this surface can touch `policy.json`. The scheduler decides *when* it acts; the
+policy decides *what it may do*, and a run able to widen its own permissions would make
+deny-by-default a suggestion. A scheduled job reaches exactly what a chat turn reaches.
+
+Schedules are stated the way you'd say them — `daily at 12:00pm`, `weekdays at 8:00am`,
+`every 6 hours`, `mon,wed,fri at 6pm`. Cron is rejected, and the rejection travels back to
+the model with the grammar attached, so a bad spec costs one step instead of your approval
+on a job that then fails. "Stop doing that" prefers `enabled: false` over deletion — a
+disabled job can be turned back on.
+
+### Once, and then never again
+
+*"Remind me tomorrow at 9 to send the invoice."* Same tool, a one-shot spec:
+
+```
+in 30 minutes      today at 5pm         tomorrow at 9am
+next tuesday at 9am    aug 15 at 9am    on 2026-08-15 at 14:00
+```
+
+Three things make this more than a parser addition.
+
+**The one-shot forms are all explicitly marked** — by `in`, `once`, `today`, `tomorrow`,
+`next`, or a date. `tuesday at 9am` still means *every* Tuesday, and always did. A grammar
+where a single occurrence could be spelled the same way as a recurrence makes "remind me
+Tuesday" a coin flip between one reminder and a permanent one, and you find out which a
+week later. Saying `next tuesday` is how you ask for one.
+
+**A relative spec is resolved once, at creation, and stored as the instant it meant.** "In
+30 minutes" is a sentence about the moment it was spoken. Stored verbatim it re-reads as a
+different time on every glance, shows on the Automations page as a job perpetually half an
+hour away, and — because the scheduler consults the spec again after firing — resolves to
+yet another half hour ahead instead of being finished. So the row holds `once at 2026-08-15
+14:30`, which parses back to itself.
+
+**A fired one-shot retires itself**: disabled, `next_run` cleared, row kept so Automations
+still shows what ran. The failure mode this guards against is silent — a re-armed one-shot
+becomes a reminder that arrives forever, and nothing looks wrong until the second one turns
+up. The old `next_run` fallback would have done exactly that, quietly converting "remind me
+once at 3pm" into "every hour". Two things stop it now: the store refuses to arm a job with
+no future firing (so the bad state is unrepresentable, whatever a caller asks for), and
+`schedule_update` refuses to switch a spent one-shot back on, telling you to give it a new
+time instead. The scheduler also retires the job *before* it runs rather than after, so a
+one-shot that fails does not retry — check Activity, and ask again if it mattered.
+
+### It knows what day it is
+
+Every run's system prompt now opens with the current local time and timezone. This is what
+makes "what's the weather today?" mean today, and "is that date past?" answerable at all —
+a model has no clock, and without one it answers against whenever its training data stopped.
+The scheduler's relative forms are resolved in code specifically so they never depend on the
+model getting this right, but the moment you ask *when* a job will fire, or name a bare
+date, it needs to know.
 
 ## Layout
 
@@ -519,6 +601,7 @@ src/                 the agent — no build step, two runtime dependencies
     memory.ts      memory_save / memory_recall
     notify.ts      notify — reach the user's phone (or a Mac banner)
     state.ts       state_get / state_set — exact values, for watcher change detection
+    schedule.ts    schedule_* — the app's own scheduler; writes are queued for approval
     weather.ts     weather — Open-Meteo forecast, keyless
     weather-alerts.ts  weather_alerts — thresholds applied in code, not by the model
     git-status.ts  git_status — read-only branch/dirty/recent-commits
