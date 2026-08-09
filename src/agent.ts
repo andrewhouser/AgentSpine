@@ -75,7 +75,46 @@ you can do, not something to hand back:
 const clock = (): string =>
   `Current local time: ${new Date().toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`;
 
-const system = (tools: Record<string, Tool>): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
+/**
+ * How the loop is told to finish, which is not the same question in the two places it ends.
+ *
+ * An unattended run — a 3am schedule, a watcher, the heartbeat — finishes into a ledger. The
+ * useful thing to write there is an account of what happened, and "what you did" is exactly
+ * right for it.
+ *
+ * A chat turn finishes into a person's screen, and that same instruction is actively wrong:
+ * asked for the weather, a model told to report what it did answers "I sent you a weather
+ * notification" — a true sentence containing none of the weather. The tool results are
+ * already on screen as cards, so a narration of them is the one thing the reply must not be.
+ * This is the whole difference between an agent log and a conversation, and it comes down to
+ * which sentence goes here.
+ */
+const finalDocs = (conversational: boolean): string =>
+  conversational
+    ? `{"action":"final","reply":"<your answer to the user, in prose>"}`
+    : `{"action":"final","summary":"<what you did and what you left for the user to confirm>"}`;
+
+/** Rules that only apply when a person is on the other end, reading this as it happens. */
+const chatDocs = (tools: Record<string, Tool>): string => `
+You are in a live conversation. A person asked this and is reading your reply right now.
+Your final reply is the entire answer they see — every tool call above it is shown to them
+as a collapsed card, not as your response.
+- ANSWER THEM. If they asked for the weather, the reply is the weather. "I looked it up",
+  "I sent you a notification", and "I have retrieved the data" are reports about you, not
+  answers to them, and land as no answer at all.
+- Write prose, as you would speak it. Not a status report, not a list of the steps you took,
+  not JSON, and never the raw tool output pasted back — they can already see that.
+- Do not repeat a tool call whose result you already have. Read the result and use it.${
+  tools.notify
+    ? `
+- Do NOT use notify to tell them something they asked you here. They are already reading;
+  a push notification for an answer you are about to type is noise. Use notify in this
+  conversation ONLY if they explicitly ask you to send something to their phone.`
+    : ""
+}
+`;
+
+const system = (tools: Record<string, Tool>, conversational: boolean): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
 ${clock()}
 
@@ -85,11 +124,11 @@ To use a tool:
 {"action":"tool","tool":"<name>","args":{...}}
 
 To finish:
-{"action":"final","summary":"<what you did and what you left for the user to confirm>"}
+${finalDocs(conversational)}
 
 Available tools:
 ${toolDocs(tools)}
-${appDocs(tools)}
+${appDocs(tools)}${conversational ? chatDocs(tools) : ""}
 Rules:
 - A capability broker gates every tool call. It may reply DENIED (not permitted) or
   QUEUED (an irreversible action awaiting the user's confirmation). If something is
@@ -114,6 +153,17 @@ export interface AgentOpts {
    * the whole tree — otherwise delegating would silently reset every per-run budget.
    */
   budgetRunId?: number | null;
+  /**
+   * Whether a person is reading this as it happens.
+   *
+   * True for a chat turn, false for a schedule, a watcher, the heartbeat, and every
+   * subagent — a unit reports to its caller, not to the user, so its finishing text is an
+   * account of the work and not a reply to anyone.
+   *
+   * It changes only what the loop is asked to produce at the end, never what it may do:
+   * both modes run the same registry through the same broker under the same policy.
+   */
+  conversational?: boolean;
   /**
    * Standing context injected as system messages ahead of the goal — the user profile
    * and auto-recalled memories. Assembled by the caller (`runner.ts`) so every run kind
@@ -165,6 +215,27 @@ const parseOr = async (messages: Msg[], opts: RouteOpts) => {
   return { text: result.text, parsed: safeJson(result.text), actualTier: result.tier, via: result.via };
 };
 
+/**
+ * Where the finishing text lives in the model's reply.
+ *
+ * `summary` is the documented key and `reply` is the one the conversational prompt asks
+ * for, but a local model finishing a chat turn reaches for whichever word the prompt put in
+ * its head — and the cost of guessing wrong is total. `String(parsed.summary ?? "…")` on a
+ * reply keyed `answer` yields the empty string, and an empty string renders as nothing at
+ * all: the turn shows its tool cards and then simply stops, which is what a user reports as
+ * "it returned the JSON output". Reading every plausible key is the same forgiveness the
+ * tool-call parser already extends one branch below, for the same reason.
+ */
+const FINAL_KEYS = ["reply", "summary", "answer", "response", "message", "text", "content"];
+
+const finalText = (parsed: any): string => {
+  for (const key of FINAL_KEYS) {
+    const value = parsed?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+};
+
 const safeJson = (text: string): any | null => {
   try {
     return extractJson(text);
@@ -181,9 +252,10 @@ export const runAgent = async (
 ): Promise<AgentResult> => {
   const tools = visibleTools(opts.tools);
   const tier = opts.tier ?? "standard";
+  const conversational = opts.conversational ?? false;
 
   const messages: Msg[] = [
-    { role: "system", content: system(tools) },
+    { role: "system", content: system(tools, conversational) },
     ...(opts.context ?? []).map((content): Msg => ({ role: "system", content })),
     ...(opts.history ?? []),
     // Project knowledge is file content, so it enters as an untrusted USER message rather
@@ -222,7 +294,22 @@ export const runAgent = async (
     }
 
     if (parsed.action === "final") {
-      const summary = String(parsed.summary ?? "(no summary)");
+      const summary = finalText(parsed);
+
+      // A blank finish is not a finish. The UI renders the final text as the whole of the
+      // assistant's turn, so returning "" here shows the user their question, some tool
+      // cards, and no answer — a failure that looks exactly like a bug in the interface.
+      // Ask once more instead; the step cap is what stops this from going around forever.
+      if (!summary) {
+        messages.push({
+          role: "user",
+          content: conversational
+            ? 'Your reply was empty. Answer the user now, in prose, using what the tools returned: {"action":"final","reply":"<the answer itself>"}'
+            : 'Your summary was empty. Finish with {"action":"final","summary":"<what you did>"}.',
+        });
+        continue;
+      }
+
       publish(runId, { steps: step + 1, summary, type: "final" });
       return { summary, steps: step + 1, trace: messages };
     }
@@ -265,7 +352,13 @@ export const runAgent = async (
         });
         continue;
       }
-      const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId);
+      // The goal passed here is the user's own message, not anything the model has since
+      // written about it — a tool gating on "did they ask for this?" must read the request,
+      // not the requester's account of it.
+      const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
+        conversational,
+        goal,
+      });
       messages.push({ role: "user", content: `tool result [${result.status}]:\n${result.output}` });
       continue;
     }
@@ -279,4 +372,14 @@ export const runAgent = async (
   const capped = "Reached the step cap without concluding.";
   publish(runId, { steps: MAX_STEPS, summary: capped, type: "final" });
   return { summary: capped, steps: MAX_STEPS, trace: messages };
+};
+
+/**
+ * Exposed for test/agent-final.test.mjs. The prompt is the product here — the difference
+ * between a reply and a status report is one sentence in it — so it is worth asserting on
+ * directly rather than only through a live model that may paper over a bad instruction.
+ */
+export const __test = {
+  finalText,
+  systemPrompt: (conversational: boolean) => system(registry, conversational),
 };

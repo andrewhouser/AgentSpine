@@ -13,7 +13,7 @@
 import { notify } from "../notify.ts";
 import { judge } from "../judge.ts";
 import { JUDGE_INTERRUPTIONS } from "../config.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, RunContext, Tool } from "../types.ts";
 
 interface Args {
   title?: string;
@@ -21,6 +21,23 @@ interface Args {
   /** 1–5. 4 and above break through Do Not Disturb, so they need a real reason. */
   priority?: number;
 }
+
+/**
+ * Did the user ask to be pushed, in the message that started this run?
+ *
+ * Read off the user's own words rather than the model's assessment of them, because the
+ * model is the party being gated here and "the user wanted a notification" is exactly the
+ * claim it would make. Same principle as the rest of the broker: the model decides what to
+ * attempt, code decides what is allowed.
+ *
+ * Deliberately generous. A false positive costs one notification the user half-asked for; a
+ * false negative silently drops one they explicitly requested, which is the worse failure —
+ * and the answer still reaches them in the reply either way.
+ */
+const PUSH_REQUESTED =
+  /\b(my|the|a)\s+phone\b|\bpush\b|\bnotif(y|ication)\b|\balert me\b|\btext me\b|\bping me\b|\bbuzz me\b|\bbanner\b|\blet me know on\b/i;
+
+const askedForPush = (goal: string): boolean => PUSH_REQUESTED.test(String(goal ?? ""));
 
 const clampPriority = (p: unknown): 1 | 2 | 3 | 4 | 5 => {
   const n = Math.round(Number(p));
@@ -32,20 +49,41 @@ export const notifyTool: Tool = {
   name: "notify",
   description:
     "Send the user a notification (their phone if push is set up, otherwise a Mac banner). " +
-    "Use it when something genuinely warrants interrupting them — a finished brief they " +
-    "asked for, a watcher detecting a real change, a problem they'd want to know about now. " +
-    "Do not use it to report routine progress or to confirm you finished a task; that belongs " +
-    "in your final summary. Priority 4-5 overrides Do Not Disturb, so keep those for urgent things.",
+    "This is for reaching someone who is NOT here — an unattended job that found something: " +
+    "a watcher detecting a real change, a brief finishing at 6am, a problem they'd want to " +
+    "know about now. If they are talking to you right now, answering them IS the delivery, " +
+    "and a push as well is just noise; notify in a live conversation only when they ask you " +
+    "to send it to their phone. Never use it to report progress or to confirm you finished a " +
+    "task. Priority 4-5 overrides Do Not Disturb, so keep those for urgent things.",
   argsSchema: '{ "title": string, "body": string, "priority"?: 1|2|3|4|5 }',
   classify: (a: Args): ClassifiedAction => ({
     reversibility: "reversible",
     target: "notifications",
     summary: `Notify the user: "${String(a?.title ?? "").slice(0, 80)}"`,
   }),
-  checkPolicy: (_p: Policy): PolicyDecision => ({
-    allowed: true,
-    reason: "notifying the user is always permitted",
-  }),
+  /**
+   * The one gate here is not about permission but about setting.
+   *
+   * Pushing a notification to answer a question someone is typing to you is noise, and it
+   * was worse than noise in practice: having "delivered" the weather to a phone, the model
+   * treated the answering as done and replied "Sent a weather notification" instead of
+   * saying what the weather was. The prompt asks it not to; this makes it so.
+   *
+   * An unattended run — a schedule, a watcher, a subagent — is untouched, because reaching
+   * someone who is not here is the entire point of the tool. And a user who asks for a push
+   * in the same breath still gets one: the exemption reads their words, not the model's.
+   */
+  checkPolicy: (_p: Policy, _a: Args, run?: RunContext): PolicyDecision => {
+    if (!run?.conversational) return { allowed: true, reason: "notifying the user is always permitted" };
+    if (askedForPush(run.goal)) return { allowed: true, reason: "the user asked for this to be pushed" };
+    return {
+      allowed: false,
+      reason:
+        "the user is in this conversation right now and did not ask to be notified. Put this " +
+        "in your reply instead — they are already reading it. (A scheduled or unattended run " +
+        "may notify freely; this only applies to a live chat turn.)",
+    };
+  },
   run: async (a: Args) => {
     const title = String(a?.title ?? "agentspine").slice(0, 120);
     const body = String(a?.body ?? "").slice(0, 2000);

@@ -25,7 +25,7 @@
  * Nothing here trusts the model's own claim about its intent; the classification
  * comes from code in the tool, and the decision comes from code here.
  */
-import type { BrokerResult, ClassifiedAction, Policy, ToolCall } from "./types.ts";
+import type { BrokerResult, ClassifiedAction, Policy, RunContext, ToolCall } from "./types.ts";
 import { registry } from "./tools/index.ts";
 import * as store from "./memory/store.ts";
 import { publish } from "./events.ts";
@@ -80,12 +80,16 @@ let callSeq = 0;
  *   ROOT run's allowance. Without this split, `countToolCallsInRun` keys on the child's id
  *   and delegating silently resets every per-run cap — "budget: 3 web searches" would mean
  *   three per subagent, which is not a budget.
+ * @param run         what kind of run this call comes from — whether a person is reading it
+ *   happen, and what they actually asked for. A few tools gate on it; see RunContext.
+ *   Omitted means the cautious reading: nobody is watching and nobody asked.
  */
 export const executeCall = async (
   call: ToolCall,
   policy: Policy,
   runId: number | null,
   budgetRunId: number | null = runId,
+  run?: RunContext,
 ): Promise<BrokerResult> => {
   const tool = registry[call.tool];
   const callId = ++callSeq;
@@ -127,8 +131,10 @@ export const executeCall = async (
     return record(null, "error", `ERROR: could not classify args: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Gate 1: allowlist.
-  const decision = tool.checkPolicy(policy, call.args);
+  // Gate 1: allowlist. `run` rides along so a tool can refuse on the setting the call is
+  // being made from as well as on its target — still a code decision in the tool, still
+  // recorded and rendered as an ordinary denial.
+  const decision = tool.checkPolicy(policy, call.args, run);
   if (!decision.allowed) return record(classified, "denied", `DENIED: ${decision.reason}`);
 
   // Budget rail. After the allowlist (a denied call shouldn't consume allowance) and
@@ -191,7 +197,7 @@ export const executeCall = async (
 
   // Execute.
   try {
-    return record(classified, "executed", await tool.run(call.args, { policy }));
+    return record(classified, "executed", await tool.run(call.args, { policy, run }));
   } catch (err) {
     return record(classified, "error", `ERROR: ${err instanceof Error ? err.message : String(err)}`);
   }

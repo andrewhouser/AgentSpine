@@ -562,6 +562,67 @@ no future firing (so the bad state is unrepresentable, whatever a caller asks fo
 time instead. The scheduler also retires the job *before* it runs rather than after, so a
 one-shot that fails does not retry — check Activity, and ask again if it mattered.
 
+## A conversation, not a work log
+
+Asked *"what's the weather like today?"*, this used to answer **"Sent a weather notification
+for Farmington, NH with current conditions and a 3-day forecast."** True, and containing no
+weather. Sometimes it answered with nothing at all — tool cards, then a blank space.
+
+Both came from the same place, and neither was the model being stupid. The loop had one
+instruction for how to finish:
+
+```
+{"action":"final","summary":"<what you did and what you left for the user to confirm>"}
+```
+
+That is exactly right for a 3am scheduled job, which finishes into a ledger where an account
+of the work is the useful thing to write. It is exactly wrong for a chat turn, which finishes
+onto a person's screen. Asked to report what it did, a model reports what it did — and having
+"delivered" the weather by pushing a notification, it considered the answering done. **A chat
+turn now gets a different closing instruction:**
+
+```
+{"action":"final","reply":"<your answer to the user, in prose>"}
+```
+
+plus rules that only apply when someone is actually reading: answer them rather than
+narrating; the tool cards are already on screen, so don't recite them; and don't call the
+same tool twice. Every other run kind is untouched, and a subagent stays in report mode
+because it reports to its caller, not to you.
+
+**The notification is a gate, not a request.** Asking the model nicely not to push is the
+weaker half of this, so `notify` refuses outright in a conversational run — an ordinary
+DENIED from the broker, with the badge and the audit row that every other refusal gets. The
+exemption is what makes this work rather than merely annoy: if the *user's own message* asked
+for a push — "text me", "send it to my phone", "notify me when" — it goes through. That
+exemption reads the user's words and not the model's, because "the user wanted a
+notification" is exactly the claim the party being gated would make. Unattended runs are
+untouched in both directions: reaching someone who is not there is the entire point of the
+tool, and a watcher firing at 3am is precisely when you want it.
+
+This needed one new thing in the plumbing: the broker now passes tools a `RunContext` — is
+anyone reading, and what did they actually ask — so a tool can gate on the *setting* a call
+is made from and not only on its target. `checkPolicy` takes it as an optional third
+argument, which is why adding it changed no other tool in the registry.
+
+The blank answers were the second bug and a smaller one: a finish keyed `reply` or `answer`
+instead of `summary` read out as the empty string, and the UI renders the final text as the
+whole assistant turn — so an empty one draws nothing, which reads as a broken interface
+rather than as a model that said nothing. The parser now reads any of the plausible keys, and
+a genuinely empty finish is refused and re-asked instead of shipped to the screen.
+
+Measured on the same question, same model, after:
+
+```
+conversational: true  — 3 steps, 26.6s, tools called: weather
+  "The weather in Farmington, NH today is currently 81°F, feeling like 88°F, with clear
+   skies and a light wind at 7 mph. The forecast for the day is overcast with temperatures
+   ranging from 67°F to 87°F, and there's a 2% chance of precipitation."
+```
+
+One weather call rather than two, no notification, and an answer to the question that was
+asked.
+
 ### It knows what day it is
 
 Every run's system prompt now opens with the current local time and timezone. This is what
@@ -599,7 +660,7 @@ src/                 the agent — no build step, two runtime dependencies
     gmail.ts       gmail_search — read-only headers+snippets, UNTRUSTED-tagged
     calendar.ts    calendar_upcoming — read-only events
     memory.ts      memory_save / memory_recall
-    notify.ts      notify — reach the user's phone (or a Mac banner)
+    notify.ts      notify — reach the user's phone; refused in a live chat unless asked
     state.ts       state_get / state_set — exact values, for watcher change detection
     schedule.ts    schedule_* — the app's own scheduler; writes are queued for approval
     weather.ts     weather — Open-Meteo forecast, keyless

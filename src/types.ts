@@ -91,8 +91,30 @@ export interface Policy {
   };
 }
 
+/**
+ * What the broker knows about the run a call is being made from.
+ *
+ * A few capabilities are appropriate in one setting and noise in another — pushing a
+ * notification to someone's phone to answer a question they are typing to you right now
+ * being the case that prompted this. Deciding that needs facts the tool cannot see from its
+ * arguments, so the loop states them here and the tool's `checkPolicy` gets to act on them
+ * in code rather than the prompt merely asking nicely.
+ *
+ * `goal` is the user's own message, and it is the only statement of intent in the system
+ * worth trusting: the model's claim that "the user wanted a push" is a claim by the party
+ * being gated. Absent — a subagent, an approval executed later — means the safe reading,
+ * which is that nobody is watching and nobody asked.
+ */
+export interface RunContext {
+  /** A person is reading this exchange as it happens, i.e. a chat turn. */
+  conversational: boolean;
+  /** The user's message for this run, verbatim. */
+  goal: string;
+}
+
 export interface ToolContext {
   policy: Policy;
+  run?: RunContext;
 }
 
 /**
@@ -107,7 +129,12 @@ export interface Tool {
   /** Shown to the model: the shape of `args`. */
   argsSchema: string;
   classify(args: any): ClassifiedAction;
-  checkPolicy(policy: Policy, args: any): PolicyDecision;
+  /**
+   * `run` describes the run this call comes from (see RunContext). Optional, and absent
+   * means the cautious reading — a tool that ignores it behaves exactly as it always did,
+   * which is why adding the parameter changed no other tool in the registry.
+   */
+  checkPolicy(policy: Policy, args: any, run?: RunContext): PolicyDecision;
   run(args: any, ctx: ToolContext): Promise<string>;
 }
 

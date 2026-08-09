@@ -231,6 +231,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     try {
       const { summary, steps, trace } = await runAgent(task, policy, runId, {
         budgetRunId: runId,
+        // A chat turn ends on someone's screen and must end in an answer; every other kind
+        // ends in the ledger and should end in an account of what happened.
+        conversational: kind === "chat",
         context,
         history,
         knowledge,
