@@ -1046,6 +1046,37 @@ The refresh token is stored `0600` at `~/.config/agentspine/google-token.json`, 
 repo. Now tasks like *"summarize what's on my calendar tomorrow and notify me"* or *"triage
 my unread inbox and save anything urgent to memory"* work.
 
+## Updating & restarting the service
+
+After pulling new code from GitHub, rebuild the web client and restart the launchd
+daemon so the running service picks up the changes.
+
+```bash
+cd /Volumes/WorkDrive/andrewhouser/Developer/AgentSpine
+git pull
+npm install              # in case dependencies changed
+npm run web:build        # rebuild the interface into ./public
+sudo launchctl bootout system/local.agentspine.dashboard
+sudo launchctl bootstrap system /Library/LaunchDaemons/local.agentspine.dashboard.plist
+```
+
+Verify it came back:
+
+```bash
+sudo launchctl print system/local.agentspine.dashboard | head -5
+curl -s http://localhost:8787/api/status | head -c 80; echo
+```
+
+If you only changed server-side code (`src/`), skip `npm run web:build` — just restart the
+daemon. The server has no build step; Node runs the TypeScript directly.
+
+**Logs** (if something goes wrong after restart):
+
+```bash
+tail -f ~/Library/Logs/agentspine.log
+tail -f ~/Library/Logs/agentspine.err.log
+```
+
 ## Commands
 
 ```
