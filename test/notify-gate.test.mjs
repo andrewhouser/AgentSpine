@@ -61,6 +61,15 @@ check("'ping me'", chat("Ping me with the result."), true);
 check("'alert me'", chat("Alert me if it is going to storm."), true);
 check("'push a notification'", chat("Push a notification with today's high."), true);
 check("'let me know on my watch'", chat("Let me know on my watch."), true);
+check("'send me an alert'", chat("Send me an alert about the weather."), true);
+check("'message me'", chat("Message me the forecast."), true);
+
+// The line the exemption must not cross: in a chat, "send me X" means "tell me X". Reading
+// it as a push request would reopen the bug this gate exists to close.
+console.log("\nAND THE LINE IT MUST NOT CROSS");
+check("'send me the weather' is just asking", chat("Send me the weather for Concord."), false);
+check("'give me the forecast'", chat("Give me the forecast."), false);
+check("'tell me about the weather'", chat("Tell me about the weather today."), false);
 
 // The exemption must read the user's words. A model that decides on its own that a push is
 // wanted has written nothing into the goal, so it stays refused — which is the point.

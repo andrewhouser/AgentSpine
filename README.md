@@ -605,6 +605,26 @@ anyone reading, and what did they actually ask — so a tool can gate on the *se
 is made from and not only on its target. `checkPolicy` takes it as an optional third
 argument, which is why adding it changed no other tool in the registry.
 
+**And a refused notification is an answer, not an obstacle.** Gating the push exposed the
+next problem immediately: a model reads DENIED as "route around this". Observed — denied,
+search again, compose the same notification, denied, search again, around until the step cap,
+and the user saw *nothing at all* despite a perfectly good answer having been written on the
+second step. The refusal was correct and the outcome was worse than before it.
+
+The insight is that the text in that notification body is the finished reply, merely
+addressed to a channel the user is not reading. So the loop keeps it:
+
+| | |
+|---|---|
+| first refusal | keep the text, and tell the model plainly that no more tools are wanted |
+| second refusal | stop negotiating — that text *is* the reply, finish with it |
+| step cap | finish with it, rather than with "reached the step cap without concluding" |
+
+The user gets the answer however the run ends. Nothing here decides what they may be told —
+only the delivery was ever refused. The step-cap rung is worth having on its own: a capped
+run used to report only that it had run out of steps, discarding whatever it had actually
+worked out.
+
 The blank answers were the second bug and a smaller one: a finish keyed `reply` or `answer`
 instead of `summary` read out as the empty string, and the UI renders the final text as the
 whole assistant turn — so an empty one draws nothing, which reads as a broken interface

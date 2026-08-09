@@ -30,7 +30,7 @@ const check = (label, actual, expected) => {
   );
 };
 
-const { finalText, systemPrompt } = __test;
+const { finalText, refusedNotifyText, systemPrompt } = __test;
 const chat = systemPrompt(true);
 const job = systemPrompt(false);
 
@@ -52,6 +52,27 @@ check("whitespace only", finalText({ summary: "   \n " }), "");
 check("no recognisable key at all", finalText({ action: "final" }), "");
 check("a non-string value is not text", finalText({ summary: { a: 1 } }), "");
 check("null", finalText({ summary: null }), "");
+
+/**
+ * The refused notification carries the answer.
+ *
+ * Observed after the gate went in: denied, search again, compose the same notification,
+ * denied, search again — around until the step cap, and the user saw nothing at all even
+ * though a correct answer had been written on the second step. The model reads DENIED as
+ * "route around this", so the loop stops asking and keeps the text.
+ */
+console.log("\nA REFUSED NOTIFICATION IS AN ANSWER SENT TO THE WRONG PLACE");
+const body = "Currently 83°F and clear with a wind of 8 mph. Today's high is 88°F.";
+const notifyCall = { args: { body, priority: 3, title: "Weather in Concord, NH" }, tool: "notify" };
+check("a denied notify in chat yields its body", refusedNotifyText(true, notifyCall, "denied"), body);
+check("the title is dropped — the body is the answer", refusedNotifyText(true, notifyCall, "denied").includes("Weather in Concord"), false);
+check("a notify that RAN is not salvage", refusedNotifyText(true, notifyCall, "executed"), "");
+check("nor one that queued", refusedNotifyText(true, notifyCall, "queued"), "");
+check("an unattended run is left alone entirely", refusedNotifyText(false, notifyCall, "denied"), "");
+check("another denied tool is not mistaken for it", refusedNotifyText(true, { args: { query: "weather" }, tool: "web_search" }, "denied"), "");
+check("a notify with no body salvages nothing", refusedNotifyText(true, { args: { title: "hi" }, tool: "notify" }, "denied"), "");
+check("whitespace body salvages nothing", refusedNotifyText(true, { args: { body: "  " }, tool: "notify" }, "denied"), "");
+check("missing args do not throw", refusedNotifyText(true, { tool: "notify" }, "denied"), "");
 
 console.log("\nTHE CHAT PROMPT — a reply, not a report");
 check("asks for a reply, not a summary", /"reply":"<your answer to the user/.test(chat), true);

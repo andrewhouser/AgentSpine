@@ -35,7 +35,10 @@ interface Args {
  * and the answer still reaches them in the reply either way.
  */
 const PUSH_REQUESTED =
-  /\b(my|the|a)\s+phone\b|\bpush\b|\bnotif(y|ication)\b|\balert me\b|\btext me\b|\bping me\b|\bbuzz me\b|\bbanner\b|\blet me know on\b/i;
+  // A delivery noun ("send me an alert", "on my phone"), or telling it to reach you by name
+  // ("text me", "ping me"). A bare "send me the weather" deliberately does NOT match: in a
+  // chat that means "tell me", and reading it as a push request reopens the original bug.
+  /\b(phone|notification|notifications|notify|alert|alerts|push|pushed|banner|watch)\b|\b(text|ping|buzz|message)\s+me\b|\blet me know on\b/i;
 
 const askedForPush = (goal: string): boolean => PUSH_REQUESTED.test(String(goal ?? ""));
 

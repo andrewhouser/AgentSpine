@@ -15,7 +15,7 @@ import type { Msg } from "./llm.ts";
 import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
-import type { Policy, Tool, ToolCall } from "./types.ts";
+import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
 /** The tools this loop may see. A subagent's registry is a subset of its parent's. */
 const visibleTools = (allowed?: string[]): Record<string, Tool> =>
@@ -236,6 +236,18 @@ const finalText = (parsed: any): string => {
   return "";
 };
 
+/**
+ * The text of a notification the broker refused during a live chat turn — which is to say,
+ * a finished answer the model tried to send down a channel the user is not reading.
+ *
+ * Deliberately blind to *which* gate refused it. Any denied notify in a conversation means
+ * the same thing operationally: this text did not reach the user, and it is addressed to
+ * them. The body is where the answer lives; the title is a header ("Weather in Concord, NH")
+ * and would only be a heading on a sentence.
+ */
+const refusedNotifyText = (conversational: boolean, call: ToolCall, status: BrokerStatus): string =>
+  conversational && call.tool === "notify" && status === "denied" ? String(call.args?.body ?? "").trim() : "";
+
 const safeJson = (text: string): any | null => {
   try {
     return extractJson(text);
@@ -267,6 +279,13 @@ export const runAgent = async (
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
 
   let tierCorrected = false;
+
+  /**
+   * An answer the model wrote into a notification that was refused. Held so that however
+   * this run ends — a second refusal, or the step cap — the user gets the text that was
+   * written for them rather than silence.
+   */
+  let undelivered = "";
 
   for (let step = 0; step < maxSteps; step++) {
     publish(runId, { step: step + 1, type: "step_start" });
@@ -359,6 +378,40 @@ export const runAgent = async (
         conversational,
         goal,
       });
+
+      /**
+       * A notification refused in a live chat is not an obstacle to route around. It is the
+       * answer, addressed to the wrong place — the model has already written the finished
+       * message, it just tried to deliver it down a channel the user is not using.
+       *
+       * Left to itself the model does not read the refusal that way. Observed: denied,
+       * search again, compose the same notification, denied, search again — around until
+       * the step cap, and the user gets nothing at all despite a correct answer having been
+       * written on the second step. So the text is kept, and the loop stops asking:
+       *
+       *   first refusal   keep the text, and say plainly that no more tools are wanted
+       *   second refusal  stop negotiating — that text IS the reply, finish with it
+       *   step cap        finish with it rather than with "reached the step cap"
+       *
+       * Only the delivery is refused; nothing here decides what the user may be told.
+       */
+      const refused = refusedNotifyText(conversational, call, result.status);
+      if (refused) {
+        if (undelivered) {
+          publish(runId, { steps: step + 1, summary: refused, type: "final" });
+          return { summary: refused, steps: step + 1, trace: messages };
+        }
+        undelivered = refused;
+        messages.push({
+          role: "user",
+          content:
+            `tool result [${result.status}]:\n${result.output}\n\n` +
+            `You have already written the answer. Do NOT call another tool — no searches, no ` +
+            `lookups, nothing. Reply now with {"action":"final","reply":"<that same text>"}.`,
+        });
+        continue;
+      }
+
       messages.push({ role: "user", content: `tool result [${result.status}]:\n${result.output}` });
       continue;
     }
@@ -369,9 +422,13 @@ export const runAgent = async (
     });
   }
 
-  const capped = "Reached the step cap without concluding.";
-  publish(runId, { steps: MAX_STEPS, summary: capped, type: "final" });
-  return { summary: capped, steps: MAX_STEPS, trace: messages };
+  // Out of steps. If an answer was written along the way and only its delivery was refused,
+  // that is the thing to show — "reached the step cap" tells the user nothing, and this run
+  // did in fact produce what they asked for. `maxSteps`, not MAX_STEPS: a subagent has its
+  // own tighter cap, and reporting the top-level one here was simply wrong.
+  const capped = undelivered || "Reached the step cap without concluding.";
+  publish(runId, { steps: maxSteps, summary: capped, type: "final" });
+  return { summary: capped, steps: maxSteps, trace: messages };
 };
 
 /**
@@ -381,5 +438,6 @@ export const runAgent = async (
  */
 export const __test = {
   finalText,
+  refusedNotifyText,
   systemPrompt: (conversational: boolean) => system(registry, conversational),
 };
