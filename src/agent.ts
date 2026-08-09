@@ -248,6 +248,63 @@ const finalText = (parsed: any): string => {
 const refusedNotifyText = (conversational: boolean, call: ToolCall, status: BrokerStatus): string =>
   conversational && call.tool === "notify" && status === "denied" ? String(call.args?.body ?? "").trim() : "";
 
+/**
+ * Identity of a call, for spotting the model asking the same question over and over. Keys
+ * are sorted so that argument order — which the model varies freely — doesn't disguise a
+ * repeat as a new call.
+ */
+const callKey = (call: ToolCall): string => {
+  const args = call.args ?? {};
+  return `${call.tool}:${JSON.stringify(args, Object.keys(args).sort())}`;
+};
+
+/** Identical calls tolerated before the run is treated as stuck and closed out. */
+const REPEAT_LIMIT = 3;
+
+/**
+ * One last call to the model, outside the loop's JSON protocol.
+ *
+ * A run that is going in circles still usually holds the answer — it looked the weather up
+ * three times and got it three times; what it cannot do is stop and say so. Ending such a
+ * run with "reached the step cap without concluding" throws that away and shows the user
+ * nothing, which is the worst of both: the work was done and the answer was discarded.
+ *
+ * So the loop is abandoned and the model is asked one plain question with the material it
+ * gathered. No tools, no protocol, nothing to get stuck in — the failure mode being escaped
+ * is precisely the protocol, so the escape hatch must not use it.
+ *
+ * The material is tool output, so it enters as a USER message and keeps whatever UNTRUSTED
+ * tagging its tool gave it. Never throws: this runs when things have already gone wrong.
+ */
+const closingAnswer = async (
+  goal: string,
+  gathered: string[],
+  conversational: boolean,
+  tier: Tier,
+): Promise<string> => {
+  const material = gathered.slice(-6).map((g) => g.slice(0, 1500)).join("\n\n").slice(0, 8000);
+  if (!material) return "";
+  try {
+    const { text } = await route(
+      [
+        {
+          role: "system",
+          content: conversational
+            ? "Answer the person's question using only the information below. Reply in plain prose — " +
+              "no JSON, no tool calls, and no mention of tools, steps, or how the information was " +
+              "obtained. If it does not answer their question, say so in one sentence."
+            : "Summarise what was found, using only the information below. Plain prose, no JSON.",
+        },
+        { role: "user", content: `Question: ${goal}\n\nInformation gathered:\n${material}` },
+      ],
+      { tier },
+    );
+    return text.trim();
+  } catch {
+    return "";
+  }
+};
+
 const safeJson = (text: string): any | null => {
   try {
     return extractJson(text);
@@ -286,6 +343,21 @@ export const runAgent = async (
    * written for them rather than silence.
    */
   let undelivered = "";
+
+  /** How many times each exact call has been made, and what the run has learned so far. */
+  const callCounts = new Map<string, number>();
+  const gathered: string[] = [];
+
+  /**
+   * End a run that is not going to end itself. Prefers text the model already wrote for the
+   * user over spending another call, then a closing answer built from what was gathered,
+   * and only says "nothing came of this" when there is genuinely nothing.
+   */
+  const concludeStuck = async (steps: number, fallback: string): Promise<AgentResult> => {
+    const summary = undelivered || (await closingAnswer(goal, gathered, conversational, tier)) || fallback;
+    publish(runId, { steps, summary, type: "final" });
+    return { summary, steps, trace: messages };
+  };
 
   for (let step = 0; step < maxSteps; step++) {
     publish(runId, { step: step + 1, type: "step_start" });
@@ -371,6 +443,18 @@ export const runAgent = async (
         });
         continue;
       }
+      /**
+       * How many times this exact call has now been made.
+       *
+       * Counted rather than blocked, and the call still executes. Repeating a *query* is
+       * merely wasteful, but repeating an *action* — a click, a keystroke, a banner — may be
+       * exactly what was intended, and serving those from a cache would silently break
+       * workflows that legitimately do the same thing twice. So nothing is suppressed; the
+       * repetition is used as the signal it is, that the model is stuck rather than working.
+       */
+      const repeats = (callCounts.get(callKey(call)) ?? 0) + 1;
+      callCounts.set(callKey(call), repeats);
+
       // The goal passed here is the user's own message, not anything the model has since
       // written about it — a tool gating on "did they ask for this?" must read the request,
       // not the requester's account of it.
@@ -378,6 +462,7 @@ export const runAgent = async (
         conversational,
         goal,
       });
+      if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
 
       /**
        * A notification refused in a live chat is not an obstacle to route around. It is the
@@ -412,7 +497,31 @@ export const runAgent = async (
         continue;
       }
 
-      messages.push({ role: "user", content: `tool result [${result.status}]:\n${result.output}` });
+      /**
+       * The same call, for the third time, with the same arguments and the same answer.
+       *
+       * Observed: three identical `weather` calls and still going at step six, on its way to
+       * burning the whole cap and showing the user nothing. The prompt already asks it not
+       * to do this, and asking is evidently not enough — a model in this state reads its own
+       * repetition as progress. So the run stops here and is closed out with what it found,
+       * which it has now found three times.
+       */
+      if (repeats >= REPEAT_LIMIT) {
+        return concludeStuck(step + 1, "Kept repeating the same tool call without concluding.");
+      }
+
+      messages.push({
+        role: "user",
+        content:
+          `tool result [${result.status}]:\n${result.output}` +
+          // One warning first, on the second identical call, so a model that can take the
+          // hint gets to finish properly rather than being cut off.
+          (repeats > 1
+            ? `\n\nYou have now made this exact call ${repeats} times and received the same answer. ` +
+              `Do NOT call it again. You have what you need — answer now with ` +
+              `{"action":"final","${conversational ? "reply" : "summary"}":"..."}.`
+            : ""),
+      });
       continue;
     }
 
@@ -422,13 +531,10 @@ export const runAgent = async (
     });
   }
 
-  // Out of steps. If an answer was written along the way and only its delivery was refused,
-  // that is the thing to show — "reached the step cap" tells the user nothing, and this run
-  // did in fact produce what they asked for. `maxSteps`, not MAX_STEPS: a subagent has its
-  // own tighter cap, and reporting the top-level one here was simply wrong.
-  const capped = undelivered || "Reached the step cap without concluding.";
-  publish(runId, { steps: maxSteps, summary: capped, type: "final" });
-  return { summary: capped, steps: maxSteps, trace: messages };
+  // Out of steps, and the same reasoning applies: a run that gathered the answer and then
+  // failed to say it should still say it. `maxSteps`, not MAX_STEPS — a subagent has its own
+  // tighter cap, and reporting the top-level one here was simply wrong.
+  return concludeStuck(maxSteps, "Reached the step cap without concluding.");
 };
 
 /**
@@ -437,7 +543,9 @@ export const runAgent = async (
  * directly rather than only through a live model that may paper over a bad instruction.
  */
 export const __test = {
+  callKey,
   finalText,
   refusedNotifyText,
+  REPEAT_LIMIT,
   systemPrompt: (conversational: boolean) => system(registry, conversational),
 };

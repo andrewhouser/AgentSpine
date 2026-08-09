@@ -30,7 +30,7 @@ const check = (label, actual, expected) => {
   );
 };
 
-const { finalText, refusedNotifyText, systemPrompt } = __test;
+const { callKey, finalText, refusedNotifyText, REPEAT_LIMIT, systemPrompt } = __test;
 const chat = systemPrompt(true);
 const job = systemPrompt(false);
 
@@ -73,6 +73,22 @@ check("another denied tool is not mistaken for it", refusedNotifyText(true, { ar
 check("a notify with no body salvages nothing", refusedNotifyText(true, { args: { title: "hi" }, tool: "notify" }, "denied"), "");
 check("whitespace body salvages nothing", refusedNotifyText(true, { args: { body: "  " }, tool: "notify" }, "denied"), "");
 check("missing args do not throw", refusedNotifyText(true, { tool: "notify" }, "denied"), "");
+
+/**
+ * Spotting the model asking the same question over and over.
+ *
+ * Observed: three identical `weather` calls and still going at step six. The key has to see
+ * through the cosmetic variation a model produces freely — argument order above all — or a
+ * repeat reads as a new call and the run keeps going.
+ */
+console.log("\nSAME CALL, SAME ARGUMENTS — the repeat has to be recognisable as one");
+const w = (args) => callKey({ args, tool: "weather" });
+check("identical calls share a key", w({ location: "Concord, NH" }) === w({ location: "Concord, NH" }), true);
+check("argument ORDER does not disguise a repeat", callKey({ args: { a: 1, b: 2 }, tool: "t" }) === callKey({ args: { b: 2, a: 1 }, tool: "t" }), true);
+check("a different argument is a different call", w({ location: "Concord, NH" }) === w({ location: "Boston, MA" }), false);
+check("a different tool is a different call", callKey({ args: {}, tool: "weather" }) === callKey({ args: {}, tool: "notify" }), false);
+check("missing args do not throw", callKey({ tool: "weather" }), 'weather:{}');
+check("the run is cut off before a fourth identical call", REPEAT_LIMIT, 3);
 
 console.log("\nTHE CHAT PROMPT — a reply, not a report");
 check("asks for a reply, not a summary", /"reply":"<your answer to the user/.test(chat), true);

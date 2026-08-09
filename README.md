@@ -621,9 +621,41 @@ addressed to a channel the user is not reading. So the loop keeps it:
 | step cap | finish with it, rather than with "reached the step cap without concluding" |
 
 The user gets the answer however the run ends. Nothing here decides what they may be told —
-only the delivery was ever refused. The step-cap rung is worth having on its own: a capped
-run used to report only that it had run out of steps, discarding whatever it had actually
-worked out.
+only the delivery was ever refused.
+
+### Going in circles
+
+The same lesson landed a third time, without a notification anywhere near it: three
+identical `weather` calls, same arguments, same answer, still going at step six on its way
+to burning the whole cap. A model in that state reads its own repetition as progress, and
+"do not repeat a tool call" in the prompt does not reach it.
+
+Identical calls are now **counted** — by tool and arguments, with the keys sorted, so the
+argument reordering a model does freely can't disguise a repeat as a new call. The second
+one gets a warning attached to its result; the third ends the run.
+
+They are counted, not blocked, and the call still executes. Repeating a *query* is merely
+wasteful, but repeating an *action* — a click, a keystroke — may be exactly what was
+intended, and serving those from a cache would silently break workflows that legitimately do
+the same thing twice. The repetition is used as the signal it is, that the model is stuck
+rather than working.
+
+**Ending a stuck run means answering, not apologising.** Such a run usually *holds* the
+answer — it looked the weather up three times and got it three times; what it cannot do is
+stop and say so. So the loop is abandoned and the model gets one plain question with the
+material it gathered: no tools, no JSON protocol, nothing to get stuck in — the thing being
+escaped is the protocol, so the escape hatch must not use it. That closing answer is also
+what a step-capped run now returns, in place of the "reached the step cap without
+concluding" that used to throw the work away.
+
+Measured on the reported case, with the goal deliberately ordering it to keep re-checking:
+
+```
+"...you must call the weather tool at least six separate times before answering."
+3 steps of a possible 30, 30.0s     calls: weather -> weather -> weather
+  "The current weather in Concord, NH is 86°F (feels like 90°F), mainly clear, with wind
+   at 10 mph. For the upcoming days, the forecast shows overcast conditions…"
+```
 
 The blank answers were the second bug and a smaller one: a finish keyed `reply` or `answer`
 instead of `summary` read out as the empty string, and the UI renders the final text as the
