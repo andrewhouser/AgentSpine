@@ -15,11 +15,37 @@ import type { Msg } from "./llm.ts";
 import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
+import { askedForPush } from "./tools/notify.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
 /** The tools this loop may see. A subagent's registry is a subset of its parent's. */
 const visibleTools = (allowed?: string[]): Record<string, Tool> =>
   allowed ? Object.fromEntries(Object.entries(registry).filter(([name]) => allowed.includes(name))) : registry;
+
+/**
+ * The tools this SETTING may see, applied after `visibleTools` narrows by caller.
+ *
+ * In a live chat, `notify` used to stay listed and the broker denied it — and the observed
+ * default path became: reach for notify first, get DENIED, lean on the salvage machinery
+ * below to turn the refused text into a reply. The answer arrived, but through a detour
+ * that burned a step and showed the user a denied call on every ordinary question. Gating
+ * treated the symptom; the cause was showing the model a delivery channel it must not use.
+ *
+ * So a chat turn simply does not carry `notify` unless the user's own message asked for a
+ * push — read by the same `askedForPush` the broker's gate uses, so the prompt and the
+ * gate can never disagree. Direct reply is the default path; notify is opt-in by the user.
+ * Unattended runs are untouched: reaching someone who is away is what the tool is for.
+ * The broker gate stays as the backstop for a model that names the tool unprompted.
+ */
+const settingTools = (
+  tools: Record<string, Tool>,
+  conversational: boolean,
+  goal: string,
+): Record<string, Tool> => {
+  if (!conversational || !tools.notify || askedForPush(goal)) return tools;
+  const { notify: _notify, ...rest } = tools;
+  return rest;
+};
 
 const toolDocs = (tools: Record<string, Tool>): string =>
   Object.values(tools)
@@ -104,6 +130,11 @@ as a collapsed card, not as your response.
   answers to them, and land as no answer at all.
 - Write prose, as you would speak it. Not a status report, not a list of the steps you took,
   not JSON, and never the raw tool output pasted back — they can already see that.
+- Answer the CURRENT message only. Earlier turns are context for understanding it, never a
+  list of things to redo. Asked for the weather, look up ONE place — the one this message
+  names, or where they are now, or the default — not every place that came up earlier in
+  the conversation. Cover multiple places, or redo earlier work, only when the current
+  message itself asks for that.
 - Do not repeat a tool call whose result you already have. Read the result and use it.${
   tools.notify
     ? `
@@ -113,6 +144,30 @@ as a collapsed card, not as your response.
     : ""
 }
 `;
+
+/**
+ * Rules for a run nobody is reading live — how its findings reach the user.
+ *
+ * Written against an observed failure: a scheduled morning brief delivered itself with
+ * `draft`, which is classified irreversible precisely so it queues — and the user opened
+ * Approvals to find a "DRAFT (text)" of their own brief, an approval card with nothing
+ * being asked. The confirmation queue is for actions with consequences, not for handing
+ * over information; a brief has no consequence to approve.
+ *
+ * Conditional on `draft` actually being visible, same reasoning as `appDocs`: a loop that
+ * cannot reach the tool should not be lectured about it.
+ */
+const jobDocs = (tools: Record<string, Tool>): string =>
+  tools.draft
+    ? `
+This run is unattended. Your final summary is its record, and it is how information you
+gathered reaches the user${tools.notify ? " — along with notify, when a finding should reach their phone now (a finished brief, a real change, a problem)" : ""}.
+- draft is ONLY for text the user might send onward as their own: an email, a reply, a
+  calendar event. A draft queues for their approval, so a brief, digest, report, or answer
+  sent as a draft turns information into a bogus approval request with nothing to approve.
+  Deliver information in the summary${tools.notify ? " or a notification" : ""}, never as a draft.
+`
+    : "";
 
 const system = (tools: Record<string, Tool>, conversational: boolean): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
@@ -128,7 +183,7 @@ ${finalDocs(conversational)}
 
 Available tools:
 ${toolDocs(tools)}
-${appDocs(tools)}${conversational ? chatDocs(tools) : ""}
+${appDocs(tools)}${conversational ? chatDocs(tools) : jobDocs(tools)}
 Rules:
 - A capability broker gates every tool call. It may reply DENIED (not permitted) or
   QUEUED (an irreversible action awaiting the user's confirmation). If something is
@@ -319,9 +374,9 @@ export const runAgent = async (
   runId: number | null,
   opts: AgentOpts = {},
 ): Promise<AgentResult> => {
-  const tools = visibleTools(opts.tools);
-  const tier = opts.tier ?? "standard";
   const conversational = opts.conversational ?? false;
+  const tools = settingTools(visibleTools(opts.tools), conversational, goal);
+  const tier = opts.tier ?? "standard";
 
   const messages: Msg[] = [
     { role: "system", content: system(tools, conversational) },
@@ -547,5 +602,6 @@ export const __test = {
   finalText,
   refusedNotifyText,
   REPEAT_LIMIT,
+  settingTools,
   systemPrompt: (conversational: boolean) => system(registry, conversational),
 };

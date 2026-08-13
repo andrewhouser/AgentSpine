@@ -122,13 +122,21 @@ export const NOTE_MEMORY_MAX = Number(env.NOTE_MEMORY_MAX ?? "300");
 export const PROFILE_MAX_CHARS = Number(env.PROFILE_MAX_CHARS ?? "4000");
 
 // --- Conversations ---
-// How many earlier turns of a chat are replayed into the next one. Each turn costs context
-// on EVERY step of the loop, not once, so this is smaller than it looks — and what gets
-// replayed is the compacted turn (what was asked, what was concluded), never the tool trace.
+// How many earlier turns of a chat are CANDIDATES for the next one's context. Each turn
+// that makes it in costs context on EVERY step of the loop, not once — so candidates are
+// shaped by src/history.ts rather than replayed: the newest ride along whole, older ones
+// only when they share content words with the current message, as one-line background.
 export const CHAT_HISTORY_TURNS = Number(env.CHAT_HISTORY_TURNS ?? "8");
-// Hard ceiling on that history in characters, oldest dropped first. The turn cap alone
-// isn't enough: one run that summarized a long document could otherwise crowd out the
-// tools prompt on a small local model.
+// Most-recent turns kept as full user/assistant pairs regardless of relevance — the
+// anchor, where "what about tomorrow?" resolves. Raise to 2 if follow-ups routinely
+// reach back two turns; every anchor turn is context paid on every step.
+export const CHAT_HISTORY_ANCHOR_TURNS = Number(env.CHAT_HISTORY_ANCHOR_TURNS ?? "1");
+// Older turns that may survive relevance gating, as one-liners. The rest are dropped —
+// their full traces stay in the messages table, reachable via conversation_detail.
+export const CHAT_HISTORY_RELEVANT_TURNS = Number(env.CHAT_HISTORY_RELEVANT_TURNS ?? "4");
+// Hard ceiling on shaped history in characters. The turn caps alone aren't enough: one
+// run that summarized a long document could otherwise crowd out the tools prompt on a
+// small local model.
 export const CHAT_HISTORY_MAX_CHARS = Number(env.CHAT_HISTORY_MAX_CHARS ?? "6000");
 // Name a conversation from its first exchange. Local-only by construction (see runner.ts).
 export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";

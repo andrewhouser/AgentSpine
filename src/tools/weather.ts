@@ -134,8 +134,9 @@ export const weather: Tool = {
   description:
     "Current conditions and a short forecast for a place, by name (e.g. 'Asheville, NC'). " +
     `Omit the location to use the configured default${DEFAULT_LOCATION ? ` (${DEFAULT_LOCATION})` : ""}. ` +
-    "Useful in a morning brief, and worth " +
-    "checking before an outdoor or travel-involving calendar event.",
+    "One call, one place — the place the CURRENT request is about, not every place " +
+    "mentioned earlier; check several only when asked for several. Useful in a morning " +
+    "brief, and worth checking before an outdoor or travel-involving calendar event.",
   argsSchema: '{ "location"?: string, "days"?: 1-7 }',
   classify: (a: Args): ClassifiedAction => ({
     reversibility: "reversible",

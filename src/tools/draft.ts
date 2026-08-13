@@ -95,9 +95,13 @@ export const draft: Tool = {
     "Write a proposed email reply, new email, calendar event, or note for the user to review. " +
     "NOTHING IS SENT OR CREATED — you are composing text, and the user decides whether to use " +
     "it. Use this whenever you conclude something should be sent or scheduled: you cannot do " +
-    "either, and drafting is how you act on that conclusion. Write the full finished text, in " +
-    "the user's voice, ready to send as-is — a draft they have to rewrite is worse than none. " +
-    "Set `reason` to say what prompted it.",
+    "either, and drafting is how you act on that conclusion. This is ONLY for text the user " +
+    "might send onward as their own — never for delivering information TO the user. A brief, " +
+    "digest, report, or answer is not a draft: a draft queues for approval, and information " +
+    "queued for approval is a question with nothing being asked. Deliver information in your " +
+    "reply or summary (or, from an unattended run, with notify). Write the full finished " +
+    "text, in the user's voice, ready to send as-is — a draft they have to rewrite is worse " +
+    "than none. Set `reason` to say what prompted it.",
   argsSchema:
     '{ "kind": "email_reply"|"email"|"event"|"text", "to"?: string, "subject"?: string, ' +
     '"body": string, "start"?: string, "duration"?: string, "location"?: string, "reason"?: string }',

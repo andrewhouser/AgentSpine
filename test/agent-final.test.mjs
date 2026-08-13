@@ -98,13 +98,20 @@ check("names the exact failure that was seen", /I sent you a notification/.test(
 check("forbids pasting raw tool output", /never the raw tool output/.test(chat), true);
 check("forbids the duplicate tool call", /Do not repeat a tool call/.test(chat), true);
 check("forbids notifying what it can just say", /Do NOT use notify to tell them something/.test(chat), true);
+check("answers the current message, not the whole history", /Answer the CURRENT message only/.test(chat), true);
+check("one weather lookup, not one per remembered place", /not every place that came up earlier/.test(chat), true);
 
-console.log("\nTHE UNATTENDED PROMPT — unchanged, because a ledger wants the account");
+console.log("\nTHE UNATTENDED PROMPT — a ledger wants the account, not a queue entry");
 check("still asks what you did", /"summary":"<what you did/.test(job), true);
 // Matched on the block's own opening line: "live conversation" alone now also appears in
 // the notify tool's description, which both prompts carry.
 check("no conversation rules", /You are in a live conversation/.test(job), false);
 check("no notify rule — an unattended job is exactly when to notify", /Do NOT use notify/.test(job), false);
+// The morning-brief-in-Approvals bug: a brief delivered via `draft` queues as a bogus
+// approval. The unattended prompt now says where information goes instead.
+check("forbids draft as an information channel", /never as a draft/.test(job), true);
+check("names the bogus-approval failure", /nothing to approve/.test(job), true);
+check("chat prompt carries no unattended delivery rules", /This run is unattended/.test(chat), false);
 
 console.log("\nSHARED — neither mode loses what both need");
 for (const [name, p] of [["chat", chat], ["job", job]]) {

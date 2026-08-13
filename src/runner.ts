@@ -17,7 +17,9 @@
 import {
   loadPolicy,
   CHAT_AUTO_TITLE,
+  CHAT_HISTORY_ANCHOR_TURNS,
   CHAT_HISTORY_MAX_CHARS,
+  CHAT_HISTORY_RELEVANT_TURNS,
   CHAT_HISTORY_TURNS,
   MEMORY_RECALL_K,
   REFLECT_ENABLED,
@@ -25,11 +27,12 @@ import {
   NOTIFY_ON_SCHEDULE,
 } from "./config.ts";
 import { runAgent } from "./agent.ts";
+import { shapeHistory } from "./history.ts";
+import type { ShapedHistory } from "./history.ts";
 import { sizeTask } from "./dispatch.ts";
 import { publish } from "./events.ts";
 import type { Tier } from "./tiers.ts";
 import { enqueue, queueStatus } from "./queue.ts";
-import type { Msg } from "./llm.ts";
 import { profileMessage } from "./memory/profile.ts";
 import { recall } from "./memory/rag.ts";
 import { reflect } from "./reflect.ts";
@@ -101,35 +104,35 @@ const buildContext = async (task: string): Promise<string[]> => {
 };
 
 /**
- * Earlier turns of this conversation, compacted.
+ * Earlier turns of this conversation, compacted AND shaped.
  *
  * The temptation is to replay each past run's stored trace, since it's right there. Don't:
  * a trace carries every tool result — pages of fetched text, mail snippets, file contents —
  * and three of those exhaust a local model's context, at which point the assistant starts
- * forgetting its own tool list. So each past turn contributes what was asked and what was
- * concluded, and nothing else.
+ * forgetting its own tool list.
  *
- * Walked newest-first and reversed at the end, so when the character budget runs out it is
- * the OLDEST turns that get dropped rather than the most recent ones.
+ * Compaction alone was not enough either. A flat window of task/note pairs still grew
+ * linearly with the conversation, taxing every step's prefill — and worse, a local model
+ * reads replayed user messages as live requests, which is how one weather question became
+ * a lookup for every city the window remembered. So `history.ts` shapes the window: the
+ * most recent turn stays a rich pair (anaphora resolves there), and older turns re-enter
+ * only if they share content words with the CURRENT message, as one-line background notes
+ * rather than as messages. The full trace of every run stays in the `messages` table,
+ * reachable through `conversation_detail` — fidelity is fetched when needed, not paid for
+ * on every step.
  */
-const buildHistory = (conversationId: number): Msg[] => {
+const buildHistory = (conversationId: number, task: string): ShapedHistory => {
   const prior = store
     .runsForConversation(conversationId)
     .filter((r) => r.task && r.note && r.status === "ok")
-    .slice(-CHAT_HISTORY_TURNS);
+    .slice(-CHAT_HISTORY_TURNS)
+    .map((r) => ({ id: Number(r.id), note: String(r.note), task: String(r.task) }));
 
-  const turns: Msg[] = [];
-  let chars = 0;
-  for (const r of prior.reverse()) {
-    const task = String(r.task);
-    const note = String(r.note);
-    const cost = task.length + note.length;
-    if (chars + cost > CHAT_HISTORY_MAX_CHARS) break;
-    chars += cost;
-    // Unshift the pair so the array stays in chronological order as we walk backwards.
-    turns.unshift({ role: "user", content: task }, { role: "assistant", content: note });
-  }
-  return turns;
+  return shapeHistory(prior, task, {
+    anchorTurns: CHAT_HISTORY_ANCHOR_TURNS,
+    backgroundTurns: CHAT_HISTORY_RELEVANT_TURNS,
+    maxChars: CHAT_HISTORY_MAX_CHARS,
+  });
 };
 
 /**
@@ -222,7 +225,11 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       if (instructions) context.unshift(instructions);
     }
     const knowledge = project ? await knowledgeFor(project.id, task) : "";
-    const history = conversationId != null ? buildHistory(conversationId) : [];
+    const shaped = conversationId != null ? buildHistory(conversationId, task) : { anchor: [], background: "" };
+    // The background block is a digest of the user's own conversation, so it joins the
+    // trusted standing context; only the anchor turn replays as actual messages.
+    if (shaped.background) context.push(shaped.background);
+    const history = shaped.anchor;
 
     // Tell the `subagent` tool who is calling. A top-level run holds the whole registry, so
     // `parentTools` is empty — meaning "no ceiling" — and it is the root of the budget tree.

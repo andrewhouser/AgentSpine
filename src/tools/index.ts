@@ -13,6 +13,7 @@ import { readFile, listDir } from "./read-file.ts";
 import { gmailSearch } from "./gmail.ts";
 import { calendarUpcoming } from "./calendar.ts";
 import { memorySave, memoryRecall } from "./memory.ts";
+import { conversationDetail } from "./conversation.ts";
 import { notifyTool } from "./notify.ts";
 import { stateGet, stateSet } from "./state.ts";
 import { scheduleCreate, scheduleDelete, scheduleList, scheduleUpdate } from "./schedule.ts";
@@ -35,6 +36,7 @@ export const tools: Tool[] = [
   calendarUpcoming,
   memorySave,
   memoryRecall,
+  conversationDetail,
   stateGet,
   stateSet,
   scheduleList,

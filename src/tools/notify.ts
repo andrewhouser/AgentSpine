@@ -40,7 +40,15 @@ const PUSH_REQUESTED =
   // chat that means "tell me", and reading it as a push request reopens the original bug.
   /\b(phone|notification|notifications|notify|alert|alerts|push|pushed|banner|watch)\b|\b(text|ping|buzz|message)\s+me\b|\blet me know on\b/i;
 
-const askedForPush = (goal: string): boolean => PUSH_REQUESTED.test(String(goal ?? ""));
+/**
+ * Exported because two layers read the same question: the broker's gate below (the
+ * backstop), and `agent.ts`, which removes this tool from a chat turn's visible registry
+ * entirely when the answer is no — a tool the model must not use in that setting is a
+ * tool it should not be shown. Both layers MUST share this one reading; if they diverged,
+ * the prompt could advertise a tool the broker then refuses, which is the wasted-step
+ * detour the visibility filter exists to end.
+ */
+export const askedForPush = (goal: string): boolean => PUSH_REQUESTED.test(String(goal ?? ""));
 
 const clampPriority = (p: unknown): 1 | 2 | 3 | 4 | 5 => {
   const n = Math.round(Number(p));
