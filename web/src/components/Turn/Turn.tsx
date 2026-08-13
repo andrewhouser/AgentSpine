@@ -5,7 +5,7 @@ import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
 import { TierBadge } from "../TierBadge/TierBadge.tsx";
-import { ToolCallCard } from "../ToolCallCard/ToolCallCard.tsx";
+import { ToolTrace } from "../ToolTrace/ToolTrace.tsx";
 import { UserMessage } from "../UserMessage/UserMessage.tsx";
 import styles from "./Turn.module.css";
 
@@ -31,7 +31,9 @@ interface TurnProps {
  *
  * Tool calls sit BEFORE the answer rather than being hidden behind it, because in this
  * system what it touched is part of the answer — an assistant that read your calendar to
- * reply is telling you something an assistant that guessed is not.
+ * reply is telling you something an assistant that guessed is not. They are folded into
+ * one summary strip once the turn finishes (see ToolTrace), which keeps that promise
+ * without making a twelve-step research turn twelve rows tall.
  */
 export const Turn = ({
   confirmations,
@@ -50,13 +52,7 @@ export const Turn = ({
   <article className={styles.turn}>
     <UserMessage text={task} />
 
-    {toolCalls.length > 0 && (
-      <div className={styles.tools}>
-        {toolCalls.map((call) => (
-          <ToolCallCard call={call} key={call.callId} />
-        ))}
-      </div>
-    )}
+    <ToolTrace calls={toolCalls} live={live && !summary && !error} />
 
     {delegations.length > 0 && (
       <div className={styles.tools}>

@@ -1,0 +1,72 @@
+.trace {
+  margin: 10px 0;
+}
+
+/* The strip reads as furniture, not content — quieter than a card, one line tall. */
+.strip {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  display: flex;
+  gap: 8px;
+  padding: 4px 6px;
+  text-align: left;
+  width: 100%;
+}
+
+.strip:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.chevron {
+  color: var(--text-faint);
+  display: inline-block;
+  flex: none;
+  font-size: 0.9375rem;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.chevron[data-open] {
+  transform: rotate(90deg);
+}
+
+.count {
+  flex: none;
+  font-size: 0.8125rem;
+}
+
+.breakdown {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A denial or error in the trace is never incidental — say so on the strip itself. */
+.flag {
+  color: var(--danger);
+  flex: none;
+  font-size: 0.75rem;
+}
+
+.running {
+  color: var(--accent);
+  flex: none;
+  font-size: 0.75rem;
+}
+
+.cards {
+  margin-top: 2px;
+}
+
+@media (width <= 560px) {
+  .breakdown {
+    display: none;
+  }
+}
