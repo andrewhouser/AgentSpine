@@ -479,6 +479,16 @@ export const RUN_RETENTION_DAYS = Number(env.RUN_RETENTION_DAYS ?? RETENTION_DAY
  * `memories` and is kept until you delete it. This window governs the raw words only.
  */
 export const TRANSCRIPT_RETENTION_DAYS = Number(env.TRANSCRIPT_RETENTION_DAYS ?? "30");
+/**
+ * Ceiling on how much of an over-long tool result is kept for `read_more` to page through.
+ *
+ * Not a retention window — a stash row is dropped when its run ends, so this bounds one
+ * run, not history. It exists because `read_file` on a 200MB log would otherwise put 200MB
+ * into spine.db for a model that is going to read maybe 30,000 characters of it. Past this
+ * the tail really is discarded, and `clip` says so in the result rather than offering an
+ * offset that would come back empty.
+ */
+export const STASH_MAX_CHARS = Number(env.STASH_MAX_CHARS ?? "200000");
 
 // --- Paths ---
 export const BASE = path.resolve(import.meta.dirname, "..");

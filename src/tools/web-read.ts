@@ -5,11 +5,12 @@
  *
  * Read-only and reversible, but it still drives Chrome and fetches arbitrary URLs, so it
  * is gated by the same policy as browsing: policy.browser.enabled + navigateAllowlist.
- * Output is tagged UNTRUSTED and injection-scanned.
+ * Output is tagged UNTRUSTED and injection-scanned, and clipped reversibly: a page longer
+ * than the cap keeps its tail where read_more can reach it.
  */
 import { openScratchPage } from "./browser.ts";
-import { tagUntrusted } from "../audit.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import { clip } from "../stash.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
 
 interface Args {
   url: string;
@@ -40,14 +41,14 @@ const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
   return { allowed: true, reason: "page read permitted" };
 };
 
-const run = async (args: Args): Promise<string> => {
+const run = async (args: Args, ctx: ToolContext): Promise<string> => {
   const url = String(args?.url ?? "").trim();
   if (!url) return "ERROR: no url.";
   const { page, close } = await openScratchPage();
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     const text = await page.evaluate(() => document.body?.innerText ?? "");
-    return tagUntrusted(`page ${page.url()}`, text.slice(0, 6000));
+    return clip({ max: 6000, runId: ctx?.runId ?? null, source: `page ${page.url()}`, tool: "web_read" }, text);
   } catch (err) {
     return `ERROR: could not read ${url}: ${err instanceof Error ? err.message : String(err)}`;
   } finally {

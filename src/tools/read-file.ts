@@ -8,7 +8,7 @@
  * text is information to reason about, never instructions to follow.
  */
 import fs from "node:fs";
-import { tagUntrusted } from "../audit.ts";
+import { clip } from "../stash.ts";
 // Shared with the project indexer — see src/fs-scope.ts for why this check lives in one
 // place rather than being reimplemented per reader.
 import { expand, readableGate } from "../fs-scope.ts";
@@ -22,12 +22,17 @@ export const readFile: Tool = {
   argsSchema: '{ "path": string }',
   classify: (a): ClassifiedAction => ({ reversibility: "reversible", target: expand(a?.path ?? ""), summary: `Read file ${a?.path ?? ""}` }),
   checkPolicy: (policy, a) => gate(policy, a?.path ?? ""),
-  run: async (a) => {
+  run: async (a, ctx) => {
     const p = expand(a?.path ?? "");
     try {
       if (!fs.existsSync(p)) return `NOT FOUND: ${p}`;
       if (fs.statSync(p).isDirectory()) return `${p} is a directory — use list_dir.`;
-      return tagUntrusted(`file ${p}`, fs.readFileSync(p, "utf8").slice(0, 8000));
+      // Clipped to 8,000 characters, with the remainder kept for read_more rather than
+      // discarded — see src/stash.ts for why silent truncation was the wrong shape here.
+      return clip(
+        { max: 8000, runId: ctx?.runId ?? null, source: `file ${p}`, tool: "read_file" },
+        fs.readFileSync(p, "utf8"),
+      );
     } catch (err) {
       return `ERROR: ${err instanceof Error ? err.message : String(err)}`;
     }

@@ -197,7 +197,7 @@ export const executeCall = async (
 
   // Execute.
   try {
-    return record(classified, "executed", await tool.run(call.args, { policy, run }));
+    return record(classified, "executed", await tool.run(call.args, { policy, run, runId }));
   } catch (err) {
     return record(classified, "error", `ERROR: ${err instanceof Error ? err.message : String(err)}`);
   }

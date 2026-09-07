@@ -694,6 +694,7 @@ src/                 the agent — no build step, two runtime dependencies
   events.ts        run event bus — what lets the UI watch a cycle instead of awaiting it
   broker.ts    ★   the two-gate capability broker
   audit.ts         injection scanner + UNTRUSTED tagging (salvaged from v1)
+  stash.ts         reversible truncation: clip a huge result, keep the rest for read_more
   agent.ts         plan → tool → observe loop
   runner.ts        the one place a run executes; injects profile + recalled memories
   reflect.ts       post-run pass that learns durable facts about you (local-only)
@@ -709,6 +710,7 @@ src/                 the agent — no build step, two runtime dependencies
     web-read.ts    fetch a known URL with the headless browser, extract text
     browser.ts     headless-by-default Chrome; risky clicks/submits are queued
     read-file.ts   read_file / list_dir, confined to policy.fs.readableDirs
+    read-more.ts   read_more — page through the tail of a result that was clipped
     gmail.ts       gmail_search — read-only headers+snippets, UNTRUSTED-tagged
     calendar.ts    calendar_upcoming — read-only events
     memory.ts      memory_save / memory_recall
@@ -724,7 +726,8 @@ src/                 the agent — no build step, two runtime dependencies
     auth.ts        one-time read-only OAuth (npm run auth)
     client.ts      read-only Gmail + Calendar REST (no SDK)
   memory/
-    store.ts       SQLite ledger: conversations, runs, actions (audit log), confirmations
+    store.ts       SQLite ledger: conversations, runs, actions (audit log), confirmations,
+                   stash (withheld tails, dropped when their run ends)
     rag.ts         local embeddings via EMBEDDINGS_URL, with a keyword fallback
     profile.ts     loads profile.md as trusted standing context
 
@@ -1061,7 +1064,8 @@ The honest split, because public search engines serve a CAPTCHA to headless brow
   "Chrome headless by default" pays off.
 
 Idiomatic flow: `web_search` (Tavily) to find URLs → `browser` navigate/read (headless) to
-read them. Both feed the model UNTRUSTED-tagged text.
+read them. Both feed the model UNTRUSTED-tagged text, clipped to a cap with the remainder
+kept for `read_more` — see "Long results" below.
 
 ## Local files
 
@@ -1073,6 +1077,64 @@ directories:
 ```jsonc
 "fs": { "readableDirs": ["~/notes", "~/Developer/agentspine/data"] }
 ```
+
+## Long results — clipped, not truncated
+
+`read_file`, `web_read` and `browser` read all cap what they return: 8,000 characters for a
+file, 6,000 for a page, 4,000 for the browser's `read`. The cap is not going anywhere. The
+binding constraint on this system is the local 30B's context window — not cost, which is
+zero — so a 200,000-character log genuinely cannot go into the loop.
+
+What changed is what happens to the rest of it. These used to end in a bare `.slice(0, N)`,
+which is the worst shape a limit can take: a 9,000-character file came back as 8,000
+characters with **nothing saying a ninth thousand had ever existed**. A model handed the
+wrong 8,000 could not know it, and neither could you, reading the trace afterwards.
+
+Now the remainder is kept and the result says so:
+
+```
+[UNTRUSTED CONTENT from file ~/notes/log.md]
+…the first 8,000 characters…
+
+[agentspine] Showed 8,000 of 24,318 characters. 16,318 more are held locally under
+ref a91f3c2d8b04.
+To read on: {"action":"tool","tool":"read_more","args":{"ref":"a91f3c2d8b04","offset":8000}}
+```
+
+The literal next call is spelled out because the caller is a 30B, and a 30B does much
+better with the JSON in front of it than with a description of the JSON.
+
+`read_more` is stateless — the window is `(offset, offset + cap)` and nothing advances a
+cursor. The same call twice gives the same answer, which is what the loop's repeat guard in
+`agent.ts` is written to notice; a cursor that moved on retry would turn that guard into a
+way to skip content silently.
+
+**The ref is not a bearer token**, and that matters because these refs get printed inside
+hostile web pages. Three properties, all enforced in SQL rather than in the prompt:
+
+- **Run-scoped.** `stashGet` binds the current run id into the query, so a ref cannot be
+  read from another run — a subagent has its own run row and so cannot reach its caller's.
+- **Short-lived.** Rows are dropped by `finishRun`, and a startup sweep clears whatever the
+  last crash left. A ref is dead before anything could replay it.
+- **Nothing new.** A row exists only because a gated call already succeeded and its output
+  was already handed to this model. The set of bytes `read_more` can return is exactly the
+  set already granted, minus what was shown — which is why it is the one tool with no
+  allowlist of its own, and why re-gating it would mean a second copy of every other gate,
+  written to eventually disagree with the first.
+
+So a page is free to write a convincing fake footer into its own body; it buys nothing. A
+forged ref either misses or names a row belonging to a different run, which is the same
+miss. Budgets still apply normally — `perRun.default` covers `read_more` like any other
+tool, which is the rail that matters when a model decides to page through a whole log.
+
+Retrieved windows are tagged `UNTRUSTED` exactly like the shown half, because they are the
+same bytes from the same source. Both halves are tagged by the same function for that
+reason: two call sites could drift, one cannot.
+
+`STASH_MAX_CHARS` (default 200,000) caps what is retained per result, so `read_file` on a
+huge log does not put the whole thing in `spine.db`. Past that the tail really is gone, and
+the footer says so rather than offering an offset that would come back empty. This is not a
+retention window — a row dies with its run either way.
 
 ## Email & Calendar (read-only)
 

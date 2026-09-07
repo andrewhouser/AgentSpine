@@ -20,8 +20,8 @@
 import { chromium } from "playwright-core";
 import type { Browser, Page } from "playwright-core";
 import { CHROME_CDP_URL, BROWSER_MODE, CHROME_PATH } from "../config.ts";
-import { tagUntrusted } from "../audit.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import { clip } from "../stash.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
 
 // --- shared connection (used by this tool AND web-search's scrape path) ---
 let browser: Browser | null = null;
@@ -148,7 +148,7 @@ const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
   return { allowed: true, reason: "browser control permitted" };
 };
 
-const run = async (args: Args): Promise<string> => {
+const run = async (args: Args, ctx: ToolContext): Promise<string> => {
   const p = await getPage();
   switch (args.action) {
     case "navigate":
@@ -156,7 +156,7 @@ const run = async (args: Args): Promise<string> => {
       return `navigated to ${p.url()}`;
     case "read": {
       const text = await p.evaluate(() => document.body?.innerText ?? "");
-      return tagUntrusted(`page ${p.url()}`, text.slice(0, 4000));
+      return clip({ max: 4000, runId: ctx?.runId ?? null, source: `page ${p.url()}`, tool: "browser" }, text);
     }
     case "type":
       await p.fill(String(args.selector), String(args.text ?? ""), { timeout: 10_000 });
@@ -182,5 +182,5 @@ export const browserControl: Tool = {
     '{ "action": "navigate"|"read"|"click"|"type"|"submit", "url"?: string, "selector"?: string, "text"?: string, "description"?: string }',
   classify,
   checkPolicy,
-  run: (args: Args) => run(args),
+  run: (args: Args, ctx) => run(args, ctx),
 };

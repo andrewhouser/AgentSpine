@@ -7,6 +7,8 @@
  *   actions       the audit log — every broker decision, kept for RETENTION_DAYS
  *   confirmations irreversible actions waiting for approval
  *   schedules     named jobs, each on its own interval
+ *   stash         the withheld tail of an over-long tool result, readable only by the
+ *                 run that produced it and dropped when that run ends
  *
  * Long-term semantic memory (RAG) lives in ./rag.ts against the same db file.
  */
@@ -83,6 +85,16 @@ db.exec(`
     last_run TEXT,
     next_run TEXT
   );
+  CREATE TABLE IF NOT EXISTS stash (
+    ref TEXT PRIMARY KEY,
+    run_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    source TEXT NOT NULL,
+    untrusted INTEGER NOT NULL DEFAULT 1,
+    shown INTEGER NOT NULL,
+    content TEXT NOT NULL
+  );
 `);
 
 // Best-effort migrations for DBs created before these columns existed.
@@ -107,6 +119,8 @@ addColumn("schedules", "spec", "TEXT");
 
 // A conversation's thread is "its runs, in order", read on every thread load.
 db.exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs (conversation_id, id)");
+// The stash is only ever read or swept one run at a time.
+db.exec("CREATE INDEX IF NOT EXISTS idx_stash_run ON stash (run_id)");
 
 const now = () => new Date().toISOString();
 
@@ -242,6 +256,10 @@ export const beginRun = (id: number): void => {
 
 export const finishRun = (id: number, status: string, note = ""): void => {
   db.prepare("UPDATE runs SET finished = ?, status = ?, note = ? WHERE id = ?").run(now(), status, note, id);
+  // Nothing can read this run's stash once the run is over — see "stash" below. Dropping
+  // it here is what keeps the ledger from accumulating the full text of every large file
+  // the agent has ever opened.
+  dropStashForRun(id);
   const row = db.prepare("SELECT conversation_id FROM runs WHERE id = ?").get(id) as
     | { conversation_id: number | null }
     | undefined;
@@ -261,6 +279,10 @@ export const markInterruptedRuns = (): number => {
         "WHERE status IN ('running','queued')",
     )
     .run(now());
+  // A process killed mid-run never reached finishRun, so its stash rows were never
+  // dropped. Nothing can read them any more — the run they belong to is over — so sweep
+  // every row whose run has finished, which self-heals whatever the last crash left.
+  db.exec("DELETE FROM stash WHERE run_id IN (SELECT id FROM runs WHERE finished IS NOT NULL)");
   return Number(r.changes);
 };
 
@@ -346,6 +368,62 @@ export const countToolCallsSince = (sinceIso: string, tool: string): number =>
       .prepare(`SELECT COUNT(*) AS n FROM actions WHERE ts >= ? AND tool = ? AND decision IN ${BUDGETED}`)
       .get(sinceIso, tool) as { n: number }
   ).n;
+
+// --- stash (the withheld tail of an over-long tool result) ---
+/**
+ * A tool result too large to hand a local model whole is clipped, and the remainder is
+ * put here so the model can ask for it instead of losing it. See `src/stash.ts` for the
+ * boundary that writes these rows and `src/tools/read-more.ts` for the tool that reads
+ * them; this module only owns the storage.
+ *
+ * Two properties are enforced here rather than in either of those, because this is where
+ * they cannot be forgotten:
+ *
+ *   - **A ref is readable only by the run that created it.** `readStash` takes the run id
+ *     as a query parameter, not as a filter the caller may omit. So a forged ref inside a
+ *     hostile web page cannot reach a file a different run read, and a subagent — which
+ *     has its own run row — cannot reach its caller's. The random ref makes guessing
+ *     impractical; the run scope makes a correct guess useless.
+ *   - **A row dies with its run.** `finishRun` drops them, because a ref that outlives its
+ *     run is unreadable by construction and holding the full text of every large file
+ *     anyone ever read would be storing content with no reader. A trace read months later
+ *     therefore shows a ref that no longer resolves, which is the honest record: it is
+ *     what the model saw at the time.
+ */
+export interface StashRow {
+  content: string;
+  ref: string;
+  shown: number;
+  source: string;
+  tool: string;
+  untrusted: number;
+}
+
+export const stashPut = (
+  runId: number,
+  entry: { content: string; ref: string; shown: number; source: string; tool: string; untrusted: boolean },
+): void => {
+  db.prepare("INSERT OR REPLACE INTO stash (ref, run_id, ts, tool, source, untrusted, shown, content) VALUES (?,?,?,?,?,?,?,?)").run(
+    entry.ref,
+    runId,
+    now(),
+    entry.tool,
+    entry.source,
+    entry.untrusted ? 1 : 0,
+    entry.shown,
+    entry.content,
+  );
+};
+
+/** The row, or undefined — including when the ref exists but belongs to another run. */
+export const stashGet = (runId: number, ref: string): StashRow | undefined =>
+  db.prepare("SELECT ref, tool, source, untrusted, shown, content FROM stash WHERE ref = ? AND run_id = ?").get(ref, runId) as
+    | StashRow
+    | undefined;
+
+export const dropStashForRun = (runId: number): void => {
+  db.prepare("DELETE FROM stash WHERE run_id = ?").run(runId);
+};
 
 // --- digest queries ---
 export const actionsSince = (sinceIso: string): any[] =>
@@ -546,6 +624,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
       db.exec(`DELETE FROM messages WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM actions WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM confirmations WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM stash WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM runs WHERE id IN (${list})`);
     }
 

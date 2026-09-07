@@ -115,6 +115,13 @@ export interface RunContext {
 export interface ToolContext {
   policy: Policy;
   run?: RunContext;
+  /**
+   * The run this call belongs to. A tool needs it only to reach run-scoped storage — today
+   * that is the stash behind `read_more`, whose whole security property is that a ref
+   * cannot be read outside the run that produced it (see src/stash.ts). Null means there
+   * is no such run, and a tool that ignores it behaves exactly as it did before.
+   */
+  runId?: number | null;
 }
 
 /**
