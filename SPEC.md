@@ -41,8 +41,11 @@ stripping — no build step**; run `.ts` directly. Deps: `openai`, `playwright-c
 `npm audit` = **0 vulnerabilities** (a maintained value — see gotchas).
 
 **Runtime**
-- Chat model: local **MLX-LM** server, OpenAI-spec, `http://192.168.0.145:8080/v1`
-  (`LOCAL_MODEL=mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ`).
+- Chat model: local **MLX-LM** server, OpenAI-spec, `http://192.168.0.150:8080/v1`
+  (`LOCAL_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit-DWQ` since 2026-09-08; the host address is
+  static as of the same date, after two DHCP moves from `.145`). It is a *reasoning* model,
+  so every local request carries `chat_template_kwargs.enable_thinking: false` — see
+  `chat()` in src/llm.ts and MODELS.md.
 - Cloud fallback: OpenAI, used only when local fails or `prefer:"cloud"`; disabled unless
   `OPENAI_API_KEY` set. Route private data with `sensitivity:"private"` (never leaves box).
 - Embeddings (RAG): local **Ollama** `nomic-embed-text` at `http://localhost:11434/v1`
@@ -561,7 +564,7 @@ npm run tick | loop    # legacy single-goal heartbeat
 >
 > The obvious design (one model server, a `model` field per request, a cheap classifier
 > choosing) is **worse than not routing at all** on this hardware. Measured against the M4
-> Mini at 192.168.0.145:
+> Mini (then at 192.168.0.145, now 192.168.0.150):
 >
 > ```
 > model swap on one server ....... 1.7s to reach a 3B, 7.9s to get back to the 30B
@@ -577,7 +580,8 @@ npm run tick | loop    # legacy single-goal heartbeat
 >    one model resident. Two pinned servers never swap; one server pays 1.7–7.9s per switch
 >    to save 0.2s of generation.
 > 2. **Sizing must be free.** A classifier costs 4× what the smaller model saves, because
->    Qwen3-Coder-30B-A3B is a MoE with ~3B active parameters and already runs at 32.7 tok/s
+>    The standard-tier model is a MoE with ~3B active parameters and already runs at 28.0 tok/s
+>    (32.7 on the Qwen3-Coder-30B these numbers were taken against)
 >    against a dense 3B's 39.1. So `dispatch.ts` is regex-first, and a model is consulted
 >    only for *escalation* to the cloud tier — a quality decision, worth its latency. Auto
 >    -routing earns its keep escalating, never economising.
@@ -741,7 +745,8 @@ npm run tick | loop    # legacy single-goal heartbeat
 > 30s chunk does. That is a floor, not something a smaller chunk size buys back — hence
 > `MEETING_CHUNK_SECONDS` defaulting to 5 rather than 1.
 >
-> **The LLM** (Mac Mini M4, 32 GB, `Qwen3-Coder-30B-A3B-4bit-DWQ`):
+> **The LLM** (Mac Mini M4, 32 GB, `Qwen3.6-35B-A3B-4bit-DWQ`; these figures were taken on
+> the `Qwen3-Coder-30B-A3B-4bit-DWQ` it replaced):
 >
 > | | |
 > |---|---|

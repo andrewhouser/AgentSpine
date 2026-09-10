@@ -23,7 +23,7 @@ Neither gate is a prompt the model could be talked out of — both are code.
 
 - **Node ≥ 24** (Node 26 recommended). Types are stripped at runtime, so there is **no
   build step** — `node src/*.ts` just runs. Uses the built-in `node:sqlite`.
-- Your **MLX-LM server** running (default `http://192.168.0.145:8080/v1`).
+- Your **MLX-LM server** running (default `http://192.168.0.150:8080/v1`).
 
 ## Setup
 
@@ -184,11 +184,11 @@ and your profile in context, which no declared-tier caller does.
 > Full setup — launchd plists, which models to delete, and the measurements behind all of
 > it — is in [MODELS.md](MODELS.md).
 
-`Qwen3-Coder-30B-A3B-4bit` is ~17GB and `Llama-3.2-3B-4bit` is ~2GB, so both sit
+`Qwen3.6-35B-A3B-4bit` is ~21GB and `Llama-3.2-3B-4bit` is ~2GB, so both sit
 comfortably in 32GB:
 
 ```bash
-mlx_lm.server --model mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ --port 8080 --host 0.0.0.0
+mlx_lm.server --model mlx-community/Qwen3.6-35B-A3B-4bit-DWQ --port 8080 --host 0.0.0.0
 ```
 
 ```bash
@@ -199,7 +199,7 @@ Then point AgentSpine at the second one:
 
 ```bash
 # .env
-FAST_LLM_URL=http://192.168.0.145:8081/v1
+FAST_LLM_URL=http://192.168.0.150:8081/v1
 FAST_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit
 ```
 
@@ -207,19 +207,27 @@ Leave `FAST_LLM_URL` empty and the fast tier silently resolves to standard — n
 breaks, and turning it on later is one variable, not a code change. `npm run dashboard`
 prints the live tiers on boot so what's running is never a guess.
 
-### Why the 30B is the *default* and not the "slow" one
+### Why the big MoE is the *default* and not the "slow" one
 
-Qwen3-Coder-30B-A3B is a mixture-of-experts with ~3B active parameters per token:
+The standard tier is a mixture-of-experts with ~3B active parameters per token, so it costs
+about what a dense 3B costs:
 
 | model | simple question | tool call | throughput | drives the loop |
 |---|---|---|---|---|
-| Llama-3.2-3B-4bit | 0.60s | 1.0s | 39.1 tok/s | 3/3 |
-| **Qwen3-Coder-30B-A3B-4bit** | 0.82s | 1.4s | **32.7 tok/s** | 3/3 |
+| Llama-3.2-3B-4bit | 0.60s | 1.0s | 37.0 tok/s | 3/3 |
+| **Qwen3.6-35B-A3B-4bit** (current) | 0.97s | 1.28s | **28.0 tok/s** | 3/3 |
+| Qwen3-Coder-30B-A3B-4bit (until 2026-09-08) | 0.82s | 1.4s | 32.7 tok/s | 3/3 |
 | Qwen3-4B-8bit | 1.57s | 6.9s | 12.8 tok/s | 3/3 |
 | Qwen2.5-Coder-14B-8bit | 1.35s | 6.6s | **5.6 tok/s** | 3/3 |
 
-It is within 20% of a dense 3B while being far more capable, so there is no speed tax for
-making it the default. Two consequences worth acting on:
+It is within ~25% of a dense 3B while being far more capable, so there is no speed tax for
+making it the default.
+
+> The 35B row is measured **with thinking disabled**. It is a reasoning model, and left in
+> its default mode it spends 255 completion tokens saying "OK" and returns no `content` at
+> all when `max_tokens` is small. `chat()` in `src/llm.ts` sends
+> `chat_template_kwargs.enable_thinking: false` to every local endpoint; anything else that
+> talks to :8080 must send it too. See [MODELS.md](MODELS.md). Two consequences worth acting on:
 
 - **`Qwen2.5-Coder-14B-8bit` has no role.** 5.6 tok/s — about six times slower than the
   30B — and less capable. A dense 14B at 8-bit is ~15GB of weights and is

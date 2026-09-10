@@ -12,19 +12,24 @@
  * The obvious design is one server and a `model` field per request. Measured on this
  * setup, that is worse than not routing at all: `mlx_lm.server` holds one model resident,
  * so alternating between two costs ~1.7s to reach a 3B and **~7.9s to get back to the
- * 30B**, against ~0.6s when staying put. Routing a simple question to the small model
+ * big one**, against ~0.6s when staying put. Routing a simple question to the small model
  * saves ~0.2s of generation and then pays ~8s to switch back.
  *
  * So a tier is a *separate always-warm server*. Two `mlx_lm.server` processes on the model
- * host — the 30B on :8080, a 3B on :8081 — never swap, and the routing is finally worth
- * doing. See README "Model tiers" for the launch commands.
+ * host — the big MoE on :8080, a 3B on :8081 — never swap, and the routing is finally
+ * worth doing. See README "Model tiers" for the launch commands.
  *
- * ## Why the 30B is the standard tier and not the "big, slow" one
+ * ## Why the big model is the standard tier and not the "big, slow" one
  *
- * Qwen3-Coder-30B-A3B is a mixture-of-experts with ~3B active parameters per token, so it
- * measures 32.7 tok/s against a dense 3B's 39.1 — within 20%, while being far more
- * capable. There is no speed tax for making it the default, which is why `fast` is a
- * narrow optimisation for trivial turns rather than the tier most work should land on.
+ * The standard tier — `Qwen3.6-35B-A3B` since 2026-09-08, `Qwen3-Coder-30B-A3B` before it —
+ * is a mixture-of-experts with ~3B active parameters per token, so it measures 28.0 tok/s
+ * against a dense 3B's 37.0 — within ~25%, while being far more capable. There is no speed
+ * tax for making it the default, which is why `fast` is a narrow optimisation for trivial
+ * turns rather than the tier most work should land on.
+ *
+ * The 35B is a *reasoning* model, and those numbers hold only because `chat()` in llm.ts
+ * sends `chat_template_kwargs.enable_thinking: false` to every local endpoint. See the
+ * comment on `NO_THINKING` there for what happens without it.
  *
  * ## Degrading safely
  *

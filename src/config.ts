@@ -16,7 +16,11 @@ try {
 const env = process.env;
 
 // --- Models ---
-export const LOCAL_BASE_URL = env.LOCAL_LLM_URL ?? "http://192.168.0.145:8080/v1";
+// The model host is 192.168.0.150, a STATIC address as of 2026-09-08. It got there via
+// .145 -> .134 -> .150, each move silently turning every local call into a timeout, which
+// is why it is pinned now. A timeout here should mean the server is down, not that the
+// address moved again.
+export const LOCAL_BASE_URL = env.LOCAL_LLM_URL ?? "http://192.168.0.150:8080/v1";
 export const LOCAL_MODEL = env.LOCAL_MODEL ?? "local";
 
 // The `fast` tier: a SECOND, separately-pinned model server holding a small model
@@ -381,10 +385,12 @@ export const MEETING_EXTRACT_ENABLED = (env.MEETING_EXTRACT_ENABLED ?? "true") !
 /**
  * Point extraction at a different local server than the standard tier.
  *
- * The default `LOCAL_MODEL` is `Qwen3-Coder-30B-A3B` — a *coder* fine-tune being asked to do
- * conversation analysis, which is the wrong tool at identical cost. Plain
- * `Qwen3-30B-A3B-Instruct` on a second port is the intended comparison, and this knob exists
- * so you can run it without moving `LOCAL_MODEL` out from under the agent loop.
+ * This knob exists so extraction can be tried on a different model without moving
+ * `LOCAL_MODEL` out from under the agent loop. It was added when the standard tier was
+ * `Qwen3-Coder-30B-A3B` — a *coder* fine-tune being asked to do conversation analysis, the
+ * wrong tool at identical cost. The standard tier is now `Qwen3.6-35B-A3B`, a general
+ * model, so the original reason for a second port is gone; the knob stays for the next
+ * comparison.
  *
  * Local URLs only. Extraction is pinned to local by `sensitivity: "private"` regardless of
  * what is set here — see the standing constraint in SPEC §15.

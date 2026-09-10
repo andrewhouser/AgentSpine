@@ -11,13 +11,13 @@
  * The obvious build is "ask a cheap model which tier to use". Measured on this hardware,
  * with both tiers warm on separate servers, that loses:
  *
- *   answer on standard (30B MoE), direct .................  873ms
+ *   answer on standard (the big MoE), direct .............  873ms
  *   answer on fast (3B), direct ..........................  684ms
  *   classifier call ......................................  ~800ms
  *   → classify, then answer on fast ......................  ~1484ms
  *
  * The classifier costs four times what the smaller model saves. The saving is small
- * because Qwen3-Coder-30B-A3B is a mixture-of-experts with ~3B active parameters — it is
+ * because the standard-tier model is a mixture-of-experts with ~3B active parameters — it is
  * already within 20% of a dense 3B's throughput. There is no slow big model here to route
  * around.
  *
