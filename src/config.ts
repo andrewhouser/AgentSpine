@@ -53,6 +53,21 @@ export const CLOUD_MODEL = env.CLOUD_MODEL ?? "gpt-4o";
 export const CLOUD_API_KEY = env.OPENAI_API_KEY ?? "";
 export const CLOUD_ENABLED = CLOUD_API_KEY.length > 0;
 
+// How many times route() re-attempts the SAME tier on a TRANSIENT failure (a dropped
+// connection, a socket timeout, a 429/5xx) before it gives up and falls through to the next
+// tier. The model host is a box on the LAN that can briefly sleep, thrash on a model swap,
+// or drop a packet; without this, one blip fails a whole run — which is exactly the "Request
+// timed out" / "Connection error" pattern the digest surfaced. Only transient errors are
+// retried: a deterministic LLMError (a reasoning model that returned no content, a rejected
+// prompt shape) will fail again identically, so it is never retried. 0 disables retries and
+// restores the old try-once-per-tier behaviour.
+export const LLM_RETRIES = Number(env.LLM_RETRIES ?? "2");
+// Base backoff between retries, in milliseconds. The wait is exponential with full jitter —
+// attempt n waits a random time in [0, LLM_RETRY_BASE_MS * 2^(n-1)) — so a model host coming
+// back from a swap is not hammered by a tight loop, and concurrent runs do not resynchronise
+// onto the same retry instant.
+export const LLM_RETRY_BASE_MS = Number(env.LLM_RETRY_BASE_MS ?? "400");
+
 // --- Tools ---
 export const TAVILY_API_KEY = env.TAVILY_API_KEY ?? "";
 // CDP endpoint of a Chrome you launched with --remote-debugging-port. Use a DEDICATED
