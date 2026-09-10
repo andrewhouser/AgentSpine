@@ -164,6 +164,31 @@
   font-size: 0.6875rem;
 }
 
+/* Retract a single learned memory. Kept quiet — faint until the row is hovered — because
+   deleting is the rare correction, not the primary action of the list. */
+.forget {
+  background: none;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  flex: none;
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0;
+  padding: 0 2px;
+}
+
+.forget:hover {
+  color: var(--danger, #d9534f);
+}
+
+/* Declared after .forget:hover to satisfy no-descending-specificity: the single-class
+   pseudo-selectors come before this descendant selector, which is more specific. */
+.forget:focus-visible,
+.memory:hover .forget {
+  opacity: 1;
+}
+
 .policy {
   background: var(--bg-inset);
   border: 1px solid var(--border);

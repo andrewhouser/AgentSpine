@@ -256,13 +256,21 @@ export interface Recalled {
  * 50,000 chunks, so a caller ranking several corpora against one question — the live meeting
  * sidecar does exactly this — should pay for the embed once and pass the vector to each.
  */
-export const recallScored = async (query: string, k = 5, vector?: Float32Array): Promise<Recalled[]> => {
+export const recallScored = async (
+  query: string,
+  k = 5,
+  vector?: Float32Array,
+  minScore = 0,
+): Promise<Recalled[]> => {
   const embedder = vector ? null : await getEmbedder();
 
   if (!embedder && !vector) {
     const rows = rawDb
       .prepare("SELECT text FROM memories WHERE text LIKE ? ORDER BY id DESC LIMIT ?")
       .all(`%${query}%`, k) as { text: string }[];
+    // Keyword fallback has no meaningful similarity (score is NaN), so the floor cannot apply
+    // here — filtering by `NaN >= minScore` would drop every row and turn recall into nothing.
+    // A weak keyword match still beats no recall at all.
     return rows.map((r) => ({ text: r.text, score: NaN }));
   }
 
@@ -271,13 +279,19 @@ export const recallScored = async (query: string, k = 5, vector?: Float32Array):
   return rows
     .filter((r) => r.embedding)
     .map((r) => ({ text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))
+    // Drop matches below the floor BEFORE the top-k cut, so a weak hit does not take a slot a
+    // stronger one could have used. `minScore <= 0` is a fast no-op that keeps rank-only order.
+    .filter((r) => minScore <= 0 || r.score >= minScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
 };
 
-/** Recall the k most relevant memories for a query. */
-export const recall = async (query: string, k = 5): Promise<string[]> =>
-  (await recallScored(query, k)).map((r) => r.text);
+/**
+ * Recall the k most relevant memories for a query, optionally dropping anything below
+ * `minScore` (cosine). The floor is ignored under the keyword fallback — see `recallScored`.
+ */
+export const recall = async (query: string, k = 5, minScore = 0): Promise<string[]> =>
+  (await recallScored(query, k, undefined, minScore)).map((r) => r.text);
 
 /**
  * Recall the k most relevant memories OF ONE KIND for a query (LEARNING Phase 3). Recipes
@@ -302,6 +316,21 @@ export const recallOfKind = async (kind: string, query: string, k = 3, minScore 
     .sort((a, b) => b.score - a.score)
     .slice(0, k)
     .map((r) => r.text);
+};
+
+/**
+ * Delete one memory by id. Returns true if a row was removed, false if the id was unknown.
+ *
+ * Unlike `pruneMemories` (bulk, by kind and age, run unattended), this is the single-row
+ * correction a human makes from Settings → Memory when the assistant has learned something
+ * wrong or stale. It is deliberately kind-agnostic: a human deleting a fact they can see is
+ * the one writer allowed to remove anything, including a `note` the automated prune leaves
+ * alone. The profile is still the trusted ground truth; this just lets you retract a
+ * model-generated memory without hand-editing the database.
+ */
+export const deleteMemory = (id: number): boolean => {
+  const res = rawDb.prepare("DELETE FROM memories WHERE id = ?").run(id);
+  return Number(res.changes ?? 0) > 0;
 };
 
 /** How many memories are stored, optionally of one kind. */

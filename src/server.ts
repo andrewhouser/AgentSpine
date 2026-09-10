@@ -55,7 +55,8 @@ import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { DASHBOARD_PUBLIC_URL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { rawDb } from "./memory/store.ts";
-import { dedupeMemories, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
+import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
+import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? "8787");
 // Default binds localhost only. Set DASHBOARD_HOST=0.0.0.0 to reach it from other machines
@@ -451,6 +452,12 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         // null pins nothing and hands the thread back to the dispatcher.
         if ("tier" in b) patch.tier = b.tier ?? null;
         store.updateConversation(id, patch);
+        // Archiving is an explicit "I'm done with this" — the moment to fold the thread into
+        // cross-conversation memory, even if short (force). Fire-and-forget so the PATCH still
+        // answers immediately; the summariser is private-pinned and never throws. No-op unless
+        // CONVERSATION_SUMMARY_ENABLED. Done after the update so the archived flag is set, but
+        // it reads the thread's runs, which the flag doesn't touch.
+        if (patch.archived === true) void summarizeConversation(id, { force: true });
         return sendJson(res, 200, store.getConversation(id));
       }
 
@@ -502,6 +509,15 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (m === "GET" && seg[1] === "memories" && seg.length === 2) {
       const q = url.searchParams.get("query");
       return sendJson(res, 200, q ? searchMemories(q, 100) : listMemories(100));
+    }
+
+    // /api/memories/:id  — retract a single learned memory. The human-facing correction for
+    // a wrong or stale fact, behind the dashboard token like every other mutating route; the
+    // agent has no tool that reaches it. 404 when the id is unknown so a stale UI double-click
+    // reads honestly rather than pretending it deleted something.
+    if (m === "DELETE" && seg[1] === "memories" && seg.length === 3) {
+      const removed = deleteMemory(Number(seg[2]));
+      return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
     }
 
     // /api/policy
@@ -859,7 +875,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
  */
 const PRUNE_INTERVAL_MS = 24 * 60 * 60_000;
 
-const prune = (): void => {
+const prune = async (): Promise<void> => {
   try {
     const r = store.pruneLedger({
       auditDays: AUDIT_RETENTION_DAYS,
@@ -890,6 +906,15 @@ const prune = (): void => {
     }
   } catch (err) {
     console.error("prune failed:", err instanceof Error ? err.message : err);
+  }
+
+  // Fold idle chat threads into cross-conversation memory (no-op unless enabled). Separate
+  // try/catch: a summariser failure must not stop the ledger prune above from having run.
+  try {
+    const summarised = await summarizeIdleConversations();
+    if (summarised.length) console.log(`summarised ${summarised.length} idle conversation(s) into memory`);
+  } catch (err) {
+    console.error("conversation summary failed:", err instanceof Error ? err.message : err);
   }
 };
 

@@ -113,6 +113,10 @@ addColumn("runs", "tier", "TEXT");
 addColumn("runs", "parent_run_id", "INTEGER");
 addColumn("runs", "agent", "TEXT");
 addColumn("conversations", "tier", "TEXT");
+// Cross-conversation memory: the ISO time this thread was last summarised into a
+// `conversation` memory, or null if never. Lets the summariser skip threads it has already
+// captured and re-do one only if it has had new activity since. Best-effort, like the rest.
+addColumn("conversations", "summarized", "TEXT");
 addColumn("confirmations", "run_id", "INTEGER");
 addColumn("confirmations", "token", "TEXT");
 // LEARNING §Phase 0: approval latency = resolved − ts. `ts` is when the question was
@@ -212,6 +216,36 @@ export const tasksByKind = (kind: string, limit = 500): string[] =>
       .prepare("SELECT task FROM runs WHERE kind = ? AND task IS NOT NULL AND finished IS NOT NULL ORDER BY id DESC LIMIT ?")
       .all(kind, limit) as { task: string }[]
   ).map((r) => r.task);
+
+/** Stamp when a conversation was last folded into a `conversation` memory. */
+export const markConversationSummarized = (id: number): void => {
+  db.prepare("UPDATE conversations SET summarized = ? WHERE id = ?").run(now(), id);
+};
+
+/**
+ * Conversations ready to be summarised into cross-conversation memory. A thread qualifies
+ * when it has at least `minRuns` finished 'ok' runs and either has never been summarised or
+ * has had activity (`updated`) since it last was — so an ongoing thread is re-captured after
+ * it moves on, but a settled one is summarised exactly once. `idleBefore` is an ISO cutoff:
+ * only threads untouched since then are due, so an active conversation is not summarised
+ * mid-flight. Archived threads are handled directly by the caller and excluded here.
+ */
+export const conversationsDueForSummary = (minRuns: number, idleBefore: string, limit = 20): number[] =>
+  (
+    db
+      .prepare(
+        `SELECT c.id AS id
+           FROM conversations c
+          WHERE c.archived = 0
+            AND c.updated < ?
+            AND (c.summarized IS NULL OR c.summarized < c.updated)
+            AND (SELECT COUNT(*) FROM runs r
+                  WHERE r.conversation_id = c.id AND r.status = 'ok' AND r.finished IS NOT NULL) >= ?
+          ORDER BY c.updated ASC
+          LIMIT ?`,
+      )
+      .all(idleBefore, minRuns, limit) as { id: number }[]
+  ).map((r) => r.id);
 
 // --- runs ---
 export interface StartRunOpts {

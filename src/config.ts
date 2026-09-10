@@ -106,6 +106,14 @@ export const MAX_STEPS = Number(env.MAX_STEPS ?? "10");
 // How many stored memories are auto-recalled and injected before every run. Keep small;
 // each hit costs context on every step of the loop.
 export const MEMORY_RECALL_K = Number(env.MEMORY_RECALL_K ?? "5");
+// Minimum cosine similarity a recalled memory must clear to be injected. The point of a
+// FLOOR rather than a bigger K: raising K pulls in more weak, off-topic matches (measured — a
+// "preferences" query returned an unrelated weather fact at 0.586, just under a real hit at
+// 0.724), and each one costs context on every step while crowding out a better one. A floor
+// drops those instead. 0 keeps the old behaviour (rank only, no threshold). Only applies when
+// a real embedder is present: under the keyword fallback scores are NaN and this is ignored,
+// so recall still returns something rather than nothing.
+export const MEMORY_RECALL_MIN_SCORE = Number(env.MEMORY_RECALL_MIN_SCORE ?? "0");
 // Run a reflection pass after each run to extract durable facts about the user.
 export const REFLECT_ENABLED = (env.REFLECT_ENABLED ?? "true") !== "false";
 // Hard cap on facts a single reflection may store, so one weird run can't flood memory.
@@ -176,6 +184,23 @@ export const PROMOTE_MIN_DAYS = Number(env.PROMOTE_MIN_DAYS ?? "14");
 // similarity in buildContext. 0 disables recipe extraction; the ceiling prunes oldest past it.
 export const RECIPE_ENABLED = (env.RECIPE_ENABLED ?? "true") !== "false";
 export const RECIPE_MEMORY_MAX = Number(env.RECIPE_MEMORY_MAX ?? "200");
+
+// --- Cross-conversation memory ---
+// After a chat thread goes idle, one local-only pass summarises what it was about and what
+// was decided, stored as a `conversation` memory and recalled by task similarity when a later
+// thread touches the same ground. This is the piece plain reflection misses: reflection keeps
+// FACTS about the user ("prefers concise answers"), never "the thread on the 8th decided to
+// move auth to JWT". Off by default until you've watched what it writes. Pinned local like
+// reflection — a thread can quote your mail, and a summary of it must never reach the cloud.
+export const CONVERSATION_SUMMARY_ENABLED = (env.CONVERSATION_SUMMARY_ENABLED ?? "false") === "true";
+// A thread is summarised only once it is genuinely "done": at least this many finished runs
+// (a one-turn thread is a question, not a conversation to remember)…
+export const CONVERSATION_SUMMARY_MIN_RUNS = Number(env.CONVERSATION_SUMMARY_MIN_RUNS ?? "3");
+// …and untouched for at least this many hours, so an active thread isn't re-summarised on
+// every turn. Archiving a thread summarises it immediately regardless of this.
+export const CONVERSATION_SUMMARY_IDLE_HOURS = Number(env.CONVERSATION_SUMMARY_IDLE_HOURS ?? "6");
+// Ceiling on `conversation` memories; oldest pruned past it, like every other derived kind.
+export const CONVERSATION_MEMORY_MAX = Number(env.CONVERSATION_MEMORY_MAX ?? "200");
 
 // Sampled self-critique (LEARNING Phase 3.2). Roughly this fraction of CHAT runs get a
 // `judge()` pass asking whether they accomplished the ask without wasted effort; a "no" with

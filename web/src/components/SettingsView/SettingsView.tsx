@@ -47,6 +47,14 @@ export const SettingsView = () => {
     return () => clearTimeout(timer);
   }, [query]);
 
+  // Retract one memory. Optimistic: drop it from the list immediately, and put it back if the
+  // server rejects the delete, so a failed request doesn't silently look like a success.
+  const forget = (id: number): void => {
+    const prev = memories;
+    setMemories((cur) => cur.filter((m) => m.id !== id));
+    void api.deleteMemory(id).catch(() => setMemories(prev));
+  };
+
   return (
     <div className={styles.page}>
       <PageHeader title="Settings" />
@@ -116,8 +124,9 @@ export const SettingsView = () => {
         <h2 className={styles.subhead}>Memory</h2>
         <p className={styles.note}>
           What it has learned about you. <code>reflection</code> memories are written automatically after
-          each run; <code>preference</code> memories come from rejections you explained. Standing facts you
-          want it to always know belong in <code>profile.md</code>, which nothing automated writes to.
+          each run; <code>preference</code> memories come from rejections you explained. Hover a row and
+          click <code>×</code> to forget one that is wrong or stale. Standing facts you want it to always
+          know belong in <code>profile.md</code>, which nothing automated writes to.
         </p>
         <input
           className={styles.search}
@@ -131,6 +140,15 @@ export const SettingsView = () => {
             <span className={styles.kind}>{m.kind}</span>
             <span className={styles.text}>{m.text}</span>
             <span className={styles.when}>{new Date(m.ts).toLocaleDateString()}</span>
+            <button
+              aria-label={`Forget: ${m.text}`}
+              className={styles.forget}
+              onClick={() => forget(m.id)}
+              title="Forget this"
+              type="button"
+            >
+              ×
+            </button>
           </div>
         ))}
       </section>
