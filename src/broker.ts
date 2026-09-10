@@ -31,6 +31,7 @@ import * as store from "./memory/store.ts";
 import { publish } from "./events.ts";
 import { notify, confirmationActions } from "./notify.ts";
 import { NOTIFY_ON_CONFIRMATION } from "./config.ts";
+import { recordFriction } from "./learn/friction.ts";
 
 const startOfToday = (): string => {
   const d = new Date();
@@ -143,8 +144,17 @@ export const executeCall = async (
   if (budgetDenial) return record(classified, "denied", `DENIED: ${budgetDenial}`);
 
   // Gate 2: reversibility tier.
+  // A shape the user has approved enough times may be pre-approved in policy.autoApprove
+  // (LEARNING Phase 2) — the narrowest possible grant, one (tool, target) pair, written to
+  // policy.json only by a human clicking a proposal. It lets exactly this shape skip the
+  // queue; every other irreversible action still confirms.
+  const preApproved =
+    classified.reversibility === "irreversible" &&
+    (policy.autoApprove ?? []).some((s) => s.tool === call.tool && s.target === classified.target);
   const mustConfirm =
-    classified.reversibility === "irreversible" && policy.autoExecute.irreversibleAlwaysConfirm;
+    classified.reversibility === "irreversible" &&
+    policy.autoExecute.irreversibleAlwaysConfirm &&
+    !preApproved;
   const canAutoRun =
     classified.reversibility === "reversible" ? policy.autoExecute.reversible : !mustConfirm;
 
@@ -199,6 +209,11 @@ export const executeCall = async (
   try {
     return record(classified, "executed", await tool.run(call.args, { policy, run, runId }));
   } catch (err) {
-    return record(classified, "error", `ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    const output = `ERROR: ${err instanceof Error ? err.message : String(err)}`;
+    // Learn the failure so the tool's own description can warn the next run (LEARNING Phase
+    // 1.2). Inference-free (a regex classifies the error) and never throws; a learner must
+    // not turn one tool error into two.
+    recordFriction(call.tool, output);
+    return record(classified, "error", output);
   }
 };

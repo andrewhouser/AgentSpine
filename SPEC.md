@@ -83,17 +83,22 @@ stripping — no build step**; run `.ts` directly. Deps: `openai`, `playwright-c
   `confirmations`, `schedules`, `memories`. Full CRUD.
 - `memory/rag.ts` — `remember(text, kind)` / `recall(query, k)`; embedder priority
   `EMBEDDINGS_URL` → Transformers.js (uninstalled) → keyword; cosine over stored vectors.
-- `tools/` — `mac-control`, `notify`, `web-search`, `web-read`, `browser`, `read-file`,
-  `gmail`, `calendar`, `memory`, `state`, `weather`, `git-status`, and `index.ts` (the
-  `weather-alerts`, `digest`, `draft`, and `index.ts` (the registry). **18 tools today:**
-  `mac_control`, `notify`, `web_search`, `web_read`, `browser`, `read_file`, `list_dir`,
-  `gmail_search`, `calendar_upcoming`, `memory_save`, `memory_recall`, `state_get`,
-  `state_set`, `weather`, `weather_alerts`, `git_status`, `digest`, `draft`.
+- `tools/` — one file per capability plus `index.ts` (the registry). **25 tools today**
+  (verified against `src/tools/index.ts`, 2026-09-10): `mac_control`, `notify`, `web_search`,
+  `web_read`, `browser`, `read_file`, `list_dir`, `read_more` (§ stash), `gmail_search`,
+  `calendar_upcoming`, `memory_save`, `memory_recall`, `conversation_detail`, `state_get`,
+  `state_set`, `schedule_list`, `schedule_create`, `schedule_update`, `schedule_delete`,
+  `weather`, `weather_alerts`, `git_status`, `digest`, `draft`, `subagent`. (The four
+  `schedule_*` tools, `subagent`, `conversation_detail`, and `read_more` arrived with §11–§13
+  and the stash work; the earlier "18 tools" figure predated them.)
 - `public/` — dashboard `index.html` + `style.css` + `script.js` (tabs: Jobs w/ traces,
   Schedules, Confirmations, Memory, Policy, Run).
 - `policy.json` — deny-by-default surfaces: `autoExecute`, `apps`, `web`, `browser`, `google`,
-  `fs`, `weather`, `git`. The last two are optional in the `Policy` type and denied when
-  absent, so an older config can't silently grant a newer capability.
+  `fs`, `weather`, `git`, plus the surfaces added by later sections — `drafts` (§5), `budgets`
+  (§6), and `audio` (§15). All the later-added surfaces are optional in the `Policy` type
+  (see `src/types.ts`) and denied when absent, so an older config can't silently grant a newer
+  capability. Note `audio` *inverts* the allowlist convention: an empty `devices: []` means **no**
+  microphone, not any (§15).
 
 **Tool interface (contract every tool implements):**
 ```ts
@@ -430,10 +435,10 @@ is to keep it.
 ## 7. Recommended build sequence
 
 1. ~~**Active memory** (#1)~~ — ✅ done.
-2. **Push notifications** (#3 push half) — read-only, high value, reach anywhere. **← next**
-3. **API auth + remote approval** (#3 rest) — API auth is ✅ done (`DASHBOARD_TOKEN`, enforced by
-   a refusal to bind non-localhost without it; see MIGRATION §7). Remaining: ntfy action buttons
-   wired to the confirmations endpoints.
+2. ~~**Push notifications** (#3 push half)~~ — ✅ done (`src/notify.ts`, ntfy + Mac fallback).
+3. ~~**API auth + remote approval** (#3 rest)~~ — ✅ done. API auth via `DASHBOARD_TOKEN`
+   (enforced by a refusal to bind non-localhost without it; see MIGRATION §7), and single-purpose
+   approval tokens wired to the confirmations endpoints with rate limiting.
 4. ~~**Watchers + `state` tool** (#2)~~ — ✅ done.
 5. ~~**More senses** (#4)~~ — ✅ done.
 6. ~~**Trust mechanisms** (#6)~~ — ✅ done.
@@ -479,6 +484,7 @@ thing deliberately left undone is widening the Google scopes, which needs its ow
 npm run dashboard      # server + scheduler (main); http://localhost:8787
 npm run do "<task>"    # one-off cycle
 npm run watcher        # list | add <starter> | remove <id> | state | template
+npm run listen         # meeting capture CLI (§15): record | file <path> | …
 npm run digest         # [hours] [--push] — computed account of recent activity
 npm test               # weather alert threshold tests (no framework)
 npm run confirm        # approve/reject queued actions (CLI)
@@ -1018,11 +1024,110 @@ npm run tick | loop    # legacy single-goal heartbeat
 
 ---
 
+## 16. Reversible truncation — `stash` + `read_more`  ✅ **BUILT**
+
+> **Status: done.** Documented here after the fact — it shipped alongside §11–§13 but never
+> had a section, so a new session met `src/stash.ts` and the `read_more` tool as surprises.
+>
+> **The problem it replaces.** Every tool returning bulk external text (a fetched page, a
+> file, a search result) used to end in a hard `.slice(0, N)`. A 9,000-character file came
+> back as 8,000 with no sign a ninth thousand ever existed — so a model handed the wrong
+> 8,000 could not know it, and neither could you reading the trace. Silent truncation is the
+> worst shape a limit can take: the caller is confidently told a partial answer. The cap
+> itself is not going away — the `standard` tier is a local 30B whose *context*, not cost, is
+> the binding constraint — so what changed is that the remainder is kept and the model is told
+> in the result exactly how much was withheld and how to fetch it.
+>
+> **What shipped.**
+> - `src/stash.ts` — `clip(ctx, text)` returns the exact string a tool should hand back. When
+>   nothing was cut it is byte-for-byte the old `.slice()` output: the common case writes no
+>   row and reads no differently. When text is cut, it keeps up to `STASH_MAX_CHARS` in a
+>   `stash` table keyed by run id and a random 12-hex `ref`, and appends a footer naming the
+>   ref and the exact `read_more` call to continue.
+> - `read_more` **tool** (`src/tools/read-more.ts`) — hands back one window of a stashed
+>   remainder. Reads no file, opens no page, touches no network: every byte it returns was
+>   already fetched under a gate the broker applied during this same run.
+>
+> Decisions worth not relitigating:
+>
+> 1. **`clip` wraps the visible slice in `tagUntrusted` itself, and `read_more` re-tags the
+>    same way.** Both halves are the same bytes from the same hostile source; the only way
+>    they end up tagged differently is if one call site forgets, so neither call site is
+>    trusted to remember.
+> 2. **The footer sits *outside* the untrusted block** — it names a ref the model may act on,
+>    so it must not read as content a page could have written. That is presentation, not the
+>    defence: refs are random and looked up with the current run id bound into the query, so a
+>    forged footer names a row in another run (or none) and returns nothing.
+> 3. **`read_more` is allowed unconditionally, and that is stronger, not weaker.** It has no
+>    target of its own; re-deriving the original path to re-gate it would mean a second copy
+>    of each gate, and a gate written twice eventually disagrees with itself. What bounds the
+>    tool is the shape of the stash, enforced in SQL: a row exists only because a gated call
+>    already succeeded, the lookup binds the run id (so a subagent cannot reach its caller's
+>    stash), and rows die when the run ends. The reachable bytes are exactly those already
+>    granted, minus what was shown.
+> 4. **Budgets still apply** — the broker counts every tool by name, so `perRun.default` covers
+>    `read_more` like any other. That is the rail that matters for a model paging through a
+>    200,000-character log one window at a time.
+> 5. **`read_more` is stateless — no cursor.** The window is `(offset, offset + shown)` and a
+>    repeated call returns the same bytes, which is what the loop's repeat guard in `agent.ts`
+>    detects. A cursor that advanced on retry would turn that guard into a way to skip content
+>    silently.
+
+---
+
+## 17. Dictation — voice into the composer  ✅ **BUILT**
+
+> **Status: done.** Also undocumented until now. `src/senses/dictate.ts` lets you speak a
+> message instead of typing it, and reuses the meeting capture path rather than inventing a
+> second audio stack.
+>
+> **Two microphones, because the dashboard is opened from more than one machine.**
+> - **Browser.** The page records with `MediaRecorder` and uploads the blob (`transcribeUpload`).
+>   This dictates from whatever machine you are actually at, which is the point. `getUserMedia`
+>   needs a secure context, so it works on `localhost` and over the Tailscale HTTPS URL and is
+>   refused on a plain-http LAN address. The browser owns the permission prompt, so
+>   `policy.audio` is **not** consulted — that gate is about *this machine's* microphone, and
+>   this audio never touches it.
+> - **Server.** Reuses ffmpeg + avfoundation + `policy.audio` (`startDictation`/`stopDictation`),
+>   so it works however you are browsing but only hears the room the server is in. Refused while
+>   a meeting is recording — one microphone, one session (§15).
+>
+> Decisions worth not relitigating:
+>
+> 1. **Everything converges on one WAV.** Both paths end at `transcribeFile`, the same function
+>    meetings use. The browser path adds one step — `MediaRecorder` emits WebM/Opus on Chrome
+>    and MP4/AAC on Safari and `whisper-cli` reads neither — so ffmpeg decodes whatever arrived
+>    into the 16kHz mono WAV Whisper wants. ffmpeg is already a capture dependency, so this
+>    installs nothing new.
+> 2. **The accurate model, not the fast one.** Meetings use `base.en` live because a rough
+>    transcript that keeps up beats a good one that lags. Dictation inverts that: the utterance
+>    is seconds long, nothing waits on it, and the text becomes an *instruction to an agent that
+>    can call tools*. At ~11x realtime a fifteen-second sentence costs ~1.4s — worth it to not
+>    act on a misheard command. `DICTATION_MODEL` / `DICTATION_MAX_SECONDS` in config.
+> 3. **`execFile`, never `exec`.** No shell, so a filename can only ever be an argument. `-t`
+>    bounds the decode so a long or malformed upload costs a known amount of work.
+> 4. **Audio is never *retained*.** Temp files (upload, decoded WAV, mic capture) are removed in
+>    a `finally`, even when the decode throws — the same posture as meeting chunks.
+> 5. **Silence is silence.** Under ~0.25s of audio returns empty text rather than letting
+>    Whisper hallucinate a sentence into the quiet. A dead-man timeout releases a mic capture
+>    whose release never arrived (a closed tab, a dropped connection).
+> 6. **A prompt biases style, a substitution list corrects vocabulary.** The decoder prompt
+>    carries `DICTATION_PROMPT` plus known-mangled names, and `applyCorrections` (shared with
+>    meetings) runs on the output — the same names are misheard whether spoken to a meeting or
+>    a composer. This is the `DICTATION_PROMPT` / `MEETING_CORRECTIONS` split the README records
+>    as one working and one not.
+
+---
+
 ## 10. Data model additions this spec introduces
 
 - `conversations` table (§11): `id, project_id, title, created, updated, archived`; `runs` gains
   `conversation_id` (indexed) and a `queued` status.
 - `kv` table (state watchers): `key TEXT PRIMARY KEY, value TEXT, updated TEXT`.
+- `stash` table (§16): `ref TEXT PRIMARY KEY, run_id, ts, tool, source, untrusted, shown,
+  content` — the withheld tail of an over-long tool result. Read only by the run that wrote
+  it (the run id is a query parameter, not an omittable filter) and dropped on `finishRun`,
+  with a boot-time sweep of any rows whose run never closed. Indexed `idx_stash_run`.
 - `meetings` + `meeting_segments` tables (§15): a capture session and its transcript, the
   latter carrying a `pass` (`live` | `final`) so both survive. `project_sources.kind` gains
   its first non-`path` value, `meeting`.

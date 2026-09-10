@@ -121,6 +121,89 @@ export const NOTE_MEMORY_MAX = Number(env.NOTE_MEMORY_MAX ?? "300");
 // eating the whole context window on every single step.
 export const PROFILE_MAX_CHARS = Number(env.PROFILE_MAX_CHARS ?? "4000");
 
+// --- Learning from the ledger (LEARNING.md Phase 1) ---
+// All inference-free: SQL over the audit log and a regex table. None of it calls a model.
+
+// How many known-denied shapes to list in standing context before every run, so the model
+// stops re-attempting things policy forbids and wasting a turn on each. Kept small — this
+// is a hint, not a policy dump, and it costs context on every step.
+export const DENIAL_PROMPT_MAX = Number(env.DENIAL_PROMPT_MAX ?? "5");
+
+// A (tool, target) shape denied at least this many times becomes a line in the weekly
+// digest: "denied N times — allowlist it, or should I stop proposing it?" Below this it is
+// noise, not a pattern.
+export const DENIAL_PROPOSE_MIN = Number(env.DENIAL_PROPOSE_MIN ?? "3");
+
+// Ceiling on `friction` memories PER TOOL — recent tool failures, recalled into that tool's
+// own description so a small model stops failing the same way. Scoped per tool so one broken
+// integration cannot crowd out the rest. 0 keeps them forever.
+export const FRICTION_MEMORY_MAX = Number(env.FRICTION_MEMORY_MAX ?? "5");
+
+// Silent (reason-less) rejections of the same (tool, target) shape before it is promoted to
+// a `preference` memory written by code — three silent noes are a preference even when
+// nobody typed one (LEARNING Phase 1.3).
+export const REJECT_PROMOTE_AFTER = Number(env.REJECT_PROMOTE_AFTER ?? "3");
+
+// Learn from APPROVALS (LEARNING Phase 2). A (tool, target) shape approved this many times,
+// with zero rejections, spanning at least PROMOTE_MIN_DAYS, becomes a proposal to let that
+// one shape auto-execute. This is a report the agent cannot read; a human applies it on a
+// click. High bar on purpose — an auto-approval is a standing grant, so it should be earned.
+export const PROMOTE_MIN_APPROVALS = Number(env.PROMOTE_MIN_APPROVALS ?? "10");
+export const PROMOTE_MIN_DAYS = Number(env.PROMOTE_MIN_DAYS ?? "14");
+
+// Learn PROCEDURE, not just facts (LEARNING Phase 3.1). The reflection pass also extracts a
+// `recipe` — how a task was done — but ONLY from a run that finished cleanly (ok, no errored
+// calls, nothing rejected); a run that went badly must not teach its method. Recalled by task
+// similarity in buildContext. 0 disables recipe extraction; the ceiling prunes oldest past it.
+export const RECIPE_ENABLED = (env.RECIPE_ENABLED ?? "true") !== "false";
+export const RECIPE_MEMORY_MAX = Number(env.RECIPE_MEMORY_MAX ?? "200");
+
+// Sampled self-critique (LEARNING Phase 3.2). Roughly this fraction of CHAT runs get a
+// `judge()` pass asking whether they accomplished the ask without wasted effort; a "no" with
+// its reason becomes a `lesson` memory recalled before later runs. Sampling is the cost
+// control — 0.1 makes it a rounding error against the runs themselves. 0 disables it.
+export const LESSON_SAMPLE_RATE = Number(env.LESSON_SAMPLE_RATE ?? "0.1");
+export const LESSON_MEMORY_MAX = Number(env.LESSON_MEMORY_MAX ?? "200");
+
+// --- Anticipation (LEARNING.md Phase 4) ---
+// A chat-task shape that recurs at least this many times becomes a PROPOSED schedule or
+// watcher — pre-written task text landing in the confirmation queue, never installed
+// silently. The scheduler and watchers already exist; this only decides what to point them
+// at. 0 disables the proposer.
+export const PROPOSE_MIN_RECURRENCE = Number(env.PROPOSE_MIN_RECURRENCE ?? "3");
+
+// Look-forward horizon: a `horizon` job reads the calendar this many hours ahead and
+// prepares a brief before a meeting rather than when asked. Anticipation is usually just
+// earlier. 0 disables the horizon helper.
+export const HORIZON_HOURS = Number(env.HORIZON_HOURS ?? "2");
+
+// The interruption budget's soft gate (Phase 4.5). When true, a notify that originated from
+// a PROACTIVE job (a watcher, the horizon, a proposer) must clear a judge() "is this worth
+// interrupting for?" check before it pushes. The hard rail is policy.budgets.perDay.tools.notify;
+// this is the judgment layer on top of it. Off by default — it costs a model round-trip per
+// proactive push, and only earns that once the agent runs unattended enough to matter.
+export const JUDGE_INTERRUPTIONS_PROACTIVE = (env.JUDGE_INTERRUPTIONS_PROACTIVE ?? "false") === "true";
+
+// Retire goals.md: when true, the heartbeat stops running a static goal and instead runs the
+// watcher shape against your own horizon — calendar, pending confirmations, stale watchers,
+// open proposals — acting only on a difference and staying silent otherwise (Phase 4.6). The
+// old goals.md behaviour is the default until you opt in.
+export const HEARTBEAT_HORIZON = (env.HEARTBEAT_HORIZON ?? "false") === "true";
+
+// --- Self-editing task text (LEARNING.md Phase 5) ---
+// A watcher is budgeted for about this many tool calls per run (fetch, state_get, maybe
+// state_set/notify). A watcher whose recent runs consistently cost MORE than this has task
+// text too loose, and becomes a candidate for a proposed rewrite.
+export const WATCHER_CALL_BUDGET = Number(env.WATCHER_CALL_BUDGET ?? "3");
+// How many recent runs must be over budget before a rewrite is proposed — a single expensive
+// run is noise, a run of them is a pattern. Needs at least this many finished runs to judge.
+export const REWRITE_MIN_OVER_BUDGET = Number(env.REWRITE_MIN_OVER_BUDGET ?? "3");
+// The rewrite is a MODEL call (tighten the wording), pinned local and treating the current
+// task as evidence, and it lands in the confirmation queue as a DIFF — never the new text
+// alone — because a watcher task is the one place a smuggled instruction could become a
+// standing one. Off by default: this is the phase with teeth.
+export const REWRITE_ENABLED = (env.REWRITE_ENABLED ?? "false") === "true";
+
 // --- Conversations ---
 // How many earlier turns of a chat are CANDIDATES for the next one's context. Each turn
 // that makes it in costs context on EVERY step of the loop, not once — so candidates are

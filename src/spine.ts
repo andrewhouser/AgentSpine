@@ -7,15 +7,24 @@
  * up in the dashboard alongside scheduled and one-off jobs.
  */
 import fs from "node:fs";
-import { HEARTBEAT_MS, GOALS_PATH } from "./config.ts";
+import { HEARTBEAT_MS, HEARTBEAT_HORIZON, GOALS_PATH } from "./config.ts";
 import { runTask } from "./runner.ts";
+import { heartbeatHorizonGoal } from "./learn/horizon.ts";
 import * as store from "./memory/store.ts";
 
 const DEFAULT_GOAL =
   "Do a light check-in: recall anything relevant from memory, and if there is nothing " +
   "useful to do right now, finish with a short summary. Take only low-risk reversible actions.";
 
+/**
+ * The heartbeat's goal. With HEARTBEAT_HORIZON on (Phase 4.6) it stops reading the static
+ * goals.md — whose honest default is "(none)", a task that then runs every tick — and instead
+ * runs the watcher shape against your own near future: pull the horizon, act only on a
+ * difference, stay silent otherwise. Off by default, so existing goals.md behaviour is intact
+ * until you opt in.
+ */
 const readGoal = (): string => {
+  if (HEARTBEAT_HORIZON) return heartbeatHorizonGoal();
   try {
     const g = fs.readFileSync(GOALS_PATH, "utf8").trim();
     return g || DEFAULT_GOAL;

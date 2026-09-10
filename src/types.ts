@@ -89,6 +89,21 @@ export interface Policy {
     perRun?: { default?: number; tools?: Record<string, number> };
     perDay?: { default?: number; tools?: Record<string, number> };
   };
+  /**
+   * Per-shape auto-approval (LEARNING Phase 2). A list of `{tool, target}` shapes that may
+   * auto-execute even though they are irreversible, because the user has approved that exact
+   * shape enough times, with no rejections, that queuing it again is friction rather than
+   * safety. Absent = none, like every other optional surface: an irreversible action queues
+   * unless its shape is listed here.
+   *
+   * This is deliberately the NARROWEST possible grant — one `(tool, target)` pair, never a
+   * whole tool and never a domain — and it is only ever written to `policy.json` by a human
+   * clicking a proposal in the dashboard. `src/learn/promote.ts` can *propose* an entry; it
+   * cannot add one, and no tool in the registry can reach either the proposal or the write.
+   * The narrowing is checked against the tool's own `classify().target`, so it matches the
+   * same key the allowlist and the broker already use.
+   */
+  autoApprove?: { tool: string; target: string }[];
 }
 
 /**

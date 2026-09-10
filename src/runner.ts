@@ -22,6 +22,7 @@ import {
   CHAT_HISTORY_RELEVANT_TURNS,
   CHAT_HISTORY_TURNS,
   MEMORY_RECALL_K,
+  RECIPE_ENABLED,
   REFLECT_ENABLED,
   NOTIFY_ON_FAILURE,
   NOTIFY_ON_SCHEDULE,
@@ -34,7 +35,11 @@ import { publish } from "./events.ts";
 import type { Tier } from "./tiers.ts";
 import { enqueue, queueStatus } from "./queue.ts";
 import { profileMessage } from "./memory/profile.ts";
-import { recall } from "./memory/rag.ts";
+import { recall, recallOfKind } from "./memory/rag.ts";
+import { deniedContext } from "./learn/denials.ts";
+import { RECIPE_KIND } from "./reflect.ts";
+import { LESSON_KIND, critiqueRun } from "./learn/critique.ts";
+import { queueStandingIntent } from "./learn/propose.ts";
 import { reflect } from "./reflect.ts";
 import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
@@ -84,6 +89,16 @@ const buildContext = async (task: string): Promise<string[]> => {
   const profile = profileMessage();
   if (profile) context.push(profile);
 
+  // Known-denied shapes (LEARNING Phase 1.1): flatly derived from the audit log, so it joins
+  // the trusted standing context. Kills the wasted turn a model otherwise spends re-attempting
+  // something policy forbids. Never throws — a learner must never fail a run.
+  try {
+    const denied = deniedContext();
+    if (denied) context.push(denied);
+  } catch (err) {
+    console.warn(`[learn] denied-context skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   if (MEMORY_RECALL_K > 0) {
     try {
       const hits = await recall(task, MEMORY_RECALL_K);
@@ -98,6 +113,36 @@ const buildContext = async (task: string): Promise<string[]> => {
     } catch (err) {
       console.warn(`[memory] recall skipped: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  // Recipes (Phase 3.1) and lessons (Phase 3.2), recalled by task similarity and injected
+  // under their own heading — a recipe is a procedure to reuse, a lesson is a past mistake to
+  // avoid, and neither is a fact about the user. Both are the assistant's own trusted notes.
+  // Wrapped so a learner can never fail a run.
+  try {
+    const recipes = await recallOfKind(RECIPE_KIND, task, 2);
+    if (recipes.length) {
+      context.push(
+        "You have done something like this before. Your own notes on how — reuse them if they " +
+          "still fit, adapt them if not:\n" +
+          recipes.join("\n\n"),
+      );
+    }
+  } catch (err) {
+    console.warn(`[learn] recipe recall skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  try {
+    const lessons = await recallOfKind(LESSON_KIND, task, 2);
+    if (lessons.length) {
+      context.push(
+        "Lessons from past runs that went less well than they should have. Avoid repeating " +
+          "these:\n" +
+          lessons.map((l, i) => `${i + 1}. ${l}`).join("\n"),
+      );
+    }
+  } catch (err) {
+    console.warn(`[learn] lesson recall skipped: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return context;
@@ -251,7 +296,30 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       publish(runId, { status: "ok", type: "run_end" });
 
       // After the run is fully closed out, so a reflection failure cannot touch the result.
-      if (REFLECT_ENABLED && !opts.noMemory) await reflect(task, trace);
+      // A recipe is learned only from a run that finished cleanly — no errored or rejected
+      // calls (Phase 3.1) — read from the run's own audit rows, never assumed.
+      if (REFLECT_ENABLED && !opts.noMemory) {
+        const allowRecipe = RECIPE_ENABLED && store.runIsClean(runId);
+        const result = await reflect(task, trace, { allowRecipe });
+        // Standing intent caught in conversation (Phase 4.2) becomes a PROPOSED recurring
+        // job — queued for approval, never installed. Chat only: a scheduled run restating
+        // its own standing task would propose itself forever.
+        if (kind === "chat" && result.standing) {
+          try {
+            queueStandingIntent(result.standing);
+          } catch (err) {
+            console.warn(`[propose] standing intent skipped: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+
+      // Sampled self-critique (Phase 3.2): on roughly one in ten CHAT runs, ask whether the
+      // run did what was asked without waste; a "no" becomes a lesson. Chat only — nobody was
+      // reading a scheduled or watcher run, so critiquing it teaches against the wrong bar.
+      // Never throws; runs after the result is persisted.
+      if (kind === "chat" && !opts.noMemory) {
+        await critiqueRun(runId, task, trace, summary);
+      }
 
       // First turn of a thread that has no name yet.
       if (CHAT_AUTO_TITLE && conversationId != null && !store.getConversation(conversationId)?.title) {

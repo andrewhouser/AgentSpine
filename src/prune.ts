@@ -17,11 +17,14 @@ import fs from "node:fs";
 import {
   AUDIT_RETENTION_DAYS,
   DB_PATH,
+  FRICTION_MEMORY_MAX,
+  LESSON_MEMORY_MAX,
   NOTE_MEMORY_MAX,
+  RECIPE_MEMORY_MAX,
   RUN_RETENTION_DAYS,
   TRACE_RETENTION_DAYS,
 } from "./config.ts";
-import { dedupeMemories, pruneMemories } from "./memory/rag.ts";
+import { dedupeMemories, pruneFriction, pruneMemories } from "./memory/rag.ts";
 import { pruneLedger, vacuum } from "./memory/store.ts";
 
 const args = process.argv.slice(2);
@@ -67,8 +70,16 @@ if (result.withheld) {
  */
 const duplicates = dedupeMemories(dryRun);
 const notes = dryRun || NOTE_MEMORY_MAX <= 0 ? 0 : pruneMemories("note", NOTE_MEMORY_MAX);
+// Friction is capped per tool, not globally — see pruneFriction.
+const friction = dryRun || FRICTION_MEMORY_MAX <= 0 ? 0 : pruneFriction(FRICTION_MEMORY_MAX);
+// Recipes (Phase 3.1) and lessons (Phase 3.2) are auto-generated kinds with their own caps.
+const recipes = dryRun || RECIPE_MEMORY_MAX <= 0 ? 0 : pruneMemories("recipe", RECIPE_MEMORY_MAX);
+const lessons = dryRun || LESSON_MEMORY_MAX <= 0 ? 0 : pruneMemories("lesson", LESSON_MEMORY_MAX);
 console.log(`  ${String(duplicates).padStart(6)} duplicate memories`);
 console.log(`  ${String(notes).padStart(6)} note memories past the ${NOTE_MEMORY_MAX} ceiling`);
+console.log(`  ${String(friction).padStart(6)} friction memories past the ${FRICTION_MEMORY_MAX}/tool ceiling`);
+console.log(`  ${String(recipes).padStart(6)} recipe memories past the ${RECIPE_MEMORY_MAX} ceiling`);
+console.log(`  ${String(lessons).padStart(6)} lesson memories past the ${LESSON_MEMORY_MAX} ceiling`);
 
 if (dryRun) {
   console.log("\nDry run — nothing was deleted.");

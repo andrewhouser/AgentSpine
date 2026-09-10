@@ -16,6 +16,7 @@ import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
 import { askedForPush } from "./tools/notify.ts";
+import { frictionDocs } from "./learn/friction.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
 /** The tools this loop may see. A subagent's registry is a subset of its parent's. */
@@ -49,7 +50,17 @@ const settingTools = (
 
 const toolDocs = (tools: Record<string, Tool>): string =>
   Object.values(tools)
-    .map((t) => `- ${t.name}: ${t.description}\n    args: ${t.argsSchema}`)
+    .map((t) => {
+      // Recent failures with this tool, appended to its own description (LEARNING Phase 1.2).
+      // Synchronous SQL, inference-free; never throws, so a lookup failure just omits the line.
+      let friction = "";
+      try {
+        friction = frictionDocs(t.name);
+      } catch {
+        /* a learner must not break prompt assembly */
+      }
+      return `- ${t.name}: ${t.description}${friction ? `\n    ${friction}` : ""}\n    args: ${t.argsSchema}`;
+    })
     .join("\n");
 
 /**

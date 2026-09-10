@@ -24,6 +24,15 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories (kind);
 `);
 
+// `friction` memories (LEARNING Phase 1.2) carry the tool they concern, so the per-tool
+// lookup in `store.frictionForTool` is an exact match rather than a text sniff. Best-effort
+// ALTER, the same pattern the ledger uses: harmless if the column already exists.
+try {
+  rawDb.exec("ALTER TABLE memories ADD COLUMN tool TEXT");
+} catch {
+  /* column already exists */
+}
+
 // --- embedder (lazy, optional) ---
 type Embedder = (text: string) => Promise<Float32Array>;
 let embedderPromise: Promise<Embedder | null> | null = null;
@@ -162,6 +171,49 @@ export const remember = async (text: string, kind = "note"): Promise<boolean> =>
 };
 
 /**
+ * Record a tool failure as a `friction` memory (LEARNING Phase 1.2).
+ *
+ * Deliberately NOT routed through `remember`: friction is recalled by exact SQL into a
+ * tool's own description, never by cosine into a goal, so it needs no embedding — and it
+ * carries a `tool` column `remember` knows nothing about. Dedupe is exact-text and scoped
+ * to the tool, so the same failure recorded twice does not take two of the tool's slots.
+ * Trims the tool's oldest friction past `max` in the same call, so the ceiling is enforced
+ * at write time rather than only by `prune`.
+ *
+ * Never throws — this runs off the broker's error path and must not turn a tool error into
+ * a second failure.
+ */
+export const rememberFriction = (tool: string, detail: string, max: number): boolean => {
+  try {
+    const text = detail.trim().slice(0, 300);
+    if (!tool || !text) return false;
+
+    const dup = rawDb
+      .prepare("SELECT id FROM memories WHERE kind = 'friction' AND tool = ? AND lower(trim(text)) = ? LIMIT 1")
+      .get(tool, text.toLowerCase());
+    if (dup) return false;
+
+    rawDb
+      .prepare("INSERT INTO memories (ts, kind, tool, text, embedding) VALUES (?, 'friction', ?, ?, NULL)")
+      .run(now(), tool, text);
+
+    if (max > 0) {
+      rawDb
+        .prepare(
+          `DELETE FROM memories WHERE kind = 'friction' AND tool = ? AND id NOT IN (
+             SELECT id FROM memories WHERE kind = 'friction' AND tool = ? ORDER BY id DESC LIMIT ?
+           )`,
+        )
+        .run(tool, tool, max);
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[learn] friction not recorded: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+};
+
+/**
  * Collapse memories that are already duplicated, keeping the oldest of each exact-text
  * group. For the backlog that accumulated before `remember` started checking.
  *
@@ -227,12 +279,64 @@ export const recallScored = async (query: string, k = 5, vector?: Float32Array):
 export const recall = async (query: string, k = 5): Promise<string[]> =>
   (await recallScored(query, k)).map((r) => r.text);
 
+/**
+ * Recall the k most relevant memories OF ONE KIND for a query (LEARNING Phase 3). Recipes
+ * and lessons are recalled separately from facts so they can be injected under their own
+ * heading and capped independently of the general recall budget. Same embedder, same cosine;
+ * the only difference is the `WHERE kind = ?` filter, and the keyword fallback honours it too.
+ */
+export const recallOfKind = async (kind: string, query: string, k = 3, minScore = 0): Promise<string[]> => {
+  const embedder = await getEmbedder();
+  if (!embedder) {
+    const rows = rawDb
+      .prepare("SELECT text FROM memories WHERE kind = ? AND text LIKE ? ORDER BY id DESC LIMIT ?")
+      .all(kind, `%${query}%`, k) as { text: string }[];
+    return rows.map((r) => r.text);
+  }
+  const q = await embedder(query);
+  const rows = rawDb.prepare("SELECT id, text, embedding FROM memories WHERE kind = ?").all(kind) as unknown as MemRow[];
+  return rows
+    .filter((r) => r.embedding)
+    .map((r) => ({ score: cosine(q, fromBlob(r.embedding as Buffer)), text: r.text }))
+    .filter((r) => r.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k)
+    .map((r) => r.text);
+};
+
 /** How many memories are stored, optionally of one kind. */
 export const countMemories = (kind?: string): number => {
   const row = kind
     ? (rawDb.prepare("SELECT COUNT(*) AS n FROM memories WHERE kind = ?").get(kind) as { n: number })
     : (rawDb.prepare("SELECT COUNT(*) AS n FROM memories").get() as { n: number });
   return row.n;
+};
+
+/**
+ * Prune `friction` memories to at most `max` PER TOOL (LEARNING Phase 1.2).
+ *
+ * `pruneMemories("friction", max)` would be wrong here: friction's ceiling is per tool, so a
+ * global cap would let one chatty tool's failures evict another tool's entirely. Write-time
+ * trimming in `rememberFriction` already enforces this; this is the backstop `prune` runs,
+ * and the path that catches rows written before a lower `max` was set. Returns rows removed.
+ */
+export const pruneFriction = (max: number): number => {
+  if (max <= 0) return 0;
+  const tools = rawDb
+    .prepare("SELECT DISTINCT tool FROM memories WHERE kind = 'friction' AND tool IS NOT NULL")
+    .all() as { tool: string }[];
+  let removed = 0;
+  for (const { tool } of tools) {
+    const res = rawDb
+      .prepare(
+        `DELETE FROM memories WHERE kind = 'friction' AND tool = ? AND id NOT IN (
+           SELECT id FROM memories WHERE kind = 'friction' AND tool = ? ORDER BY id DESC LIMIT ?
+         )`,
+      )
+      .run(tool, tool, max);
+    removed += Number(res.changes ?? 0);
+  }
+  return removed;
 };
 
 /**

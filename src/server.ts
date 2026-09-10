@@ -50,6 +50,7 @@ import { hasEnded, replay, subscribe } from "./events.ts";
 import type { RunEvent } from "./events.ts";
 import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation } from "./confirmations.ts";
+import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { DASHBOARD_PUBLIC_URL } from "./config.ts";
 import * as store from "./memory/store.ts";
@@ -505,6 +506,30 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
     // /api/policy
     if (m === "GET" && seg[1] === "policy" && seg.length === 2) return sendJson(res, 200, loadPolicy());
+
+    /**
+     * /api/proposals — auto-approval proposals from the ledger (LEARNING Phase 2).
+     *
+     * A GET lists them; a POST applies one, which is the ONLY path that writes an
+     * autoApprove entry to policy.json. Both sit behind the dashboard token like every
+     * other /api route. The agent cannot reach this — promotionProposals reads the ledger
+     * and no tool exposes it, which is invariant 1: the model never widens its own grants.
+     */
+    if (seg[1] === "proposals" && seg.length === 2) {
+      if (m === "GET") {
+        return sendJson(
+          res,
+          200,
+          promotionProposals().map((p) => ({ ...p, diff: proposalDiff(p) })),
+        );
+      }
+      if (m === "POST") {
+        const b = await readBody(req);
+        if (!b?.tool) return sendJson(res, 400, { error: "tool is required" });
+        const result = applyProposal(String(b.tool), String(b.target ?? ""));
+        return sendJson(res, result.ok ? 200 : 409, result);
+      }
+    }
 
     /**
      * /api/dictate — voice into the composer.

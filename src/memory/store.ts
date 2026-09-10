@@ -115,6 +115,9 @@ addColumn("runs", "agent", "TEXT");
 addColumn("conversations", "tier", "TEXT");
 addColumn("confirmations", "run_id", "INTEGER");
 addColumn("confirmations", "token", "TEXT");
+// LEARNING §Phase 0: approval latency = resolved − ts. `ts` is when the question was
+// queued; there was no record of when it was answered, so the wait could not be measured.
+addColumn("confirmations", "resolved", "TEXT");
 addColumn("schedules", "spec", "TEXT");
 
 // A conversation's thread is "its runs, in order", read on every thread load.
@@ -196,6 +199,19 @@ export const deleteConversation = (id: number): void => {
 
 export const runsForConversation = (conversationId: number): any[] =>
   db.prepare("SELECT * FROM runs WHERE conversation_id = ? ORDER BY id").all(conversationId);
+
+/**
+ * Task strings of finished runs of one kind (LEARNING Phase 4.1). The proposer clusters
+ * these to find intent that recurs — a question asked the same way three times is a
+ * standing job waiting to be named. Only finished runs with a task; ordered oldest-first so
+ * a cluster's first-seen date is stable.
+ */
+export const tasksByKind = (kind: string, limit = 500): string[] =>
+  (
+    db
+      .prepare("SELECT task FROM runs WHERE kind = ? AND task IS NOT NULL AND finished IS NOT NULL ORDER BY id DESC LIMIT ?")
+      .all(kind, limit) as { task: string }[]
+  ).map((r) => r.task);
 
 // --- runs ---
 export interface StartRunOpts {
@@ -343,6 +359,91 @@ export const listActions = (runId?: number, limit = 200): any[] =>
     : db.prepare("SELECT * FROM actions ORDER BY id DESC LIMIT ?").all(limit);
 
 /**
+ * Recent `friction` memories for one tool (LEARNING Phase 1.2), newest first. Stored in the
+ * `memories` table (kind `friction`) with a `tool` column so the lookup is exact rather than
+ * a text sniff — the recall path here is synchronous SQL, invoked while the system prompt is
+ * assembled, so it must not embed anything. `memories` is created by `rag.ts`; the column is
+ * added there too. Returns the human `detail` string of each row.
+ */
+export const frictionForTool = (tool: string, limit: number): string[] =>
+  (
+    db
+      .prepare("SELECT text FROM memories WHERE kind = 'friction' AND tool = ? ORDER BY id DESC LIMIT ?")
+      .all(tool, limit) as { text: string }[]
+  ).map((r) => r.text);
+
+/**
+ * The per-run tool-call cost of a schedule's recent finished runs (LEARNING Phase 5). A
+ * watcher is budgeted for about three calls — fetch, state_get, maybe state_set/notify — so
+ * runs consistently costing more are a signal the task text is too loose and lets the model
+ * wander. Counts every action row (executed/denied/error/queued) since each is work the run
+ * did. Only finished runs; newest first, capped by `limit`.
+ */
+export const scheduleRunCosts = (scheduleId: number, limit = 10): number[] =>
+  (
+    db
+      .prepare(
+        `SELECT (SELECT COUNT(*) FROM actions a WHERE a.run_id = r.id) AS calls
+           FROM runs r
+          WHERE r.schedule_id = ? AND r.finished IS NOT NULL
+          ORDER BY r.id DESC LIMIT ?`,
+      )
+      .all(scheduleId, limit) as { calls: number }[]
+  ).map((r) => r.calls);
+
+/**
+ * Whether a finished run is clean enough to teach a recipe (LEARNING Phase 3.1): it made no
+ * errored calls and none of the confirmations it raised were rejected. A run that hit an
+ * error or had a proposal turned down did not establish a method worth reusing. Computed
+ * from the run's own audit + confirmation rows — no inference. `error` is the decision the
+ * broker records for a tool that threw; a rejected confirmation is `state='rejected'`.
+ */
+export const runIsClean = (runId: number): boolean => {
+  const errored = (
+    db.prepare("SELECT COUNT(*) AS n FROM actions WHERE run_id = ? AND decision = 'error'").get(runId) as { n: number }
+  ).n;
+  if (errored > 0) return false;
+  const rejected = (
+    db.prepare("SELECT COUNT(*) AS n FROM confirmations WHERE run_id = ? AND state = 'rejected'").get(runId) as {
+      n: number;
+    }
+  ).n;
+  return rejected === 0;
+};
+
+export interface DeniedShape {
+  tool: string;
+  target: null | string;
+  n: number;
+  /** The most recent denial reason for this shape — the `output` column, verbatim. */
+  reason: string;
+}
+
+/**
+ * The (tool, target) shapes the broker has refused, most-attempted first, for the denial
+ * learner (LEARNING Phase 1.1). This is the highest-value untouched query in the database:
+ * each row is the model attempting something policy forbids, at the cost of a wasted turn
+ * every time, with nothing anywhere remembering. `MAX(id)` picks the latest reason for the
+ * shape. Pure SQL over the audit log — no inference, so nothing in it can be argued with.
+ */
+export const deniedShapes = (minCount = 1, limit = 10): DeniedShape[] =>
+  db
+    .prepare(
+      `SELECT tool, target, COUNT(*) AS n,
+              (SELECT output FROM actions a2
+                WHERE a2.tool = a.tool AND (a2.target IS a.target OR a2.target = a.target)
+                  AND a2.decision = 'denied'
+                ORDER BY a2.id DESC LIMIT 1) AS reason
+         FROM actions a
+        WHERE decision = 'denied'
+        GROUP BY tool, target
+       HAVING n >= ?
+        ORDER BY n DESC
+        LIMIT ?`,
+    )
+    .all(minCount, limit) as unknown as DeniedShape[];
+
+/**
  * Budget counters, read straight off the audit log rather than a separate tally.
  *
  * The audit log is already the record of what happened and is written on every broker
@@ -432,6 +533,44 @@ export const actionsSince = (sinceIso: string): any[] =>
 export const runsSince = (sinceIso: string): any[] =>
   db.prepare("SELECT * FROM runs WHERE started >= ? ORDER BY id").all(sinceIso);
 
+/**
+ * Confirmations *resolved* within the window — for the rejection-rate and approval-latency
+ * metrics (LEARNING Phase 0). Keyed on `resolved`, not `ts`: a decision made today about a
+ * question queued yesterday belongs to today's digest, and a still-pending row has no
+ * outcome to measure. Excludes `token` by selecting explicit columns.
+ */
+export const confirmationsResolvedSince = (sinceIso: string): ConfirmationRow[] =>
+  db
+    .prepare(`SELECT ${CONFIRMATION_COLS} FROM confirmations WHERE resolved >= ? ORDER BY id`)
+    .all(sinceIso) as unknown as ConfirmationRow[];
+
+/**
+ * Every resolved confirmation (approved or rejected), for the approval-promotion learner
+ * (LEARNING Phase 2). The `(tool, target)` shape is not a column — target lives on the
+ * `actions` row, not here — so the caller classifies each `args` with the tool's own
+ * classifier, the same key the broker uses. `resolved` and `ts` come along so the learner
+ * can require a shape to have been stable across a span of days, not just a count.
+ */
+export const resolvedConfirmations = (): ConfirmationRow[] =>
+  db
+    .prepare(`SELECT ${CONFIRMATION_COLS} FROM confirmations WHERE state IN ('done','rejected') ORDER BY id`)
+    .all() as unknown as ConfirmationRow[];
+
+/**
+ * Each finished run in the window with its task and step count (rows in `messages`), for the
+ * steps-per-repeat-task metric (LEARNING Phase 0). The clustering by task text is left to the
+ * caller; the DB just supplies the pair. Only finished runs — an open run has no final count.
+ */
+export const runStepCountsSince = (sinceIso: string): { task: string | null; steps: number }[] =>
+  db
+    .prepare(
+      `SELECT r.task AS task, (SELECT COUNT(*) FROM messages m WHERE m.run_id = r.id) AS steps
+         FROM runs r
+        WHERE r.started >= ? AND r.finished IS NOT NULL
+        ORDER BY r.id`,
+    )
+    .all(sinceIso) as { task: string | null; steps: number }[];
+
 export const memoriesSince = (sinceIso: string): any[] =>
   db.prepare("SELECT id, ts, kind, text FROM memories WHERE ts >= ? ORDER BY id").all(sinceIso);
 
@@ -459,12 +598,14 @@ export interface ConfirmationRow {
   summary: string;
   state: string;
   result: string | null;
+  /** When the row left 'pending', ISO. Null while pending or on rows predating the column. */
+  resolved: string | null;
   /** Present only on rows read internally; never returned by listConfirmations. */
   token?: string | null;
 }
 
 /** Columns safe to hand to a UI or CLI — deliberately excludes `token`. */
-const CONFIRMATION_COLS = "id, ts, run_id, tool, args, summary, state, result";
+const CONFIRMATION_COLS = "id, ts, run_id, tool, args, summary, state, result, resolved";
 
 export const listConfirmations = (state?: string): ConfirmationRow[] =>
   state
@@ -517,11 +658,13 @@ export const checkApprovalToken = (id: number, provided: string): boolean => {
 
 export const setConfirmation = (id: number, state: string, result = ""): void => {
   // Burn the token alongside the state change — this is what makes approval single-use.
-  db.prepare("UPDATE confirmations SET state = ?, result = ?, token = NULL WHERE id = ?").run(
-    state,
-    result.slice(0, 4000),
-    id,
-  );
+  // Stamp `resolved` with the moment the question leaves 'pending', so approval latency
+  // (LEARNING Phase 0) is a subtraction rather than a guess. Only the first transition
+  // stamps it: `resolved` is left alone if already set, so a row can never be "answered
+  // twice" and a re-run migration on old rows leaves them honestly null.
+  db.prepare(
+    "UPDATE confirmations SET state = ?, result = ?, token = NULL, resolved = COALESCE(resolved, ?) WHERE id = ?",
+  ).run(state, result.slice(0, 4000), now(), id);
 };
 
 // --- retention ---
