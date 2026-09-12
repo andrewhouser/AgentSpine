@@ -22,7 +22,17 @@ server holds one model resident and swapping costs more than a smaller model sav
 | 8080 | `mlx-community/Qwen3.6-35B-A3B-4bit-DWQ` | ~21GB | `standard` — the default |
 | 8081 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | ~2GB | `fast` — lookups, `tracker`/`runner`/`inspector` |
 
-~23GB of 32GB. Tighter than the 30B it replaced, but still headroom.
+~23GB of 32GB, against an `iogpu.wired_limit_mb` of **28672** — set at boot by
+`/Library/LaunchDaemons/com.agentspine.wiredlimit.plist`, the only daemon setting it as of
+2026-09-12.
+
+**There is less headroom than that arithmetic suggests.** Measured on the host with both
+servers warm and nothing else running: 31GB used, under 1GB free, ~2.3GB already in swap.
+MLX's allocations are *pageable*, not wired, so anything else wanting a few GB does not fail
+— it silently pages the models out, and the next request pays the fault-in off SSD. Measured
+on :8080 that costs **31–64s** against 0.21s warm. Treat this host as full; see
+[IMAGE_GENERATION.md](IMAGE_GENERATION.md) for why image generation runs on the app host
+instead.
 
 ## `standard` is a reasoning model now — thinking must be turned off
 
@@ -161,7 +171,7 @@ Measured on this host, warm:
 |---|---|---|---|---|
 | `Llama-3.2-3B-Instruct-4bit` | 0.60s | 1.0s | 39.1 tok/s | **keep** — the fast tier |
 | `Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ` | 0.82s | 1.4s | 32.7 tok/s | superseded 2026-09-08 by the 35B; still cached |
-| `Qwen2.5-Coder-14B-Instruct-8bit` | 1.35s | 6.6s | **5.6 tok/s** | ~~remove~~ — deleted 2026-07-31 |
+| `Qwen2.5-Coder-14B-Instruct-8bit` | 1.35s | 6.6s | **5.6 tok/s** | ~~remove~~ — deleted **2026-09-12**; this doc wrongly claimed 2026-07-31, see below |
 | `Qwen3-4B-8bit` | 1.57s | 6.9s | 12.8 tok/s | ~~remove~~ — deleted 2026-07-31 |
 | `Qwen3.5-4B-8bit` | — | — | — | ~~broken~~ — deleted 2026-07-31 |
 
@@ -174,8 +184,13 @@ Measured on this host, warm:
   system Python predated that architecture. That is now fixed by the 3.12 venv below, but the
   model was deleted rather than kept.
 
-All three are gone as of 2026-07-31. The cache holds `Llama-3.2-3B-Instruct-4bit`,
-`Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ`, and `Qwen3.6-35B-A3B-4bit-DWQ`.
+The two 4B models went on 2026-07-31. **The 14B did not** — this doc said it had, and it was
+wrong for six weeks; see "A pinned server is only pinned if every client agrees" below. It was
+actually deleted on 2026-09-12, reclaiming 15GB.
+
+The cache now holds exactly three models: `Llama-3.2-3B-Instruct-4bit` (1.7GB),
+`Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ` (16GB, the one-line revert), and
+`Qwen3.6-35B-A3B-4bit-DWQ` (19GB, the `standard` tier) — 37GB total, verified 2026-09-12.
 
 **`Qwen3.6-35B-A3B-4bit-DWQ` is the `standard` tier as of 2026-09-08.** The reasoning
 behaviour that made it look unusable — a `message.reasoning` field, 255 completion tokens to
@@ -185,6 +200,38 @@ budgeting generously. See "thinking must be turned off" above.
 
 Models live in `~/.cache/huggingface/hub`; remove with
 `huggingface-cli delete-cache`, or delete the `models--mlx-community--<name>` directory.
+
+## A pinned server is only pinned if every client agrees
+
+**`--model` is a boot default, not a constraint.** `mlx_lm.server` loads whatever model a
+*request* names, evicting the incumbent. So a client naming a different id silently re-points
+the tier, and the plist keeps looking correct the whole time.
+
+This is not hypothetical. Between 2026-08-13 and 2026-09-08, :8080 served
+`Qwen2.5-Coder-14B-Instruct-8bit` — the 5.6 tok/s model this doc had already declared deleted
+— continuously, because a stale second AgentSpine checkout was running on the model host with
+a hardcoded `PRIMARY_MODEL` and calling `127.0.0.1:8080` every 15 minutes. The standard tier
+ran at roughly a sixth of its throughput for 26 days. Nothing alerted, because the port kept
+answering 200.
+
+Two rules follow:
+
+1. **Never hardcode a model id in a client.** Read it from config, so there is one place it
+   can be wrong. This applies to anything new pointed at these servers — including the image
+   service in [IMAGE_GENERATION.md](IMAGE_GENERATION.md).
+2. **Never run AgentSpine on the model host.** That is what put a stale client on loopback.
+   The stale `~/agentspine` copy is not a git checkout and is managed by nothing.
+
+To check what a tier is *actually* serving rather than what it was launched with:
+
+```bash
+curl -s http://192.168.0.150:8080/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"mlx-community/Qwen3.6-35B-A3B-4bit-DWQ","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"chat_template_kwargs":{"enable_thinking":false}}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('model'))"
+```
+
+Note that `GET /v1/models` will **not** tell you this — it lists the whole local HuggingFace
+cache, not the resident model, so every port reports every model it could load.
 
 ## Two Python stacks
 
