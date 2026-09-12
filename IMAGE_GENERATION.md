@@ -108,9 +108,16 @@ Expect 4.3 GB in `~/.cache/huggingface/hub`.
 
 ### 4. Run it and verify
 
+`services/mflux/` inside this repo is the **canonical location** — run it from there, not
+from a copy. A second copy elsewhere on disk is the same trap as the stale `~/agentspine`
+checkout that served the wrong model for 26 days: the two drift, and nothing tells you which
+one is live. Keeping it in the repo also means a fix arrives by `git pull`.
+
 ```bash
-cd <repo>/services/mflux && ~/.venvs/mflux/bin/uvicorn server:app --host 127.0.0.1 --port 8082
+cd ~/Developer/AgentSpine/services/mflux && ~/.venvs/mflux/bin/uvicorn server:app --host 127.0.0.1 --port 8082
 ```
+
+Adjust the path if the repo lives elsewhere on this machine.
 
 ```bash
 curl -s http://127.0.0.1:8082/health
@@ -136,11 +143,31 @@ Compare the peak against the table above; if it is materially higher on `.85`, l
 
 ### 5. launchd
 
-Bind to `127.0.0.1` if AgentSpine is the only caller — there is no auth on this endpoint.
-Model it on the existing MLX agents, but note the two things those get wrong for this use:
-`KeepAlive = { SuccessfulExit = false }` makes a clean stop ambiguous, and
-`ThrottleInterval = 60` can delay a restart by a minute. Prefer
-`launchctl bootout` / `bootstrap` over `stop` / `start` when cycling it.
+A ready plist ships at [`services/mflux/com.local.mflux.plist`](services/mflux/com.local.mflux.plist).
+Check the three items called out in its header comment — `WorkingDirectory`, the uvicorn
+path, and `MFLUX_MAX_SIDE` — then:
+
+```bash
+cp services/mflux/com.local.mflux.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.mflux.plist
+```
+
+To stop or cycle it:
+
+```bash
+launchctl bootout gui/$UID/com.local.mflux
+```
+
+**Use `bootout`/`bootstrap`, not `stop`/`start`.** `KeepAlive` is `true`, so `launchctl stop`
+is undone by an immediate respawn.
+
+It binds `127.0.0.1`, because there is no auth on this endpoint and AgentSpine is on the same
+machine. Only widen to `0.0.0.0` if something off-box genuinely needs it.
+
+Note this plist deliberately differs from the MLX agents on the model host in two ways.
+Those use `KeepAlive = { SuccessfulExit = false }`, which makes a clean stop ambiguous, and
+`ThrottleInterval = 60`, which can leave a minute-long dead window after a restart. Neither
+is wanted here.
 
 ### 6. AgentSpine: config
 

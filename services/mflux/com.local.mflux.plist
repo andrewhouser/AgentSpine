@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for the MFLUX image service. Install on the APP host (.85), not the model
+  host — an image render pages the language models out and costs the next :8080 call 30-60s.
+
+  Copy to ~/Library/LaunchAgents/com.local.mflux.plist, then:
+
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.mflux.plist
+    launchctl bootout   gui/$UID/com.local.mflux
+
+  Use bootout/bootstrap, NOT stop/start: KeepAlive is on, so `launchctl stop` is
+  immediately undone by a respawn.
+
+  THREE THINGS TO CHECK BEFORE LOADING:
+
+    1. WorkingDirectory must be this directory's absolute path on THIS machine. uvicorn
+       resolves `server:app` relative to cwd, so a wrong path fails with ModuleNotFoundError.
+    2. The uvicorn path must match the venv actually built on this machine.
+    3. MFLUX_MAX_SIDE is set from peaks measured on a 32GB host: 512px needs 6.13GB, 768px
+       9.04GB, 1024px 13.16GB. 768 is the ceiling for a 16GB box already running capture and
+       Whisper. Confirm against /health's `last_render.peak_gb` before raising it.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.mflux</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/andrewhouser/.venvs/mflux/bin/uvicorn</string>
+    <string>server:app</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8082</string>
+    <string>--log-level</string><string>warning</string>
+  </array>
+
+  <!-- Required. uvicorn imports `server` from the working directory. -->
+  <key>WorkingDirectory</key>
+  <string>/Users/andrewhouser/Developer/AgentSpine/services/mflux</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- huggingface_hub resolves the weight cache from HOME; a LaunchAgent normally has it,
+         but naming it explicitly removes one way for the 4.3GB cache to be missed. -->
+    <key>HOME</key><string>/Users/andrewhouser</string>
+    <key>MFLUX_DEFAULT_SIDE</key><string>512</string>
+    <key>MFLUX_MAX_SIDE</key><string>768</string>
+    <!-- Bounds MLX's buffer cache. Unbounded it reached 24.9GB at 1024px and drove the test
+         machine into 23GB of swap. Costs some reallocation, nothing else. -->
+    <key>MFLUX_CACHE_LIMIT_GB</key><string>4</string>
+    <!-- Unload the pipeline after this many idle seconds. This is what lets the service
+         share a 16GB box: it holds nothing between bursts. Do not make it eager. -->
+    <key>MFLUX_IDLE_SECONDS</key><string>300</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- A server that exits for any reason should come back, including a clean exit. This is
+       deliberately not the `SuccessfulExit: false` form used by the MLX agents on the model
+       host, where a clean stop is ambiguous. -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- Long enough to avoid a crash loop, short enough that a restart is not a dead minute.
+       launchd enforces a 10s floor regardless. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/andrewhouser/Library/Logs/mflux-service.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/andrewhouser/Library/Logs/mflux-service-error.log</string>
+</dict>
+</plist>
