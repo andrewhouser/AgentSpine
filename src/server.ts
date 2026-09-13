@@ -37,6 +37,7 @@ import {
   readAttachment,
   removeAttachment,
   storeImage,
+  sweepOrphanedAttachments,
   sweepUnsentAttachments,
   UnsupportedImageError,
 } from "./attachments.ts";
@@ -1009,6 +1010,11 @@ const prune = async (): Promise<void> => {
     // Uploads nobody ever sent: picked a file, changed their mind, closed the tab.
     const unsent = sweepUnsentAttachments();
     if (unsent) console.log(`pruned: ${unsent} unsent attachment(s)`);
+    // And images whose run the prune above just removed. Runs first, then this, so a run
+    // pruned on this pass takes its photographs with it on the same pass rather than the
+    // next one.
+    const orphaned = sweepOrphanedAttachments();
+    if (orphaned) console.log(`pruned: ${orphaned} image(s) whose run passed the retention window`);
 
     const collapsed = dedupeMemories();
     if (collapsed) console.log(`pruned: ${collapsed} duplicate memories`);

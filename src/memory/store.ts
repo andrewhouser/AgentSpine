@@ -611,6 +611,24 @@ export const setAttachmentDescription = (id: number, description: string): void 
 };
 
 /**
+ * Images whose run is gone — because `pruneLedger` reached it, or because a thread was
+ * removed by a path that missed them.
+ *
+ * This is a reconciliation sweep rather than a hook inside the prune, and that is deliberate:
+ * coupling the ledger prune to the filesystem would put a `DELETE FROM runs` and an `unlink`
+ * in the same transaction, and it would still miss any future path that drops a run. Asking
+ * "which attachments no longer have a run" catches all of them, whatever removed the run.
+ *
+ * It matters because an image is the most personal thing this system stores. Without it, a
+ * photograph outlives the retention window the user actually configured — the run row, its
+ * trace and its audit rows all go at RETENTION_DAYS while the picture stays on disk forever.
+ */
+export const attachmentsWithMissingRun = (): AttachmentRow[] =>
+  db
+    .prepare("SELECT * FROM attachments WHERE run_id IS NOT NULL AND run_id NOT IN (SELECT id FROM runs)")
+    .all() as unknown as AttachmentRow[];
+
+/**
  * Uploads that were never sent — the user picked a file, changed their mind, and closed the
  * tab. Swept on the same schedule as the ledger; returns the rows so the caller can unlink
  * the files too.
