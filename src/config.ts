@@ -30,6 +30,48 @@ export const LOCAL_MODEL = env.LOCAL_MODEL ?? "local";
 // a safe no-op.
 export const FAST_BASE_URL = env.FAST_LLM_URL ?? "";
 export const FAST_MODEL = env.FAST_MODEL ?? "mlx-community/Llama-3.2-3B-Instruct-4bit";
+
+// The `vision` tier: a THIRD pinned server, running `mlx_vlm.server` rather than
+// `mlx_lm.server`. It exists because neither text server can see — `mlx_lm.server` rejects
+// any non-text content part outright ("Only 'text' content type is supported"), and the
+// standard tier's own weights carry no vision tower, despite a config that mentions image
+// tokens. So an image is not a prompt this system can route; it is a capability another
+// endpoint has and these do not.
+//
+// Empty = attachments are refused with a plain message rather than silently dropped. That
+// is deliberate: a missing fast tier degrades to a slower answer, while a missing vision
+// tier degrades to answering a question about a picture nobody looked at, which is worse
+// than no answer at all. See src/vision.ts.
+export const VISION_BASE_URL = env.VISION_LLM_URL ?? "";
+export const VISION_MODEL = env.VISION_MODEL ?? "mlx-community/Qwen3-VL-4B-Instruct-4bit";
+export const VISION_ENABLED = VISION_BASE_URL.length > 0;
+// Largest single image accepted, in bytes. A phone photo is 2-5MB; the ceiling exists so an
+// upload cannot grow the request body without bound, not to be tight.
+export const VISION_MAX_BYTES = Number(env.VISION_MAX_BYTES ?? "16777216");
+// Most images one turn may carry. Each costs roughly 250-1500 prompt tokens on the vision
+// model depending on resolution, and they are described in ONE call so the model can compare
+// them — so this bounds a single prefill rather than a number of round-trips.
+export const VISION_MAX_IMAGES = Number(env.VISION_MAX_IMAGES ?? "4");
+// Ceiling on the perception pass's reply. Long enough for a careful description of a
+// photograph; short enough that a model which starts narrating cannot fill the agent loop's
+// context with one image.
+export const VISION_MAX_TOKENS = Number(env.VISION_MAX_TOKENS ?? "700");
+// Longest edge, in pixels, of the copy sent to the model. THE most consequential number
+// here: a Qwen3-VL prompt grows with the image's pixel count, and a modern phone or a 4K
+// screenshot is far past the point of diminishing returns. Measured on this host with a
+// 3840x2160 photograph, one description cost:
+//
+//   full 3840px .... 81.3s
+//   1280px .........  6.7s   (904 prompt tokens)
+//   1024px .........  5.0s   (600 prompt tokens)
+//    768px .........  3.6s   (360 prompt tokens)
+//
+// The descriptions at 768 and 1280 were equally specific — the 768 one identified the lake
+// by name — so the resolution was buying prompt tokens rather than detail. 1024 is the
+// default because it leaves headroom for the one case that genuinely needs pixels, which is
+// reading small text in a screenshot. Raise it for that; do not raise it for photographs.
+// Images already smaller than this are sent untouched and never enlarged.
+export const VISION_MAX_EDGE = Number(env.VISION_MAX_EDGE ?? "1024");
 // Size each task and send it to the cheapest tier that can close it. The sizing is
 // regex-based and costs nothing; see src/dispatch.ts for why it is not a model call.
 export const AUTO_ROUTE = (env.AUTO_ROUTE ?? "true") !== "false";
@@ -630,6 +672,10 @@ export const POLICY_PATH = env.POLICY_PATH ?? path.join(BASE, "policy.json");
 export const GOALS_PATH = path.join(BASE, "goals.md");
 export const AGENTS_DIR = env.AGENTS_DIR ?? path.join(BASE, "agents");
 export const PROFILE_PATH = env.PROFILE_PATH ?? path.join(BASE, "profile.md");
+// Where uploaded images are kept. Files rather than BLOBs: the ledger is pruned on a
+// schedule and read by hand with sqlite3, and putting megabytes of photograph in it would
+// make both worse. The database holds the metadata and the path; this holds the bytes.
+export const ATTACHMENTS_DIR = env.ATTACHMENTS_DIR ?? path.join(BASE, "attachments");
 
 /** Re-read the policy from disk every time it is needed, so edits take effect live. */
 export const loadPolicy = (): Policy => {

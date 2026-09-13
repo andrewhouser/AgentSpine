@@ -6,6 +6,22 @@
  *   fast      a small always-resident local model. Trivial questions, lookups, sign-off.
  *   standard  the workhorse local model. Everything with tools in it. The default.
  *   deep      the cloud model. The rare call that genuinely needs judgment.
+ *   vision    a local model that can SEE. Reached only by an input the others cannot read.
+ *
+ * ## `vision` is not a rung on the same ladder
+ *
+ * The other three are ordered by capability and price, and routing between them trades an
+ * answer's quality against its latency. `vision` is not on that scale at all: it is reached
+ * because of what the INPUT is, never because of how hard the task looks. An image cannot be
+ * answered better or worse by the standard tier — `mlx_lm.server` refuses a non-text content
+ * part with `Only 'text' content type is supported`, and the standard model's weights carry
+ * no vision tower to use even if it accepted one.
+ *
+ * That is why nothing here ever *sizes* a task to `vision`, and why `resolveTier` will not
+ * silently fall back to it or away from it. Attachments decide it, in `runner.ts`, before
+ * sizing happens — and a turn carrying an image gets a perception pass on this endpoint
+ * whose text output is handed to whichever tier then does the actual work. See src/vision.ts
+ * for why the seeing model is not also the one holding the tools.
  *
  * ## Why a tier is an ENDPOINT and not just a model name
  *
@@ -46,11 +62,14 @@ import {
   FAST_MODEL,
   LOCAL_BASE_URL,
   LOCAL_MODEL,
+  VISION_BASE_URL,
+  VISION_ENABLED,
+  VISION_MODEL,
 } from "./config.ts";
 
-export type Tier = "deep" | "fast" | "standard";
+export type Tier = "deep" | "fast" | "standard" | "vision";
 
-export const TIERS: Tier[] = ["fast", "standard", "deep"];
+export const TIERS: Tier[] = ["fast", "standard", "deep", "vision"];
 
 export interface TierConfig {
   apiKey: string;
@@ -83,7 +102,17 @@ const deep: TierConfig = CLOUD_ENABLED
   ? { apiKey: CLOUD_API_KEY, baseUrl: CLOUD_BASE_URL, configured: true, model: CLOUD_MODEL, tier: "deep" }
   : { ...standard, tier: "deep", configured: false };
 
-const BY_TIER: Record<Tier, TierConfig> = { deep, fast, standard };
+/**
+ * Unconfigured, this one keeps `standard`'s address like the others — but nothing reads it
+ * in that state, because every caller checks `visionConfigured()` first and says so out loud
+ * when the answer is no. The shape is kept uniform so `describeTiers` and the boot banner
+ * need no special case.
+ */
+const vision: TierConfig = VISION_ENABLED
+  ? { apiKey: "not-needed", baseUrl: VISION_BASE_URL, configured: true, model: VISION_MODEL, tier: "vision" }
+  : { ...standard, tier: "vision", configured: false };
+
+const BY_TIER: Record<Tier, TierConfig> = { deep, fast, standard, vision };
 
 export const tierConfig = (tier: Tier): TierConfig => BY_TIER[tier] ?? standard;
 
@@ -107,14 +136,24 @@ export const tierIsDistinct = (tier: Tier): boolean => {
 export const resolveTier = (tier: Tier, sensitivity: string): TierConfig => {
   if (sensitivity === "private" && tier === "deep") return standard;
   const resolved = tierConfig(tier);
+  // `vision` is the one tier with no substitute. Quietly resolving it to `standard` would
+  // send an image to a server that cannot read one, and the failure would arrive as an HTTP
+  // 400 about content parts rather than as "no vision endpoint is configured". So it is
+  // returned as-is and the caller — which checked `visionConfigured()` before getting here —
+  // owns the honest message.
+  if (tier === "vision") return resolved;
   // An unconfigured tier silently becomes standard — see "Degrading safely" above.
   return resolved.configured ? resolved : standard;
 };
+
+/** Whether an image can actually be looked at right now. */
+export const visionConfigured = (): boolean => vision.configured;
 
 /** One-line summary for the boot banner, so the running tiers are never a guess. */
 export const describeTiers = (): string =>
   TIERS.map((t) => {
     const c = tierConfig(t);
-    if (!c.configured) return `${t}=→standard`;
+    // `vision` has no substitute, so "→standard" would be a lie about what happens next.
+    if (!c.configured) return `${t}=${t === "vision" ? "off" : "→standard"}`;
     return `${t}=${c.model.replace(/^mlx-community\//, "").slice(0, 28)}`;
   }).join("  ");
