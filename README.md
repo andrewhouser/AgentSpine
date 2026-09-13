@@ -139,13 +139,20 @@ gitignored; the source is `web/`.
 
 ## Model tiers — and the measurement that shaped them
 
-Three tiers, each a **separate always-warm endpoint**:
+Four tiers, each a **separate always-warm endpoint**:
 
 | tier | what runs there | what it's for |
 |---|---|---|
 | `fast` | a small local model on its own port | `tracker` / `runner` / `inspector` units — reached by declaring it, never by auto-routing |
 | `standard` | your main local model | everything with tools in it — the default |
 | `deep` | the cloud model | the rare genuine judgment call |
+| `vision` | a local model that can see | reached by attaching an image, never by sizing a task |
+
+The first three are a ladder: they trade an answer's quality against its latency, and routing
+between them is a judgment about the work. **`vision` is not on that ladder.** It is reached
+because of what the *input* is — an image, which the other three cannot read at all — so it
+is decided by a boolean rather than a classifier, and it never competes with the others. See
+[Images](#images--attach-one-and-it-just-works).
 
 **A tier is an endpoint, not a model name, and that is the whole design.** `mlx_lm.server`
 holds one model resident, so asking one server for a different model swaps it. Measured on
@@ -206,6 +213,84 @@ FAST_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit
 Leave `FAST_LLM_URL` empty and the fast tier silently resolves to standard — nothing
 breaks, and turning it on later is one variable, not a code change. `npm run dashboard`
 prints the live tiers on boot so what's running is never a guess.
+
+### Images — attach one and it just works
+
+Paste a screenshot into the composer, drop a photo on it, or press ⊕. Ask your question and
+send. Nothing is switched on, no mode is chosen, and no model is picked:
+
+> **you** *(photo of a plant)* Is this a weed or something I should keep?
+
+Behind that, an image on a turn routes itself. The two text servers cannot read one —
+`mlx_lm.server` refuses a non-text content part outright, and the standard tier's weights
+carry no vision tower — so a turn carrying an image gets a **perception pass** on a third
+pinned server running `mlx_vlm.server`, and what that model writes down becomes material for
+the ordinary agent loop.
+
+**The model that sees is not the model that answers.** The vision model is 4B. Handing it the
+whole turn — tool registry, profile, memories — is exactly the failure
+[`src/dispatch.ts`](src/dispatch.ts) documents at length, where a 3B given an open-ended turn
+invented tool arguments and described its own context block instead of answering from it. So
+it does one narrow thing: it looks, and it writes down what it sees, in observations rather
+than conclusions ("leaves in threes, glossy, reddish at the edges" — not "that's poison
+ivy"). The standard tier then answers with everything it normally has, including the web and
+what it remembers about your garden.
+
+The routing rule is a boolean about the input, not a judgment about the task, which is why it
+costs nothing and cannot misfire the way a regex over a sentence can. It is also the only
+tier with no substitute: with no vision endpoint configured an attachment is **refused with a
+plain message**, never quietly dropped, because answering a question about a picture nobody
+looked at is worse than not answering.
+
+What it does in the thread:
+
+- **Follow-ups work.** Turn two carries no image, but the assistant still knows one is there
+  and can call `look_at_image` to ask the picture a *new* question. The first description is
+  cached, so remembering costs nothing and only a genuinely new question costs a model call.
+- **You can see that it looked.** A quiet line under the message says `Read the image · 3.8s`.
+  The switching is automatic so that you never manage it — not so that it is hidden. Same
+  bargain as the tier badge.
+- **HEIC is converted on the way in**, because phone photographs are HEIC and Pillow cannot
+  read it. You will not notice this unless it fails.
+- **The description is UNTRUSTED.** A vision model reads text in pictures, which makes an
+  image an input channel for instructions written by whoever made it. The notes come back
+  wrapped and injection-scanned like a fetched web page, and the looking model is told that
+  text in an image is content to transcribe and never an instruction to obey.
+- **Deleting the thread deletes the photographs** from disk, not just the rows.
+
+Turning it on is one server and two variables — see
+[Setting up the vision server](#setting-up-the-vision-server) below.
+
+### Setting up the vision server
+
+> Full setup, the resolution measurements, and the memory behaviour are in
+> [MODELS.md](MODELS.md#seeing--the-vision-server-on-8082).
+
+`mlx-vlm` is a different package from `mlx-lm` with a different dependency set, so it gets
+its **own venv** — installing it must never disturb the two servers everything else depends
+on:
+
+```bash
+python3.12 -m venv ~/.venvs/mlx-vlm && ~/.venvs/mlx-vlm/bin/pip install mlx-vlm
+```
+
+```bash
+~/.venvs/mlx-vlm/bin/python -m mlx_vlm.server --model mlx-community/Qwen3-VL-4B-Instruct-4bit --port 8082 --host 0.0.0.0
+```
+
+```bash
+# .env
+VISION_LLM_URL=http://192.168.0.150:8082/v1
+VISION_MODEL=mlx-community/Qwen3-VL-4B-Instruct-4bit
+```
+
+The model is ~2.9GB resident and sits beside the other two without pushing them out — `:8080`
+stayed at 0.35s between image turns throughout testing. A warm image call is **3.8s**.
+
+The one number worth knowing about is `VISION_MAX_EDGE` (default 1024). Images are downscaled
+before they are sent, because a Qwen3-VL prompt grows with pixel count: the same 3840×2160
+photograph took **81.3s** at full size and **5.0s** at 1024px, with no loss of detail in the
+description. Raise it only if you need to read small text in screenshots.
 
 ### Why the big MoE is the *default* and not the "slow" one
 
@@ -699,6 +784,8 @@ src/                 the agent — no build step, two runtime dependencies
   config.ts        env + live policy loader
   llm.ts           raw openai SDK: local + cloud clients
   router.ts        local-first routing; sensitivity="private" never leaves the box
+  vision.ts        the perception pass — the only tier that can see, pinned local
+  attachments.ts   uploaded images: sniffed not believed, HEIC converted, downscaled
   events.ts        run event bus — what lets the UI watch a cycle instead of awaiting it
   broker.ts    ★   the two-gate capability broker
   audit.ts         injection scanner + UNTRUSTED tagging (salvaged from v1)
@@ -719,6 +806,7 @@ src/                 the agent — no build step, two runtime dependencies
     browser.ts     headless-by-default Chrome; risky clicks/submits are queued
     read-file.ts   read_file / list_dir, confined to policy.fs.readableDirs
     read-more.ts   read_more — page through the tail of a result that was clipped
+    look-at-image.ts look_at_image — ask a new question of a picture already in the thread
     gmail.ts       gmail_search — read-only headers+snippets, UNTRUSTED-tagged
     calendar.ts    calendar_upcoming — read-only events
     memory.ts      memory_save / memory_recall

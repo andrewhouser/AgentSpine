@@ -13,16 +13,21 @@ Everything here runs on the **model host**, not on the machine running AgentSpin
 
 ## What to run
 
-Two `mlx_lm.server` processes, each pinned to one model. Two, not one, because a single
-server holds one model resident and swapping costs more than a smaller model saves — see
-"Why two servers" below.
+Three pinned servers, each holding one model. Pinned, not shared, because a single server
+holds one model resident and swapping costs more than a smaller model saves — see "Why two
+servers" below.
 
 | port | model | size | role |
 |---|---|---|---|
 | 8080 | `mlx-community/Qwen3.6-35B-A3B-4bit-DWQ` | ~21GB | `standard` — the default |
 | 8081 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | ~2GB | `fast` — lookups, `tracker`/`runner`/`inspector` |
+| 8082 | `mlx-community/Qwen3-VL-4B-Instruct-4bit` | ~2.9GB | `vision` — reads images attached to a message |
 
-~23GB of 32GB, against an `iogpu.wired_limit_mb` of **28672** — set at boot by
+The first two run `mlx_lm.server`; the third runs **`mlx_vlm.server`**, which is a different
+package in a different venv. See "Seeing" below for why it is a separate server rather than
+another model name, and why it is not a rung on the same ladder as the other two.
+
+~26GB of 32GB, against an `iogpu.wired_limit_mb` of **28672** — set at boot by
 `/Library/LaunchDaemons/com.agentspine.wiredlimit.plist`, the only daemon setting it as of
 2026-09-12.
 
@@ -162,6 +167,112 @@ Confirm both are answering:
 ```bash
 curl -s http://192.168.0.150:8080/v1/models && curl -s http://192.168.0.150:8081/v1/models
 ```
+
+## Seeing — the `vision` server on 8082
+
+### Why it is a separate server and not a `model` field
+
+Neither text server can read an image, and this is not a configuration problem to work around:
+
+```
+$ curl :8080/v1/chat/completions -d '{"messages":[{"role":"user","content":[{"type":"image_url",...}]}]}'
+{"error": "Only 'text' content type is supported."}
+```
+
+`mlx_lm.server` refuses any non-text content part outright. And the standard tier could not
+use one if it accepted it: the `Qwen3.6-35B-A3B-4bit-DWQ` conversion in the cache carries
+**no vision tower**. Its `config.json` mentions `image_token_id` and `vision_start_token_id`,
+which is misleading — the weight index has 1757 tensors and not one of them is under a
+`visual.*` prefix. Every key is under `language_model.*`.
+
+So images need a model that has eyes, in a server that speaks to it.
+
+### Setting it up
+
+`mlx-vlm` pulls a different dependency set than `mlx-lm` (a newer `transformers`, among
+others). It gets its **own venv** so that installing it can never disturb the two servers the
+whole system depends on — the same reasoning as the MFLUX venv:
+
+```bash
+python3.12 -m venv ~/.venvs/mlx-vlm
+~/.venvs/mlx-vlm/bin/pip install mlx-vlm
+```
+
+```bash
+HF_HUB_DISABLE_XET=1 ~/.venvs/mlx-vlm/bin/python -c \
+  "from huggingface_hub import snapshot_download; snapshot_download('mlx-community/Qwen3-VL-4B-Instruct-4bit')"
+```
+
+> `HF_HUB_DISABLE_XET=1` is not optional here. The default Xet CDN path failed partway
+> through this download with a middleware error; the plain path worked first time.
+
+```bash
+~/.venvs/mlx-vlm/bin/python -m mlx_vlm.server \
+  --model mlx-community/Qwen3-VL-4B-Instruct-4bit --port 8082 --host 0.0.0.0
+```
+
+Then, on the app host:
+
+```bash
+# .env
+VISION_LLM_URL=http://192.168.0.150:8082/v1
+VISION_MODEL=mlx-community/Qwen3-VL-4B-Instruct-4bit
+```
+
+Leave `VISION_LLM_URL` empty and an attached image is **refused with a plain message**
+rather than silently dropped. This differs from `FAST_LLM_URL` on purpose: a missing fast
+tier costs a slower answer, while a missing vision tier would mean answering a question about
+a picture nobody looked at.
+
+`chat_template_kwargs` is accepted and ignored by this server, so the `enable_thinking:false`
+that `llm.ts` sends to every local endpoint needs no special case.
+
+### Resolution is the whole performance story
+
+A Qwen3-VL prompt grows with the image's pixel count. Measured on this host, one 3840x2160
+photograph, same question:
+
+| longest edge | prompt tokens | wall time |
+|---|---|---|
+| 3840 (untouched) | — | **81.3s** |
+| 1280 | 904 | 6.7s |
+| 1024 | 600 | 5.0s |
+| 768 | 360 | 3.6s |
+
+The descriptions did not get vaguer as the image got smaller — the 768px pass named the lake.
+So AgentSpine downscales to `VISION_MAX_EDGE` (default **1024**) with `sips` before sending,
+caches the downscaled copy beside the original, and keeps the original for display. Without
+this the feature is unusable and looks like a slow model rather than an oversized input.
+
+Note that `sips -Z` **enlarges** an image that is already smaller than the target, so the
+dimensions are checked first; skipping that check quietly quadruples the prompt tokens of
+every small screenshot.
+
+### Memory, and the fault-in
+
+2.9GB resident, 3.4GB peak — it fits beside the other two. Measured behaviour with all three
+up:
+
+| | |
+|---|---|
+| warm vision call (1024px) | 3.8s, stable across calls |
+| first call after a long idle | up to 19s |
+| :8080 between vision calls | 0.35s — unchanged |
+| swap growth across a session of image turns | none |
+
+The first vision call after the server has sat idle pays a fault-in, because MLX allocations
+are pageable and the 35B next door is 21GB. It is the same effect [IMAGE_GENERATION.md]
+documents for MFLUX, but far smaller — 19s against 64s — because this model is 2.9GB rather
+than a whole pipeline. Critically, it does **not** push the 35B out: :8080 answered in 0.35s
+between image turns throughout.
+
+### HEIC
+
+Phone photographs are HEIC, and Pillow — which `mlx_vlm` decodes with — cannot read it
+without `pillow-heif`. AgentSpine converts on upload with `sips` (~180ms), which macOS
+already ships, so nothing downstream ever sees a HEIC. A host without `sips` refuses the
+upload by name instead of failing inside the model server.
+
 
 ## Models to remove
 
