@@ -52,6 +52,15 @@
  * never "3B is bad"; it was handing one an open-ended turn with the whole tool registry and
  * the user's profile in context, which no declared-tier caller does.
  *
+ * ## Images are not sized here at all
+ *
+ * A turn carrying an image is switched to the `vision` endpoint before this function is ever
+ * called — in `runner.ts`, from a boolean about the attachment list. That is deliberately not
+ * a sizing decision: the other tiers cannot read an image at any price, so there is nothing
+ * to trade off and nothing for a heuristic to get wrong. By the time a task reaches `sizeTask`
+ * the looking has already happened and what remains is ordinary text work, which is why
+ * nothing below mentions images and why `standard` is still the right floor for them.
+ *
  * ## Why a misroute is cheap
  *
  * Every tier runs the same agent loop through the same broker against the same

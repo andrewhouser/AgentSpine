@@ -35,7 +35,8 @@ export type RunEventType =
   | "subagent_start"
   | "tier"
   | "tool_call"
-  | "tool_result";
+  | "tool_result"
+  | "vision";
 
 export interface RunEvent {
   /** Monotonic within a run. Lets a reconnecting client resume from where it stopped. */

@@ -47,6 +47,7 @@ import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
+import { look, NoVisionError, priorImagesContext } from "./vision.ts";
 import { setFrame } from "./tools/subagent.ts";
 import { notify } from "./notify.ts";
 import * as store from "./memory/store.ts";
@@ -65,6 +66,14 @@ export interface RunResult {
 }
 
 export interface RunOpts {
+  /**
+   * Uploads the user attached to this message, by id.
+   *
+   * Claimed by `bindAttachments` once the run row exists, which is also where an id that
+   * belongs to another thread — or that was already used — is dropped. So what arrives here
+   * is a request, and what the run actually carries is whatever the ledger agreed to.
+   */
+  attachmentIds?: number[];
   /** Thread this run belongs to. Null for schedules, watchers, and the `do` CLI. */
   conversationId?: number | null;
   kind?: string; // "do" | "chat" | "heartbeat" | "schedule"
@@ -254,7 +263,15 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   // Created BEFORE the queue, so the caller gets an id it can stream against immediately
   // rather than after the model frees up. Sits in 'queued' until the queue reaches it.
   const runId = store.startRun({ conversationId, kind, scheduleId: opts.scheduleId ?? null, task });
-  publish(runId, { conversationId, kind, task, type: "run_start" });
+
+  // Claim the uploads this message was sent with, before anything is queued, so a browser
+  // that reloads the thread a second later already sees the images under the turn. The
+  // ledger decides which ids are actually taken — see RunOpts.attachmentIds.
+  const attachmentIds = opts.attachmentIds?.length
+    ? store.bindAttachments(opts.attachmentIds, runId, conversationId)
+    : [];
+
+  publish(runId, { attachments: attachmentIds.length, conversationId, kind, task, type: "run_start" });
 
   // Agent cycles are serialized, so this run may genuinely be waiting on a scheduled job.
   // Saying so beats a spinner that looks identical to a hang.
@@ -274,6 +291,40 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     // a project row (writable through the API) to influence the security boundary at all.
     const policy = project ? narrowPolicy(basePolicy, projectOverlay(project)) : basePolicy;
 
+    /**
+     * Look at anything attached, before the turn is sized or run.
+     *
+     * This is the whole of the automatic switching. There is no classifier and no mode: a
+     * turn either carries an image or it does not, and one that does gets a pass on the
+     * vision endpoint whose notes become material for the ordinary loop. See src/vision.ts
+     * for why the model that sees is not the model that then acts.
+     *
+     * Inside the queue for the same reason sizing is — it is a model call, and firing it
+     * while another cycle is mid-turn would put two requests on a host that serves one at a
+     * time. It is also why the "looking" event lands after the queue_wait clears.
+     */
+    let seen = "";
+    if (attachmentIds.length) {
+      const rows = store.attachmentsForRun(runId);
+      publish(runId, { count: rows.length, type: "vision" });
+      try {
+        const result = await look(rows, task);
+        seen = result.knowledge;
+        publish(runId, { count: rows.length, elapsedMs: result.elapsedMs, model: result.model, type: "vision" });
+      } catch (err) {
+        const why = err instanceof NoVisionError ? err.message : `the vision endpoint failed: ${err instanceof Error ? err.message : String(err)}`;
+        console.warn(`[vision] run ${runId}: ${why}`);
+        publish(runId, { count: rows.length, error: why, type: "vision" });
+        // The turn continues, but it must not answer as though it had seen anything. Saying
+        // so in the material is what makes the assistant tell the user the image could not be
+        // read, instead of confabulating a description or quietly ignoring the attachment.
+        seen =
+          `[SYSTEM NOTE] The person attached ${rows.length === 1 ? "an image" : `${rows.length} images`} to this ` +
+          `message, but it could not be looked at: ${why} Tell them this plainly and answer only ` +
+          `what you can without seeing it. Do not guess at what the image showed.`;
+      }
+    }
+
     // Size the task before doing it. Deliberately inside the queue rather than at submit
     // time: the classifier is itself a model call, and firing it while another cycle holds
     // the model would put two requests on a server that serves one at a time.
@@ -288,7 +339,27 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       const instructions = instructionsFor(project.id);
       if (instructions) context.unshift(instructions);
     }
-    const knowledge = project ? await knowledgeFor(project.id, task) : "";
+    const projectKnowledge = project ? await knowledgeFor(project.id, task) : "";
+    // Both are UNTRUSTED-tagged blocks bound for the same slot — project excerpts are file
+    // content, the description is what a model saw in a picture — so they are simply
+    // concatenated rather than one winning. See AgentOpts.knowledge.
+    const knowledge = [projectKnowledge, seen].filter(Boolean).join("\n\n");
+
+    /**
+     * Images from EARLIER turns, as a standing note.
+     *
+     * Not the same thing as `seen` above: that is this turn's pass over pixels, while this
+     * is a cached reminder that a photograph was shared three turns ago and roughly what it
+     * showed. Without it a follow-up question about an image would reach a model with no
+     * idea one ever existed, because the history shaper compacts a turn to what was asked and
+     * what was concluded and has no notion of an attachment.
+     */
+    const conversationHasImages =
+      conversationId != null && store.attachmentsForConversation(conversationId).length > 0;
+    if (conversationId != null && !opts.noMemory) {
+      const earlier = priorImagesContext(conversationId, runId);
+      if (earlier) context.push(earlier);
+    }
     const shaped = conversationId != null ? buildHistory(conversationId, task) : { anchor: [], background: "" };
     // The background block is a digest of the user's own conversation, so it joins the
     // trusted standing context; only the anchor turn replays as actual messages.
@@ -307,6 +378,10 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         conversational: kind === "chat",
         context,
         history,
+        // Only a thread that actually holds an image is shown look_at_image — see
+        // settingTools in agent.ts for why an always-listed tool with nothing to act on is
+        // worse than no tool.
+        imagesAvailable: conversationHasImages || attachmentIds.length > 0,
         knowledge,
         tier: sizing.tier,
       });
