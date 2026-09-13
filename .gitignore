@@ -16,6 +16,10 @@ data/
 audit/
 # Approved drafts — unsent mail and event proposals, i.e. your correspondence.
 drafts/
+# Images you attached to a message. A photograph is of your garden, your desk, your
+# paperwork — the same reasoning as the audio above, and it does not belong in a repo
+# whatever it was useful for. Deleting a conversation deletes its images from here too.
+attachments/
 # Never commit credentials that were left in this directory.
 client_secret_*.json
 google-token.json

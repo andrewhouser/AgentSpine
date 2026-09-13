@@ -85,6 +85,19 @@ db.exec(`
     last_run TEXT,
     next_run TEXT
   );
+  CREATE TABLE IF NOT EXISTS attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created TEXT NOT NULL,
+    conversation_id INTEGER,
+    run_id INTEGER,
+    kind TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    name TEXT,
+    bytes INTEGER NOT NULL,
+    path TEXT NOT NULL,
+    description TEXT,
+    described_at TEXT
+  );
   CREATE TABLE IF NOT EXISTS stash (
     ref TEXT PRIMARY KEY,
     run_id INTEGER NOT NULL,
@@ -503,6 +516,113 @@ export const countToolCallsSince = (sinceIso: string, tool: string): number =>
       .prepare(`SELECT COUNT(*) AS n FROM actions WHERE ts >= ? AND tool = ? AND decision IN ${BUDGETED}`)
       .get(sinceIso, tool) as { n: number }
   ).n;
+
+// --- attachments (images a turn was sent with) ---
+/**
+ * An uploaded file and what became of it. The bytes live on disk under
+ * `ATTACHMENTS_DIR`; this row holds the metadata, the path, and — once the perception pass
+ * has run — what the vision model made of it.
+ *
+ * The description is cached deliberately. A thread's later turns need to know an image was
+ * here and roughly what it showed, and re-running a 4B vision model on every subsequent turn
+ * to re-derive a description nobody asked to refresh would be a model call spent on a fact
+ * already known. When a later turn needs something the description does not cover, the
+ * `look_at_image` tool asks a NEW question of the same image rather than replaying this one.
+ */
+export interface AttachmentRow {
+  bytes: number;
+  conversation_id: null | number;
+  created: string;
+  described_at: null | string;
+  description: null | string;
+  id: number;
+  kind: string;
+  mime: string;
+  name: null | string;
+  path: string;
+  run_id: null | number;
+}
+
+export interface AddAttachmentOpts {
+  bytes: number;
+  conversationId: number | null;
+  kind: string;
+  mime: string;
+  name: string | null;
+  path: string;
+}
+
+/**
+ * Record an upload. Created with no `run_id`: the browser uploads while the user is still
+ * typing, and the run it belongs to does not exist until they press send. `bindAttachments`
+ * claims them at that point.
+ */
+export const addAttachment = (opts: AddAttachmentOpts): number => {
+  const r = db
+    .prepare(
+      "INSERT INTO attachments (created, conversation_id, run_id, kind, mime, name, bytes, path) " +
+        "VALUES (?,?,NULL,?,?,?,?,?)",
+    )
+    .run(now(), opts.conversationId, opts.kind, opts.mime, opts.name, opts.bytes, opts.path);
+  return Number(r.lastInsertRowid);
+};
+
+export const getAttachment = (id: number): AttachmentRow | undefined =>
+  db.prepare("SELECT * FROM attachments WHERE id = ?").get(id) as unknown as AttachmentRow | undefined;
+
+export const attachmentsForRun = (runId: number): AttachmentRow[] =>
+  db.prepare("SELECT * FROM attachments WHERE run_id = ? ORDER BY id").all(runId) as unknown as AttachmentRow[];
+
+/**
+ * Images seen anywhere in a thread, newest last. Used to give a follow-up turn ("is the one
+ * on the left the same plant?") the context that an image exists at all, without re-sending
+ * pixels to a model that already described them.
+ */
+export const attachmentsForConversation = (conversationId: number, limit = 12): AttachmentRow[] =>
+  db
+    .prepare("SELECT * FROM attachments WHERE conversation_id = ? AND run_id IS NOT NULL ORDER BY id DESC LIMIT ?")
+    .all(conversationId, limit)
+    .reverse() as unknown as AttachmentRow[];
+
+/**
+ * Attach uploads to the run that is about to use them.
+ *
+ * Binds only rows that are still unclaimed AND belong to this conversation, and returns the
+ * ids it actually took. Both halves matter: an id replayed from another thread's upload
+ * cannot be pulled into this one, and an id sent twice cannot re-attach an image to a second
+ * run. The caller uses the returned list rather than the one it was given, so a rejected id
+ * is simply absent instead of becoming a file read that fails later.
+ */
+export const bindAttachments = (ids: number[], runId: number, conversationId: number | null): number[] => {
+  const stmt = db.prepare(
+    "UPDATE attachments SET run_id = ? WHERE id = ? AND run_id IS NULL AND conversation_id IS ?",
+  );
+  const bound: number[] = [];
+  for (const id of ids) {
+    const r = stmt.run(runId, id, conversationId);
+    if (Number(r.changes) > 0) bound.push(id);
+  }
+  return bound;
+};
+
+/** Cache what the vision model saw, so later turns need not re-derive it. */
+export const setAttachmentDescription = (id: number, description: string): void => {
+  db.prepare("UPDATE attachments SET description = ?, described_at = ? WHERE id = ?").run(description, now(), id);
+};
+
+/**
+ * Uploads that were never sent — the user picked a file, changed their mind, and closed the
+ * tab. Swept on the same schedule as the ledger; returns the rows so the caller can unlink
+ * the files too.
+ */
+export const orphanedAttachments = (olderThanIso: string): AttachmentRow[] =>
+  db
+    .prepare("SELECT * FROM attachments WHERE run_id IS NULL AND created < ?")
+    .all(olderThanIso) as unknown as AttachmentRow[];
+
+export const deleteAttachment = (id: number): void => {
+  db.prepare("DELETE FROM attachments WHERE id = ?").run(id);
+};
 
 // --- stash (the withheld tail of an over-long tool result) ---
 /**
