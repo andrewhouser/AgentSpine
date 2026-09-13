@@ -6,18 +6,124 @@
 }
 
 .box {
-  align-items: flex-end;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   box-shadow: var(--shadow);
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 8px 8px 8px 14px;
 }
 
 .box:focus-within {
   border-color: var(--accent);
+}
+
+/* Dragging a file anywhere over the composer. The whole box is the target, not a separate
+   drop zone that only appears once you are already dragging. */
+.dropping {
+  background: var(--bg-inset);
+  border-color: var(--accent);
+}
+
+.inputRow {
+  align-items: flex-end;
+  display: flex;
+  gap: 8px;
+}
+
+/* --- staged images ------------------------------------------------------------------ */
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 6px 0 0;
+}
+
+.thumb {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  height: 56px;
+  overflow: hidden;
+  position: relative;
+  width: 56px;
+}
+
+.thumbFailed {
+  border-color: var(--danger-line);
+}
+
+.thumbImage {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+/* Still uploading: the image is already visible, so this is a veil over it rather than a
+   spinner in place of it. */
+.thumbBusy {
+  animation: thumb-pulse 1.2s ease-in-out infinite;
+  background: var(--bg);
+  inset: 0;
+  opacity: 0.55;
+  position: absolute;
+}
+
+@keyframes thumb-pulse {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumbBusy {
+    animation: none;
+  }
+}
+
+.thumbError {
+  align-items: center;
+  background: var(--danger-soft);
+  color: var(--danger);
+  display: flex;
+  font-size: 1rem;
+  font-weight: 600;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+}
+
+.thumbRemove {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  height: 18px;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 18px;
+}
+
+.thumbRemove:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+/* The real file input. Kept in the DOM and out of sight — `display: none` would make it
+   unreachable for the click the attach button forwards to it. */
+.picker {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 0;
 }
 
 .input {
@@ -53,6 +159,23 @@
   background: var(--border-strong);
   color: var(--bg);
   cursor: default;
+}
+
+.attach {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text-dim);
+  flex: none;
+  font-size: 0.9375rem;
+  height: 32px;
+  line-height: 1;
+  width: 32px;
+}
+
+.attach:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .mic {

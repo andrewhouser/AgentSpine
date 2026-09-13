@@ -9,6 +9,7 @@
  */
 import type {
   Agent,
+  Attachment,
   AudioDevices,
   Confirmation,
   Conversation,
@@ -25,6 +26,7 @@ import type {
   Run,
   Schedule,
   Thread,
+  VisionStatus,
 } from "./types.ts";
 
 const TOKEN_KEY = "as_token";
@@ -60,6 +62,16 @@ export const runStreamUrl = (runId: number, after: number): string => {
   if (token) params.set("token", token);
   return `/api/runs/${runId}/stream?${params}`;
 };
+
+/**
+ * Where an image lives, for an `<img src>`.
+ *
+ * No token in the query string, unlike the two event streams above: this is a normal
+ * same-origin subresource, so the browser sends whatever cookies and headers it would send
+ * for any other request to this server, and putting the dashboard token in an `src` would
+ * write it into the page's DOM and every referrer for no gain.
+ */
+export const attachmentUrl = (id: number): string => `/api/attachments/${id}`;
 
 /**
  * The live meeting stream. Takes no meeting id on purpose — there is one microphone, so
@@ -181,8 +193,11 @@ export const api = {
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 
-  sendMessage: (conversationId: number, task: string) =>
-    post<{ conversationId: number; runId: number }>(`/api/conversations/${conversationId}/messages`, { task }),
+  sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
+    post<{ conversationId: number; runId: number }>(`/api/conversations/${conversationId}/messages`, {
+      attachmentIds,
+      task,
+    }),
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
@@ -212,4 +227,27 @@ export const api = {
 
   updateProject: (id: number, fields: { instructions?: string; name?: string }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
+
+  /**
+   * Send one image up and get its id back.
+   *
+   * Raw bytes as the body rather than multipart, matching `dictate` above: there is exactly
+   * one field, and the server hands the bytes straight to a sniffer. The filename rides in
+   * the query string because it is a label, not data — the server sanitises it and names the
+   * file on disk from a random id regardless.
+   *
+   * Uploading happens as soon as a file is chosen, not on send, so that attaching three
+   * photos and then writing a question does not end in a wait.
+   */
+  uploadAttachment: (conversationId: number, file: Blob, name?: string) => {
+    const params = new URLSearchParams({ conversationId: String(conversationId) });
+    if (name) params.set("name", name);
+    return request<Attachment>(`/api/attachments?${params}`, {
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      method: "POST",
+    });
+  },
+
+  visionStatus: () => request<VisionStatus>("/api/vision"),
 };

@@ -1,4 +1,4 @@
-import type { LiveToolCall } from "../../lib/types.ts";
+import type { Attachment, LiveToolCall, VisionPass } from "../../lib/types.ts";
 
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
@@ -7,9 +7,12 @@ import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
 import { TierBadge } from "../TierBadge/TierBadge.tsx";
 import { ToolTrace } from "../ToolTrace/ToolTrace.tsx";
 import { UserMessage } from "../UserMessage/UserMessage.tsx";
+import { VisionNote } from "../VisionNote/VisionNote.tsx";
 import styles from "./Turn.module.css";
 
 interface TurnProps {
+  /** Images sent with this turn. */
+  attachments?: Attachment[];
   confirmations: { id: number; summary: string; tool: string }[];
   /** Units this turn delegated to, live or persisted. */
   delegations?: { actions?: LiveToolCall[]; agent: string; status: null | string; summary: null | string; task: null | string; tier: null | string }[];
@@ -22,6 +25,8 @@ interface TurnProps {
   tier?: null | string;
   tierReason?: string;
   toolCalls: LiveToolCall[];
+  /** The perception pass, when this turn had an image on it. */
+  vision?: null | VisionPass;
   waitingBehind: number;
 }
 
@@ -36,6 +41,7 @@ interface TurnProps {
  * without making a twelve-step research turn twelve rows tall.
  */
 export const Turn = ({
+  attachments = [],
   confirmations,
   delegations = [],
   error,
@@ -47,10 +53,15 @@ export const Turn = ({
   tier,
   tierReason,
   toolCalls,
+  vision = null,
   waitingBehind,
 }: TurnProps) => (
   <article className={styles.turn}>
-    <UserMessage text={task} />
+    <UserMessage attachments={attachments} text={task} />
+
+    {/* Before the tool trace: the looking happens first, and it is what the rest of the
+        turn is reasoning from. */}
+    {vision && <VisionNote pass={vision} />}
 
     <ToolTrace calls={toolCalls} live={live && !summary && !error} />
 

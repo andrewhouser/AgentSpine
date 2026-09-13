@@ -14,6 +14,31 @@ export interface Action {
   ts: string;
 }
 
+/**
+ * An image sent with a turn. Metadata only — the bytes come from /api/attachments/:id, so a
+ * thread full of photographs is still one small JSON response and each image is cached once
+ * by the browser.
+ */
+export interface Attachment {
+  bytes: number;
+  /**
+   * Whether the vision pass actually read this image. Absent on an attachment echoed
+   * straight out of the composer, where the looking has not happened yet.
+   */
+  described?: boolean;
+  id: number;
+  mime: string;
+  name: null | string;
+}
+
+/** Mirrors the /api/vision route: whether images can be read at all, and by what. */
+export interface VisionStatus {
+  configured: boolean;
+  maxBytes: number;
+  maxImages: number;
+  model: null | string;
+}
+
 export interface Confirmation {
   args: string;
   id: number;
@@ -266,6 +291,8 @@ export interface ChildRun {
 
 export interface Turn {
   actions: Action[];
+  /** Images the user sent with this turn. */
+  attachments: Attachment[];
   /** Units this turn delegated to. */
   children: ChildRun[];
   /** Approvals this turn raised that are still open. */
@@ -292,8 +319,16 @@ export interface RunEvent {
   callId?: number;
   childRunId?: number;
   confirmationId?: number;
+  /** `vision`: how many images were looked at. */
+  count?: number;
   depth?: number;
+  /** `vision`: how long the perception pass took. */
+  elapsedMs?: number;
+  /** `vision`: why the images could not be read, when they could not be. */
+  error?: string;
   message?: string;
+  /** `vision`: which model did the looking. */
+  model?: string;
   output?: string;
   reason?: string;
   reversibility?: null | string;
@@ -318,7 +353,8 @@ export interface RunEvent {
     | "subagent_start"
     | "tier"
     | "tool_call"
-    | "tool_result";
+    | "tool_result"
+    | "vision";
 }
 
 /**
@@ -335,8 +371,23 @@ export interface LiveToolCall {
   tool: string;
 }
 
+/**
+ * The perception pass, as the thread shows it: started, then finished or failed.
+ *
+ * `elapsedMs` is null while it is still looking, which is the state worth rendering — the
+ * pass is several seconds on a photograph and a turn that showed nothing during it would
+ * look stalled.
+ */
+export interface VisionPass {
+  count: number;
+  elapsedMs: null | number;
+  error: null | string;
+}
+
 /** What a turn looks like while it is still running. */
 export interface LiveTurn {
+  /** Images the user attached, echoed locally so the turn renders them before it finishes. */
+  attachments: Attachment[];
   confirmations: { id: number; summary: string; tool: string }[];
   /** Units delegated to during this turn, as they start and finish. */
   delegations: { agent: string; childRunId: number; status: null | string; summary: null | string; tier: string }[];
@@ -349,5 +400,7 @@ export interface LiveTurn {
   tier: null | Tier;
   tierReason: string;
   toolCalls: LiveToolCall[];
+  /** Null until this turn turns out to have images on it. */
+  vision: null | VisionPass;
   waitingBehind: number;
 }

@@ -11,5 +11,35 @@
   max-width: 85%;
   overflow-wrap: anywhere;
   padding: 9px 14px;
+}
+
+/* --- attached images ----------------------------------------------------------------- */
+
+.images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Only pad between the pictures and the words when there are both. */
+.images:not(:last-child) {
+  margin-bottom: 8px;
+}
+
+.imageLink {
+  display: block;
+  line-height: 0;
+}
+
+/* Capped by height rather than width so a portrait phone photo and a landscape screenshot
+   sit on the same line without one of them towering over the thread. */
+.image {
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+.text {
   white-space: pre-wrap;
 }

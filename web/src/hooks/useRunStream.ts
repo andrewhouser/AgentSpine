@@ -12,11 +12,12 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-import type { BrokerStatus, LiveTurn, RunEvent } from "../lib/types.ts";
+import type { Attachment, BrokerStatus, LiveTurn, RunEvent } from "../lib/types.ts";
 
 import { runStreamUrl } from "../lib/api.ts";
 
-const blank = (runId: number, task: string): LiveTurn => ({
+const blank = (runId: number, task: string, attachments: Attachment[]): LiveTurn => ({
+  attachments,
   confirmations: [],
   delegations: [],
   error: null,
@@ -28,6 +29,7 @@ const blank = (runId: number, task: string): LiveTurn => ({
   tier: null,
   tierReason: "",
   toolCalls: [],
+  vision: null,
   waitingBehind: 0,
 });
 
@@ -88,6 +90,22 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
     case "step_start":
       return { ...turn, status: "running", step: event.step ?? turn.step, waitingBehind: 0 };
 
+    /**
+     * The perception pass. Published twice with the same shape — once when it starts, with
+     * no `elapsedMs`, and once when it is done — so the "looking…" state and the finished
+     * one fold through a single case. An `error` on the second means the images could not be
+     * read, which the turn shows rather than swallowing.
+     */
+    case "vision":
+      return {
+        ...turn,
+        vision: {
+          count: Number(event.count ?? 1),
+          elapsedMs: event.elapsedMs === undefined ? null : Number(event.elapsedMs),
+          error: event.error ?? null,
+        },
+      };
+
     case "tool_call":
       return {
         ...turn,
@@ -127,6 +145,8 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
 };
 
 export interface ActiveRun {
+  /** Echoed from the composer so the turn shows its images before the run finishes. */
+  attachments?: Attachment[];
   runId: number;
   task: string;
 }
@@ -153,7 +173,7 @@ export const useRunStream = (active: ActiveRun | null, onComplete: () => void): 
   const [trackedRun, setTrackedRun] = useState(active);
   if (trackedRun !== active) {
     setTrackedRun(active);
-    setTurn(active ? blank(active.runId, active.task) : null);
+    setTurn(active ? blank(active.runId, active.task, active.attachments ?? []) : null);
   }
 
   useEffect(() => {
