@@ -66,12 +66,20 @@ export const runStreamUrl = (runId: number, after: number): string => {
 /**
  * Where an image lives, for an `<img src>`.
  *
- * No token in the query string, unlike the two event streams above: this is a normal
- * same-origin subresource, so the browser sends whatever cookies and headers it would send
- * for any other request to this server, and putting the dashboard token in an `src` would
- * write it into the page's DOM and every referrer for no gain.
+ * Carries `?token=` for exactly the reason the two streams above do: the browser issues this
+ * request itself, so nothing can attach the `X-Dashboard-Token` header to it. Without the
+ * query parameter every image in a thread 401s the moment the dashboard is bound past
+ * localhost — which is precisely the deployment that requires a token in the first place.
+ *
+ * The token does end up in the DOM. That is a smaller exposure than it first appears, since
+ * it already lives in `localStorage` where any script on the page can read it, and this is
+ * the same-origin hop every other API call makes. It is still worth knowing about before
+ * copying an image URL out of the page and sending it to someone.
  */
-export const attachmentUrl = (id: number): string => `/api/attachments/${id}`;
+export const attachmentUrl = (id: number): string => {
+  const token = getToken();
+  return token ? `/api/attachments/${id}?token=${encodeURIComponent(token)}` : `/api/attachments/${id}`;
+};
 
 /**
  * The live meeting stream. Takes no meeting id on purpose — there is one microphone, so
