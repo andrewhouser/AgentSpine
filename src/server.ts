@@ -33,6 +33,13 @@ import { listDevices } from "./senses/listen.ts";
 import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
+import {
+  readAttachment,
+  removeAttachment,
+  storeImage,
+  sweepUnsentAttachments,
+  UnsupportedImageError,
+} from "./attachments.ts";
 import { runTask, startTask } from "./runner.ts";
 import {
   AUDIT_RETENTION_DAYS,
@@ -44,7 +51,7 @@ import {
   TRACE_RETENTION_DAYS,
   TRANSCRIPT_RETENTION_DAYS,
 } from "./config.ts";
-import { describeTiers } from "./tiers.ts";
+import { describeTiers, visionConfigured } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
 import { hasEnded, replay, subscribe } from "./events.ts";
 import type { RunEvent } from "./events.ts";
@@ -53,6 +60,7 @@ import { approveConfirmation, rejectConfirmation } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { DASHBOARD_PUBLIC_URL } from "./config.ts";
+import { VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
@@ -418,6 +426,20 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (m === "GET" && seg.length === 3) {
         const turns = store.runsForConversation(id).map((r: any) => ({
           actions: store.listActions(r.id),
+          // Images the user sent with this turn. Metadata only — the bytes come from
+          // /api/attachments/:id, so a thread of twenty photographs is still one small JSON
+          // response and the browser caches each image once.
+          attachments: store.attachmentsForRun(r.id).map((a) => ({
+            bytes: a.bytes,
+            // Whether the perception pass actually read this one. A reloaded thread has no
+            // event stream to replay, so without this it could only guess — and guessing
+            // "read" from the mere presence of an image would quietly claim the assistant
+            // looked at a picture that the vision endpoint was down for.
+            described: a.description !== null,
+            id: a.id,
+            mime: a.mime,
+            name: a.name,
+          })),
           // Units this turn delegated to, each with its own trace — rendered nested under
           // the turn rather than as separate rows in the thread.
           children: store.childRuns(r.id).map((c: any) => ({
@@ -462,6 +484,11 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
 
       if (m === "DELETE" && seg.length === 3) {
+        // The files too, not just the rows. An image is the most personal thing this system
+        // stores, and "I deleted that conversation" has to mean the photograph is gone from
+        // the disk as well — otherwise the attachments directory becomes a private archive
+        // of every thread the user thought they had removed.
+        for (const a of store.attachmentsForConversation(id, 1000)) removeAttachment(a);
         store.deleteConversation(id);
         return sendJson(res, 200, { ok: true });
       }
@@ -475,11 +502,17 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (m === "POST" && seg.length === 4 && seg[3] === "messages") {
         const b = await readBody(req);
         const task = String(b.task ?? "").trim();
-        if (!task) return sendJson(res, 400, { error: "task required" });
+        const attachmentIds = Array.isArray(b.attachmentIds)
+          ? b.attachmentIds.map(Number).filter((n: number) => Number.isInteger(n) && n > 0)
+          : [];
+        // A message may be an image with no words — "what is this?" is often the picture
+        // itself — so text is required only when nothing was attached.
+        if (!task && !attachmentIds.length) return sendJson(res, 400, { error: "task required" });
         // A thread pinned to a tier overrides the dispatcher for every turn in it — the
         // escape hatch for "I know this one is hard, use the good model".
         const pinned = store.getConversation(id)?.tier;
-        const { done, runId } = startTask(task, {
+        const { done, runId } = startTask(task || "What is this?", {
+          attachmentIds,
           conversationId: id,
           kind: "chat",
           tier: (pinned as Tier | undefined) ?? undefined,
@@ -489,6 +522,81 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         done.catch((e) => console.error(`[chat] run ${runId} failed: ${e instanceof Error ? e.message : e}`));
         return sendJson(res, 202, { conversationId: id, runId });
       }
+    }
+
+    /**
+     * /api/attachments — images sent with a message.
+     *
+     * Upload is its own route rather than part of the message body, for the same reason
+     * dictation's is: the bytes are binary and potentially megabytes, and JSON would mean
+     * base64 in a string with no ceiling. The browser uploads while the user is still
+     * typing, gets an id back, and sends that id with the message — so a photograph that
+     * takes a moment to travel does not hold up the composer.
+     *
+     * The upload is bound to a conversation at this point but to no run: the run does not
+     * exist until send is pressed, and an upload nobody sends is swept by `prune` below.
+     */
+    if (seg[1] === "attachments") {
+      // POST /api/attachments?conversationId=&name= — raw image bytes as the body.
+      if (m === "POST" && seg.length === 2) {
+        try {
+          const bytes = await readBinary(req, VISION_MAX_BYTES);
+          const raw = url.searchParams.get("conversationId");
+          const conversationId = raw ? Number(raw) : null;
+          // An upload naming a conversation that does not exist is refused rather than
+          // stored loose: every legitimate upload comes from an open thread, and a row with
+          // a dangling conversation id would never be swept by thread deletion.
+          if (conversationId != null && (!Number.isInteger(conversationId) || !store.getConversation(conversationId))) {
+            return sendJson(res, 404, { error: "no such conversation" });
+          }
+          const stored = await storeImage(bytes, { conversationId, name: url.searchParams.get("name") });
+          return sendJson(res, 200, stored);
+        } catch (err) {
+          if (err instanceof TooLargeError) return sendJson(res, 413, { error: (err as Error).message });
+          if (err instanceof UnsupportedImageError) return sendJson(res, 415, { error: err.message });
+          return sendJson(res, 400, { error: (err as Error).message });
+        }
+      }
+
+      /**
+       * GET /api/attachments/:id — the image itself, for the thread to render.
+       *
+       * Served with `nosniff` and a `default-src 'none'` policy. The sniffer in
+       * attachments.ts already refuses anything that is not one of four raster formats — SVG
+       * in particular never reaches disk, because an SVG is a document that can carry script
+       * — so these headers are the second lock rather than the first. The long cache is safe
+       * because the file is immutable: an id names one set of bytes forever.
+       */
+      if (m === "GET" && seg.length === 3) {
+        const row = store.getAttachment(Number(seg[2]));
+        if (!row) return sendJson(res, 404, { error: "no such attachment" });
+        const bytes = readAttachment(row);
+        if (!bytes) return sendJson(res, 410, { error: "the file for this attachment is gone" });
+        res.writeHead(200, {
+          "Cache-Control": "private, max-age=31536000, immutable",
+          "Content-Length": String(bytes.length),
+          "Content-Security-Policy": "default-src 'none'; sandbox",
+          "Content-Type": row.mime,
+          "X-Content-Type-Options": "nosniff",
+        });
+        res.end(bytes);
+        return;
+      }
+    }
+
+    /**
+     * /api/vision — whether images can be read at all, and by what.
+     *
+     * The composer asks this once on load so it can say "no vision endpoint configured"
+     * before someone attaches a photograph and waits for an answer, rather than after.
+     */
+    if (m === "GET" && seg[1] === "vision" && seg.length === 2) {
+      return sendJson(res, 200, {
+        configured: visionConfigured(),
+        maxBytes: VISION_MAX_BYTES,
+        maxImages: VISION_MAX_IMAGES,
+        model: visionConfigured() ? VISION_MODEL : null,
+      });
     }
 
     // /api/confirmations , approve, reject
@@ -898,6 +1006,10 @@ const prune = async (): Promise<void> => {
     // had no ceiling at all until 2026-07-30, which is how 20 copies of one sentence came to
     // occupy every recall slot. `remember` now refuses duplicates, so this is the backstop
     // for what predates it and for near-misses that clear the similarity threshold.
+    // Uploads nobody ever sent: picked a file, changed their mind, closed the tab.
+    const unsent = sweepUnsentAttachments();
+    if (unsent) console.log(`pruned: ${unsent} unsent attachment(s)`);
+
     const collapsed = dedupeMemories();
     if (collapsed) console.log(`pruned: ${collapsed} duplicate memories`);
     if (NOTE_MEMORY_MAX > 0) {
@@ -955,6 +1067,13 @@ http.createServer(handle).listen(PORT, HOST, () => {
   console.log(fs.existsSync(PUBLIC_DIR) ? "  serving static frontend from ./public" : "  API only (no ./public) — point your frontend here");
   console.log(`  scheduler: checking due jobs every ${SCHEDULER_TICK_MS / 1000}s`);
   console.log(`  tiers: ${describeTiers()}`);
+  console.log(
+    `  vision: ${
+      visionConfigured()
+        ? `${VISION_MODEL.replace(/^mlx-community\//, "")} — images attached to a message are read automatically`
+        : "off (set VISION_LLM_URL to accept images)"
+    }`,
+  );
   console.log(
     `  push: ${
       remoteApprovalConfigured()
