@@ -42,9 +42,20 @@ const settingTools = (
   tools: Record<string, Tool>,
   conversational: boolean,
   goal: string,
+  imagesAvailable = false,
 ): Record<string, Tool> => {
-  if (!conversational || !tools.notify || askedForPush(goal)) return tools;
-  const { notify: _notify, ...rest } = tools;
+  let out = tools;
+  // `look_at_image` is listed only when this conversation actually holds an image. The same
+  // reasoning as `notify` above, arrived at from the other direction: a tool the model can
+  // see is a tool it will reach for, and offering one whose every invocation must answer
+  // "there is no image #3 in this conversation" teaches it to invent ids. A thread with a
+  // photograph in it gets the tool; a thread without one never hears of it.
+  if (!imagesAvailable && out.look_at_image) {
+    const { look_at_image: _look, ...rest } = out;
+    out = rest;
+  }
+  if (!conversational || !out.notify || askedForPush(goal)) return out;
+  const { notify: _notify, ...rest } = out;
   return rest;
 };
 
@@ -258,6 +269,14 @@ export interface AgentOpts {
    * something you downloaded. So it arrives UNTRUSTED-tagged and enters as a USER message.
    */
   knowledge?: string;
+  /**
+   * Whether this conversation holds an image the `look_at_image` tool could go back to.
+   *
+   * Set by `runner.ts` from the ledger rather than inferred here, because the loop has no
+   * idea what a conversation contains. False everywhere else, which is why a schedule, a
+   * watcher and the CLI never carry the tool.
+   */
+  imagesAvailable?: boolean;
   /** Step cap for this loop. Subagents get a tighter one than the top-level run. */
   maxSteps?: number;
   /**
@@ -386,7 +405,7 @@ export const runAgent = async (
   opts: AgentOpts = {},
 ): Promise<AgentResult> => {
   const conversational = opts.conversational ?? false;
-  const tools = settingTools(visibleTools(opts.tools), conversational, goal);
+  const tools = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
   const tier = opts.tier ?? "standard";
 
   const messages: Msg[] = [
