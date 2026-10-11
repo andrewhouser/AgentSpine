@@ -27,7 +27,8 @@ process.env.ATTACHMENTS_DIR = path.join(scratch, "attachments");
 // assertions are meaningful, while any accidental call fails fast instead of hanging.
 process.env.VISION_LLM_URL = "http://127.0.0.1:9/v1";
 
-const { safeName, sniffImage, storeImage, UnsupportedImageError } = await import("../src/attachments.ts");
+const { safeName, sniffImage, storeImage, sweepOrphanedAttachments, UnsupportedImageError } =
+  await import("../src/attachments.ts");
 const store = await import("../src/memory/store.ts");
 const { resolveTier, tierConfig, visionConfigured } = await import("../src/tiers.ts");
 const { priorImagesContext } = await import("../src/vision.ts");
@@ -149,6 +150,23 @@ check("the cached description is offered", context.includes("three leaflets"), t
 check("with the id the tool needs", context.includes(`image #${inA.id}`), true);
 check("and it is framed as an observation", context.includes("observations rather than"), true);
 check("the turn that is running is excluded from its own history", priorImagesContext(threadA, runInA), "");
+
+console.log("\nAN IMAGE DOES NOT OUTLIVE THE RUN THAT CARRIED IT");
+// The retention window is a promise about how long this system keeps what it saw. pruneLedger
+// removes a run, its trace and its audit rows; until the sweep existed the photograph stayed
+// on disk forever with a run id pointing at nothing.
+const keptFile = store.getAttachment(inA.id).path;
+check("the file is on disk while its run exists", fs.existsSync(keptFile), true);
+check("nothing is swept while the run is there", sweepOrphanedAttachments(), 0);
+
+store.rawDb.prepare("DELETE FROM runs WHERE id = ?").run(runInA);
+check("once the run is pruned the image is orphaned", store.attachmentsWithMissingRun().length, 1);
+check("and the sweep removes it", sweepOrphanedAttachments(), 1);
+check("the row is gone", store.getAttachment(inA.id), undefined);
+check("and so is the file", fs.existsSync(keptFile), false);
+// The other thread's unsent upload has no run at all and must NOT be caught by this sweep —
+// that one belongs to the unsent sweep, which is time-based.
+check("an unsent upload is not collateral", store.getAttachment(inB.id) !== undefined, true);
 
 console.log("\nTHE VISION TIER HAS NO SUBSTITUTE, SO IT NEVER SILENTLY BECOMES ONE");
 check("it reports as configured", visionConfigured(), true);

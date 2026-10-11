@@ -290,6 +290,23 @@ export const removeAttachment = (row: store.AttachmentRow): void => {
  * the file has no reader, and nothing will ever come looking for it. Anything still
  * unclaimed after `hours` is swept, on the same cycle that prunes the ledger.
  */
+/**
+ * Drop images whose run has been pruned out of the ledger.
+ *
+ * The retention window is a promise about how long this system keeps what it saw, and until
+ * this existed the photographs quietly did not honour it: `pruneLedger` removes the run, its
+ * trace and its audit rows at RETENTION_DAYS, and the image sat in the attachments directory
+ * indefinitely with a run id pointing at nothing.
+ */
+export const sweepOrphanedAttachments = (): number => {
+  let removed = 0;
+  for (const row of store.attachmentsWithMissingRun()) {
+    removeAttachment(row);
+    removed += 1;
+  }
+  return removed;
+};
+
 export const sweepUnsentAttachments = (hours = 24): number => {
   const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
   let removed = 0;
