@@ -30,6 +30,7 @@ import {
   transcribeUpload,
 } from "./senses/dictate.ts";
 import { listDevices } from "./senses/listen.ts";
+import { listenForTurn, listenForWake, planSpeech, speak, voiceStatus } from "./senses/voice.ts";
 import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
@@ -45,6 +46,7 @@ import {
   AUDIT_RETENTION_DAYS,
   DICTATION_ENABLED,
   DICTATION_MAX_BYTES,
+  IMAGES_DIR,
   MEETING_COACH_ENABLED,
   NOTE_MEMORY_MAX,
   RUN_RETENTION_DAYS,
@@ -201,6 +203,7 @@ const MIME: Record<string, string> = {
   ".js": "text/javascript",
   ".json": "application/json",
   ".map": "application/json",
+  ".png": "image/png",
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",
 };
@@ -240,6 +243,28 @@ const serveStatic = (res: Res, urlPath: string): boolean => {
   const index = path.join(PUBLIC_DIR, "index.html");
   if (!path.extname(rel) && fs.existsSync(index)) return sendFile(res, index, false);
   return false;
+};
+
+/**
+ * Serve a generated image from IMAGES_DIR under /images/.
+ *
+ * These are written by the generate_image tool, NOT part of the built frontend, so they
+ * live outside PUBLIC_DIR (which is replaced wholesale on every rebuild) and get their own
+ * route. The filename in the URL originates from a tool whose arguments come from the model,
+ * so the same path-traversal guard serveStatic uses is a real boundary here, not a
+ * formality: resolve the path, then confirm it is still inside IMAGES_DIR before reading it.
+ * A `/images/../server.ts` or an absolute path must not escape. No SPA fallback — a missing
+ * image is a 404, never index.html.
+ */
+const serveImage = (res: Res, urlPath: string): boolean => {
+  if (!fs.existsSync(IMAGES_DIR)) return false;
+  const rel = urlPath.replace(/^\/images\/+/, "");
+  if (!rel) return false;
+  const file = path.resolve(IMAGES_DIR, rel);
+  if (!file.startsWith(IMAGES_DIR + path.sep)) return false; // escaped the directory
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
+  // Generated PNGs are immutable — the filename carries a uuid, so it never changes content.
+  return sendFile(res, file, true);
 };
 
 /**
@@ -346,6 +371,15 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
   const p = url.pathname;
   const seg = p.split("/").filter(Boolean); // e.g. ["api","runs","3"]
   const m = req.method ?? "GET";
+
+  // Generated images, served from IMAGES_DIR (outside PUBLIC_DIR). No token: same posture
+  // as the static shell, and the guard inside serveImage is what keeps this to real files
+  // under that one directory. Checked before serveStatic so an /images path is never handed
+  // the SPA index fallback.
+  if (seg[0] === "images") {
+    if (serveImage(res, p)) return;
+    return sendJson(res, 404, { error: "image not found" });
+  }
 
   // Non-API paths: serve the static frontend (no token needed — it's just the shell that
   // then prompts for and sends the token on its API calls).
@@ -692,6 +726,61 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         } catch (err) {
           const message = (err as Error).message;
           return sendJson(res, message.startsWith("denied:") ? 403 : 409, { error: message });
+        }
+      }
+    }
+
+    /**
+     * /api/voice — hands-free: wake word in, spoken reply out.
+     *
+     * The session logic lives in the browser (see web/src/hooks/useVoiceSession.ts); these are
+     * the three things it needs from here. The wake word and its aliases arrive per request,
+     * from the browser's own saved settings, so changing them in Settings takes effect on the
+     * next utterance with nothing to restart.
+     */
+    if (seg[1] === "voice") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, await voiceStatus());
+
+      // POST /api/voice/listen?mode=wake|turn&wake=Gianna&aliases=Jana,Joanna — raw audio body.
+      if (m === "POST" && seg.length === 3 && seg[2] === "listen") {
+        if (!DICTATION_ENABLED) return sendJson(res, 403, { error: "DICTATION_ENABLED is false" });
+        const wake = (url.searchParams.get("wake") ?? "").trim();
+        if (!wake) return sendJson(res, 400, { error: "no wake word given" });
+        const aliases = (url.searchParams.get("aliases") ?? "").split(",").map((a) => a.trim()).filter(Boolean);
+        try {
+          const audio = await readBinary(req, DICTATION_MAX_BYTES);
+          if (!audio.length) return sendJson(res, 400, { error: "no audio received" });
+          const type = String(req.headers["content-type"] ?? "");
+          const sounds = url.searchParams.get("sounds") === "1";
+          return sendJson(
+            res,
+            200,
+            url.searchParams.get("mode") === "turn"
+              ? await listenForTurn(audio, type, wake, aliases, sounds)
+              : await listenForWake(audio, type, wake, aliases, sounds),
+          );
+        } catch (err) {
+          return sendJson(res, err instanceof TooLargeError ? 413 : 400, { error: (err as Error).message });
+        }
+      }
+
+      // POST /api/voice/plan {text} — what to say, cleaned and cut into pieces to synthesise in turn.
+      if (m === "POST" && seg.length === 3 && seg[2] === "plan") {
+        const body = (await readBody(req)) as { text?: string };
+        return sendJson(res, 200, { chunks: planSpeech(body.text ?? "") });
+      }
+
+      // POST /api/voice/speak {text, voice?} — WAV bytes back, for one piece from /plan.
+      if (m === "POST" && seg.length === 3 && seg[2] === "speak") {
+        try {
+          const body = (await readBody(req)) as { text?: string; voice?: string };
+          if (!body.text?.trim()) return sendJson(res, 400, { error: "text required" });
+          const wav = await speak(body.text, body.voice);
+          res.writeHead(200, { "Cache-Control": "no-store", "Content-Length": wav.length, "Content-Type": "audio/wav" });
+          return void res.end(wav);
+        } catch (err) {
+          const message = (err as Error).message;
+          return sendJson(res, message === "nothing to read aloud" ? 422 : 502, { error: message });
         }
       }
     }

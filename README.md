@@ -93,6 +93,13 @@ the difference is stark: *"great um i by profession and choice uh i'm a tester"*
 `MEETING_CORRECTIONS`, where a prompt was measured *not* to fix a misheard name. A prompt
 biases style reliably and vocabulary poorly; the two knobs exist because those differ.
 
+**It can talk back, hands-free.** Turn on *Hands-free* on the chat page, say the wake word
+("Gianna", configurable), and talk — it answers out loud and keeps listening until you stop
+for a configurable timeout. Listening reuses the Whisper models above; speaking uses a local
+Kokoro service in `services/tts/`. See [VOICE.md](VOICE.md) for setup, what was measured, and
+the limits — notably that a wake word matched on a transcript trades missed wakes against
+near-homophone false ones, and that the microphone is deaf while it speaks.
+
 **Conversations have memory of themselves.** Each turn sees what was asked and concluded in
 earlier turns of the same thread — not the prior tool traces, which would exhaust a local
 model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and

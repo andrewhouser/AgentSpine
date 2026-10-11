@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import type { ThemeChoice } from "../../lib/preferences.ts";
-import type { Memory } from "../../lib/types.ts";
+import type { Memory, VoiceStatus } from "../../lib/types.ts";
+import type { VoiceSettings } from "../../lib/voiceSettings.ts";
 
 import { api } from "../../lib/api.ts";
 import {
@@ -12,6 +13,7 @@ import {
   SCALE_MIN,
   SCALE_STEP,
 } from "../../lib/preferences.ts";
+import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import styles from "./SettingsView.module.css";
 
@@ -41,6 +43,45 @@ export const SettingsView = () => {
   useEffect(() => {
     void api.policy().then(setPolicy);
   }, []);
+
+  // Voice: the server supplies the defaults and the live status; this browser's saved choice
+  // wins over both. See lib/voiceSettings.ts.
+  const [voiceStatus, setVoiceStatus] = useState<null | VoiceStatus>(null);
+  const [voice, setVoice] = useState<null | VoiceSettings>(null);
+  const [testing, setTesting] = useState(false);
+  const [voiceError, setVoiceError] = useState<null | string>(null);
+
+  useEffect(() => {
+    void api
+      .voiceStatus()
+      .then((s) => {
+        setVoiceStatus(s);
+        setVoice(resolveVoiceSettings(s.defaults));
+      })
+      .catch(() => setVoiceStatus(null));
+  }, []);
+
+  const updateVoice = (next: Partial<VoiceSettings>): void => {
+    if (!voice) return;
+    const merged = { ...voice, ...next };
+    setVoice(merged);
+    saveVoiceSettings(merged);
+  };
+
+  const testVoice = (): void => {
+    setTesting(true);
+    setVoiceError(null);
+    void api
+      .speak(`Hello. You can call me ${voice?.wakeWord ?? "by name"}, and I will answer like this.`)
+      .then(async (blob) => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => URL.revokeObjectURL(url);
+        await audio.play();
+      })
+      .catch((err: Error) => setVoiceError(err.message))
+      .finally(() => setTesting(false));
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => void api.listMemories(query || undefined).then(setMemories), 200);
@@ -118,6 +159,122 @@ export const SettingsView = () => {
             than merely larger. Starts from your browser's own font setting.
           </span>
         </div>
+      </section>
+
+      <section>
+        <h2 className={styles.subhead}>Voice</h2>
+        <p className={styles.note}>
+          Hands-free mode on the chat page: say the wake word, talk, and hear the answer. Kept in this
+          browser, like appearance — the wake word is a property of the room. The wake word is matched on
+          what Whisper hears, so it can be any word, and the spellings below are how Whisper tends to
+          write it.
+        </p>
+
+        {voiceStatus && voice && (
+          <>
+            <div className={styles.field}>
+              <label className={styles.fieldLabel} htmlFor="voice-wake">
+                Wake word
+              </label>
+              <input
+                className={styles.search}
+                id="voice-wake"
+                onChange={(e) => {
+                  // The spellings belong to a particular word. Left in place after the word
+                  // changes they would keep waking it on the old name, silently — so changing the
+                  // word drops them, and returning to the server's own word restores its list.
+                  const word = e.target.value;
+                  const home = word.trim().toLowerCase() === voiceStatus.defaults.wakeWord.toLowerCase();
+                  updateVoice({ aliases: home ? voiceStatus.defaults.aliases.join(", ") : "", wakeWord: word });
+                }}
+                value={voice.wakeWord}
+              />
+              <span className={styles.fieldHint}>
+                Only counts at the start or the very end of a sentence, so a name that comes up in passing
+                does not wake it.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.fieldLabel} htmlFor="voice-aliases">
+                Also accept spellings
+              </label>
+              <input
+                className={styles.search}
+                id="voice-aliases"
+                onChange={(e) => updateVoice({ aliases: e.target.value })}
+                placeholder="Other spellings, separated by commas"
+                value={voice.aliases}
+              />
+              <span className={styles.fieldHint}>
+                If it ignores you, look at the “heard …” text beside the Hands-free button on the chat page
+                and add whatever it wrote here.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.checkRow} htmlFor="voice-sounds">
+                <input
+                  checked={voice.soundsAlike}
+                  id="voice-sounds"
+                  onChange={(e) => updateVoice({ soundsAlike: e.target.checked })}
+                  type="checkbox"
+                />
+                <span className={styles.fieldLabel}>Accept words that sound like it</span>
+              </label>
+              <span className={styles.fieldHint}>
+                Whisper rarely spells a name the way you meant — “Gianna” comes back as “Jaina” or “Jayana”.
+                On, it catches those, and also near-homophones like “Jane” or “Gina”. Off, only the spellings
+                above count, and a name it writes differently is simply missed. A more distinctive wake
+                word needs this far less.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.fieldLabel} htmlFor="voice-timeout">
+                Stay listening for
+              </label>
+              <div className={styles.sliderRow}>
+                <input
+                  className={styles.slider}
+                  id="voice-timeout"
+                  max={TIMEOUT_MAX}
+                  min={TIMEOUT_MIN}
+                  onChange={(e) => updateVoice({ timeoutSeconds: Number(e.target.value) })}
+                  step={5}
+                  type="range"
+                  value={voice.timeoutSeconds}
+                />
+                <span className={styles.scaleValue}>{voice.timeoutSeconds}s</span>
+              </div>
+              <span className={styles.fieldHint}>
+                How long it waits in silence after it finishes speaking before it goes back to waiting for
+                the wake word. It does not run while the assistant is thinking or talking.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Status</span>
+              <span className={styles.fieldHint}>
+                Listening: {voiceStatus.listenReady ? "ready" : voiceStatus.listenReason}.
+                <br />
+                Speaking ({voiceStatus.voice}): {voiceStatus.speakReady ? "ready" : voiceStatus.speakReason}.
+              </span>
+              <div className={styles.sliderRow}>
+                <button
+                  className={styles.segment}
+                  disabled={!voiceStatus.speakReady || testing}
+                  onClick={testVoice}
+                  type="button"
+                >
+                  {testing ? "Speaking…" : "Test the voice"}
+                </button>
+                {voiceError && <span className={styles.fieldHint}>{voiceError}</span>}
+              </div>
+            </div>
+          </>
+        )}
+        {!voiceStatus && <div className={styles.empty}>Voice status unavailable.</div>}
       </section>
 
       <section>

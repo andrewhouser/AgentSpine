@@ -85,6 +85,18 @@ export interface Policy {
    * cannot object to something they do not know is happening.
    */
   audio?: { enabled: boolean; devices: string[]; announce?: boolean };
+  /**
+   * Local image generation via the MFLUX service (the `generate_image` tool). Absent =
+   * denied, like every other optional surface.
+   *
+   * The tool is reversible — it writes a PNG into a directory it owns and touches nothing
+   * else — so it is not gated for danger. It is gated because the prompt is model-authored
+   * and the effect is a file written to disk, and because the render runs a local model
+   * that must stay on the app host (an image render on the model host pages the language
+   * models out; see IMAGE_GENERATION.md). Whether that capability exists at all is a
+   * decision to make here, not a default.
+   */
+  images?: { enabled: boolean };
   budgets?: {
     perRun?: { default?: number; tools?: Record<string, number> };
     perDay?: { default?: number; tools?: Record<string, number> };

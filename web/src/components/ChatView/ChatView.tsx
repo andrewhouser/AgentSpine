@@ -5,9 +5,12 @@ import type { Action, Attachment, LiveToolCall, Thread, VisionPass } from "../..
 
 import { useResource } from "../../hooks/useResource.ts";
 import { useRunStream } from "../../hooks/useRunStream.ts";
+import { useVoiceConfig } from "../../hooks/useVoiceConfig.ts";
+import { useVoiceSession } from "../../hooks/useVoiceSession.ts";
 import { api } from "../../lib/api.ts";
 import { Composer } from "../Composer/Composer.tsx";
 import { Turn } from "../Turn/Turn.tsx";
+import { VoiceBar } from "../VoiceBar/VoiceBar.tsx";
 import styles from "./ChatView.module.css";
 
 interface ChatViewProps {
@@ -61,12 +64,45 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
   const [active, setActive] = useState<ActiveRun | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
+  const runId = active?.runId;
+  const voiceConfig = useVoiceConfig();
+
+  const send = useCallback(
+    async (task: string, attachments: Attachment[]): Promise<void> => {
+      const { runId: id } = await api.sendMessage(
+        conversationId,
+        task,
+        attachments.map((a) => a.id),
+      );
+      // The attachments are carried into the live turn rather than refetched: they are already
+      // in hand, and the turn has to render them the moment it appears — waiting for the thread
+      // to reload would show a question about a photograph with no photograph under it.
+      setActive({ attachments, runId: id, task });
+    },
+    [conversationId],
+  );
+
+  // A spoken message is just a message: it goes through the same send, so it is queued,
+  // sized and gated exactly as a typed one would be.
+  const voice = useVoiceSession({
+    onSend: useCallback((text: string) => send(text, []), [send]),
+    settings: voiceConfig.settings,
+    speakReady: voiceConfig.status?.speakReady ?? false,
+  });
+  const { notifyReply } = voice;
+
   const onRunComplete = useCallback(() => {
     // The persisted turn supersedes the streamed one, so clear the live turn and refetch.
     setActive(null);
     reloadThread();
     onTitleMayHaveChanged();
-  }, [onTitleMayHaveChanged, reloadThread]);
+    // The spoken reply comes from the persisted turn, not the stream: the ledger is the record
+    // of what the run actually concluded, and it also says whether the run failed.
+    void api.thread(conversationId).then((t) => {
+      const turn = t.turns.find((x) => x.id === runId);
+      notifyReply(turn && turn.status !== "failed" ? turn.summary : null);
+    });
+  }, [conversationId, notifyReply, onTitleMayHaveChanged, reloadThread, runId]);
 
   const live = useRunStream(active, onRunComplete);
 
@@ -74,18 +110,6 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread, live?.step, live?.toolCalls.length, live?.summary]);
-
-  const send = async (task: string, attachments: Attachment[]): Promise<void> => {
-    const { runId } = await api.sendMessage(
-      conversationId,
-      task,
-      attachments.map((a) => a.id),
-    );
-    // The attachments are carried into the live turn rather than refetched: they are already
-    // in hand, and the turn has to render them the moment it appears — waiting for the thread
-    // to reload would show a question about a photograph with no photograph under it.
-    setActive({ attachments, runId, task });
-  };
 
   const turns = thread?.turns ?? [];
   // While a run streams, its own row already exists server-side (created before the queue).
@@ -169,6 +193,9 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
 
       <div className={styles.composer}>
         <div className={styles.column}>
+          {voiceConfig.status && (
+            <VoiceBar session={voice} settings={voiceConfig.settings} status={voiceConfig.status} />
+          )}
           <Composer
             busy={!!active}
             conversationId={conversationId}

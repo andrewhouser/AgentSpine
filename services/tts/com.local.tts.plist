@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for the Kokoro speech service. Install on the machine that runs the dashboard.
+
+  Copy to ~/Library/LaunchAgents/com.local.tts.plist, then:
+
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.tts.plist
+    launchctl bootout   gui/$UID/com.local.tts
+
+  Use bootout/bootstrap, NOT stop/start: KeepAlive is on, so `launchctl stop` is
+  immediately undone by a respawn.
+
+  CHECK BEFORE LOADING (see VOICE.md for the one-time setup that creates all of these):
+
+    1. WorkingDirectory must be this directory's absolute path on THIS machine. uvicorn
+       resolves `server:app` relative to cwd.
+    2. The uvicorn path must match the venv built on this machine.
+    3. espeak-ng must be installed (`brew install espeak-ng`) — see VOICE.md for why the copy
+       bundled with the Python package cannot be used.
+    4. The two model files must exist in TTS_MODEL_DIR. A missing file does not crash the
+       service — /health reports it and requests get a 503 — so a bad install looks like a
+       silent assistant, not a restart loop. Check `curl localhost:8083/health`.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.tts</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/andrewhouser/.venvs/tts/bin/uvicorn</string>
+    <string>server:app</string>
+    <!-- Loopback only: there is no auth on this endpoint. -->
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8083</string>
+    <string>--log-level</string><string>warning</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/andrewhouser/Developer/AgentSpine/services/tts</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/Users/andrewhouser</string>
+    <key>TTS_MODEL_DIR</key><string>/Users/andrewhouser/.kokoro-models</string>
+    <key>TTS_MODEL_FILE</key><string>kokoro-v1.0.int8.onnx</string>
+    <key>TTS_VOICE</key><string>af_heart</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/andrewhouser/Library/Logs/tts-service.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/andrewhouser/Library/Logs/tts-service-error.log</string>
+</dict>
+</plist>

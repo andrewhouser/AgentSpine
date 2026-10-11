@@ -20,6 +20,9 @@ drafts/
 # paperwork — the same reasoning as the audio above, and it does not belong in a repo
 # whatever it was useful for. Deleting a conversation deletes its images from here too.
 attachments/
+# Generated images from the generate_image tool. Machine-generated output served at
+# /images/, regenerated on demand — not source, and potentially large.
+images/
 # Never commit credentials that were left in this directory.
 client_secret_*.json
 google-token.json

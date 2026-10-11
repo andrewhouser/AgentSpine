@@ -43,6 +43,12 @@
   font-weight: 600;
 }
 
+.checkRow {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
 .fieldHint {
   color: var(--text-faint);
   font-size: 0.75rem;

@@ -72,6 +72,16 @@ export const VISION_MAX_TOKENS = Number(env.VISION_MAX_TOKENS ?? "700");
 // reading small text in a screenshot. Raise it for that; do not raise it for photographs.
 // Images already smaller than this are sent untouched and never enlarged.
 export const VISION_MAX_EDGE = Number(env.VISION_MAX_EDGE ?? "1024");
+
+// The image tier: an OpenAI-images endpoint (POST /v1/images/generations) in front of the
+// local MFLUX service — see IMAGE_GENERATION.md and services/mflux/. It is NOT a chat tier
+// and never enters the router; the generate_image tool points clientFor() at it directly.
+// Empty = the tool is a no-op that reports it's unconfigured, exactly the way FAST_BASE_URL
+// degrades to standard when unset. There is deliberately no IMAGE_MODEL: the service hosts
+// one pipeline and reports it via /v1/models, so hardcoding an id in the client would be
+// the very mistake MODELS.md documents (a stale hardcoded id served the wrong model for
+// 26 days). The tool reads the id from the endpoint rather than carrying one.
+export const IMAGE_BASE_URL = env.IMAGE_URL ?? "";
 // Size each task and send it to the cheapest tier that can close it. The sizing is
 // regex-based and costs nothing; see src/dispatch.ts for why it is not a model call.
 export const AUTO_ROUTE = (env.AUTO_ROUTE ?? "true") !== "false";
@@ -596,6 +606,60 @@ export const DICTATION_PROMPT =
  */
 export const DICTATION_MAX_BYTES = Number(env.DICTATION_MAX_BYTES ?? String(16 * 1024 * 1024));
 
+// --- Voice (hands-free: wake word in, spoken reply out) ---
+/**
+ * The speech endpoint: an OpenAI-shaped `POST /v1/audio/speech` in front of the local Kokoro
+ * service (services/tts/). Same idea as IMAGE_URL — a tier is an endpoint, so the client side
+ * is one fetch rather than a new transport. Empty = replies are never spoken, and the voice
+ * controls report why instead of appearing to work.
+ */
+export const TTS_BASE_URL = env.TTS_URL ?? "";
+/** Kokoro voice id. `af_heart` is the service's own default; this only overrides it. */
+export const TTS_VOICE = env.TTS_VOICE ?? "af_heart";
+/** Speaking rate, 1 = the voice's natural pace. Bounded in the service as well. */
+export const TTS_SPEED = Number(env.TTS_SPEED ?? "1");
+/**
+ * Most characters of one reply that are read aloud. Cut at a sentence boundary, and the full
+ * text is on screen regardless. A long answer read out in full is a minute of monologue with
+ * no way to skim it, which is the opposite of why anyone talks to an assistant.
+ */
+export const VOICE_MAX_CHARS = Number(env.VOICE_MAX_CHARS ?? "900");
+/**
+ * Defaults for the two knobs the Settings page lets you change per browser. The browser's own
+ * saved choice wins; these are what a fresh browser starts from.
+ *
+ * The wake word is matched on *Whisper's transcript*, not on audio, which is what makes it
+ * configurable to any word with no training. The cost is that Whisper has to spell it the way
+ * you configured it, so `VOICE_WAKE_ALIASES` lists the spellings it actually produces — a
+ * name like Gianna comes back as "Jaina", "Jayana" or "Jana", almost never as "Gianna". Words
+ * that merely *sound* like it are also accepted unless "sounds alike" is switched off in
+ * Settings; see `soundKey` in src/senses/speech.ts for what that does and costs.
+ */
+export const VOICE_WAKE_WORD = env.VOICE_WAKE_WORD ?? "Gianna";
+export const VOICE_WAKE_ALIASES = (env.VOICE_WAKE_ALIASES ?? "Jaina,Jana,Giana")
+  .split(",")
+  .map((a) => a.trim())
+  .filter(Boolean);
+/**
+ * Also accept words that SOUND like the wake word (the default). Measured over five synthetic
+ * voices: spelling plus aliases caught 12 of 15 wakes, sounds-alike caught 15 of 15 — at the
+ * price of near-homophones ("Jane", "Gina" for "Gianna") waking it too. See `soundKey`.
+ */
+export const VOICE_WAKE_SOUNDS = (env.VOICE_WAKE_SOUNDS ?? "true") !== "false";
+/**
+ * Seconds a conversation stays open with nobody speaking before it drops back to waiting for
+ * the wake word. The clock starts when the assistant finishes talking, not when you sent your
+ * message, so a slow answer never eats your turn.
+ */
+export const VOICE_TIMEOUT_SECONDS = Number(env.VOICE_TIMEOUT_SECONDS ?? "20");
+/**
+ * The Whisper model that listens for the wake word. The fast one, on purpose: it runs on every
+ * stretch of speech the room produces while the assistant is idle, and `base.en` costs ~0.35s
+ * where the accurate model costs ~1.7s. The accurate model (DICTATION_MODEL) only ever hears
+ * what is actually being said *to* the assistant.
+ */
+export const VOICE_WAKE_MODEL = env.VOICE_WAKE_MODEL ?? WHISPER_LIVE_MODEL;
+
 // --- The coaching hotkey ---
 /**
  * Whether the hotkey can ask the local model for notes on what was just said.
@@ -676,6 +740,12 @@ export const PROFILE_PATH = env.PROFILE_PATH ?? path.join(BASE, "profile.md");
 // schedule and read by hand with sqlite3, and putting megabytes of photograph in it would
 // make both worse. The database holds the metadata and the path; this holds the bytes.
 export const ATTACHMENTS_DIR = env.ATTACHMENTS_DIR ?? path.join(BASE, "attachments");
+// Where generate_image writes PNGs, and where src/server.ts serves them from under
+// /images/. Deliberately under BASE (the repo root) and NOT PUBLIC_DIR: PUBLIC_DIR is the
+// built frontend and is replaced wholesale on every rebuild, which would delete generated
+// images. This directory persists across rebuilds, so a URL returned to the transcript
+// still resolves after a reload.
+export const IMAGES_DIR = path.join(BASE, "images");
 
 /** Re-read the policy from disk every time it is needed, so edits take effect live. */
 export const loadPolicy = (): Policy => {

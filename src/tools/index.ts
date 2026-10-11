@@ -25,6 +25,7 @@ import { lookAtImage } from "./look-at-image.ts";
 import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
 import { subagent } from "./subagent.ts";
+import { generateImage } from "./generate-image.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -53,6 +54,7 @@ export const tools: Tool[] = [
   digestTool,
   draft,
   subagent,
+  generateImage,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

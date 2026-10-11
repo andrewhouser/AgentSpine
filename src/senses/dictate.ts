@@ -74,8 +74,8 @@ export const modelReady = (): boolean => fs.existsSync(path.join(WHISPER_MODEL_D
 const prompt = (): string =>
   [DICTATION_PROMPT, MEETING_CORRECTIONS.map(([, right]) => right).join(", ")].filter(Boolean).join(" ");
 
-const transcribeWav = async (wav: string): Promise<string> => {
-  const segments = await transcribeFile(wav, DICTATION_MODEL, { prompt: prompt() });
+export const transcribeWav = async (wav: string, model: string = DICTATION_MODEL): Promise<string> => {
+  const segments = await transcribeFile(wav, model, { prompt: prompt() });
   const text = segments
     .map((s) => s.text.trim())
     .filter(Boolean)
@@ -94,9 +94,15 @@ const transcribeWav = async (wav: string): Promise<string> => {
  * when the decode throws — the same posture as meeting chunks, and for the same reason: audio
  * is never *retained*, only briefly present.
  */
-export const transcribeUpload = async (audio: Buffer, contentType: string): Promise<string> => {
-  const stamp = `${process.pid}-${Date.now()}`;
-  const source = path.join(os.tmpdir(), `spine-dictate-${stamp}${extensionFor(contentType)}`);
+export const withDecodedUpload = async <T>(
+  audio: Buffer,
+  contentType: string,
+  use: (wav: string) => Promise<T>,
+): Promise<T> => {
+  const stamp = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // `-in` keeps a WAV upload from colliding with the decoded WAV: ffmpeg refuses to write over
+  // its own input, and the hands-free path uploads WAV directly.
+  const source = path.join(os.tmpdir(), `spine-dictate-${stamp}-in${extensionFor(contentType)}`);
   const wav = path.join(os.tmpdir(), `spine-dictate-${stamp}.wav`);
   try {
     fs.writeFileSync(source, audio);
@@ -106,12 +112,15 @@ export const transcribeUpload = async (audio: Buffer, contentType: string): Prom
       ["-nostdin", "-hide_banner", "-loglevel", "error", "-t", String(DICTATION_MAX_SECONDS), "-i", source, "-ar", "16000", "-ac", "1", "-y", wav],
       { timeout: 60_000 },
     );
-    return await transcribeWav(wav);
+    return await use(wav);
   } finally {
     fs.rmSync(source, { force: true });
     fs.rmSync(wav, { force: true });
   }
 };
+
+export const transcribeUpload = (audio: Buffer, contentType: string, model: string = DICTATION_MODEL): Promise<string> =>
+  withDecodedUpload(audio, contentType, (wav) => transcribeWav(wav, model));
 
 // --- the server's own microphone ---
 

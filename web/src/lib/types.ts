@@ -404,3 +404,22 @@ export interface LiveTurn {
   vision: null | VisionPass;
   waitingBehind: number;
 }
+
+/** Mirrors VoiceStatus in src/senses/voice.ts. */
+export interface VoiceStatus {
+  defaults: { aliases: string[]; soundsAlike: boolean; timeoutSeconds: number; wakeWord: string };
+  listenReady: boolean;
+  /** Why listening cannot work, or empty. */
+  listenReason: string;
+  speakReady: boolean;
+  /** Why replies cannot be spoken, or empty. */
+  speakReason: string;
+  voice: string;
+}
+
+/** Mirrors WakeResult in src/senses/voice.ts. */
+export interface WakeResult {
+  command: string;
+  heard: string;
+  woke: boolean;
+}

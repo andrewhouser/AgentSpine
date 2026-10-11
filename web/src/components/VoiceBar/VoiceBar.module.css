@@ -1,0 +1,108 @@
+.bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 4px 12px;
+  padding: 6px 2px 0;
+}
+
+.toggle {
+  align-items: center;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  display: inline-flex;
+  font-size: 0.75rem;
+  gap: 7px;
+  padding: 3px 11px 3px 9px;
+}
+
+.toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.toggle:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.toggleOn {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+
+.dot {
+  background: var(--text-faint);
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+/* Lit in every state but off: an open microphone should never look closed. */
+.idle {
+  background: var(--accent);
+}
+
+.listening {
+  animation: breathe 1.4s ease-in-out infinite;
+  background: var(--ok);
+}
+
+.thinking {
+  background: var(--warn);
+}
+
+.speaking {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+@keyframes breathe {
+  50% {
+    box-shadow: 0 0 0 4px var(--ok-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listening {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--ok-soft);
+  }
+}
+
+.line {
+  color: var(--text-dim);
+}
+
+.heard {
+  color: var(--text-faint);
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stop {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.75rem;
+  padding: 2px 10px;
+}
+
+.stop:hover {
+  background: var(--bg-inset);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.error {
+  color: var(--danger);
+}

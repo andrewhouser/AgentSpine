@@ -47,6 +47,11 @@
     "enabled": true
   },
 
+  "images": {
+    "//": "The generate_image tool: renders a PNG via the local MFLUX service (IMAGE_URL) and saves it under ./images, returning a URL the UI displays. Classified REVERSIBLE, not irreversible like a draft: it writes a new file into a directory it owns, overwrites nothing, and deletes cleanly — there is no outbound send and nothing to review before the fact, so queuing every render for confirmation would be friction, not safety. Enabling it here lets it auto-execute under autoExecute.reversible. The real cost it carries is compute: a render is 15-30s and the pipeline shares this 16GB box with capture and Whisper, which is a resource decision (bounded by MFLUX_MAX_SIDE on the service), not a security one. Disable by setting enabled to false.",
+    "enabled": true
+  },
+
   "drafts": {
     "//": "SPEC §5, preferred path: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. This grants NO new OAuth scope — the Google token stays read-only by construction and still cannot send or modify anything.",
     "enabled": true,

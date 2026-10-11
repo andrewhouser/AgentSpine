@@ -27,6 +27,8 @@ import type {
   Schedule,
   Thread,
   VisionStatus,
+  VoiceStatus,
+  WakeResult,
 } from "./types.ts";
 
 const TOKEN_KEY = "as_token";
@@ -51,6 +53,9 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   return body as T;
 };
+
+const voiceListenPath = (mode: "turn" | "wake", wake: string, aliases: string[], sounds: boolean): string =>
+  `/api/voice/listen?${new URLSearchParams({ aliases: aliases.join(","), mode, sounds: sounds ? "1" : "0", wake })}`;
 
 const post = <T>(path: string, body?: unknown): Promise<T> =>
   request<T>(path, { body: body === undefined ? undefined : JSON.stringify(body), method: "POST" });
@@ -147,6 +152,26 @@ export const api = {
 
   listConversations: () => request<Conversation[]>("/api/conversations"),
 
+  /** One utterance said to an assistant that is already listening. */
+  listenForTurn: (audio: Blob, wake: string, aliases: string[], sounds: boolean) =>
+    request<{ text: string }>(voiceListenPath("turn", wake, aliases, sounds), {
+      body: audio,
+      headers: { "Content-Type": audio.type || "audio/wav" },
+      method: "POST",
+    }),
+
+  /**
+   * One stretch of speech heard while idle: was it the wake word, and what followed?
+   * Audio goes as the raw body, like `dictate`; the wake word and its spellings ride in the
+   * query so changing them in Settings applies to the very next utterance.
+   */
+  listenForWake: (audio: Blob, wake: string, aliases: string[], sounds: boolean) =>
+    request<WakeResult>(voiceListenPath("wake", wake, aliases, sounds), {
+      body: audio,
+      headers: { "Content-Type": audio.type || "audio/wav" },
+      method: "POST",
+    }),
+
   listMeetings: (limit = 50) => request<Meeting[]>(`/api/meetings?limit=${limit}`),
 
   listMemories: (query?: string) =>
@@ -169,6 +194,13 @@ export const api = {
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
+
+  /**
+   * What to say aloud for a reply: cleaned of markup and cut into pieces to synthesise in turn,
+   * so the first sentence can start playing while the rest are still being made. Empty when
+   * there is nothing a voice can read.
+   */
+  planSpeech: (text: string) => post<{ chunks: string[] }>("/api/voice/plan", { text }),
 
   policy: () => request<Record<string, unknown>>("/api/policy"),
 
@@ -208,6 +240,22 @@ export const api = {
 
   setMeetingTitle: (id: number, title: string) =>
     request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
+
+  /** Synthesise `text`. Resolves to WAV audio; rejects with the service's own reason. */
+  speak: async (text: string): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch("/api/voice/speak", {
+      body: JSON.stringify({ text }),
+      headers: { "Content-Type": "application/json", ...(token ? { "X-Dashboard-Token": token } : {}) },
+      method: "POST",
+    });
+    if (res.status === 401) throw new UnauthorizedError("dashboard token required");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `HTTP ${res.status}`);
+    }
+    return res.blob();
+  },
 
   startDictation: () => post<{ device: string }>("/api/dictate/start"),
 
@@ -250,4 +298,6 @@ export const api = {
   },
 
   visionStatus: () => request<VisionStatus>("/api/vision"),
+
+  voiceStatus: () => request<VoiceStatus>("/api/voice"),
 };

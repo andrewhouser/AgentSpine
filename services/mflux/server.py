@@ -38,6 +38,7 @@ import os
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -85,6 +86,20 @@ _model_key: tuple | None = None
 _lock = threading.Lock()
 _last_used = 0.0
 _last_render: dict | None = None
+
+# All MLX work — building the pipeline, generating, AND unloading — runs on this one
+# dedicated thread, and never on the event loop or an arbitrary asyncio.to_thread worker.
+#
+# MLX registers its default stream lazily and PER THREAD. Build the pipeline on thread A and
+# then call mx.eval on thread B and MLX raises "There is no Stream(cpu, 0) in current
+# thread". asyncio.to_thread dispatches to the default pool, whose workers are created on
+# demand and are not stable, so a later render can land on a different thread than the load
+# did — an intermittent crash that looks like nothing in particular. A single-worker executor
+# pins every mx operation to the same thread and removes the failure mode entirely. The
+# _lock still serializes access to the shared _model within that thread (the reaper and a
+# request can both target it), and single-worker means renders queue rather than overlap,
+# which is the intended behaviour on a memory-contended box anyway.
+_mlx_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx")
 
 
 def _mlx_clear_cache() -> None:
@@ -230,22 +245,31 @@ def _generate_sync(prompt: str, width: int, height: int, steps: int, seed: int) 
     return buf.getvalue()
 
 
+def _unload_if_idle() -> None:
+    """Unload the pipeline if it is still idle. Runs on the MLX thread."""
+    # Non-blocking: if a generation holds the lock, try again next tick rather than
+    # queueing behind it.
+    if _lock.acquire(blocking=False):
+        try:
+            if _model is not None and time.monotonic() - _last_used >= IDLE_SECONDS:
+                _unload()
+        finally:
+            _lock.release()
+
+
 async def _idle_reaper() -> None:
     """Unload the pipeline once it has gone unused for IDLE_SECONDS."""
+    loop = asyncio.get_running_loop()
     while True:
         await asyncio.sleep(min(30.0, max(5.0, IDLE_SECONDS / 10)))
         if _model is None:
             continue
         if time.monotonic() - _last_used < IDLE_SECONDS:
             continue
-        # Non-blocking: if a generation holds the lock, try again next tick rather than
-        # queueing behind it.
-        if _lock.acquire(blocking=False):
-            try:
-                if _model is not None and time.monotonic() - _last_used >= IDLE_SECONDS:
-                    _unload()
-            finally:
-                _lock.release()
+        # Unload on the dedicated MLX thread — _unload touches MLX (clear_cache), which must
+        # not run on the event loop thread where its stream is not the one the model was
+        # built under. The lock re-check inside guards against a race with a request.
+        await loop.run_in_executor(_mlx_executor, _unload_if_idle)
 
 
 @asynccontextmanager
@@ -258,8 +282,18 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         task.cancel()
-        with _lock:
-            _unload()
+        # Final unload on the MLX thread, for the same reason the reaper uses it, then retire
+        # the executor. run_in_executor needs a running loop, which we still have here.
+        loop = asyncio.get_running_loop()
+
+        def _final_unload() -> None:
+            with _lock:
+                _unload()
+
+        try:
+            await loop.run_in_executor(_mlx_executor, _final_unload)
+        finally:
+            _mlx_executor.shutdown(wait=True)
 
 
 app = FastAPI(title="mflux-image-service", lifespan=lifespan)
@@ -323,10 +357,13 @@ async def generate(req: ImageRequest):
         )
 
     steps = req.steps or DEFAULT_STEPS
+    loop = asyncio.get_running_loop()
     data = []
     for i in range(n):
         seed = (req.seed + i) if req.seed is not None else random.randint(0, 2**31 - 1)
-        png = await asyncio.to_thread(_generate_sync, req.prompt, width, height, steps, seed)
+        # Pin to the dedicated MLX thread (see _mlx_executor) rather than asyncio.to_thread,
+        # so load and eval always share a thread and MLX's per-thread stream is present.
+        png = await loop.run_in_executor(_mlx_executor, _generate_sync, req.prompt, width, height, steps, seed)
         data.append({"b64_json": base64.b64encode(png).decode("ascii"), "seed": seed})
 
     return {"created": int(time.time()), "data": data}
