@@ -9,7 +9,8 @@
  * Output goes to ./public, which server.ts already serves — so a built client needs no
  * new plumbing, and `npm run dashboard` alone is still the whole thing.
  */
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const API_TARGET = process.env.API_TARGET ?? "http://127.0.0.1:8787";
@@ -20,7 +21,8 @@ export default defineConfig({
     emptyOutDir: true,
     outDir: "../public",
   },
-  plugins: [react()],
+  // React Compiler auto-memoizes components at build time; no manual useMemo/useCallback needed.
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   root: "web",
   server: {
     port: 5173,
