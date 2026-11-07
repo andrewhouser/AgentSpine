@@ -6,13 +6,13 @@ import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { ScheduleForm } from "../ScheduleForm/ScheduleForm.tsx";
-import styles from "./AutomationsView.module.css";
+import styles from "./SchedulesView.module.css";
 
 const NO_SCHEDULES: Schedule[] = [];
 
 const when = (iso: null | string): string => (iso ? new Date(iso).toLocaleString() : "—");
 
-export const AutomationsView = () => {
+export const SchedulesView = () => {
   const [schedules, refresh] = useResource(api.listSchedules, NO_SCHEDULES);
   const [running, setRunning] = useState<null | number>(null);
 
@@ -30,10 +30,10 @@ export const AutomationsView = () => {
     <div className={styles.page}>
       <PageHeader
         subtitle="Jobs that run on a clock. A watcher is one of these whose task compares against stored state and stays silent unless something changed."
-        title="Automations"
+        title="Schedules"
       />
 
-      {schedules.length === 0 && <div className={styles.empty}>No automations yet.</div>}
+      {schedules.length === 0 && <div className={styles.empty}>No schedules yet.</div>}
 
       {schedules.map((s) => (
         <div className={styles.card} key={s.id}>

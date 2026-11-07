@@ -41,7 +41,7 @@ export const ScheduleForm = ({ onCreated }: ScheduleFormProps) => {
 
   return (
     <div className={styles.form}>
-      <h2 className={styles.title}>New automation</h2>
+      <h2 className={styles.title}>New schedule</h2>
       <div className={styles.row}>
         <input
           className={styles.input}

@@ -106,7 +106,7 @@ model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
 `CHAT_HISTORY_MAX_CHARS`.
 
 Everything else lives one click away in the sidebar: **Approvals** (the whole queue, including
-what a 3am scheduled job asked for), **Automations** (schedules and watchers), **Activity**
+what a 3am scheduled job asked for), **Schedules** (scheduled tasks and watchers), **Activity**
 (every run — chat, scheduled, watcher — with its full trace and audit log), and **Settings**
 (appearance, memory, and the current policy).
 
@@ -583,7 +583,7 @@ Ways to give it work:
 - **The chat interface** — the usual one. Multi-turn, streamed, with approvals inline.
 - **`npm run do "<task>"`** — hand it a single task on demand. Runs one agent cycle and
   exits. Best for one-offs; no repetition.
-- **Automations** — a named task on a schedule. Add one on the page, or just ask for it in
+- **Schedules** — a named task on a schedule. Add one on the page, or just ask for it in
   chat (see below). See Watchers below for the ones that should only speak up when
   something changed.
 - **`goals.md`** — the standing goal read on every `tick`/`loop` heartbeat. Keep it
@@ -598,7 +598,7 @@ That used to be a request the assistant couldn't hear. It would look up today's 
 tell you about them, and finish — because nothing in its context said the thing it was
 running in *had* a scheduler. A tool list reads as a set of ways to act on the world, not as
 a way to change how the assistant behaves, so a standing request came back as a one-off
-answer plus, at best, a suggestion that you open Automations yourself.
+answer plus, at best, a suggestion that you open Schedules yourself.
 
 Two things fix that, and it takes both. The `schedule_*` tools give it a handle on the
 `schedules` table — list, create, update, delete. And the system prompt now names the
@@ -647,12 +647,12 @@ week later. Saying `next tuesday` is how you ask for one.
 
 **A relative spec is resolved once, at creation, and stored as the instant it meant.** "In
 30 minutes" is a sentence about the moment it was spoken. Stored verbatim it re-reads as a
-different time on every glance, shows on the Automations page as a job perpetually half an
+different time on every glance, shows on the Schedules page as a job perpetually half an
 hour away, and — because the scheduler consults the spec again after firing — resolves to
 yet another half hour ahead instead of being finished. So the row holds `once at 2026-08-15
 14:30`, which parses back to itself.
 
-**A fired one-shot retires itself**: disabled, `next_run` cleared, row kept so Automations
+**A fired one-shot retires itself**: disabled, `next_run` cleared, row kept so Schedules
 still shows what ran. The failure mode this guards against is silent — a re-armed one-shot
 becomes a reminder that arrives forever, and nothing looks wrong until the second one turns
 up. The old `next_run` fallback would have done exactly that, quietly converting "remind me

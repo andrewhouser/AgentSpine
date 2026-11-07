@@ -554,7 +554,7 @@ npm run tick | loop    # legacy single-goal heartbeat
 > per file, built to `public/` (now gitignored; the old vanilla dashboard is in
 > `_archive/public-vanilla/`). Live tool-call cards carrying the broker's decision badge,
 > **inline approval cards** with reject-and-say-why, a conversation sidebar, and the former tabs
-> as Activity / Automations / Approvals / Settings. Markdown renders through markdown-it with
+> as Activity / Schedules / Approvals / Settings. Markdown renders through markdown-it with
 > `html: false` — assistant text quotes UNTRUSTED web and mail, so raw HTML is never emitted and
 > there is no sanitizer to misconfigure. ESLint (with Perfectionist) and Stylelint enforce
 > alphabetical ordering; `npm run check` runs typecheck + both linters + the tests.

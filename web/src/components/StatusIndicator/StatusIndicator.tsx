@@ -21,9 +21,6 @@ export const StatusIndicator = ({ status }: StatusIndicatorProps) => {
     <div className={styles.bar}>
       <span className={`${styles.dot} ${busy ? styles.busy : styles.idle}`} />
       {busy ? `running${status.depth > 1 ? ` · ${status.depth} queued` : ""}` : "idle"}
-      <span className={styles.meta}>
-        {status.schedules} schedule{status.schedules === 1 ? "" : "s"}
-      </span>
     </div>
   );
 };

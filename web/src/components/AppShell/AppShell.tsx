@@ -10,11 +10,11 @@ import { useStatus } from "../../hooks/useStatus.ts";
 import { api } from "../../lib/api.ts";
 import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
-import { AutomationsView } from "../AutomationsView/AutomationsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { ConfirmationsView } from "../ConfirmationsView/ConfirmationsView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
+import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
 import { SettingsView } from "../SettingsView/SettingsView.tsx";
 import { Sidebar } from "../Sidebar/Sidebar.tsx";
 import styles from "./AppShell.module.css";
@@ -23,9 +23,9 @@ const NO_PROJECTS: Project[] = [];
 
 const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
-  automations: "Automations",
   confirmations: "Approvals",
   meetings: "Meetings",
+  schedules: "Schedules",
   settings: "Settings",
 };
 
@@ -141,7 +141,7 @@ export const AppShell = () => {
         </div>
 
         {route.view === "activity" && <ActivityView />}
-        {route.view === "automations" && <AutomationsView />}
+        {route.view === "schedules" && <SchedulesView />}
         {route.view === "confirmations" && <ConfirmationsView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}

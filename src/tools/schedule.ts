@@ -5,7 +5,7 @@
  * agent is running in — they are how "look up new movie trailers every day at noon"
  * becomes a row in the `schedules` table instead of a thing done once and described in a
  * summary. Without them the model has no idea the thing it lives in even has a scheduler,
- * and the only honest answer to a standing request is "open Automations and add it
+ * and the only honest answer to a standing request is "open Schedules and add it
  * yourself", which is precisely the seam this closes.
  *
  * Every write here is classified **irreversible**, and not because a row is hard to

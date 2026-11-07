@@ -5,7 +5,7 @@ import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
 import styles from "./Sidebar.module.css";
 
-export type View = "activity" | "automations" | "chat" | "confirmations" | "meetings" | "project" | "settings";
+export type View = "activity" | "chat" | "confirmations" | "meetings" | "project" | "schedules" | "settings";
 
 interface SidebarProps {
   activeConversation: null | number;
@@ -26,7 +26,7 @@ interface SidebarProps {
 const NAV: { key: View; label: string }[] = [
   { key: "confirmations", label: "Approvals" },
   { key: "meetings", label: "Meetings" },
-  { key: "automations", label: "Automations" },
+  { key: "schedules", label: "Schedules" },
   { key: "activity", label: "Activity" },
   { key: "settings", label: "Settings" },
 ];
@@ -97,6 +97,7 @@ export const Sidebar = ({
           type="button"
         >
           {item.label}
+          {item.key === "schedules" && ` (${status.schedules})`}
           {item.key === "confirmations" && status.pendingConfirmations > 0 && (
             <span className={styles.badge}>{status.pendingConfirmations}</span>
           )}

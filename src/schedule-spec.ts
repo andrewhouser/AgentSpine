@@ -245,7 +245,7 @@ const pad = (n: number): string => String(n).padStart(2, "0");
  * Recurring specs are already absolute statements and are kept exactly as written. A
  * one-shot is not: "in 30 minutes" is a sentence about the moment it was spoken, and
  * storing it verbatim would leave a row that re-reads as a different time on every glance,
- * displays on the Automations page as a job perpetually half an hour away, and — once the
+ * displays on the Schedules page as a job perpetually half an hour away, and — once the
  * scheduler consults it after firing — resolves to yet another half hour in the future
  * instead of being finished. So a one-shot is resolved once, here, at creation, and stored
  * as the instant it meant. `once at 2026-08-15 14:30` parses back to itself.

@@ -1209,7 +1209,7 @@ export const dueSchedules = (): ScheduleRow[] =>
  * Record that a job just ran and arm it for next time.
  *
  * A one-shot has no next time, so it retires itself: disabled, with next_run cleared. The
- * row deliberately stays — Automations should still show what ran and when, and deleting it
+ * row deliberately stays — Schedules should still show what ran and when, and deleting it
  * would make a fired reminder indistinguishable from one that never existed.
  */
 export const markScheduleRan = (id: number): void => {
