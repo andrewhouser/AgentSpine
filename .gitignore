@@ -45,3 +45,13 @@ ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/build/
 *.xcworkspace/xcuserdata/
+
+# Signing material. The APNs .p8 belongs outside the repo entirely (ios/README.md step 2
+# puts it in ~/.config/agentspine), and these rules exist for the day it lands here anyway:
+# Apple issues it once and never again, it can push to every app in the team, and it does
+# not expire — so a single careless `git add` is a credential published forever, recoverable
+# only by revoking the key. Belt and braces, deliberately.
+*.p8
+*.p12
+*.cer
+*.mobileprovision
