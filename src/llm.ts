@@ -15,6 +15,7 @@ import {
   CLOUD_API_KEY,
   CLOUD_ENABLED,
 } from "./config.ts";
+import { record as recordTiming } from "./timing.ts";
 
 /**
  * A failed completion. `retryable` says whether re-attempting the SAME endpoint could
@@ -111,6 +112,19 @@ export interface ChatOpts {
   maxTokens?: number;
   temperature?: number;
   timeoutMs?: number;
+  // --- timing attribution (see src/timing.ts) ---
+  // These three are metadata, never sent to the model. They ride on ChatOpts because
+  // RouteOpts extends it, so a caller that already knows the run and the step gets them to
+  // the one place that can time the request without a new parameter on every layer in
+  // between. Unset is fine and common: a call with no run is still worth timing.
+  /** Which run this call belongs to. */
+  runId?: null | number;
+  /** Which agent-loop step, 1-based. Absent for calls outside the loop. */
+  step?: null | number;
+  /** The call site spending the time: "step", "dispatch", "closing", "judge", … */
+  purpose?: null | string;
+  /** The tier being asked. Injected by the router, which knows it after fallback. */
+  tier?: null | string;
 }
 
 /**
@@ -187,9 +201,26 @@ export const chat = async (
   client: OpenAI,
   model: string,
   messages: Msg[],
-  { maxTokens, temperature = 0.2, timeoutMs = 120_000 }: ChatOpts = {},
+  { maxTokens, purpose, runId, step, temperature = 0.2, tier, timeoutMs = 120_000 }: ChatOpts = {},
 ): Promise<string> => {
   const isCloud = sameEndpoint(String(client.baseURL ?? ""), CLOUD_BASE_URL);
+  // Every completion in the system funnels through here, which is what makes this the only
+  // honest place to time one: a measurement taken a layer up would miss the retries and
+  // fallbacks that router.ts performs by calling this again.
+  const startedAt = performance.now();
+  const timed = (ok: boolean, usage?: { completion_tokens?: number; prompt_tokens?: number } | null): void =>
+    recordTiming({
+      completionTokens: usage?.completion_tokens ?? null,
+      model,
+      ms: performance.now() - startedAt,
+      ok,
+      promptTokens: usage?.prompt_tokens ?? null,
+      purpose: purpose ?? null,
+      runId: runId ?? null,
+      step: step ?? null,
+      tier: tier ?? null,
+    });
+
   try {
     const res = await client.chat.completions.create(
       {
@@ -201,6 +232,11 @@ export const chat = async (
       } as ChatCompletionCreateParamsNonStreaming,
       { timeout: timeoutMs },
     );
+    // Timed before the shape checks below: the server did the work and we waited for it,
+    // whether or not what came back is usable. A reply that burned 40 seconds and then
+    // turned out to be reasoning-with-no-content is exactly the cost worth seeing.
+    timed(true, res.usage);
+
     const message = res.choices?.[0]?.message as
       | (typeof res.choices)[number]["message"] & { reasoning?: unknown };
     const text = message?.content;
@@ -219,6 +255,10 @@ export const chat = async (
     }
     return stripControlTokens(text);
   } catch (err) {
+    // A failed call is time the user waited too, so it is recorded rather than dropped —
+    // but only when the request itself failed. The two throws above have already timed
+    // their call, and double-counting would inflate every total they appear in.
+    if (!(err instanceof LLMError)) timed(false, null);
     // Our own deterministic errors (unexpected shape, reasoning-no-content) are already
     // non-retryable by construction — pass them through untouched.
     if (err instanceof LLMError) throw err;

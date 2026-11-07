@@ -800,7 +800,9 @@ src/                 the agent — no build step, two runtime dependencies
   agent.ts         plan → tool → observe loop
   runner.ts        the one place a run executes; injects profile + recalled memories
   reflect.ts       post-run pass that learns durable facts about you (local-only)
-  notify.ts        reaching you: ntfy push (phone) with a Mac-banner fallback
+  notify.ts        reaching you: APNs + ntfy together, Mac banner only if neither landed
+  push/
+    apns.ts        Apple Push, HTTP/2 + a self-signed ES256 JWT, no dependencies
   watcher.ts       npm run watcher — install/inspect poll-diff-act schedules
   digest.ts        npm run digest — computed account of what it actually did
   judge.ts         cloud-preferring yes/no for the rare real judgment call
@@ -839,6 +841,9 @@ web/                 the interface — Vite + React + TypeScript + CSS Modules
   src/hooks/       useRunStream (SSE), useConversations, useResource, useStatus
   src/lib/         api client, route table, markdown (html:false — see below)
 public/              build output of web/. Gitignored; `npm run web:build` regenerates it.
+ios/                 the iPhone app — SwiftUI, no dependencies, installed from Xcode
+  AgentSpine/      Core (API client, SSE, keychain), Views, Push
+  Supporting/      Info.plist, entitlements, and the two values that are yours
 _archive/            the previous vanilla-JS dashboard, kept for reference
 ```
 
@@ -1061,6 +1066,39 @@ A Mac banner only works if you're sitting at the Mac. Once AgentSpine lives on a
 always-on box, "it acted while you were away" needs two things: it can reach you, and you
 can answer.
 
+**There are two ways to reach your phone**, and they run *together* rather than as a
+fallback chain: [the AgentSpine iOS app](ios/README.md), and ntfy. Both configured means
+both get pushed, every time — because the failure worth guarding against is not a transport
+erroring, it is a transport that looks like it worked while the notification went nowhere,
+which is the normal failure mode of a stale APNs token and of an ntfy topic you have
+stopped looking at. The Mac banner is a true fallback and fires only when neither delivered.
+
+### The iPhone app
+
+[`ios/`](ios/README.md) is a native SwiftUI client: the thread list, a composer, turns
+streaming in live with the broker's verdict on every tool call, the approval queue, and
+notifications with Approve / Reject on the lock screen. It is never submitted to the App
+Store — you install it on your own phone from Xcode and it lasts a year before it needs
+re-signing.
+
+It exists for a reason that is slightly embarrassing to write down: a notification you have
+trained yourself to swipe away is not a notification. ntfy works, but it is a generic client
+sharing its Focus allowance and its badge with whatever else you subscribed to, and the
+approval that most needs to interrupt you is the one most likely to be dismissed with
+everything else. A dedicated app gets its own icon, its own Time Sensitive permission, and a
+tap that lands on the actual thread.
+
+The cost is an Apple Developer membership — $99/year, and not for distribution. Push
+Notifications is the one entitlement a free Apple ID cannot have, so without it iOS never
+issues the app a device token and there is nothing to push to. Setup, and the table of what
+each APNs error actually means, is in [ios/README.md](ios/README.md).
+
+Pushes to the app travel over **Apple's** network, not the tailnet, so they arrive on
+cellular and on other people's Wi-Fi. Reading the thread afterwards needs Tailscale; being
+told does not.
+
+### ntfy
+
 **Push.** Set `NTFY_TOPIC` (and optionally `NTFY_URL` for your own server) and
 notifications go to the [ntfy](https://ntfy.sh) app on your phone; leave it empty and
 everything falls back to a Mac banner. Three things push automatically: an irreversible
@@ -1129,6 +1167,73 @@ approval token is that someone answers one question you were already about to be
 
 Do not port-forward the dashboard to the public internet to make this work. Tailscale or
 the LAN, per SPEC §3.
+
+### The watchdog — a clock on the queue
+
+Pushing once, at the moment a question is queued, is the right push and it used to be the
+only one. If you were asleep when a 3am job asked, nothing ever asked again: the row
+carried a timestamp no code read, and the single nudge was a line in a log nobody tails.
+That is the wrong failure mode for a system whose premise is that it works unattended,
+because **"silently stopped" and "nothing to do" look identical from the outside.**
+
+So a pending confirmation now ages through three rungs, each counted from when it was
+queued:
+
+| after | what happens |
+|---|---|
+| `CONFIRM_REMIND_AFTER_MIN` (3h) | a second push, same priority as the first |
+| `CONFIRM_ESCALATE_AFTER_MIN` (12h) | priority 5 — breaks through Do Not Disturb |
+| `CONFIRM_EXPIRE_AFTER_MIN` (72h) | the question closes, state `expired`, nothing runs |
+
+Set any of them to `0` to switch that rung off; `CONFIRM_EXPIRE_AFTER_MIN=0` restores the
+old wait-forever behaviour while keeping the reminders. The sweep runs in the dashboard
+every five minutes and on every `npm run loop` heartbeat, so the headless path — no server,
+no browser, nobody looking — is covered too.
+
+**Why anything expires at all**, given that waiting forever is the safer default for a
+security gate: approving re-checks the allowlist, so a stale row can never escape policy —
+but policy answers *may this happen*, not *is this still the thing you read*. Approving
+"send the draft about tomorrow's meeting" nine days later passes every gate in the system
+and is still wrong. 72 hours covers a weekend away without letting anything execute against
+a world that has moved on. The window is enforced at approval time as well as in the sweep,
+so it holds for `npm run confirm approve` on a box where no watchdog has ever ticked.
+
+**Expiring is not rejecting.** A rejection is a decision, and a reason-less one still
+teaches — it tallies the shape and eventually writes a `preference` memory. An expiry
+teaches nothing and writes nothing, because you did not decide against it; you never saw
+it. Putting words in your mouth from your silence is worse than being asked twice.
+
+## Where the time goes
+
+```bash
+npm run timing        # the last 7 days
+npm run timing 30
+```
+
+Every completion records its duration and token counts to a `llm_calls` row — durations and
+token counts only, never prompts or replies, since the trace already holds the content under
+its own retention and a second copy on a different clock is how a thread you deleted turns up
+somewhere nobody thought to prune. On by default (`LLM_TIMING=false` to stop), aged on
+`AUDIT_RETENTION_DAYS`, and pruned alongside its run.
+
+This exists because the first performance question asked here could not be answered at all.
+`saveTrace` stamps a run's whole trace with one timestamp at save time, so per-step timing
+was never recorded; `actions.ts` marks the moment a tool *finished*, so it cannot separate
+model time from tool time. The only remaining instrument was a synthetic benchmark against a
+warm server, which measures the hardware rather than the workload.
+
+A row is **one HTTP request, not one agent step**. A transient retry, a tier fallback and a
+re-ask after malformed JSON are each real seconds spent waiting, and folding them into the
+step that provoked them would hide exactly the costs worth finding. `purpose` says which call
+site spent the time — `step`, `step-reask`, `closing`, `dispatch`, `judge`, `reflect` — which
+is what separates "the answer was slow" from "the classifier and the closing-answer call were
+slow".
+
+The report ends on the number that settles the streaming argument: **how much of the total was
+the last call of a run.** That is the most that streaming a final answer could ever hide;
+everything before it needs fewer calls or a smaller prompt, not faster paint. For time-to-first-token,
+which a non-streaming client cannot see by construction, `node bench/ttft.mjs` measures a live
+endpoint directly.
 
 ## Chrome control
 

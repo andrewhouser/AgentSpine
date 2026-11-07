@@ -1,0 +1,23 @@
+// The two values that are yours, in one place.
+//
+// They live in an xcconfig rather than in the project file so that changing them is a
+// two-line edit in a text file instead of a hunt through Xcode's build settings, and so a
+// `git diff` after you set them shows exactly one file.
+//
+// ---------------------------------------------------------------------------------------
+// 1. Your bundle id. Must be globally unique across the App Store namespace, so use a
+//    domain you control, reversed. This exact string has to match APNS_BUNDLE_ID in the
+//    AgentSpine .env — APNs uses it as the topic, and a mismatch is rejected as
+//    TopicDisallowed.
+// ---------------------------------------------------------------------------------------
+AGENTSPINE_BUNDLE_ID = com.example.AgentSpine
+
+// ---------------------------------------------------------------------------------------
+// 2. Your 10-character Apple Developer Team ID — the same one you put in APNS_TEAM_ID.
+//    Find it at developer.apple.com/account under Membership details.
+//
+//    Leaving it empty also works: Xcode will ask you to pick a team the first time you
+//    build, and write it into the project file. Setting it here keeps the project file
+//    clean and makes the build reproducible from a fresh clone.
+// ---------------------------------------------------------------------------------------
+DEVELOPMENT_TEAM =

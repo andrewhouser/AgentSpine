@@ -178,7 +178,7 @@ export const reflect = async (task: string, trace: Msg[], opts: ReflectOpts = {}
     ];
 
     // sensitivity:"private" pins this to the local model — the trace never leaves the box.
-    const { text } = await route(messages, { sensitivity: "private", temperature: 0 });
+    const { text } = await route(messages, { purpose: "reflect", sensitivity: "private", temperature: 0 });
 
     let parsed: any;
     try {

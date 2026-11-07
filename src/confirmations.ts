@@ -3,11 +3,20 @@
  * and the dashboard API. Approving re-checks policy at approval time and runs the action
  * through the queue so it never overlaps a running agent cycle.
  */
-import { loadPolicy, REJECT_PROMOTE_AFTER } from "./config.ts";
+import {
+  CONFIRM_ESCALATE_AFTER_MIN,
+  CONFIRM_EXPIRE_AFTER_MIN,
+  CONFIRM_REMIND_AFTER_MIN,
+  loadPolicy,
+  NOTIFY_ON_CONFIRMATION,
+  REJECT_PROMOTE_AFTER,
+} from "./config.ts";
 import { registry } from "./tools/index.ts";
 import { enqueue } from "./queue.ts";
 import { remember } from "./memory/rag.ts";
 import * as store from "./memory/store.ts";
+import { confirmationActions, confirmationPush, notify } from "./notify.ts";
+import type { NotifyResult } from "./notify.ts";
 
 export const PREFERENCE_KIND = "preference";
 
@@ -39,6 +48,17 @@ export const approveConfirmation = async (id: number): Promise<ConfirmOutcome> =
   const row = store.getConfirmation(id);
   if (!row) return { ok: false, message: `No confirmation #${id}.` };
   if (row.state !== "pending") return { ok: false, message: `#${id} is already '${row.state}'.` };
+
+  // Expire at approval time as well as in the sweep, because the sweep is not guaranteed to
+  // have run: the watchdog lives in the dashboard and the heartbeat, and `npm run confirm`
+  // works with neither of them up. A row old enough to expire must not execute merely
+  // because nothing happened to be running to close it — that would make the window a
+  // property of the process uptime instead of a property of the question.
+  const stale = expiredAt(row.ts);
+  if (stale) {
+    store.setConfirmation(id, "expired", stale);
+    return { ok: false, message: `#${id} ${stale}` };
+  }
 
   const tool = registry[row.tool];
   if (!tool) return { ok: false, message: `Tool '${row.tool}' no longer exists.` };
@@ -138,4 +158,165 @@ const noteSilentRejection = async (tool: string, argsJson: string, summary: stri
   }
 
   store.kvSet(key, String(count));
+};
+
+// --- the watchdog ---
+/**
+ * The clock on the approval queue.
+ *
+ * `src/broker.ts` pushes once, at the moment a question is queued. That is the right push
+ * and it was the only one: if you were asleep, in a meeting, or simply looking at a
+ * different screen, nothing ever asked again. The row carried a `ts` that no code read.
+ *
+ * What makes this worth real care rather than a `setInterval` and a second push is that
+ * both failure directions are bad in different ways. Nudge too eagerly and the queue
+ * becomes noise, which costs the one thing the confirmation gate depends on — that you
+ * actually read the summary before approving. Never nudge and the system's unattended half
+ * silently stops, looking exactly like "there was nothing to do". The rungs in config.ts
+ * are spaced for the first risk; the existence of an expiry answers the second.
+ *
+ * See CONFIRM_REMIND_AFTER_MIN in config.ts for the rungs and why expiry defaults to 72h.
+ */
+const MINUTE_MS = 60_000;
+
+/** Minutes since `iso`, or null if it cannot be parsed — an unreadable clock acts on nothing. */
+const ageMinutes = (iso: string, nowMs: number): number | null => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? (nowMs - t) / MINUTE_MS : null;
+};
+
+/** "4h", "2d 3h" — how long it has been waiting, for the push body. */
+const describeWait = (mins: number): string => {
+  const h = Math.floor(mins / 60);
+  if (h < 1) return `${Math.max(1, Math.round(mins))}m`;
+  if (h < 48) return `${h}h`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
+};
+
+/**
+ * The expiry verdict on a question queued at `ts`: the reason string to record, or null if
+ * it is still live. Exported for the approval path, which applies the same window without
+ * waiting for a sweep.
+ */
+export const expiredAt = (ts: string, nowMs = Date.now()): null | string => {
+  if (CONFIRM_EXPIRE_AFTER_MIN <= 0) return null;
+  const age = ageMinutes(ts, nowMs);
+  if (age === null || age < CONFIRM_EXPIRE_AFTER_MIN) return null;
+  return (
+    `expired after ${describeWait(age)} without an answer — it was never run. ` +
+    `Ask again if you still want it; the world it was proposed in has moved on.`
+  );
+};
+
+export interface SweepResult {
+  reminded: number;
+  escalated: number;
+  expired: number;
+}
+
+/**
+ * One pass over the pending queue: expire what is past the window, and push about what has
+ * crossed a rung it has not climbed yet.
+ *
+ * Three properties make it safe to run unattended, every few minutes, from more than one
+ * process:
+ *
+ *   1. **Idempotent per rung.** The rung reached is stored on the row, so a sweep every 5
+ *      minutes re-pushes once per rung, not once per sweep — and the heartbeat and the
+ *      dashboard both running it is harmless rather than double the notifications.
+ *   2. **Rungs are skipped, not queued.** A row that is already past the escalation
+ *      threshold the first time it is seen (the server was down for a day) climbs straight
+ *      to rung 2 and pushes once, rather than firing a reminder it is far too late for.
+ *   3. **It never throws and never resolves a question by accident.** A failed push leaves
+ *      the rung unclimbed so the next sweep retries it; a row that errors is skipped, not
+ *      expired.
+ *
+ * Expiring is deliberately NOT a rejection: no preference memory, no silent-rejection
+ * tally. You did not decide against this — you never saw it, and teaching the assistant a
+ * preference from your absence would put words in your mouth.
+ *
+ * `notifier` is injected for tests; everything else defaults to real time and real pushes.
+ */
+export const sweepConfirmations = async (
+  opts: { notifier?: typeof notify; now?: number } = {},
+): Promise<SweepResult> => {
+  const nowMs = opts.now ?? Date.now();
+  const push = opts.notifier ?? notify;
+  const result: SweepResult = { escalated: 0, expired: 0, reminded: 0 };
+
+  let rows: store.ConfirmationRow[];
+  try {
+    rows = store.pendingConfirmationsBefore(new Date(nowMs).toISOString());
+  } catch (err) {
+    console.warn(`[watchdog] could not read the queue: ${err instanceof Error ? err.message : String(err)}`);
+    return result;
+  }
+
+  for (const row of rows) {
+    try {
+      const age = ageMinutes(row.ts, nowMs);
+      if (age === null) continue;
+
+      const stale = expiredAt(row.ts, nowMs);
+      if (stale) {
+        store.setConfirmation(row.id, "expired", stale);
+        result.expired++;
+        // Say so. An action that quietly stopped existing is the failure this whole module
+        // was written against, and closing the question silently would reproduce it.
+        if (NOTIFY_ON_CONFIRMATION) {
+          await push(`Approval expired (#${row.id})`, `${row.summary}\n\nWaited ${describeWait(age)}. Nothing ran.`, {
+            priority: 3,
+            tags: ["hourglass"],
+          });
+        }
+        continue;
+      }
+
+      // The highest rung this age has reached. Escalation is checked first so a long-cold
+      // row climbs straight to it instead of spending a sweep on a reminder.
+      const rung =
+        CONFIRM_ESCALATE_AFTER_MIN > 0 && age >= CONFIRM_ESCALATE_AFTER_MIN
+          ? 2
+          : CONFIRM_REMIND_AFTER_MIN > 0 && age >= CONFIRM_REMIND_AFTER_MIN
+            ? 1
+            : 0;
+      if (rung === 0 || rung <= (row.rung ?? 0)) continue;
+
+      if (!NOTIFY_ON_CONFIRMATION) {
+        // Pushes are off by configuration. Climb the rung anyway so that turning them back
+        // on does not fire a backlog of nudges for questions that aged while they were off.
+        store.setConfirmationRung(row.id, rung);
+        continue;
+      }
+
+      const token = row.token ?? null;
+      const sent: NotifyResult = await push(
+        rung === 2 ? `Still waiting (#${row.id})` : `Approval needed (#${row.id})`,
+        `${row.summary}\n\nQueued ${describeWait(age)} ago and still unanswered.`,
+        {
+          actions: token ? confirmationActions(row.id, token) : [],
+          priority: rung === 2 ? 5 : 4,
+          // A reminder shares the first push's collapse id, so three nudges about #12 are
+          // one item on the lock screen rather than a stack you have to clear.
+          push: token
+            ? confirmationPush(row.id, token)
+            : { category: "CONFIRMATION", collapseId: `confirmation-${row.id}`, confirmationId: row.id },
+          tags: rung === 2 ? ["rotating_light"] : ["warning"],
+        },
+      );
+
+      // Only record the rung if it actually went somewhere. A failed push that marked
+      // itself delivered would turn a transient ntfy outage into a question you are never
+      // reminded about again — the precise failure this is here to prevent.
+      if (sent.ok) {
+        store.setConfirmationRung(row.id, rung);
+        if (rung === 2) result.escalated++;
+        else result.reminded++;
+      }
+    } catch (err) {
+      console.warn(`[watchdog] #${row.id} skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return result;
 };

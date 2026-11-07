@@ -252,6 +252,17 @@ fuzzy semantic guessing (today's model-release watcher approximates this via `re
 >   `NOTIFY_ON_CONFIRMATION`, `NOTIFY_ON_FAILURE`, `NOTIFY_ON_SCHEDULE`.
 > - Still on you: the transport. `DASHBOARD_PUBLIC_URL` must be a Tailscale/LAN address.
 >   Do not port-forward 8787.
+>
+> **Added 2026-11-07 — the confirmation watchdog.** The push above fires once, at queue
+> time. A question nobody answered then waited forever, nudged only by a `console.log` on
+> the next heartbeat — "silently stopped" looking exactly like "nothing to do". A pending
+> row now ages through remind → escalate → expire (`sweepConfirmations` in
+> `src/confirmations.ts`, swept by the dashboard every 5 min and by every `npm run loop`
+> tick), adding the `expired` confirmation state and the `rung`/`nudged` columns. The
+> expiry window is enforced in `approveConfirmation` too, so it holds for a CLI approval on
+> a box where no sweep has run; `src/confirm.ts` was switched to that shared path, having
+> carried its own drifting copy of approve since before this module existed. Knobs and the
+> reasoning: `CONFIRM_*` in `src/config.ts`. Tests: `test/confirm-watchdog.test.mjs`.
 
 *Original plan, kept for reference:*
 
@@ -718,6 +729,42 @@ npm run tick | loop    # legacy single-goal heartbeat
 > behaviour. A doc that disagrees with the code is worse than either.
 >
 > 21 assertions in `test/prune.test.mjs`, weighted toward the two refusals.
+
+---
+
+## 18. Model-call timing — where a turn's time actually goes  ✅ **BUILT, 2026-11-07**
+
+> **The gap this closes.** Asked where a chat turn's wall time went, the ledger could not
+> say. `saveTrace` writes a run's whole trace at the end and stamps every row with the same
+> `now()`, so per-step timing was never recorded; `actions.ts` is stamped after a tool
+> returns, so it marks completion and cannot separate model time from tool time. The only
+> instrument left was a synthetic benchmark against a warm server, which measures the
+> hardware rather than the workload.
+>
+> - `src/timing.ts` — `record()`, the only writer, and the summarisers the report uses. It
+>   never throws: a measurement that can break the thing it measures is worse than none.
+>   Keeping the ledger out of `llm.ts`'s imports is the other reason it is a module.
+> - `src/llm.ts` — timed inside `chat()`, the single chokepoint every completion funnels
+>   through. A layer up would miss the retries and tier fallbacks `router.ts` performs by
+>   calling it again, which is why a row is **one HTTP request, not one agent step**.
+> - Attribution rides on `ChatOpts` (`runId`, `step`, `purpose`, `tier`) because `RouteOpts`
+>   extends it, so no new parameter was needed on any layer in between. `tier` is stamped by
+>   `router.ts`'s `send`, the first place that knows which tier is actually serving the call.
+> - `llm_calls` table, aged on `AUDIT_RETENTION_DAYS` rather than a knob of its own, and
+>   dropped with its run by `pruneLedger`. Durations and token counts only — the trace
+>   already holds the content, and a second copy on a different clock is how a deleted
+>   thread survives somewhere nobody prunes.
+> - `npm run timing [days]` reports per-purpose and per-tier breakdowns, the calls-per-run
+>   histogram, and the share of total time spent in the **last** call of a run — the ceiling
+>   on what streaming a final answer could ever hide.
+> - `LLM_TIMING` defaults **on**. Instrumentation nobody remembers to enable is off when the
+>   question gets asked, which is the situation this section exists to end.
+> - Not measurable here: time to first token. Completions are
+>   `ChatCompletionCreateParamsNonStreaming` by construction, so there is no first token to
+>   time. `bench/ttft.mjs` measures that against a live endpoint instead.
+> - Tests: `test/timing.test.mjs`. `test/llm-messages.test.mjs` and
+>   `test/router-retry.test.mjs` now point `SPINE_DB_PATH` at a scratch file — importing
+>   `llm.ts` opens the ledger, and without that a test run would write into the real one.
 
 ---
 

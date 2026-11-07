@@ -48,6 +48,13 @@
   color: var(--danger);
 }
 
+/* Expired is not rejected and not failed — nobody decided anything and nothing ran.
+   Warn, not danger, because the thing worth noticing is the unanswered question. */
+.expired {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
 .tool {
   flex: none;
   font-family: var(--font-mono);

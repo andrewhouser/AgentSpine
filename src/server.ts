@@ -45,6 +45,8 @@ import {
 import { runTask, startTask } from "./runner.ts";
 import {
   AUDIT_RETENTION_DAYS,
+  CONFIRM_EXPIRE_AFTER_MIN,
+  CONFIRM_SWEEP_MS,
   DICTATION_ENABLED,
   DICTATION_MAX_BYTES,
   IMAGES_DIR,
@@ -59,10 +61,11 @@ import type { Tier } from "./tiers.ts";
 import { hasEnded, replay, subscribe } from "./events.ts";
 import type { RunEvent } from "./events.ts";
 import { queueStatus } from "./queue.ts";
-import { approveConfirmation, rejectConfirmation } from "./confirmations.ts";
+import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
-import { DASHBOARD_PUBLIC_URL } from "./config.ts";
+import { defaultApnsEnv, sendPush } from "./push/apns.ts";
+import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
 import { VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { rawDb } from "./memory/store.ts";
@@ -550,6 +553,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           attachmentIds,
           conversationId: id,
           kind: "chat",
+          // The phone sets this and then locks itself. The dashboard never does — it is
+          // holding the event stream open. See RunOpts.notifyOnFinish.
+          notifyOnFinish: !!b.notify,
           tier: (pinned as Tier | undefined) ?? undefined,
         });
         // The failure is already recorded on the run row and published to the stream; this
@@ -646,6 +652,79 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const b = await readBody(req);
         return sendJson(res, 200, await rejectConfirmation(Number(seg[2]), String(b.reason ?? "")));
       }
+    }
+
+    /**
+     * /api/devices — the phones that get pushed to.
+     *
+     * Registration is an upsert the app repeats on every launch, because an APNs device
+     * token is not stable (reinstall, restore from backup, or iOS simply deciding). A client
+     * that tried to remember whether it had already registered would eventually be wrong in
+     * the one direction that matters, so it does not try.
+     *
+     * Behind the dashboard token like every other mutating route. The agent has no tool that
+     * reaches this: nothing the model does can add a destination for your notifications,
+     * which is the same posture as /api/proposals and for the same reason.
+     */
+    if (seg[1] === "devices") {
+      if (m === "GET" && seg.length === 2) {
+        // The token is a credential for pushing to your phone, so it is shown the way a card
+        // number is: enough to tell two devices apart, not enough to be useful if this
+        // response is read by someone else.
+        return sendJson(
+          res,
+          200,
+          store.listDevices().map((d) => ({
+            created: d.created,
+            detail: d.detail,
+            disabled: d.disabled,
+            environment: d.environment,
+            failures: d.failures,
+            id: d.id,
+            name: d.name,
+            seen: d.seen,
+            token: `…${d.token.slice(-8)}`,
+          })),
+        );
+      }
+
+      if (m === "POST" && seg.length === 2) {
+        const b = await readBody(req);
+        // Hex, 64 characters today, but Apple has lengthened it before and may again — so
+        // this checks the alphabet and a sane range rather than an exact length, which would
+        // turn a future iOS release into a silent registration failure.
+        const token = String(b.token ?? "").trim().toLowerCase();
+        if (!/^[0-9a-f]{32,200}$/.test(token))
+          return sendJson(res, 400, { error: "token must be a hex APNs device token" });
+        const environment = b.environment === "production" ? "production" : defaultApnsEnv();
+        const name = typeof b.name === "string" && b.name.trim() ? b.name.trim().slice(0, 80) : null;
+        const row = store.upsertDevice(token, environment, name);
+        console.log(`[devices] registered ${row.name ?? "device"} ${row.id} (${environment})`);
+        return sendJson(res, 200, { environment: row.environment, id: row.id, name: row.name });
+      }
+
+      if (m === "DELETE" && seg.length === 3) {
+        const removed = store.deleteDevice(Number(seg[2]));
+        return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+      }
+    }
+
+    /**
+     * POST /api/push/test — send a notification to every registered phone, right now.
+     *
+     * This earns its place because the APNs failure modes are all silent from the phone's
+     * side: a wrong key id, the wrong environment, a Time Sensitive permission you never
+     * granted, and a working setup are indistinguishable from the sofa. The response is the
+     * verbatim APNs verdict per device, which turns "it didn't buzz" into a reason.
+     */
+    if (m === "POST" && seg[1] === "push" && seg[2] === "test" && seg.length === 3) {
+      const b = await readBody(req);
+      const r = await sendPush(
+        String(b.title ?? "AgentSpine"),
+        String(b.body ?? "Test push. If you can read this, the APNs path works."),
+        { category: "RUN", priority: Number(b.priority ?? 3) },
+      );
+      return sendJson(res, r.ok ? 200 : 502, r);
     }
 
     // /api/memories?query=
@@ -1140,6 +1219,26 @@ const runScheduler = async (): Promise<void> => {
   }
 };
 
+// --- the confirmation watchdog ---
+/**
+ * Nudge, escalate and expire questions nobody has answered. The logic is in
+ * confirmations.ts; this is only the clock. Runs on boot as well as on the interval,
+ * because the case it exists for — the Mini was asleep, or the process restarted
+ * overnight — is exactly the one where the first sweep should not wait five minutes.
+ */
+const watchdog = async (): Promise<void> => {
+  try {
+    const r = await sweepConfirmations();
+    if (r.reminded + r.escalated + r.expired > 0) {
+      console.log(
+        `watchdog: ${r.reminded} reminded, ${r.escalated} escalated, ${r.expired} expired`,
+      );
+    }
+  } catch (err) {
+    console.error("watchdog error:", err instanceof Error ? err.message : err);
+  }
+};
+
 // --- boot ---
 // Fail-safe: never expose the (data-bearing, action-capable) API to the network unauthenticated.
 if (!IS_LOCAL && !TOKEN) {
@@ -1161,6 +1260,11 @@ http.createServer(handle).listen(PORT, HOST, () => {
   console.log(`  auth: ${TOKEN ? "token required on /api" : IS_LOCAL ? "none (localhost only)" : "NONE"}`);
   console.log(fs.existsSync(PUBLIC_DIR) ? "  serving static frontend from ./public" : "  API only (no ./public) — point your frontend here");
   console.log(`  scheduler: checking due jobs every ${SCHEDULER_TICK_MS / 1000}s`);
+  console.log(
+    `  watchdog: unanswered approvals re-pushed, then ${
+      CONFIRM_EXPIRE_AFTER_MIN > 0 ? `expired after ${CONFIRM_EXPIRE_AFTER_MIN / 60}h` : "kept forever (expiry off)"
+    }`,
+  );
   console.log(`  tiers: ${describeTiers()}`);
   console.log(
     `  vision: ${
@@ -1169,13 +1273,21 @@ http.createServer(handle).listen(PORT, HOST, () => {
         : "off (set VISION_LLM_URL to accept images)"
     }`,
   );
+  // Which transports are actually live, and whether an approval can be answered from the
+  // phone. Worth printing in full: every one of these failures is silent at the phone end.
+  const transports = [
+    ...(APNS_ENABLED ? [`APNs (${store.activeDevices().length} device(s) registered)`] : []),
+    ...(NTFY_ENABLED ? ["ntfy"] : []),
+  ];
   console.log(
     `  push: ${
-      remoteApprovalConfigured()
-        ? `ntfy + remote approval via ${DASHBOARD_PUBLIC_URL}`
-        : pushConfigured()
-          ? "ntfy (no DASHBOARD_PUBLIC_URL — pushes arrive without Approve/Reject buttons)"
-          : "off (Mac banners only — set NTFY_TOPIC to reach your phone)"
+      transports.length
+        ? `${transports.join(" + ")}${
+            remoteApprovalConfigured()
+              ? ", Approve/Reject from the phone"
+              : " (no DASHBOARD_PUBLIC_URL — ntfy pushes arrive without buttons)"
+          }`
+        : "off (Mac banners only — set NTFY_TOPIC, or see ios/README.md for the iPhone app)"
     }`,
   );
 });
@@ -1183,3 +1295,5 @@ runScheduler();
 setInterval(runScheduler, SCHEDULER_TICK_MS);
 prune();
 setInterval(prune, PRUNE_INTERVAL_MS).unref();
+watchdog();
+setInterval(watchdog, CONFIRM_SWEEP_MS).unref();

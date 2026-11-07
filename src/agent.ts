@@ -366,6 +366,7 @@ const closingAnswer = async (
   gathered: string[],
   conversational: boolean,
   tier: Tier,
+  runId: number | null = null,
 ): Promise<string> => {
   const material = gathered.slice(-6).map((g) => g.slice(0, 1500)).join("\n\n").slice(0, 8000);
   if (!material) return "";
@@ -382,7 +383,7 @@ const closingAnswer = async (
         },
         { role: "user", content: `Question: ${goal}\n\nInformation gathered:\n${material}` },
       ],
-      { tier },
+      { purpose: "closing", runId, tier },
     );
     return text.trim();
   } catch {
@@ -439,7 +440,7 @@ export const runAgent = async (
    * and only says "nothing came of this" when there is genuinely nothing.
    */
   const concludeStuck = async (steps: number, fallback: string): Promise<AgentResult> => {
-    const summary = undelivered || (await closingAnswer(goal, gathered, conversational, tier)) || fallback;
+    const summary = undelivered || (await closingAnswer(goal, gathered, conversational, tier, runId)) || fallback;
     publish(runId, { steps, summary, type: "final" });
     return { summary, steps, trace: messages };
   };
@@ -447,13 +448,21 @@ export const runAgent = async (
   for (let step = 0; step < maxSteps; step++) {
     publish(runId, { step: step + 1, type: "step_start" });
 
-    let { text, parsed, actualTier, via } = await parseOr(messages, { tier });
+    let { text, parsed, actualTier, via } = await parseOr(messages, { purpose: "step", runId, step: step + 1, tier });
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
     // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
     // failing the run, which is what makes routing cheap work to a cheap tier safe.
     if (!parsed) {
-      ({ text, parsed, actualTier, via } = await parseOr(messages, tier === "deep" ? { prefer: "cloud" } : { tier: escalate(tier) }));
+      // Attributed as its own purpose, not folded into the step: a model that fumbles the
+      // JSON protocol costs a whole extra round-trip, and the point of timing is to find
+      // out how often that is actually happening rather than to assume.
+      ({ text, parsed, actualTier, via } = await parseOr(messages, {
+        purpose: "step-reask",
+        runId,
+        step: step + 1,
+        ...(tier === "deep" ? { prefer: "cloud" as const } : { tier: escalate(tier) }),
+      }));
     }
 
     // If the router fell back to a different tier than what dispatch sized, correct the

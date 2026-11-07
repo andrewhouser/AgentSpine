@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<!--
+		The entitlement a free Apple ID cannot have, and therefore the reason the paid
+		membership is a prerequisite for this app rather than a nicety.
+
+		"development" is right for a build you install from Xcode, and it is what decides
+		which APNs host your device token is valid against — the sandbox one. Xcode rewrites
+		this value to "production" when you archive for TestFlight or the App Store, which is
+		why src/push/apns.ts treats a device's environment as a guess that corrects itself
+		rather than as a fact.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+
+	<!--
+		Lets a priority 4-5 notification carry interruption-level "time-sensitive" and break
+		through a Focus mode. No approval from Apple needed — unlike Critical Alerts, which
+		need a request form and are meant for smoke detectors.
+
+		Worth knowing: this entitlement only grants the *ability* to ask. Whether it actually
+		interrupts you is still your choice in Settings → Notifications → AgentSpine → Time
+		Sensitive Notifications, and that toggle is the one step of this setup that cannot be
+		done from code.
+	-->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+</dict>
+</plist>

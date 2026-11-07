@@ -108,6 +108,30 @@ db.exec(`
     shown INTEGER NOT NULL,
     content TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    environment TEXT NOT NULL,
+    name TEXT,
+    created TEXT NOT NULL,
+    seen TEXT NOT NULL,
+    failures INTEGER NOT NULL DEFAULT 0,
+    disabled TEXT,
+    detail TEXT
+  );
+  CREATE TABLE IF NOT EXISTS llm_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    run_id INTEGER,
+    step INTEGER,
+    tier TEXT,
+    model TEXT NOT NULL,
+    ms INTEGER NOT NULL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    ok INTEGER NOT NULL DEFAULT 1,
+    purpose TEXT
+  );
 `);
 
 // Best-effort migrations for DBs created before these columns existed.
@@ -135,10 +159,22 @@ addColumn("confirmations", "token", "TEXT");
 // LEARNING §Phase 0: approval latency = resolved − ts. `ts` is when the question was
 // queued; there was no record of when it was answered, so the wait could not be measured.
 addColumn("confirmations", "resolved", "TEXT");
+// The confirmation watchdog (src/confirmations.ts). `rung` is the highest escalation step
+// this still-pending question has already climbed, so a sweep running every few minutes
+// re-pushes once per rung rather than once per sweep; `nudged` is when that last happened,
+// which is what the push itself quotes back to you. Null on rows predating the columns,
+// read as rung 0 — an old pending row therefore gets one reminder and then behaves like any
+// other, which is the right migration for a question that has been waiting the longest.
+addColumn("confirmations", "rung", "INTEGER");
+addColumn("confirmations", "nudged", "TEXT");
 addColumn("schedules", "spec", "TEXT");
 
 // A conversation's thread is "its runs, in order", read on every thread load.
 db.exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs (conversation_id, id)");
+// Timing rows are read two ways and only two ways: a window over recent calls (the report)
+// and everything belonging to one run (the per-turn breakdown).
+db.exec("CREATE INDEX IF NOT EXISTS idx_llm_calls_ts ON llm_calls (ts)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_llm_calls_run ON llm_calls (run_id, id)");
 // The stash is only ever read or swept one run at a time.
 db.exec("CREATE INDEX IF NOT EXISTS idx_stash_run ON stash (run_id)");
 
@@ -774,6 +810,10 @@ export interface ConfirmationRow {
   resolved: string | null;
   /** Present only on rows read internally; never returned by listConfirmations. */
   token?: string | null;
+  /** Watchdog escalation rung already climbed. Internal; null/absent means none. */
+  rung?: number | null;
+  /** When the watchdog last pushed about this row, ISO. Internal. */
+  nudged?: string | null;
 }
 
 /** Columns safe to hand to a UI or CLI — deliberately excludes `token`. */
@@ -802,6 +842,34 @@ export const pendingConfirmationsForRun = (runId: number): ConfirmationRow[] =>
 
 export const getConfirmation = (id: number): ConfirmationRow | undefined =>
   db.prepare("SELECT * FROM confirmations WHERE id = ?").get(id) as ConfirmationRow | undefined;
+
+/**
+ * Every still-pending confirmation queued at or before `iso`, oldest first.
+ *
+ * Deliberately `SELECT *` rather than CONFIRMATION_COLS: the watchdog needs the approval
+ * token to rebuild the Approve/Reject buttons on its re-push, and a reminder that arrives
+ * without the buttons the original had would be a downgrade at exactly the moment you are
+ * least able to go and find a laptop. This is an internal query — nothing hands its rows
+ * to the API or the CLI.
+ */
+export const pendingConfirmationsBefore = (iso: string): ConfirmationRow[] =>
+  db
+    .prepare("SELECT * FROM confirmations WHERE state = 'pending' AND ts <= ? ORDER BY id")
+    .all(iso) as unknown as ConfirmationRow[];
+
+/**
+ * Record that the watchdog has climbed to `rung` on this question. Separate from
+ * setConfirmation because nothing here resolves the row: it is still pending, still holds
+ * its token, and `resolved` must stay null so approval latency keeps measuring the wait
+ * rather than the nudge.
+ */
+export const setConfirmationRung = (id: number, rung: number): void => {
+  db.prepare("UPDATE confirmations SET rung = ?, nudged = ? WHERE id = ? AND state = 'pending'").run(
+    rung,
+    now(),
+    id,
+  );
+};
 
 /** The approval token for a pending confirmation, for building a push. Null once used. */
 export const getApprovalToken = (id: number): string | null => {
@@ -876,6 +944,8 @@ export interface PruneOpts {
 export interface PruneResult {
   actions: number;
   conversations: number;
+  /** Model-call timing rows (see logLlmCall). Aged on the audit window, not its own. */
+  llmCalls: number;
   messages: number;
   runs: number;
   /** Runs old enough to prune that were kept because something still refers to them. */
@@ -902,7 +972,7 @@ const prunableRuns = (before: string): number[] =>
   ).map((r) => r.id);
 
 export const pruneLedger = (opts: PruneOpts): PruneResult => {
-  const result: PruneResult = { actions: 0, conversations: 0, messages: 0, runs: 0, withheld: 0 };
+  const result: PruneResult = { actions: 0, conversations: 0, llmCalls: 0, messages: 0, runs: 0, withheld: 0 };
   const count = (sql: string, ...args: unknown[]): number =>
     (db.prepare(sql).get(...(args as never[])) as { n: number }).n;
 
@@ -924,6 +994,12 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
     const before = daysAgo(opts.auditDays);
     result.actions = count("SELECT COUNT(*) AS n FROM actions WHERE ts < ?", before);
     if (!opts.dryRun) db.prepare("DELETE FROM actions WHERE ts < ?").run(before);
+
+    // Timing rows age on the audit window rather than a window of their own. They are the
+    // same kind of thing — a per-call record of what the system did — and giving them a
+    // separate knob would be a third retention setting to keep consistent for no gain.
+    result.llmCalls = count("SELECT COUNT(*) AS n FROM llm_calls WHERE ts < ?", before);
+    if (!opts.dryRun) db.prepare("DELETE FROM llm_calls WHERE ts < ?").run(before);
   }
 
   if (opts.runDays > 0) {
@@ -940,6 +1016,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
       db.exec(`DELETE FROM actions WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM confirmations WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM stash WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM llm_calls WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM runs WHERE id IN (${list})`);
     }
 
@@ -1147,4 +1224,161 @@ export const markScheduleRan = (id: number): void => {
   );
 };
 
+// --- model call timing ---
+/**
+ * One row per completion request, written by src/timing.ts.
+ *
+ * This exists because the question "where does a turn's time actually go" was unanswerable
+ * from the ledger. `saveTrace` stamps every message with the same `now()` at save time, so
+ * per-step timing was never recorded; `actions.ts` marks tool COMPLETION, so it cannot
+ * separate model time from tool time. The result was that a performance question could only
+ * be answered by a synthetic benchmark against a warm server — which measures the hardware,
+ * not the workload.
+ *
+ * A row is deliberately per HTTP request rather than per step: a retry, a tier fallback and
+ * a malformed-JSON re-ask are each real time the user waited, and folding them into their
+ * step would hide exactly the costs worth finding.
+ */
+export interface LlmCallRow {
+  completion_tokens: number | null;
+  id: number;
+  model: string;
+  ms: number;
+  ok: number;
+  prompt_tokens: number | null;
+  /** Which call site spent this: "step", "dispatch", "closing", "judge", … */
+  purpose: string | null;
+  run_id: number | null;
+  step: number | null;
+  tier: string | null;
+  ts: string;
+}
+
+export interface LlmCallInput {
+  completionTokens?: null | number;
+  model: string;
+  ms: number;
+  ok?: boolean;
+  promptTokens?: null | number;
+  purpose?: null | string;
+  runId?: null | number;
+  step?: null | number;
+  tier?: null | string;
+}
+
+export const logLlmCall = (call: LlmCallInput): void => {
+  db.prepare(
+    `INSERT INTO llm_calls (ts, run_id, step, tier, model, ms, prompt_tokens, completion_tokens, ok, purpose)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    now(),
+    call.runId ?? null,
+    call.step ?? null,
+    call.tier ?? null,
+    call.model,
+    Math.round(call.ms),
+    call.promptTokens ?? null,
+    call.completionTokens ?? null,
+    call.ok === false ? 0 : 1,
+    call.purpose ?? null,
+  );
+};
+
+export const llmCallsSince = (sinceIso: string): LlmCallRow[] =>
+  db.prepare("SELECT * FROM llm_calls WHERE ts >= ? ORDER BY id").all(sinceIso) as unknown as LlmCallRow[];
+
+export const llmCallsForRun = (runId: number): LlmCallRow[] =>
+  db.prepare("SELECT * FROM llm_calls WHERE run_id = ? ORDER BY id").all(runId) as unknown as LlmCallRow[];
+
 export const rawDb = db;
+
+// --- devices (iOS push targets) ---
+/**
+ * One row per phone that has asked to be notified.
+ *
+ * A row is created by the app itself on every launch, because an APNs device token is not
+ * stable: iOS reissues it on reinstall, on restore from backup, and occasionally for its own
+ * reasons. So registration is an upsert keyed on the token and the app re-registers
+ * unconditionally rather than trying to remember whether it already did — the only way to
+ * be sure the server holds a *current* token is to send it again.
+ *
+ * `disabled` is the other half of that. Tokens die silently: the push succeeds as far as
+ * your code can tell and simply goes nowhere. APNs is the only thing that knows, and it says
+ * so exactly once, as a 410 Unregistered or a 400 BadDeviceToken. Recording that is what
+ * stops a deleted app from costing a wasted HTTP/2 round-trip on every notification forever.
+ * The row is kept rather than deleted so `GET /api/devices` can show you *why* your phone
+ * stopped buzzing, which is the question you will actually be asking.
+ */
+export interface DeviceRow {
+  created: string;
+  /** ISO when APNs rejected this token for good, or null while it still works. */
+  disabled: string | null;
+  /** The APNs reason that disabled it, for the dashboard to show. */
+  detail: string | null;
+  environment: string;
+  failures: number;
+  id: number;
+  name: string | null;
+  seen: string;
+  token: string;
+}
+
+/**
+ * Register or refresh a device.
+ *
+ * Re-registering clears `disabled` and `failures`, which is deliberate: the app sending its
+ * token again is the strongest evidence available that the app is installed and the token is
+ * live. Without that, one 410 during a reinstall would silently blacklist the phone until
+ * someone went looking in the database.
+ */
+export const upsertDevice = (
+  token: string,
+  environment: string,
+  name: string | null,
+): DeviceRow => {
+  db.prepare(
+    `INSERT INTO devices (token, environment, name, created, seen, failures, disabled, detail)
+     VALUES (?, ?, ?, ?, ?, 0, NULL, NULL)
+     ON CONFLICT(token) DO UPDATE SET
+       environment = excluded.environment,
+       name = COALESCE(excluded.name, devices.name),
+       seen = excluded.seen,
+       failures = 0,
+       disabled = NULL,
+       detail = NULL`,
+  ).run(token, environment, name, now(), now());
+  return db.prepare("SELECT * FROM devices WHERE token = ?").get(token) as unknown as DeviceRow;
+};
+
+/** Every device a push should be attempted against, newest registration first. */
+export const activeDevices = (): DeviceRow[] =>
+  db
+    .prepare("SELECT * FROM devices WHERE disabled IS NULL ORDER BY seen DESC")
+    .all() as unknown as DeviceRow[];
+
+export const listDevices = (): DeviceRow[] =>
+  db.prepare("SELECT * FROM devices ORDER BY seen DESC").all() as unknown as DeviceRow[];
+
+/**
+ * Move a device to the other APNs host, after APNs said the token was not valid for the one
+ * we tried. See the APNS_ENV note in config.ts for why this guess has to be self-correcting.
+ */
+export const setDeviceEnvironment = (id: number, environment: string): void => {
+  db.prepare("UPDATE devices SET environment = ? WHERE id = ?").run(environment, id);
+};
+
+/** Retire a device for good — APNs has told us the token is dead. */
+export const disableDevice = (id: number, detail: string): void => {
+  db.prepare("UPDATE devices SET disabled = ?, detail = ? WHERE id = ?").run(now(), detail.slice(0, 200), id);
+};
+
+/** Count a transient failure, without retiring the device. */
+export const noteDeviceFailure = (id: number, detail: string): void => {
+  db.prepare("UPDATE devices SET failures = failures + 1, detail = ? WHERE id = ?").run(
+    detail.slice(0, 200),
+    id,
+  );
+};
+
+export const deleteDevice = (id: number): boolean =>
+  db.prepare("DELETE FROM devices WHERE id = ?").run(id).changes > 0;

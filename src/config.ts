@@ -399,6 +399,58 @@ export const NTFY_TOPIC = env.NTFY_TOPIC ?? "";
 export const NTFY_TOKEN = env.NTFY_TOKEN ?? "";
 export const NTFY_ENABLED = NTFY_TOPIC.length > 0;
 
+// --- Push notifications (APNs — the iOS app in ios/) ---
+/**
+ * Apple Push Notification service, for the AgentSpine app on your own phone.
+ *
+ * This exists because ntfy's delivery is only as good as your relationship with the ntfy
+ * app, and a notification you have trained yourself to swipe away is not a notification.
+ * A dedicated app gets its own Focus allowances, its own Time Sensitive permission, and a
+ * tap that lands on the actual thread rather than on a generic client that has to be told
+ * where to go.
+ *
+ * It needs four things from the Apple Developer portal, all of them from a *paid* account —
+ * the Push Notifications capability is the one entitlement a free personal team cannot have,
+ * which is the whole reason the membership is a prerequisite rather than a convenience:
+ *
+ *   APNS_KEY_PATH   the .p8 token-auth key you downloaded ONCE (Apple keeps no copy)
+ *   APNS_KEY_ID     the 10-character id of that key
+ *   APNS_TEAM_ID    your 10-character team id
+ *   APNS_BUNDLE_ID  the app's bundle id, used verbatim as the APNs topic
+ *
+ * Token auth rather than certificate auth deliberately: a .p8 never expires, works for every
+ * app in the team, and needs no annual renewal ritual on a machine that is supposed to run
+ * unattended. The cost is that the key file IS the credential — it can push to every app you
+ * own, so it belongs outside the repo with the permissions to match.
+ *
+ * All four empty is the normal state for someone who has not built the app, and
+ * APNS_ENABLED then reads false and nothing changes about how notifications work.
+ */
+export const APNS_KEY_PATH = env.APNS_KEY_PATH ?? "";
+export const APNS_KEY_ID = env.APNS_KEY_ID ?? "";
+export const APNS_TEAM_ID = env.APNS_TEAM_ID ?? "";
+export const APNS_BUNDLE_ID = env.APNS_BUNDLE_ID ?? "";
+export const APNS_ENABLED = !!(APNS_KEY_PATH && APNS_KEY_ID && APNS_TEAM_ID && APNS_BUNDLE_ID);
+
+/**
+ * Which APNs host a newly-registered device is assumed to be on, when the phone itself
+ * does not say.
+ *
+ * This is the detail that wastes an afternoon if you get it wrong, because the failure is
+ * silent on the phone and only visible in the server log. A device token is only valid
+ * against the environment that issued it, and the environment is decided by the
+ * *provisioning profile the app was signed with* — not by Debug vs. Release. An app you
+ * installed from Xcode is development-signed, so its token is a SANDBOX token, even in a
+ * Release build. The same source installed through TestFlight is production.
+ *
+ * Since this app is installed from Xcode, sandbox is the right default. But the default is
+ * only a starting guess: `sendToDevice` flips a device's stored environment and retries once
+ * when APNs answers BadDeviceToken, so a wrong guess costs one round-trip once per device
+ * and then corrects itself permanently. See src/push/apns.ts.
+ */
+export const APNS_ENV: "production" | "sandbox" =
+  env.APNS_ENV === "production" ? "production" : "sandbox";
+
 // The base URL YOUR PHONE uses to reach the dashboard — a Tailscale name or LAN IP,
 // e.g. "http://mini.tail1234.ts.net:8787". Required for Approve/Reject action buttons;
 // without it, pushes still arrive, just without buttons. Never point this at a
@@ -411,6 +463,64 @@ export const DASHBOARD_PUBLIC_URL = (env.DASHBOARD_PUBLIC_URL ?? "").replace(/\/
 export const NOTIFY_ON_CONFIRMATION = (env.NOTIFY_ON_CONFIRMATION ?? "true") !== "false";
 export const NOTIFY_ON_FAILURE = (env.NOTIFY_ON_FAILURE ?? "true") !== "false";
 export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true";
+
+/**
+ * The confirmation watchdog — the clock on the approval queue.
+ *
+ * A queued action is the one thing that genuinely stops work while you are away, and until
+ * this existed the queue had no timer on it at all: the row carried a `ts` nobody read, the
+ * push went out once at queue time, and a 3am job's question could sit unanswered forever
+ * while the only nudge was a `console.log` on the next heartbeat. That is the wrong failure
+ * mode for a system whose premise is that it works unattended — "silently stopped" and
+ * "nothing to do" look identical from the outside.
+ *
+ * Three rungs, climbed in order, each counted from when the question was QUEUED (not from
+ * the previous rung — one clock is easier to reason about than three):
+ *
+ *   REMIND    a second push, same priority as the first. You were probably asleep.
+ *   ESCALATE  priority 5, which breaks through Do Not Disturb. Reserved for one rung so
+ *             it still means something when it fires.
+ *   EXPIRE    the question is closed, state `expired`, and the action never runs.
+ *
+ * Expiry is the rung that needed the most thought, because "wait forever" is the safer
+ * default for a *security* gate and the wrong default for a *question*. `approveConfirmation`
+ * already re-checks the allowlist at approval time, so a stale row cannot escape policy —
+ * but policy answers "may this happen", not "is this still the thing you read". Approving
+ * "send the draft about tomorrow's meeting" nine days later passes every gate in the system
+ * and is still wrong. So the default window is 72h: long enough to cover a weekend away,
+ * short enough that nothing executes against a world that has moved on.
+ *
+ * Expiring is not the same as rejecting. A rejection is a decision and teaches a preference
+ * memory (see confirmations.ts); an expiry is the absence of one and teaches nothing, which
+ * is why it writes no memory and does not count toward the silent-rejection tally.
+ *
+ * 0 disables any rung independently. CONFIRM_EXPIRE_AFTER_MIN=0 restores the old
+ * wait-forever behaviour while keeping the reminders.
+ */
+export const CONFIRM_REMIND_AFTER_MIN = Number(env.CONFIRM_REMIND_AFTER_MIN ?? "180");
+export const CONFIRM_ESCALATE_AFTER_MIN = Number(env.CONFIRM_ESCALATE_AFTER_MIN ?? "720");
+export const CONFIRM_EXPIRE_AFTER_MIN = Number(env.CONFIRM_EXPIRE_AFTER_MIN ?? String(72 * 60));
+/** How often the dashboard sweeps the queue. Not a knob worth exposing — see server.ts. */
+export const CONFIRM_SWEEP_MS = 5 * 60_000;
+
+/**
+ * Record how long every model call took, and how many tokens it moved.
+ *
+ * **On by default, which is the whole point.** The first time a performance question was
+ * asked here it could not be answered at all: `saveTrace` stamps a run's whole trace with
+ * one timestamp at save time, and `actions.ts` marks the moment a tool *finished*, so
+ * neither could separate model time from tool time or attribute it to a step. The only
+ * remaining option was a synthetic benchmark against a warm server, which measures the
+ * hardware rather than the workload. Instrumentation nobody remembered to switch on would
+ * have left the next question in the same position, so this defaults to on and the cost is
+ * kept small enough that it never needs to be weighed: one INSERT per completion, into a
+ * table aged on the existing audit window.
+ *
+ * It records duration and token counts, never prompts or replies — the trace already holds
+ * the content, under its own retention, and a second copy with a different lifetime is how
+ * a conversation you deleted survives somewhere you forgot to look.
+ */
+export const LLM_TIMING = (env.LLM_TIMING ?? "true") !== "false";
 
 // --- Meetings (live transcription) ---
 /**

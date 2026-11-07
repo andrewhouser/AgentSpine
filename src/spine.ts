@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import { HEARTBEAT_MS, HEARTBEAT_HORIZON, GOALS_PATH } from "./config.ts";
 import { runTask } from "./runner.ts";
+import { sweepConfirmations } from "./confirmations.ts";
 import { heartbeatHorizonGoal } from "./learn/horizon.ts";
 import * as store from "./memory/store.ts";
 
@@ -40,6 +41,16 @@ export const tick = async (): Promise<void> => {
   try {
     const { summary, steps } = await runTask(goal, { kind: "heartbeat" });
     console.log(`[${stamp}] done in ${steps} step(s): ${summary}`);
+    // The confirmation watchdog also runs here, not only in the dashboard. `npm run loop`
+    // is the headless path — no server, no browser — and it is precisely the setup where a
+    // queued question has nobody looking at it. A line in this log was the only nudge the
+    // queue ever got, and a log line is not a nudge.
+    const swept = await sweepConfirmations();
+    if (swept.reminded + swept.escalated + swept.expired > 0) {
+      console.log(
+        `  watchdog: ${swept.reminded} reminded, ${swept.escalated} escalated, ${swept.expired} expired`,
+      );
+    }
     const pending = store.listConfirmations("pending");
     if (pending.length) {
       console.log(`  ${pending.length} action(s) awaiting confirmation — run: npm run confirm list`);

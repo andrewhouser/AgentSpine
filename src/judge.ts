@@ -78,6 +78,7 @@ export const judge = async (
 
     const { text, via } = await route(messages, {
       prefer: "cloud",
+      purpose: "judge",
       sensitivity: opts.sensitivity ?? "normal",
       temperature: 0,
     });

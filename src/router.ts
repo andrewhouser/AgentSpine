@@ -54,7 +54,14 @@ export interface RouteResult {
 
 const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promise<RouteResult> => ({
   model: config.model,
-  text: await chat(clientFor(config.baseUrl, config.apiKey), config.model, messages, opts),
+  // `tier` is stamped here rather than by the caller because this is the first point that
+  // knows which tier is actually being asked. On a fallback the caller's answer is stale,
+  // and a timing row blaming `fast` for a call that `standard` served would make the one
+  // table meant to settle arguments the source of a new one.
+  text: await chat(clientFor(config.baseUrl, config.apiKey), config.model, messages, {
+    ...opts,
+    tier: config.tier,
+  }),
   tier: config.tier,
   via: config.tier === "deep" ? "cloud" : "local",
 });

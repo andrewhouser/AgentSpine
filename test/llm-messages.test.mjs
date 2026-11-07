@@ -13,6 +13,12 @@
  *
  * Pure function, no model. Run with `node test/llm-messages.test.mjs`.
  */
+// llm.ts records call timing through src/timing.ts, which opens the ledger on import.
+// Point it at a scratch file so running the tests never touches the real spine.db.
+import os from "node:os";
+import path from "node:path";
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-llmmsg-${process.pid}.db`);
+
 const { foldSystemMessages } = await import("../src/llm.ts");
 
 let passed = 0;

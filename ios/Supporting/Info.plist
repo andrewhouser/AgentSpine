@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Written by hand rather than generated from build settings, because the one thing this app
+	genuinely needs from Info.plist — the App Transport Security exception — has no build
+	setting equivalent.
+
+	WHY THE ATS EXCEPTION EXISTS, and how to not need it:
+
+	The dashboard speaks plain HTTP on port 8787. That is correct for what it is — a service
+	bound to a Tailscale interface, where the transport is already encrypted by WireGuard and
+	a second TLS layer inside the tunnel buys nothing. But iOS does not know that, and ATS
+	blocks cleartext HTTP by default, so without this the app cannot reach the server at all.
+
+	The exception is scoped to `ts.net` — Tailscale's MagicDNS domain — rather than opened
+	globally with NSAllowsArbitraryLoads. That distinction matters: this app can make
+	cleartext requests to your tailnet and to nothing else, so a bug or a bad URL cannot
+	quietly send your dashboard token over someone's café Wi-Fi in the clear.
+
+	If you would rather have no exception at all, run `tailscale serve --bg 8787` on the Mini.
+	Tailscale then terminates real, publicly-trusted TLS on your `*.ts.net` name using a
+	Let's Encrypt certificate, you point the app at `https://mini.your-tailnet.ts.net` with no
+	port, and you can delete this whole NSAppTransportSecurity block. That is the better
+	setup; this exception is here so the app works before you have done it.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>AgentSpine</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>ts.net</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

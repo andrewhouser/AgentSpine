@@ -141,7 +141,12 @@ export const sizeTask = async (task: string, override?: Tier): Promise<Sizing> =
       ],
       // Sized BY the cheapest tier available: deciding whether to spend the expensive tier
       // is itself the cheapest kind of work. Private, because the task text is the user's.
-      { maxTokens: 60, sensitivity: "private", tier: tierIsDistinct("fast") ? "fast" : "standard" },
+      {
+        maxTokens: 60,
+        purpose: "dispatch",
+        sensitivity: "private",
+        tier: tierIsDistinct("fast") ? "fast" : "standard",
+      },
     );
     const parsed = extractJson(text);
     const reason = String(parsed?.reason ?? "").slice(0, 60);

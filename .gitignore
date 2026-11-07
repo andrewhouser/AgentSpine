@@ -38,3 +38,10 @@ MIGRATION.md
 
 # IDE / editor settings
 .claude/
+
+# Xcode per-user state for the iPhone app (ios/). The project file is shared; which window
+# you had open and where the cursor was is not.
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/build/
+*.xcworkspace/xcuserdata/

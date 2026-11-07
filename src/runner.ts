@@ -79,6 +79,19 @@ export interface RunOpts {
   kind?: string; // "do" | "chat" | "heartbeat" | "schedule"
   /** Skip profile + memory injection and reflection (for meta runs that shouldn't learn). */
   noMemory?: boolean;
+  /**
+   * Push when this run ends, succeed or fail.
+   *
+   * Set by a client that is about to stop watching — which in practice means the iOS app,
+   * where "send this and put the phone away" is the normal way to use it. The web dashboard
+   * leaves it unset because it is holding the event stream open and a notification about a
+   * run you are staring at is noise.
+   *
+   * The caller declares this rather than the server inferring it, because the server cannot
+   * tell the difference between a thread nobody is reading and one being read intently —
+   * both look like an open socket, or no socket, depending on the roaming of a phone.
+   */
+  notifyOnFinish?: boolean;
   policy?: Policy;
   /** Run inside a project — its instructions, documents, and narrowed policy apply. */
   projectId?: number | null;
@@ -426,16 +439,47 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         void notify(`Scheduled job finished`, summary.slice(0, 500), { priority: 2 });
       }
 
+      // Asked for by the client that started this and then stopped watching. Priority 3:
+      // worth a banner, not worth breaking a Focus mode — you asked for the answer, you did
+      // not say it was urgent. The deep link is the point of the notification: tapping it
+      // opens the thread at the turn that just finished, which is the whole "start it on the
+      // way out and read it on the way back" loop.
+      if (opts.notifyOnFinish) {
+        void notify(
+          `Finished: ${task.slice(0, 60)}`,
+          summary.slice(0, 500) || "Done, with nothing to report.",
+          {
+            priority: 3,
+            tags: ["white_check_mark"],
+            push: {
+              category: "RUN",
+              collapseId: `run-${runId}`,
+              ...(conversationId != null ? { conversationId } : {}),
+              runId,
+            },
+          },
+        );
+      }
+
       return { runId, summary, steps };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       store.finishRun(runId, "failed", msg);
       publish(runId, { message: msg, type: "error" });
       publish(runId, { status: "failed", type: "run_end" });
-      if (NOTIFY_ON_FAILURE && isUnattended(kind)) {
+      // A run nobody was watching, or one whose caller explicitly asked to be told how it
+      // went — "tell me when it finishes" has to include "tell me that it didn't", or the
+      // silence after a failure reads exactly like a job still running.
+      if (NOTIFY_ON_FAILURE && (isUnattended(kind) || opts.notifyOnFinish)) {
         void notify(`Run failed: ${task.slice(0, 60)}`, msg.slice(0, 500), {
           priority: 4,
           tags: ["rotating_light"],
+          push: {
+            category: "RUN",
+            collapseId: `run-${runId}`,
+            ...(conversationId != null ? { conversationId } : {}),
+            runId,
+          },
         });
       }
       throw err;
