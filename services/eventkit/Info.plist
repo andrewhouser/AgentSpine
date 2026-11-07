@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>local.agentspine.eventkit</string>
+  <key>CFBundleName</key>
+  <string>AgentSpine</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>AgentSpine reads your calendar when you ask what is on it, and adds events you ask it to add.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>AgentSpine lists your reminders when you ask, and adds reminders you ask it to add.</string>
+</dict>
+</plist>

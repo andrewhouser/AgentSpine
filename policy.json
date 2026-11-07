@@ -17,7 +17,13 @@
 
   "apps": {
     "//": "Bundle IDs the mac_control tool may touch. Empty = the agent can control no apps. Find an id with: osascript -e 'id of app \"Notes\"'",
-    "allow": []
+    "allow": ["com.apple.mail", "com.apple.MobileSMS", "com.apple.iCal", "com.apple.Notes", "com.apple.reminders", "com.apple.AddressBook"]
+  },
+
+  "userDirected": {
+    "//": "Irreversible actions that run WITHOUT confirmation when YOUR OWN chat message (typed or dictated) asked for exactly that action — 'email Jeff Houser that…', 'text Jeff Houser that…', 'add lunch with Sam Friday at noon to my calendar', 'remind me at 5 to…', 'make a note that…'. Entries are tool.action. send_mail and send_message additionally require the recipient to be someone you named in that sentence: an address or number the model found anywhere else (a web page, an incoming email) still queues for approval with the full message shown. Scheduled jobs, watchers, subagents and follow-ups like 'yes, send it' never qualify — they carry no request in your own words. Set enabled to false to confirm everything again.",
+    "enabled": true,
+    "actions": ["mac_control.send_mail", "mac_control.send_message", "mac_control.create_event", "mac_control.create_reminder", "mac_control.create_note"]
   },
 
   "web": {

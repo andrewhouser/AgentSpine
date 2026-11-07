@@ -30,7 +30,7 @@ const check = (label, actual, expected) => {
   );
 };
 
-const { callKey, finalText, refusedNotifyText, REPEAT_LIMIT, systemPrompt } = __test;
+const { callKey, finalText, parseFailureNudge, refusedNotifyText, REPEAT_LIMIT, systemPrompt } = __test;
 const chat = systemPrompt(true);
 const job = systemPrompt(false);
 
@@ -97,6 +97,9 @@ check("says tool cards are already visible", /collapsed card/.test(chat), true);
 check("names the exact failure that was seen", /I sent you a notification/.test(chat), true);
 check("forbids pasting raw tool output", /never the raw tool output/.test(chat), true);
 check("forbids the duplicate tool call", /Do not repeat a tool call/.test(chat), true);
+check("time-bound questions carry recency on every search", /pass recency to web_search on EVERY search/.test(chat), true);
+check("out-of-window results are left out", /Leave out anything dated before/.test(chat), true);
+check("unattended runs get the recency rule too", /pass recency to web_search/.test(job), true);
 check("forbids notifying what it can just say", /Do NOT use notify to tell them something/.test(chat), true);
 check("answers the current message, not the whole history", /Answer the CURRENT message only/.test(chat), true);
 check("one weather lookup, not one per remembered place", /not every place that came up earlier/.test(chat), true);
@@ -112,6 +115,19 @@ check("no notify rule — an unattended job is exactly when to notify", /Do NOT 
 check("forbids draft as an information channel", /never as a draft/.test(job), true);
 check("names the bogus-approval failure", /nothing to approve/.test(job), true);
 check("chat prompt carries no unattended delivery rules", /This run is unattended/.test(chat), false);
+
+/**
+ * A reply cut off at the token cap is not a malformed one. Observed: a full research answer
+ * written into {"action":"final","reply":...}, cut at 512 tokens, answered with "That was not
+ * one valid JSON object" — and rewritten identically, sixteen times. Telling a model that
+ * wrote valid JSON to write valid JSON changes nothing; telling it to be shorter does.
+ */
+console.log("\nA TRUNCATED REPLY IS ASKED TO BE SHORTER, NOT TO BE VALID");
+check("says it was cut off", /cut off at the length limit/.test(parseFailureNudge(true, true)), true);
+check("asks for a shorter reply", /keep it shorter/.test(parseFailureNudge(true, true)), true);
+check("chat: points at the reply key", /"reply"/.test(parseFailureNudge(true, true)), true);
+check("unattended: points at the summary key", /"summary"/.test(parseFailureNudge(true, false)), true);
+check("malformed (not truncated) keeps the plain re-ask", parseFailureNudge(false, true), "That was not one valid JSON object. Reply with exactly one.");
 
 console.log("\nSHARED — neither mode loses what both need");
 for (const [name, p] of [["chat", chat], ["job", job]]) {

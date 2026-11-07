@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent for the AgentSpine dashboard. A TEMPLATE: update.sh fills in __REPO__,
+  __HOME__ and __NODE__ for this machine and installs the result at
+  ~/Library/LaunchAgents/local.agentspine.dashboard.plist. Edit this file, not the copy.
+
+  Why an agent and not a daemon: mac_control drives Mail, Calendar, Reminders, Notes,
+  Contacts and Messages. macOS only lets a process inside your login session send those
+  apps Apple Events, and only such a process can show the one-time permission prompts. A
+  LaunchDaemon in /Library/LaunchDaemons runs in the system domain, outside that session,
+  even with UserName set — so the same AppleScript that works from Terminal fails from it.
+
+  The cost: it runs while you are logged in, not from boot. On an always-on Mac mini, turn on
+  automatic login (System Settings > Users & Groups) so a reboot comes back to a session.
+
+  By hand:
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/local.agentspine.dashboard.plist
+    launchctl bootout   gui/$UID/local.agentspine.dashboard
+  Use bootout/bootstrap, not stop/start: KeepAlive respawns a stopped job immediately.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.agentspine.dashboard</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__REPO__/src/server.ts</string>
+  </array>
+
+  <!-- config.ts loads .env from the working directory, and policy.json resolves from it. -->
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- launchd's default PATH has no Homebrew, and the server shells out to ffmpeg,
+         swiftc (the EventKit helper) and osascript. -->
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key><string>__HOME__</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- Long enough to avoid a crash loop, short enough that a restart is not a dead minute. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <!-- Interactive: this process answers a person and drives GUI apps on their behalf, so it
+       should not be scheduled like background maintenance. -->
+  <key>ProcessType</key>
+  <string>Interactive</string>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/agentspine.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/agentspine.err.log</string>
+</dict>
+</plist>

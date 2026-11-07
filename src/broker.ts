@@ -151,10 +151,21 @@ export const executeCall = async (
   const preApproved =
     classified.reversibility === "irreversible" &&
     (policy.autoApprove ?? []).some((s) => s.tool === call.tool && s.target === classified.target);
+  // The user asked for exactly this, in their own words, in this chat turn — "email Jeff
+  // that I'm late". Queueing it would ask them to approve the sentence they just said. Two
+  // keys, both required: the tool must find the request in run.goal (the user's message,
+  // never the model's), and policy.userDirected must list the action. A schedule, a watcher,
+  // a subagent and a later approval carry no conversational goal, so they never qualify.
+  const directed =
+    classified.reversibility === "irreversible" && run?.conversational && policy.userDirected?.enabled && tool.directed
+      ? tool.directed(call.args, run)
+      : null;
+  const userDirected = !!directed && (policy.userDirected?.actions ?? []).includes(`${call.tool}.${directed.action}`);
   const mustConfirm =
     classified.reversibility === "irreversible" &&
     policy.autoExecute.irreversibleAlwaysConfirm &&
-    !preApproved;
+    !preApproved &&
+    !userDirected;
   const canAutoRun =
     classified.reversibility === "reversible" ? policy.autoExecute.reversible : !mustConfirm;
 
@@ -210,7 +221,14 @@ export const executeCall = async (
 
   // Execute.
   try {
-    return record(classified, "executed", await tool.run(call.args, { policy, run, runId }));
+    const output = await tool.run(call.args, { policy, run, runId });
+    // Said in the audit row itself, so a reader of the log can tell an irreversible action
+    // that skipped the queue because it was asked for from one that skipped it by mistake.
+    return record(
+      classified,
+      "executed",
+      userDirected && directed ? `${output}\n[ran without confirmation: ${directed.reason}]` : output,
+    );
   } catch (err) {
     const output = `ERROR: ${err instanceof Error ? err.message : String(err)}`;
     // Learn the failure so the tool's own description can warn the next run (LEARNING Phase

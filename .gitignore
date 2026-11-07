@@ -55,3 +55,6 @@ ios/build/
 *.p12
 *.cer
 *.mobileprovision
+
+# EventKit helper binary (built by update.sh / on first use)
+services/eventkit/.build/

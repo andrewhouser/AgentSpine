@@ -16,7 +16,7 @@
  * must never quietly upgrade a private request.
  */
 import { LLM_RETRIES, LLM_RETRY_BASE_MS } from "./config.ts";
-import { chat, clientFor, LLMError } from "./llm.ts";
+import { chatReply, clientFor, LLMError } from "./llm.ts";
 import type { ChatOpts, Msg } from "./llm.ts";
 import { resolveTier, tierConfig } from "./tiers.ts";
 import type { Tier, TierConfig } from "./tiers.ts";
@@ -49,22 +49,22 @@ export interface RouteResult {
   text: string;
   /** The tier that actually answered — may differ from the one asked for, after fallback. */
   tier: Tier;
+  /** The reply hit the token cap and was cut off. See ChatReply in llm.ts. */
+  truncated: boolean;
   via: "cloud" | "local";
 }
 
-const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promise<RouteResult> => ({
-  model: config.model,
+const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promise<RouteResult> => {
   // `tier` is stamped here rather than by the caller because this is the first point that
   // knows which tier is actually being asked. On a fallback the caller's answer is stale,
   // and a timing row blaming `fast` for a call that `standard` served would make the one
   // table meant to settle arguments the source of a new one.
-  text: await chat(clientFor(config.baseUrl, config.apiKey), config.model, messages, {
+  const { text, truncated } = await chatReply(clientFor(config.baseUrl, config.apiKey), config.model, messages, {
     ...opts,
     tier: config.tier,
-  }),
-  tier: config.tier,
-  via: config.tier === "deep" ? "cloud" : "local",
-});
+  });
+  return { model: config.model, text, tier: config.tier, truncated, via: config.tier === "deep" ? "cloud" : "local" };
+};
 
 /**
  * Send to one tier, re-attempting the SAME endpoint on a transient failure before giving up.

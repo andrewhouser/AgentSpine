@@ -6,7 +6,7 @@
  * malformed tool call on the local model triggers a one-shot cloud retry for that
  * step, which is where small-model tool-calling unreliability gets absorbed.
  */
-import { MAX_STEPS } from "./config.ts";
+import { AGENT_STEP_MAX_TOKENS, MAX_PARSE_FAILURES, MAX_STEPS } from "./config.ts";
 import { route } from "./router.ts";
 import type { RouteOpts } from "./router.ts";
 import type { Tier } from "./tiers.ts";
@@ -191,6 +191,29 @@ gathered reaches the user${tools.notify ? " — along with notify, when a findin
 `
     : "";
 
+/**
+ * Questions about a period of time ("this week", "today", "latest").
+ *
+ * Observed: "what's new in AI this week?" answered with releases from late September,
+ * because the first search surfaced model names and every follow-up searched for one of them
+ * by name — which reliably finds its launch-day coverage, weeks old. A date filter on the
+ * first search alone doesn't stop that; the follow-ups have to carry it too, and the answer
+ * has to be held to the window rather than padded out with whatever was found.
+ *
+ * Conditional on web_search being visible, like the other tool-specific rules.
+ */
+const recencyDocs = (tools: Record<string, Tool>): string =>
+  tools.web_search
+    ? `
+- When the question is about a period of time ("today", "this week", "latest", "recent",
+  "what's new"), pass recency to web_search on EVERY search for it, follow-ups included,
+  using the window the question names. Searching for a product by name finds its launch
+  coverage, which may be weeks old; the window is what keeps it current.
+- Check each result's published date against that window. Leave out anything dated before
+  it, however relevant it looks — an older item is not news this week. If little falls inside
+  the window, say so plainly rather than filling the answer with older material.`
+    : "";
+
 const system = (tools: Record<string, Tool>, conversational: boolean): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
 ${clock()}
@@ -214,7 +237,7 @@ Rules:
 - Prefer memory_recall before acting, and memory_save to record durable facts.
 - For web research: use web_search to FIND relevant URLs, then web_read to READ the most
   promising ones for detail. Do NOT ask web_read or the browser to open a search engine
-  (google.com, duckduckgo.com) — they block automation; web_search is your search path.
+  (google.com, duckduckgo.com) — they block automation; web_search is your search path.${recencyDocs(tools)}
 - Be decisive and brief. Do not loop pointlessly; finish when the goal is met or blocked.`;
 
 export interface AgentResult {
@@ -296,9 +319,30 @@ export interface AgentOpts {
 const escalate = (tier: Tier): Tier => (tier === "fast" ? "standard" : "deep");
 
 const parseOr = async (messages: Msg[], opts: RouteOpts) => {
-  const result = await route(messages, opts);
-  return { text: result.text, parsed: safeJson(result.text), actualTier: result.tier, via: result.via };
+  // The cap is explicit because the server's default is not "none" — see AGENT_STEP_MAX_TOKENS.
+  const result = await route(messages, { maxTokens: AGENT_STEP_MAX_TOKENS, ...opts });
+  return {
+    actualTier: result.tier,
+    parsed: safeJson(result.text),
+    text: result.text,
+    truncated: result.truncated,
+    via: result.via,
+  };
 };
+
+/**
+ * What to say after a reply that did not parse. A truncated reply is a different failure
+ * from a malformed one and needs a different instruction: "reply with valid JSON" to a model
+ * that WROTE valid JSON, just too much of it, gets the same over-long reply back.
+ */
+const parseFailureNudge = (truncated: boolean, conversational: boolean): string =>
+  truncated
+    ? "Your reply was cut off at the length limit before the JSON object closed, so none of it " +
+      "could be used. Reply again with one complete JSON object, and keep it shorter — " +
+      (conversational
+        ? 'if you are answering, give the key points concisely in {"action":"final","reply":"..."}.'
+        : 'if you are finishing, summarise briefly in {"action":"final","summary":"..."}.')
+    : "That was not one valid JSON object. Reply with exactly one.";
 
 /**
  * Where the finishing text lives in the model's reply.
@@ -383,7 +427,7 @@ const closingAnswer = async (
         },
         { role: "user", content: `Question: ${goal}\n\nInformation gathered:\n${material}` },
       ],
-      { purpose: "closing", runId, tier },
+      { maxTokens: AGENT_STEP_MAX_TOKENS, purpose: "closing", runId, tier },
     );
     return text.trim();
   } catch {
@@ -445,19 +489,31 @@ export const runAgent = async (
     return { summary, steps, trace: messages };
   };
 
+  /** Steps in a row whose reply could not be parsed, even after the tier-up re-ask. */
+  let parseFailures = 0;
+
   for (let step = 0; step < maxSteps; step++) {
     publish(runId, { step: step + 1, type: "step_start" });
 
-    let { text, parsed, actualTier, via } = await parseOr(messages, { purpose: "step", runId, step: step + 1, tier });
+    let { text, parsed, actualTier, via, truncated } = await parseOr(messages, {
+      purpose: "step",
+      runId,
+      step: step + 1,
+      tier,
+    });
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
     // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
     // failing the run, which is what makes routing cheap work to a cheap tier safe.
-    if (!parsed) {
+    //
+    // Not for a truncated one, though. That model did not fumble the protocol, it ran out
+    // of room, and resending the identical prompt just buys the identical cut-off reply —
+    // the nudge below, which asks for a shorter one, is what actually changes the outcome.
+    if (!parsed && !truncated) {
       // Attributed as its own purpose, not folded into the step: a model that fumbles the
       // JSON protocol costs a whole extra round-trip, and the point of timing is to find
       // out how often that is actually happening rather than to assume.
-      ({ text, parsed, actualTier, via } = await parseOr(messages, {
+      ({ text, parsed, actualTier, via, truncated } = await parseOr(messages, {
         purpose: "step-reask",
         runId,
         step: step + 1,
@@ -474,9 +530,25 @@ export const runAgent = async (
     messages.push({ role: "assistant", content: text });
 
     if (!parsed) {
-      messages.push({ role: "user", content: "That was not one valid JSON object. Reply with exactly one." });
+      /**
+       * Bounded, because nothing else bounds it. Observed: sixteen consecutive cut-off
+       * replies, each re-asked, each ~56s, ending only at a thirty-step cap eighteen minutes
+       * in. The repeat guard never fires on this — no tool is being called — so the run is
+       * closed out here with what it gathered while that is still worth having.
+       */
+      parseFailures += 1;
+      if (parseFailures >= MAX_PARSE_FAILURES) {
+        return concludeStuck(
+          step + 1,
+          truncated
+            ? "Kept running out of room before finishing a reply."
+            : "Kept replying in a form that could not be read.",
+        );
+      }
+      messages.push({ role: "user", content: parseFailureNudge(truncated, conversational) });
       continue;
     }
+    parseFailures = 0;
 
     if (parsed.action === "final") {
       const summary = finalText(parsed);
@@ -639,6 +711,7 @@ export const runAgent = async (
 export const __test = {
   callKey,
   finalText,
+  parseFailureNudge,
   refusedNotifyText,
   REPEAT_LIMIT,
   settingTools,
