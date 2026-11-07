@@ -1,0 +1,45 @@
+.trace {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px 0;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin: 0 0 2px;
+}
+
+.live {
+  color: var(--accent);
+  margin-left: 8px;
+}
+
+.delegated {
+  border-left: 2px solid var(--border, currentcolor);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 6px;
+  padding-left: 10px;
+}
+
+.agent {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.empty {
+  color: var(--text-faint);
+  padding: 40px 0;
+  text-align: center;
+}

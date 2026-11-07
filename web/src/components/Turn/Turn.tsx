@@ -1,5 +1,6 @@
 import type { Attachment, LiveToolCall, VisionPass } from "../../lib/types.ts";
 
+import { describeActivity } from "../../lib/activity.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
@@ -63,7 +64,11 @@ export const Turn = ({
         turn is reasoning from. */}
     {vision && <VisionNote pass={vision} />}
 
-    <ToolTrace calls={toolCalls} live={live && !summary && !error} />
+    {/* The full trace lives in the chat's Trace tab. Only a denial or failure surfaces here,
+        since those are never incidental. */}
+    {toolCalls.some((c) => c.status === "denied" || c.status === "error") && (
+      <ToolTrace calls={toolCalls} live={false} />
+    )}
 
     {delegations.length > 0 && (
       <div className={styles.tools}>
@@ -102,6 +107,6 @@ export const Turn = ({
       </>
     )}
     {error && <div className={styles.error}>{error}</div>}
-    {live && !summary && !error && <ThinkingIndicator step={step} waitingBehind={waitingBehind} />}
+    {live && !summary && !error && <ThinkingIndicator activity={describeActivity(toolCalls)} step={step} waitingBehind={waitingBehind} />}
   </article>
 );

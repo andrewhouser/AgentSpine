@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ActiveRun } from "../../hooks/useRunStream.ts";
 import type { Action, Attachment, LiveToolCall, Thread, VisionPass } from "../../lib/types.ts";
+import type { TraceTurn } from "../TraceView/TraceView.tsx";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { useRunStream } from "../../hooks/useRunStream.ts";
@@ -9,6 +10,7 @@ import { useVoiceConfig } from "../../hooks/useVoiceConfig.ts";
 import { useVoiceSession } from "../../hooks/useVoiceSession.ts";
 import { api } from "../../lib/api.ts";
 import { Composer } from "../Composer/Composer.tsx";
+import { TraceView } from "../TraceView/TraceView.tsx";
 import { Turn } from "../Turn/Turn.tsx";
 import { VoiceBar } from "../VoiceBar/VoiceBar.tsx";
 import styles from "./ChatView.module.css";
@@ -62,6 +64,7 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
   const load = useCallback(() => api.thread(conversationId), [conversationId]);
   const [thread, reloadThread] = useResource<null | Thread>(load, null);
   const [active, setActive] = useState<ActiveRun | null>(null);
+  const [tab, setTab] = useState<"chat" | "trace">("chat");
   const bottom = useRef<HTMLDivElement>(null);
 
   const runId = active?.runId;
@@ -116,10 +119,42 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
   // Hide it from the persisted list so the turn isn't drawn twice.
   const persisted = active ? turns.filter((t) => t.id !== active.runId) : turns;
 
+  const traceTurns: TraceTurn[] = [
+    ...persisted.map((t) => ({
+      delegated: t.children.map((c) => ({ agent: c.agent ?? "?", calls: c.actions.map(fromAction) })),
+      id: t.id,
+      live: false,
+      task: t.task ?? "",
+      toolCalls: t.actions.map(fromAction),
+    })),
+    ...(live
+      ? [{ delegated: [], id: live.runId, live: live.status === "queued" || live.status === "running", task: live.task, toolCalls: live.toolCalls }]
+      : []),
+  ];
+
   return (
     <div className={styles.view}>
+      <div aria-label="Conversation view" className={styles.tabs} role="tablist">
+        {(["chat", "trace"] as const).map((t) => (
+          <button
+            aria-selected={tab === t}
+            className={styles.tab}
+            key={t}
+            onClick={() => setTab(t)}
+            role="tab"
+            type="button"
+          >
+            {t === "chat" ? "Chat" : "Trace"}
+          </button>
+        ))}
+      </div>
       <div className={styles.scroll}>
-        <div className={styles.column}>
+        {tab === "trace" && (
+          <div className={styles.column}>
+            <TraceView turns={traceTurns} />
+          </div>
+        )}
+        <div className={styles.column} hidden={tab === "trace"}>
           {!thread && <div className={styles.loading}>Loading…</div>}
 
           {thread && !persisted.length && !live && (

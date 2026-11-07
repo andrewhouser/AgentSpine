@@ -17,6 +17,30 @@
   width: 100%;
 }
 
+.tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  justify-content: center;
+  padding: 6px 24px 0;
+}
+
+.tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 4px 12px;
+}
+
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
 .composer {
   flex: none;
   padding: 0 24px;
