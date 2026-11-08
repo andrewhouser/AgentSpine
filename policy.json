@@ -44,8 +44,9 @@
   },
 
   "fs": {
-    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]",
-    "readableDirs": ["~/Desktop", "~/Developer"]
+    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]. writableDirs is the (separate, narrower-by-default) list write_file may create text files in; absent or empty = it can write nothing. Overwriting an existing file always waits for your approval.",
+    "readableDirs": ["~/Desktop", "~/Developer"],
+    "writableDirs": ["~/Developer"]
   },
 
   "weather": {

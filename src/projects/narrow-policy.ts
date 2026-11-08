@@ -33,7 +33,7 @@ export type PolicyOverlay = {
     perRun?: { default?: number; tools?: Record<string, number> };
   };
   drafts?: { enabled?: boolean };
-  fs?: { readableDirs?: string[] };
+  fs?: { readableDirs?: string[]; writableDirs?: string[] };
   git?: { repoDirs?: string[] };
   google?: { enabled?: boolean };
   schedules?: { enabled?: boolean };
@@ -114,7 +114,10 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
       perRun: narrowScope(base.budgets?.perRun, overlay.budgets?.perRun),
     },
     drafts: { ...base.drafts, enabled: and(base.drafts?.enabled, overlay.drafts?.enabled) },
-    fs: { readableDirs: intersect(base.fs?.readableDirs, overlay.fs?.readableDirs) },
+    fs: {
+      readableDirs: intersect(base.fs?.readableDirs, overlay.fs?.readableDirs),
+      writableDirs: intersect(base.fs?.writableDirs, overlay.fs?.writableDirs),
+    },
     git: { repoDirs: intersect(base.git?.repoDirs, overlay.git?.repoDirs) },
     google: { enabled: and(base.google?.enabled, overlay.google?.enabled) },
     schedules: { enabled: and(base.schedules?.enabled, overlay.schedules?.enabled) },

@@ -11,6 +11,7 @@ import { webRead } from "./web-read.ts";
 import { browserControl } from "./browser.ts";
 import { readFile, listDir } from "./read-file.ts";
 import { readMoreTool } from "./read-more.ts";
+import { writeFile } from "./write-file.ts";
 import { gmailSearch } from "./gmail.ts";
 import { calendarUpcoming } from "./calendar.ts";
 import { memorySave, memoryRecall } from "./memory.ts";
@@ -36,6 +37,7 @@ export const tools: Tool[] = [
   readFile,
   listDir,
   readMoreTool,
+  writeFile,
   gmailSearch,
   calendarUpcoming,
   memorySave,

@@ -33,7 +33,7 @@ export interface Policy {
   web: { searchEnabled: boolean; fetchAllowlist: string[] };
   browser: { enabled: boolean; navigateAllowlist: string[] };
   google: { enabled: boolean };
-  fs: { readableDirs: string[] };
+  fs: { readableDirs: string[]; writableDirs?: string[] };
   /**
    * Optional sections. A policy.json written before these existed simply lacks them, and
    * every gate below treats "absent" as "denied" — an old config can never silently grant

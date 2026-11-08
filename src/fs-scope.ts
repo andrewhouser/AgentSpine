@@ -43,3 +43,29 @@ export const readableGate = (policy: Policy, p: string) =>
   insideReadable(policy, p)
     ? { allowed: true, reason: "inside policy.fs.readableDirs" }
     : { allowed: false, reason: `${expand(p)} is outside policy.fs.readableDirs (deny by default)` };
+
+/**
+ * Like `real`, for a path that may not exist yet: resolve the nearest EXISTING ancestor
+ * through symlinks and re-attach the rest. A file about to be created inside a symlinked
+ * directory is judged by where that directory really is.
+ */
+export const realForWrite = (p: string): string => {
+  let head = expand(p);
+  const tail: string[] = [];
+  while (!fs.existsSync(head)) {
+    const parent = path.dirname(head);
+    if (parent === head) break;
+    tail.unshift(path.basename(head));
+    head = parent;
+  }
+  return path.join(real(head), ...tail);
+};
+
+/** Is `target` inside one of `policy.fs.writableDirs`? Absent or empty means no. */
+export const insideWritable = (policy: Policy, target: string): boolean => {
+  const t = realForWrite(target);
+  return (policy.fs?.writableDirs ?? []).some((d) => {
+    const dir = real(expand(d));
+    return t === dir || t.startsWith(dir + path.sep);
+  });
+};

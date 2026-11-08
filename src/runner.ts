@@ -50,8 +50,12 @@ import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
 import { setFrame } from "./tools/subagent.ts";
+import { setWriteDefault, writeDefaultDir } from "./tools/write-file.ts";
+import { expand } from "./fs-scope.ts";
 import { notify } from "./notify.ts";
 import * as store from "./memory/store.ts";
+import * as projectStore from "./projects/store.ts";
+import fs from "node:fs";
 import type { Policy } from "./types.ts";
 
 /**
@@ -383,6 +387,33 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     }
     if (shaped.background) context.push(shaped.background);
     const history = shaped.anchor;
+
+    // Where write_file puts a bare filename: the project's own folder when it has one (the
+    // first directory among its path sources), else AgentSpine's docs folder. Set on EVERY
+    // run, null included, so one project's folder cannot leak into the next run.
+    let writeDir: null | string = null;
+    if (project) {
+      for (const src of projectStore.listSources(project.id)) {
+        if (src.kind !== "path") continue;
+        try {
+          const dir = expand(src.ref);
+          if (fs.statSync(dir).isDirectory()) {
+            writeDir = dir;
+            break;
+          }
+        } catch {
+          /* a source that is gone or is a file is not a folder to write into */
+        }
+      }
+    }
+    setWriteDefault(writeDir);
+    if (!opts.noMemory) {
+      context.push(
+        `You CAN save files: use write_file. A bare filename (e.g. "BUSINESSPLAN.md") is saved in ${writeDefaultDir()}` +
+          `${writeDir ? ", this project's folder" : ""}; give a full path only if the user names another place. ` +
+          "To save something you wrote earlier, pass from_run with its #id rather than retyping it.",
+      );
+    }
 
     // Tell the `subagent` tool who is calling. A top-level run holds the whole registry, so
     // `parentTools` is empty — meaning "no ceiling" — and it is the root of the budget tree.

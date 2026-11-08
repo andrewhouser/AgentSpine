@@ -1368,6 +1368,17 @@ The refresh token is stored `0600` at `~/.config/agentspine/google-token.json`, 
 repo. Now tasks like *"summarize what's on my calendar tomorrow and notify me"* or *"triage
 my unread inbox and save anything urgent to memory"* work.
 
+## Saving files (`write_file`)
+
+Ask it to "save the business plan as BUSINESSPLAN.md" and it will. A bare filename is saved in
+the project's own folder when the chat is inside a project that has one (its first directory
+source), otherwise in `docs/` in this repo; give a full path to put it elsewhere. It can only
+write inside `policy.fs.writableDirs` (default `~/Developer`; a project can narrow it, never
+widen it), only text document types (`.md .txt .csv .json .html .yaml .yml`), never hidden
+files, at most 1 MB. Creating a new file just happens; replacing an existing one waits for your
+approval. To save something it wrote earlier it passes `from_run` with that turn's #id, so the
+stored text is written exactly rather than retyped.
+
 ## Updating & restarting the service
 
 `./update.sh` does all of it: pull, install, build the web client and the EventKit helper,
