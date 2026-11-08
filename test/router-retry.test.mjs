@@ -37,14 +37,24 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: { message: `synthetic ${step}` } }));
     return;
   }
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(
-    JSON.stringify({
-      choices: [{ finish_reason: "stop", message: { role: "assistant", content: "OK" } }],
-      usage: { total_tokens: 3 },
-    }),
-  );
+  // "length" answers the way mlx-lm does when it hits the token cap: a 200, some content,
+  // and finish_reason "length" — the only sign the reply was cut off rather than finished.
+  const finish = step === "length" ? "length" : "stop";
+  const content = step === "length" ? '{"action":"final","reply":"Here is what' : "OK";
+  let body = "";
+  req.on("data", (d) => (body += d));
+  req.on("end", () => {
+    lastBody = body ? JSON.parse(body) : null;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        choices: [{ finish_reason: finish, message: { role: "assistant", content } }],
+        usage: { total_tokens: 3 },
+      }),
+    );
+  });
 });
+let lastBody = null;
 
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
@@ -148,6 +158,18 @@ reset([]); // all "ok"
 {
   const r = await ask();
   check("first-try success answers in 1 attempt", r.text === "OK" && hits === 1, `hits=${hits}`);
+  check("a finished reply is not marked truncated", r.truncated === false, `truncated=${r.truncated}`);
+  check("no max_tokens is sent when none is asked for", !("max_tokens" in (lastBody ?? {})), JSON.stringify(lastBody));
+}
+
+console.log("\nA REPLY CUT OFF AT THE TOKEN CAP SAYS SO");
+reset(["length"]);
+{
+  const r = await route([{ content: "hi", role: "user" }], { maxTokens: 4096, temperature: 0 });
+  check("finish_reason=length surfaces as truncated", r.truncated === true, `truncated=${r.truncated}`);
+  check("the partial text still comes back", r.text.startsWith('{"action":"final"'), `text=${r.text}`);
+  check("truncation is not an error — 1 attempt, no retry", hits === 1, `hits=${hits}`);
+  check("max_tokens reaches the server", lastBody?.max_tokens === 4096, JSON.stringify(lastBody));
 }
 
 server.close();

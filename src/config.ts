@@ -153,6 +153,16 @@ export const EMBEDDINGS_API_KEY = env.EMBEDDINGS_API_KEY ?? "";
 // --- Loop ---
 export const HEARTBEAT_MS = Number(env.HEARTBEAT_MINUTES ?? "30") * 60_000;
 export const MAX_STEPS = Number(env.MAX_STEPS ?? "10");
+// Completion cap for each agent-loop step. Sent explicitly because leaving it unset does
+// not mean "unlimited": mlx-lm applies its own default of 512, which is plenty for a tool
+// call and nowhere near enough for a research answer written inside {"action":"final"}.
+// Cut off at 512, that answer loses its closing brace, fails to parse, and is written again
+// identically — observed sixteen times in one run before the step cap ended it.
+export const AGENT_STEP_MAX_TOKENS = Number(env.AGENT_STEP_MAX_TOKENS ?? "4096");
+// Consecutive replies that fail to parse before the loop stops asking and closes the run
+// out with what it gathered. Each re-ask repeats the same prompt, so past the second the
+// model is overwhelmingly likely to reproduce the same failure.
+export const MAX_PARSE_FAILURES = Number(env.MAX_PARSE_FAILURES ?? "2");
 
 // --- Active memory ---
 // How many stored memories are auto-recalled and injected before every run. Keep small;

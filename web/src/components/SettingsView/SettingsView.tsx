@@ -5,6 +5,7 @@ import type { Memory, VoiceStatus } from "../../lib/types.ts";
 import type { VoiceSettings } from "../../lib/voiceSettings.ts";
 
 import { api } from "../../lib/api.ts";
+import { browserMicReason } from "../../lib/mic.ts";
 import {
   readPreferences,
   savePreferences,
@@ -264,7 +265,9 @@ export const SettingsView = () => {
             <div className={styles.field}>
               <span className={styles.fieldLabel}>Status</span>
               <span className={styles.fieldHint}>
-                Listening: {voiceStatus.listenReady ? "ready" : voiceStatus.listenReason}.
+                {/* The browser's reason too: the chat hides hands-free when it can't work here,
+                    and this is where that absence is explained. */}
+                Listening: {voiceStatus.listenReady ? (browserMicReason() ?? "ready") : voiceStatus.listenReason}.
                 <br />
                 Speaking ({voiceStatus.voice}): {voiceStatus.speakReady ? "ready" : voiceStatus.speakReason}.
               </span>

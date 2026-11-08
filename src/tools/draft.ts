@@ -94,8 +94,10 @@ export const draft: Tool = {
   description:
     "Write a proposed email reply, new email, calendar event, or note for the user to review. " +
     "NOTHING IS SENT OR CREATED — you are composing text, and the user decides whether to use " +
-    "it. Use this whenever you conclude something should be sent or scheduled: you cannot do " +
-    "either, and drafting is how you act on that conclusion. This is ONLY for text the user " +
+    "it. Use this when YOU conclude something should be sent or scheduled and the user has not " +
+    "told you to — drafting is how you act on your own conclusion. When the user tells you to " +
+    "email someone or add an event or reminder, do it with mac_control instead; a draft of " +
+    "something they asked you to do is a chore handed back. This is ONLY for text the user " +
     "might send onward as their own — never for delivering information TO the user. A brief, " +
     "digest, report, or answer is not a draft: a draft queues for approval, and information " +
     "queued for approval is a question with nothing being asked. Deliver information in your " +

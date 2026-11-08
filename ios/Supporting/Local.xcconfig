@@ -10,7 +10,7 @@
 //    AgentSpine .env — APNs uses it as the topic, and a mismatch is rejected as
 //    TopicDisallowed.
 // ---------------------------------------------------------------------------------------
-AGENTSPINE_BUNDLE_ID = com.example.AgentSpine
+AGENTSPINE_BUNDLE_ID = com.houserphotography.AgentSpine
 
 // ---------------------------------------------------------------------------------------
 // 2. Your 10-character Apple Developer Team ID — the same one you put in APNS_TEAM_ID.
@@ -20,4 +20,4 @@ AGENTSPINE_BUNDLE_ID = com.example.AgentSpine
 //    build, and write it into the project file. Setting it here keeps the project file
 //    clean and makes the build reproducible from a fresh clone.
 // ---------------------------------------------------------------------------------------
-DEVELOPMENT_TEAM =
+DEVELOPMENT_TEAM = 47A87M9KU5

@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Attachment, BrokerStatus, LiveTurn, RunEvent } from "../lib/types.ts";
 
-import { runStreamUrl } from "../lib/api.ts";
+import { api, runStreamUrl } from "../lib/api.ts";
 
 const blank = (runId: number, task: string, attachments: Attachment[]): LiveTurn => ({
   attachments,
@@ -203,9 +203,28 @@ export const useRunStream = (active: ActiveRun | null, onComplete: () => void): 
 
       // EventSource reconnects on its own, but it restarts from scratch; we want to resume
       // from `lastSeq`, so the connection is replaced by hand instead.
+      //
+      // Asking the run row first, because a reconnect is not always to a run still going.
+      // The server keeps a finished run's events for five minutes; reconnect after that (a
+      // laptop that slept, a phone that backgrounded the tab) and it closes the stream at
+      // once with nothing in it — no `run_end`, so without this check the hook reopened it
+      // every 1.5s forever and the answer, already saved, never appeared.
       source.onerror = () => {
         source?.close();
-        if (!closed) retry = window.setTimeout(open, 1500);
+        if (closed) return;
+        void api
+          .run(active.runId)
+          .then(({ run }) => run.status !== "running" && run.status !== "queued")
+          .catch(() => false) // the server is unreachable: keep retrying, as before
+          .then((ended) => {
+            if (closed) return;
+            if (ended) {
+              closed = true;
+              onCompleteRef.current();
+            } else {
+              retry = window.setTimeout(open, 1500);
+            }
+          });
       };
     };
 

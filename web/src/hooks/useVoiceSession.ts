@@ -37,6 +37,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { VoiceSettings } from "../lib/voiceSettings.ts";
 
 import { api } from "../lib/api.ts";
+import { browserMicReason } from "../lib/mic.ts";
 import { Downsampler, encodeWav, Segmenter } from "../lib/vad.ts";
 import { splitAliases } from "../lib/voiceSettings.ts";
 
@@ -90,8 +91,6 @@ class Capture extends AudioWorkletProcessor {
 registerProcessor("spine-capture", Capture);
 `;
 
-const micAvailable = (): boolean =>
-  typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia !== undefined;
 
 export const useVoiceSession = ({ onSend, settings, speakReady }: Options): VoiceSession => {
   const [state, setStateRaw] = useState<VoiceState>("off");
@@ -451,7 +450,7 @@ export const useVoiceSession = ({ onSend, settings, speakReady }: Options): Voic
     remaining,
     state,
     stopSpeaking,
-    unavailable: micAvailable() ? null : "this browser only allows microphone access over HTTPS or localhost",
+    unavailable: browserMicReason(),
     userSpeaking,
   };
 };

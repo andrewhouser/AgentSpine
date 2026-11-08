@@ -116,6 +116,17 @@ export interface Policy {
    * same key the allowlist and the broker already use.
    */
   autoApprove?: { tool: string; target: string }[];
+  /**
+   * Irreversible actions that run WITHOUT confirmation when the user's own message, in a live
+   * chat turn, asked for exactly that action ("email Jeff that…", "remind me at 5 to…").
+   * Absent or disabled = everything irreversible confirms, as before.
+   *
+   * Entries are "<tool>.<action>", e.g. "mac_control.send_mail". The tool decides whether a
+   * call was directed (Tool.directed, reading the user's words); this list decides whether
+   * that is enough. Unattended runs — schedules, watchers, subagents, approvals executed
+   * later — never qualify, because nobody said anything in them.
+   */
+  userDirected?: { actions: string[]; enabled: boolean };
 }
 
 /**
@@ -169,6 +180,14 @@ export interface Tool {
    * which is why adding the parameter changed no other tool in the registry.
    */
   checkPolicy(policy: Policy, args: any, run?: RunContext): PolicyDecision;
+  /**
+   * Whether the user's own message, in a live chat turn, asked for exactly this call — and
+   * if so, which named action it is and why. Optional; a tool without it never skips
+   * confirmation this way. Read only off `run.goal`, never off the model's arguments alone,
+   * because the model is the party being gated. The broker acts on it only when the action
+   * is also listed in `policy.userDirected.actions` — see Policy.userDirected.
+   */
+  directed?(args: any, run: RunContext): null | { action: string; reason: string };
   run(args: any, ctx: ToolContext): Promise<string>;
 }
 

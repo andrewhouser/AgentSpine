@@ -65,6 +65,29 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
   const [thread, reloadThread] = useResource<null | Thread>(load, null);
   const [active, setActive] = useState<ActiveRun | null>(null);
   const [tab, setTab] = useState<"chat" | "trace">("chat");
+  // The last run this view watched finish. Its row can still read "running" in the thread
+  // for the moment between the stream ending and the reload landing, and without this it
+  // would be picked straight back up below.
+  const [settledRunId, setSettledRunId] = useState<null | number>(null);
+
+  /**
+   * Pick a run back up that is still going when the thread loads.
+   *
+   * `active` lives in this component, and only `send` sets it — so a reload, a thread
+   * switch, or a remount mid-run dropped the stream on the floor. The thread then drew the
+   * run as finished history with no summary (it had none yet), and nothing ever refetched it
+   * when the run did finish: the answer was saved, and the screen never showed it. Adopting
+   * it reconnects the stream, which replays what was missed from the server's buffer.
+   *
+   * Done during render rather than in an effect, the same way useRunStream resets — it is
+   * guarded on `!active`, so it settles after one extra render.
+   */
+  const inFlight = thread?.turns.find(
+    (t) => (t.status === "running" || t.status === "queued") && t.id !== settledRunId,
+  );
+  if (!active && inFlight) {
+    setActive({ attachments: inFlight.attachments, runId: inFlight.id, task: inFlight.task ?? "" });
+  }
   const bottom = useRef<HTMLDivElement>(null);
 
   const runId = active?.runId;
@@ -96,6 +119,7 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
 
   const onRunComplete = useCallback(() => {
     // The persisted turn supersedes the streamed one, so clear the live turn and refetch.
+    if (runId != null) setSettledRunId(runId);
     setActive(null);
     reloadThread();
     onTitleMayHaveChanged();
@@ -228,7 +252,12 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
 
       <div className={styles.composer}>
         <div className={styles.column}>
-          {voiceConfig.status && (
+          {/* Offered only where it can work. A disabled toggle with an excuse beside it is noise
+              on every page view — over plain HTTP from another machine the browser withholds
+              the microphone entirely, and that never changes until the URL does. The reason
+              is still in Settings, for whoever wonders where it went. Kept while it is on, so a
+              status change mid-session can't hide the control that turns the mic off. */}
+          {voiceConfig.status && (voice.state !== "off" || (voice.unavailable === null && voiceConfig.status.listenReady)) && (
             <VoiceBar session={voice} settings={voiceConfig.settings} status={voiceConfig.status} />
           )}
           <Composer

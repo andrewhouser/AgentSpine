@@ -196,13 +196,29 @@ export const foldSystemMessages = (messages: Msg[]): Msg[] => {
   ];
 };
 
+/** A completion's text, plus whether the server stopped it at the token cap. */
+export interface ChatReply {
+  text: string;
+  /**
+   * `finish_reason === "length"`: the reply was cut off, not finished. Worth surfacing
+   * because the cut is silent otherwise — mlx-lm caps an uncapped request at 512 tokens, so
+   * a long JSON answer arrives with its closing brace missing and reads as "the model can't
+   * do JSON" rather than "the model ran out of room".
+   */
+  truncated: boolean;
+}
+
 /** One completion against a specific client + model. Throws LLMError on failure. */
-export const chat = async (
+export const chat = async (client: OpenAI, model: string, messages: Msg[], opts: ChatOpts = {}): Promise<string> =>
+  (await chatReply(client, model, messages, opts)).text;
+
+/** `chat`, keeping the finish reason. Used by the router, which the agent loop reads it from. */
+export const chatReply = async (
   client: OpenAI,
   model: string,
   messages: Msg[],
   { maxTokens, purpose, runId, step, temperature = 0.2, tier, timeoutMs = 120_000 }: ChatOpts = {},
-): Promise<string> => {
+): Promise<ChatReply> => {
   const isCloud = sameEndpoint(String(client.baseURL ?? ""), CLOUD_BASE_URL);
   // Every completion in the system funnels through here, which is what makes this the only
   // honest place to time one: a measurement taken a layer up would miss the retries and
@@ -253,7 +269,7 @@ export const chat = async (
       }
       throw new LLMError("unexpected response shape");
     }
-    return stripControlTokens(text);
+    return { text: stripControlTokens(text), truncated: res.choices?.[0]?.finish_reason === "length" };
   } catch (err) {
     // A failed call is time the user waited too, so it is recorded rather than dropped —
     // but only when the request itself failed. The two throws above have already timed

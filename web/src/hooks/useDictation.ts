@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DictationStatus } from "../lib/types.ts";
 
 import { api } from "../lib/api.ts";
+import { browserMicReason } from "../lib/mic.ts";
 
 export type DictationSource = "browser" | "server";
 
@@ -41,9 +42,6 @@ export interface Dictation {
   stop: () => void;
 }
 
-/** `getUserMedia` is absent entirely outside a secure context, so this is a real check. */
-const browserMicAvailable = (): boolean =>
-  typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia !== undefined;
 
 export const useDictation = (onText: (text: string) => void): Dictation => {
   const [status, setStatus] = useState<DictationStatus | null>(null);
@@ -66,14 +64,12 @@ export const useDictation = (onText: (text: string) => void): Dictation => {
         setStatus(s);
         // Fall back to whichever microphone actually exists, rather than defaulting to one
         // that will refuse on press.
-        if (!browserMicAvailable() && s.serverMic) setSource("server");
+        if (browserMicReason() !== null && s.serverMic) setSource("server");
       })
       .catch(() => setStatus(null));
   }, []);
 
-  const browserReason = browserMicAvailable()
-    ? null
-    : "this browser only allows microphone access over HTTPS or localhost";
+  const browserReason = browserMicReason();
 
   const start = useCallback((): void => {
     setError(null);
