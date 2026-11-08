@@ -327,6 +327,10 @@ export const CHAT_HISTORY_RELEVANT_TURNS = Number(env.CHAT_HISTORY_RELEVANT_TURN
 // run that summarized a long document could otherwise crowd out the tools prompt on a
 // small local model.
 export const CHAT_HISTORY_MAX_CHARS = Number(env.CHAT_HISTORY_MAX_CHARS ?? "6000");
+// Keep a running summary of each chat thread (goals, decisions, named deliverables with their
+// run #ids), refreshed after every turn by one small local-model call and injected into the
+// thread's next turn. This is what carries a long conversation past the shaped window.
+export const THREAD_SUMMARY_ENABLED = (env.THREAD_SUMMARY_ENABLED ?? "true") !== "false";
 // Name a conversation from its first exchange. Local-only by construction (see runner.ts).
 export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";
 

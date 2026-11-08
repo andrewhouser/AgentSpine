@@ -48,6 +48,12 @@ export interface ShapeOpts {
   lineChars?: number;
   /** Overall ceiling across anchor and background, in characters. */
   maxChars?: number;
+  /** Anchor size when the current message refers back ("save the plan", "make that shorter"). */
+  referenceAnchorTurns?: number;
+  /** A conclusion at least this long is an ARTIFACT — a plan, draft or report worth keeping findable. */
+  artifactMinChars?: number;
+  /** How many recent artifacts are always listed, whatever the current message says. */
+  artifactsListed?: number;
 }
 
 export interface ShapedHistory {
@@ -69,6 +75,9 @@ const DEFAULTS: Required<ShapeOpts> = {
   backgroundTurns: 4,
   lineChars: 300,
   maxChars: 6000,
+  referenceAnchorTurns: 3,
+  artifactMinChars: 800,
+  artifactsListed: 3,
 };
 
 /**
@@ -132,6 +141,41 @@ const line = (t: PastTurn, lineChars: number): string => {
   return clip(`#${t.id} asked: "${task}" -> concluded: ${note}`, lineChars);
 };
 
+/**
+ * Does the message point at earlier work instead of naming it? "Save the plan", "make that
+ * shorter", "send it to Jeff". The overlap gate cannot resolve these — "save" and "plan"
+ * share nothing with a plan whose text is about niches and pricing — so they widen the
+ * anchor instead. Deliberately narrow: a bare "it" is not enough, because widening replays
+ * old user messages and that is what the weather bug was made of.
+ */
+const NOUN = "(plan|draft|document|doc|report|summary|outline|script|essay|proposal|brief|write-?up|options|answer|response)";
+const REFERENCE = new RegExp(
+  [
+    `\\b(that|those|above|earlier|previous|previously|last one|same one)\\b`,
+    `\\b(the|my|our|this) (\\w+ ){0,2}${NOUN}\\b`,
+    `\\b(save|write|export|copy|send|email|edit|shorten|expand|revise|rewrite|redo|update|convert|turn|put|add|remove|fix|translate|format)\\b.{0,30}\\b(it|this|them)\\b`,
+  ].join("|"),
+  "i",
+);
+export const refersBack = (task: string): boolean => REFERENCE.test(String(task ?? ""));
+
+const isArtifact = (t: PastTurn, min: number): boolean => String(t.note ?? "").length >= min;
+
+const truncationMark = (id: number): string => ` […clipped; full text: recall_output #${id}]`;
+
+/** Like `clip`, but says so when it clipped and points at the tool that returns the rest. */
+const clipMarked = (s: string, max: number, id: number): string => {
+  const t = oneLine(s);
+  if (t.length <= max) return t;
+  const mark = truncationMark(id);
+  return `${t.slice(0, Math.max(0, max - mark.length - 1))}…${mark}`;
+};
+
+const ARTIFACT_HEADER =
+  "Long outputs produced earlier in this conversation (plans, drafts, reports). The FULL text " +
+  "of each is stored. When the user refers to one — \"the plan\", \"that draft\", \"save it\" — " +
+  "fetch it with recall_output and its #id. Never tell the user you no longer have it:";
+
 const HEADER =
   "Earlier turns of this conversation, as background only. They are COMPLETED work kept " +
   "for reference, never requests to redo. If one matters in detail, fetch it with " +
@@ -148,14 +192,15 @@ export const shapeHistory = (prior: PastTurn[], currentTask: string, opts: Shape
   const o = { ...DEFAULTS, ...opts };
   if (!prior.length) return { anchor: [], background: "" };
 
-  const anchorTurns = prior.slice(-Math.max(0, o.anchorTurns));
+  const wanted = refersBack(currentTask) ? Math.max(o.anchorTurns, o.referenceAnchorTurns) : o.anchorTurns;
+  const anchorTurns = prior.slice(-Math.max(0, wanted));
   const older = prior.slice(0, prior.length - anchorTurns.length);
 
   const anchor: Msg[] = [];
   let spent = 0;
   for (const t of anchorTurns) {
     const task = clip(t.task, o.anchorTaskChars);
-    const note = clip(t.note, o.anchorNoteChars);
+    const note = clipMarked(t.note, o.anchorNoteChars, t.id);
     spent += task.length + note.length;
     anchor.push({ role: "user", content: task }, { role: "assistant", content: note });
   }
@@ -179,8 +224,23 @@ export const shapeHistory = (prior: PastTurn[], currentTask: string, opts: Shape
     lines.push(`- ${l}`);
   }
 
-  return {
-    anchor,
-    background: lines.length ? `${HEADER}\n${lines.join("\n")}` : "",
-  };
+  // Artifacts: the long outputs that a later "save that" will want, listed by pointer whether
+  // or not this message shares words with them. Anchor turns are excluded — they are already
+  // in front of the model (with a pointer if they were clipped).
+  const inAnchor = new Set([...anchorTurns.map((t) => t.id), ...scored.map((x) => x.turn.id)]);
+  const artifactLines: string[] = [];
+  const artifacts = older
+    .filter((t) => isArtifact(t, o.artifactMinChars) && !inAnchor.has(t.id))
+    .slice(-Math.max(0, o.artifactsListed));
+  for (const t of artifacts) {
+    const l = clip(`#${t.id} "${clip(t.task, 80)}" — ${String(t.note).length} chars, begins: "${clip(t.note, 90)}"`, o.lineChars);
+    if (spent + ARTIFACT_HEADER.length + l.length > o.maxChars) break;
+    spent += l.length;
+    artifactLines.push(`- ${l}`);
+  }
+
+  const blocks: string[] = [];
+  if (lines.length) blocks.push(`${HEADER}\n${lines.join("\n")}`);
+  if (artifactLines.length) blocks.push(`${ARTIFACT_HEADER}\n${artifactLines.join("\n")}`);
+  return { anchor, background: blocks.join("\n\n") };
 };

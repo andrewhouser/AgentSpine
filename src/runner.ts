@@ -38,6 +38,7 @@ import { enqueue, queueStatus } from "./queue.ts";
 import { profileMessage } from "./memory/profile.ts";
 import { recall, recallOfKind } from "./memory/rag.ts";
 import { CONVERSATION_KIND } from "./memory/summarize.ts";
+import { threadSummaryContext, updateThreadSummary } from "./memory/thread.ts";
 import { deniedContext } from "./learn/denials.ts";
 import { RECIPE_KIND } from "./reflect.ts";
 import { LESSON_KIND, critiqueRun } from "./learn/critique.ts";
@@ -376,6 +377,10 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     const shaped = conversationId != null ? buildHistory(conversationId, task) : { anchor: [], background: "" };
     // The background block is a digest of the user's own conversation, so it joins the
     // trusted standing context; only the anchor turn replays as actual messages.
+    if (conversationId != null && !opts.noMemory) {
+      const threadState = threadSummaryContext(conversationId);
+      if (threadState) context.push(threadState);
+    }
     if (shaped.background) context.push(shaped.background);
     const history = shaped.anchor;
 
@@ -442,6 +447,12 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // Never throws; runs after the result is persisted.
       if (kind === "chat" && !opts.noMemory) {
         await critiqueRun(runId, task, trace, summary);
+      }
+
+      // Keep the thread's running summary current. Chat only, and only for a turn that
+      // finished cleanly; after the result is persisted, so a failure cannot touch it.
+      if (kind === "chat" && conversationId != null && !opts.noMemory && !errored.length) {
+        await updateThreadSummary(conversationId, runId);
       }
 
       // First turn of a thread that has no name yet.

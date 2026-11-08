@@ -158,6 +158,14 @@ as a collapsed card, not as your response.
   the conversation. Cover multiple places, or redo earlier work, only when the current
   message itself asks for that.
 - Do not repeat a tool call whose result you already have. Read the result and use it.${
+  tools.recall_output
+    ? `
+- You have not forgotten earlier output. When they refer back to something you already wrote
+  ("the plan", "that draft", "save it", "make it shorter"), fetch it with recall_output using
+  its #id from the history above, then act on it. NEVER say you don't have it, and never
+  regenerate it from scratch when the original is stored.`
+    : ""
+}${
   tools.notify
     ? `
 - Do NOT use notify to tell them something they asked you here. They are already reading;

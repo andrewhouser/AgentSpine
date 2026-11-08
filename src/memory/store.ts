@@ -154,6 +154,11 @@ addColumn("conversations", "tier", "TEXT");
 // `conversation` memory, or null if never. Lets the summariser skip threads it has already
 // captured and re-do one only if it has had new activity since. Best-effort, like the rest.
 addColumn("conversations", "summarized", "TEXT");
+// Rolling summary of a chat thread (src/memory/thread.ts) and the last run it covers. Unlike
+// `summarized` above (a one-shot cross-conversation memory written when a thread goes idle),
+// this is kept current after every turn and injected into the thread's own next turn.
+addColumn("conversations", "thread_summary", "TEXT");
+addColumn("conversations", "thread_summary_run", "INTEGER");
 addColumn("confirmations", "run_id", "INTEGER");
 addColumn("confirmations", "token", "TEXT");
 // LEARNING §Phase 0: approval latency = resolved − ts. `ts` is when the question was
@@ -267,6 +272,15 @@ export const tasksByKind = (kind: string, limit = 500): string[] =>
   ).map((r) => r.task);
 
 /** Stamp when a conversation was last folded into a `conversation` memory. */
+export const getThreadSummary = (id: number): { run: number; text: string } | null => {
+  const r = db.prepare("SELECT thread_summary, thread_summary_run FROM conversations WHERE id = ?").get(id) as any;
+  return r?.thread_summary ? { run: Number(r.thread_summary_run ?? 0), text: String(r.thread_summary) } : null;
+};
+
+export const setThreadSummary = (id: number, text: string, runId: number): void => {
+  db.prepare("UPDATE conversations SET thread_summary = ?, thread_summary_run = ? WHERE id = ?").run(text, runId, id);
+};
+
 export const markConversationSummarized = (id: number): void => {
   db.prepare("UPDATE conversations SET summarized = ? WHERE id = ?").run(now(), id);
 };

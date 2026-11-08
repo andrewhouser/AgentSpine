@@ -10,7 +10,7 @@
  *
  * Pure function, no database, no model. Run with `node test/history.test.mjs`.
  */
-const { contentWords, overlap, shapeHistory } = await import("../src/history.ts");
+const { contentWords, overlap, refersBack, shapeHistory } = await import("../src/history.ts");
 
 let passed = 0;
 let failed = 0;
@@ -77,6 +77,34 @@ console.log("\nTHE SCORER — mechanical, no model call");
 check("stopwords and short words drop out", [...contentWords("what is the weather like today")], ["weather"]);
 check("deictic time words are not content", [...contentWords("tomorrow today tonight")], []);
 check("overlap counts shared content words once each", overlap(turn(1, "weather in Boston", "Boston: 81F clear"), contentWords("Boston weather please")), 2);
+
+console.log("\nLOSING THE PLAN — the failure that motivated artifacts and reference-widening");
+const plan = "PLAN ".repeat(1200); // ~6000 chars: a business plan
+const chat = [
+  turn(10, "research 3 service business options", "Option one is an AI automation agency, two is SEO content, three is bookkeeping."),
+  turn(11, "put together a business plan for option one", plan),
+  turn(12, "what would the first month look like", "Week one: pick a niche. Week two: build a demo."),
+  turn(13, "Do you have access to save documents to a file system?", "Yes, I can write files under ~/Developer."),
+];
+const s6 = shapeHistory(chat, "I would like you to save the business plan as BUSINESSPLAN.md in the ~/Developer folder");
+check("'save the business plan' is detected as a reference", refersBack("save the business plan as X.md"), true);
+check("anchor widens to three turns on a reference", s6.anchor.length, 6);
+check("the plan turn is in that widened anchor, with a pointer to the rest", s6.anchor.some((m) => m.content.includes("recall_output #11")), true);
+const s7 = shapeHistory(chat, "ok sounds good");
+check("no reference: anchor stays at one turn", s7.anchor.length, 2);
+check("but the plan is still listed as an artifact", s7.background.includes('#11 "put together a business plan'), true);
+check("with its size and the tool that returns it", /\d+ chars/.test(s7.background) && /recall_output/.test(s7.background), true);
+check("short answers are never listed as artifacts", s7.background.includes("#10"), false);
+check("an artifact already in the anchor is not listed twice", (shapeHistory(chat.slice(0, 2), "ok").background.match(/#11/g) ?? []).length, 0);
+check("clipped anchor text carries a recall pointer", shapeHistory(chat.slice(0, 2), "ok").anchor[1].content.includes("recall_output #11"), true);
+check("and still respects the anchor clip", shapeHistory(chat.slice(0, 2), "ok").anchor[1].content.length <= 1200, true);
+
+console.log("\nREFERENCES ARE NARROW — a bare pronoun must not replay old turns");
+check("'what's the weather in Boston?' is not a reference", refersBack("What's the weather in Boston?"), false);
+check("'is it raining?' is not a reference", refersBack("is it raining?"), false);
+check("'make that shorter' is", refersBack("make that shorter"), true);
+check("'send it to Jeff' is", refersBack("send it to Jeff"), true);
+check("'what about tomorrow?' is not", refersBack("what about tomorrow?"), false);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

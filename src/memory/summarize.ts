@@ -61,7 +61,7 @@ const renderThread = (runs: { note: string; task: string }[]): string => {
 };
 
 /** Cheap belt-and-braces filter for obvious secret material, mirroring reflect.ts. */
-const looksLikeSecret = (s: string): boolean =>
+export const looksLikeSecret = (s: string): boolean =>
   /\b(password|passwd|api[_ -]?key|secret|token|bearer|ssh-rsa|BEGIN [A-Z ]*PRIVATE KEY)\b/i.test(s) ||
   /\b[A-Za-z0-9_-]{32,}\b/.test(s);
 
