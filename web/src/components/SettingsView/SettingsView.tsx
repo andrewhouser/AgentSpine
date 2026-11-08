@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { ThemeChoice } from "../../lib/preferences.ts";
 import type { Memory, VoiceStatus } from "../../lib/types.ts";
@@ -15,6 +15,7 @@ import {
 } from "../../lib/preferences.ts";
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
+import { PolicyProposals } from "../PolicyProposals/PolicyProposals.tsx";
 import styles from "./SettingsView.module.css";
 
 const THEMES: { label: string; value: ThemeChoice }[] = [
@@ -40,9 +41,16 @@ export const SettingsView = () => {
     savePreferences(merged);
   };
 
-  useEffect(() => {
+  // Re-readable rather than fetched once: accepting an auto-approval proposal rewrites
+  // policy.json, and the dump below has to show the file as it now is or the one control on
+  // this page that changes policy would appear to have done nothing.
+  const reloadPolicy = useCallback((): void => {
     void api.policy().then(setPolicy);
   }, []);
+
+  useEffect(() => {
+    reloadPolicy();
+  }, [reloadPolicy]);
 
   // Voice: the server supplies the defaults and the live status; this browser's saved choice
   // wins over both. See lib/voiceSettings.ts.
@@ -313,10 +321,15 @@ export const SettingsView = () => {
       <section>
         <h2 className={styles.subhead}>Policy</h2>
         <p className={styles.note}>
-          The security boundary — deny by default. Read-only here on purpose: this is the file that decides
-          what the assistant may touch, so it is edited in <code>policy.json</code> on disk, not through a
-          web form the agent's own API could reach. Changes take effect on the next run, no restart.
+          The security boundary — deny by default. There is no field here that grants the assistant a new
+          capability: this is the file that decides what it may touch, so it is edited in{" "}
+          <code>policy.json</code> on disk rather than through a web form the agent's own API could reach.
+          The one exception is below, and it only ever narrows a question you are already being asked.
+          Changes take effect on the next run, no restart.
         </p>
+
+        <PolicyProposals onApplied={reloadPolicy} />
+
         <pre className={styles.policy}>{policy ? JSON.stringify(policy, null, 2) : "Loading…"}</pre>
       </section>
     </div>

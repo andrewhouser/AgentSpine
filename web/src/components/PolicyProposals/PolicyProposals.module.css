@@ -1,0 +1,226 @@
+.wrap {
+  margin-bottom: 20px;
+}
+
+.heading {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 0 0 12px;
+}
+
+.note code {
+  background: var(--bg-inset);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  margin: 0;
+  padding: 8px 0;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.8125rem;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+/* The receipt for an accepted proposal, which outlives the card it came from. */
+.receipt {
+  background: var(--ok-soft);
+  border-left: 3px solid var(--ok);
+  border-radius: var(--radius-sm);
+  color: var(--ok);
+  font-size: 0.8125rem;
+  margin: 0 0 10px;
+  padding: 7px 11px;
+}
+
+/* Bordered in the warning colour, like an approval card: this is the same class of
+   decision, just a standing one rather than a single action. */
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+  margin: 0 0 12px;
+  padding: 12px 14px 14px;
+}
+
+.head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.shape {
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: 0.7813rem;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.stat {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.label {
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+  letter-spacing: 0.03em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+/* A draft's summary IS its proposed text, so line breaks have to survive to be reviewable —
+   the same reason ApprovalCard pre-wraps. */
+.sample {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  font-size: 0.8438rem;
+  margin-bottom: 12px;
+  max-height: 220px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 9px 11px;
+  white-space: pre-wrap;
+}
+
+.diff {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.7188rem;
+  line-height: 1.5;
+  margin: 0 0 10px;
+  overflow: auto;
+  padding: 9px 11px;
+}
+
+.disclose {
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.disclose:hover {
+  color: var(--text);
+}
+
+.caret {
+  display: inline-block;
+  font-size: 0.5625rem;
+  width: 1.1em;
+}
+
+.evidence {
+  border-left: 2px solid var(--border);
+  margin: 6px 0 10px;
+  padding-left: 11px;
+}
+
+.row {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.75rem;
+  gap: 9px;
+  padding: 3px 0;
+}
+
+.rowId {
+  color: var(--text-faint);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.rowText {
+  flex: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowGone {
+  color: var(--text-faint);
+  flex: 1;
+  font-style: italic;
+}
+
+.rowWhen {
+  color: var(--text-faint);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.caution {
+  color: var(--warn);
+  flex: 1;
+  font-size: 0.75rem;
+  min-width: 14rem;
+}
+
+.caution code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.primary,
+.plain {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 6px 14px;
+}
+
+.primary {
+  background: var(--warn);
+  color: var(--on-accent);
+}
+
+.plain {
+  background: none;
+  border-color: var(--border-strong);
+  color: var(--text-dim);
+}
+
+.plain:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.primary:disabled {
+  opacity: 0.6;
+}
