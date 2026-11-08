@@ -1404,8 +1404,14 @@ Ask it to "save the business plan as BUSINESSPLAN.md" and it will. A bare filena
 the project's own folder when the chat is inside a project that has one (its first directory
 source), otherwise in `docs/` in this repo; give a full path to put it elsewhere. It can only
 write inside `policy.fs.writableDirs` (default `~/Developer`; a project can narrow it, never
-widen it), only text document types (`.md .txt .csv .json .html .yaml .yml`), never hidden
-files, at most 1 MB. Creating a new file just happens, and so does replacing or editing an
+widen it), never hidden files, at most 1 MB per file. It writes documents (`.md .txt .csv
+.json .yaml .toml .xml .svg`) and web source (`.html .css .js .jsx .ts .tsx .mjs .vue
+.svelte .astro` and friends), so "build me a one-page site" can be real separate files
+rather than one inlined blob — which is both the better artefact and the cheaper generation,
+since a whole page crammed into a single JSON string argument is what used to overrun the
+completion budget. Shell and interpreter scripts (`.sh .py .rb`), plists and anything hidden
+are still refused: the line is not "can this text be executed" but "does writing it make
+something run later without you choosing to run it". Creating a new file just happens, and so does replacing or editing an
 existing one — the old version is copied to `backups/` first. To save something it wrote earlier it
 passes `from_run` with that turn's #id, so the stored text is written exactly rather than retyped.
 

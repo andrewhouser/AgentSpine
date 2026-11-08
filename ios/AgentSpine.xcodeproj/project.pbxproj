@@ -14,7 +14,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AA0000000000000000000002 /* AgentSpine */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (); path = AgentSpine; sourceTree = "<group>"; };
+		AA0000000000000000000002 /* AgentSpine */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AgentSpine;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */

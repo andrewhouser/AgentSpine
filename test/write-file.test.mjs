@@ -37,7 +37,10 @@ setWriteDefault(allowed);
 check("bare name goes to the default dir", resolveTarget({ path: "PLAN.md" }), path.join(allowed, "PLAN.md"));
 check("absolute path is kept", resolveTarget({ path: "/x/y.md" }), "/x/y.md");
 setWriteDefault(null);
-check("with no project the default is <repo>/docs", resolveTarget({ path: "PLAN.md" }).endsWith(path.join("AgentSpine", "docs", "PLAN.md")), true);
+// Derived, not spelled "AgentSpine": the checkout's folder name is the user's to choose,
+// and hard-coding one made this fail on a clone named anything else.
+const repoDocs = path.join(path.dirname(import.meta.dirname), "docs", "PLAN.md");
+check("with no project the default is <repo>/docs", resolveTarget({ path: "PLAN.md" }), repoDocs);
 setWriteDefault(allowed);
 
 console.log("\nthe gate\n");
@@ -47,6 +50,18 @@ check("a symlink cannot carry a write out", gate({ content: "hi", path: "escape/
 check("no writableDirs at all means no writing", gate({ content: "hi", path: "a.md" }, { fs: { readableDirs: [root] } }).allowed, false);
 check("scripts are refused", gate({ content: "x", path: "run.sh" }).allowed, false);
 check("plists are refused", gate({ content: "x", path: "a.plist" }).allowed, false);
+
+// A "one page site" the agent cannot give a stylesheet or a script to is not a site, and
+// the workaround — one giant inlined document in a single JSON string — is the call that
+// overran the completion budget. Web source is writable; the things that run themselves
+// later still are not.
+for (const ext of ["html", "css", "js", "jsx", "mjs", "ts", "tsx", "vue", "svelte", "astro", "svg", "toml"]) {
+  check(`a site can be built from .${ext}`, gate({ content: "x", path: `app.${ext}` }).allowed, true);
+}
+for (const ext of ["sh", "bash", "zsh", "command", "py", "rb", "php", "scpt", "applescript"]) {
+  check(`.${ext} is still refused`, gate({ content: "x", path: `thing.${ext}` }).allowed, false);
+}
+check("the refusal names what IS allowed", /web source/.test(gate({ content: "x", path: "a.py" }).reason), true);
 check("no extension is refused", gate({ content: "x", path: "Makefile" }).allowed, false);
 check("hidden files are refused", gate({ content: "x", path: ".hidden.md" }).allowed, false);
 check("traversal out of the dir is refused", gate({ content: "x", path: "../outside/a.md" }).allowed, false);

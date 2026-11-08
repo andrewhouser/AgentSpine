@@ -31,6 +31,9 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  */
 const backoffMs = (attempt: number): number => Math.floor(Math.random() * LLM_RETRY_BASE_MS * 2 ** (attempt - 1));
 
+/** One tier's failure, in a form that fits on the end of a sentence. */
+const reason = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 export type Sensitivity = "normal" | "private";
 export type Prefer = "cloud" | "local";
 
@@ -69,11 +72,12 @@ const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promis
 /**
  * Send to one tier, re-attempting the SAME endpoint on a transient failure before giving up.
  *
- * This is the layer that absorbs a flaky LAN model host: a dropped connection or a socket
- * timeout retries here (up to `LLM_RETRIES` times, with jittered backoff) rather than
- * failing the run or bouncing to another tier. A deterministic `LLMError` — a 4xx, a
- * reasoning model that returned no content — is NOT retryable and rethrows immediately, so a
- * real bug fails fast instead of being retried into a slow failure. When retries are
+ * This is the layer that absorbs a flaky LAN model host: a dropped connection or a 5xx
+ * retries here (up to `LLM_RETRIES` times, with jittered backoff) rather than failing the
+ * run or bouncing to another tier. A deterministic `LLMError` — a 4xx, a reasoning model
+ * that returned no content — is NOT retryable and rethrows immediately, so a real bug fails
+ * fast instead of being retried into a slow failure. Our OWN timeout is a third case and is
+ * also not retried; see the note at the catch below. When retries are
  * exhausted the last error propagates, and the tier-fallback loop in `route` takes over.
  */
 const sendWithRetry = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promise<RouteResult> => {
@@ -83,7 +87,12 @@ const sendWithRetry = async (config: TierConfig, messages: Msg[], opts: ChatOpts
       return await send(config, messages, opts);
     } catch (err) {
       lastErr = err;
-      const retryable = err instanceof LLMError && err.retryable;
+      // A timeout is transient-looking but is NOT worth re-attempting here: it says this
+      // endpoint could not produce this reply inside the window, and the next attempt sends
+      // the same prompt with the same window. Observed cost of treating it as retryable:
+      // three full timeouts back to back before the first fallback was even tried. The
+      // fallback below is the useful response to a timeout; a retry is pure latency.
+      const retryable = err instanceof LLMError && err.retryable && !err.timedOut;
       if (!retryable || attempt === LLM_RETRIES) break;
       const wait = backoffMs(attempt + 1);
       console.warn(
@@ -106,21 +115,40 @@ export const route = async (messages: Msg[], opts: RouteOpts = {}): Promise<Rout
   try {
     return await sendWithRetry(chosen, messages, chatOpts);
   } catch (err) {
-    // The chosen tier is down even after retries. Try standard, then — only if this isn't
-    // private — deep. Each fallback tier gets its own retry budget for the same reason: the
+    // The chosen tier could not answer — down, or unable to finish inside its window. Try
+    // standard, then — only if this isn't private — deep. Each fallback tier gets its own retry budget for the same reason: the
     // fallback is worth nothing if a single blip on it fails the run too.
+    //
+    // Every leg's failure is kept. This used to be a bare `catch {}` that rethrew the FIRST
+    // tier's error, so a run where the local model timed out and the cloud key was then
+    // rejected reported only "Request timed out." — the cloud leg left no trace at all, in
+    // the log or on screen, and there was no way to tell from the dashboard whether it had
+    // even been attempted. What reaches the user now names each tier and what it said.
     const fallbacks: Tier[] = sensitivity === "private" ? ["standard"] : ["standard", "deep"];
+    const failures = [`${chosen.tier}: ${reason(err)}`];
     for (const next of fallbacks) {
       const config = tierConfig(next);
-      if (config.baseUrl === chosen.baseUrl && config.model === chosen.model) continue;
-      if (!config.configured) continue;
+      // An unconfigured tier carries standard's address (see tiers.ts "Degrading safely"),
+      // so both of these are the same skip — but WHY it was skipped is the thing that was
+      // missing from the error. "deep: not configured" is the difference between "the cloud
+      // was tried and refused us" and "there was never a cloud to try".
+      if (config.baseUrl === chosen.baseUrl && config.model === chosen.model) {
+        if (next !== chosen.tier) {
+          failures.push(`${next}: ${config.configured ? `same endpoint as ${chosen.tier}` : "not configured"}`);
+        }
+        continue;
+      }
       try {
-        console.warn(`[router] ${chosen.tier} unreachable, falling back to ${next}`);
+        console.warn(`[router] ${chosen.tier} failed (${reason(err)}), falling back to ${next}`);
         return await sendWithRetry(config, messages, chatOpts);
-      } catch {
-        /* try the next fallback */
+      } catch (fallbackErr) {
+        failures.push(`${next}: ${reason(fallbackErr)}`);
+        console.warn(`[router] fallback ${next} also failed: ${reason(fallbackErr)}`);
       }
     }
-    throw err instanceof LLMError ? err : new LLMError(String(err));
+    throw new LLMError(`every model tier failed — ${failures.join("; ")}`, {
+      retryable: err instanceof LLMError && err.retryable,
+      timedOut: err instanceof LLMError && err.timedOut,
+    });
   }
 };

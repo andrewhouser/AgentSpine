@@ -32,6 +32,9 @@ const server = http.createServer((req, res) => {
     req.destroy(); // client sees a socket hang up / ECONNRESET — transient
     return;
   }
+  // "stall" accepts the request and never answers, which is what a model host does while
+  // it is still generating. The client's own clock is the only thing that ends it.
+  if (step === "stall") return;
   if (typeof step === "number") {
     res.writeHead(step, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { message: `synthetic ${step}` } }));
@@ -70,7 +73,7 @@ process.env.LLM_RETRIES = "2"; // 1 initial + 2 retries = 3 attempts max
 process.env.LLM_RETRY_BASE_MS = "1"; // keep the suite fast; jitter is [0, base*2^n)
 
 const { route } = await import("../src/router.ts");
-const { LLMError } = await import("../src/llm.ts");
+const { LLMError, timeoutForTokens } = await import("../src/llm.ts");
 
 let passed = 0;
 let failed = 0;
@@ -170,6 +173,41 @@ reset(["length"]);
   check("the partial text still comes back", r.text.startsWith('{"action":"final"'), `text=${r.text}`);
   check("truncation is not an error — 1 attempt, no retry", hits === 1, `hits=${hits}`);
   check("max_tokens reaches the server", lastBody?.max_tokens === 4096, JSON.stringify(lastBody));
+}
+
+console.log("\nTHE TIMEOUT IS SIZED TO THE TOKEN BUDGET");
+
+// The bug this guards: AGENT_STEP_MAX_TOKENS is 4096, and the standard tier generates at
+// 28-33 tok/s, so a step that used its budget needed ~125-146s against a flat 120s cap and
+// could not finish inside its own timeout. The budget must scale with the work asked for.
+{
+  const short = timeoutForTokens(undefined);
+  const long = timeoutForTokens(4096);
+  check("a short structured call keeps the 120s floor", short === 120_000, `short=${short}`);
+  check("a 4096-token budget gets well past 120s", long > 150_000, `long=${long}`);
+  check("4096 tokens outlasts a 33 tok/s generation", long > (4096 / 33) * 1000, `long=${long}`);
+  check("the budget is still bounded", timeoutForTokens(10_000_000) <= 600_000, `${timeoutForTokens(10_000_000)}`);
+  check("a bigger budget never shrinks the window", timeoutForTokens(8192) >= long, "not monotonic");
+}
+
+console.log("\nA TIMEOUT FALLS THROUGH INSTEAD OF RETRYING THE SAME WALL");
+
+// Re-sending the identical prompt with the identical window buys the identical failure, so
+// a timeout must cost ONE attempt, not 1 + LLM_RETRIES. Observed before this: three full
+// timeouts back to back before the first fallback was even considered.
+reset(["stall", "stall", "stall", "stall"]);
+{
+  let err = null;
+  try {
+    await route([{ content: "hi", role: "user" }], { temperature: 0, timeoutMs: 150 });
+  } catch (e) {
+    err = e;
+  }
+  check("a timeout throws", err instanceof LLMError, `got ${err?.name}`);
+  check("the same tier was tried exactly once", hits === 1, `hits=${hits}`);
+  check("the error names every tier that failed", /every model tier failed/.test(err?.message ?? ""), err?.message);
+  check("it says how long it waited, not just 'Request timed out'", /within 0s|within \d+s/.test(err?.message ?? ""), err?.message);
+  check("an unconfigured fallback says so rather than vanishing", /not configured/.test(err?.message ?? ""), err?.message);
 }
 
 server.close();

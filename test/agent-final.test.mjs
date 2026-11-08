@@ -101,8 +101,20 @@ check("time-bound questions carry recency on every search", /pass recency to web
 check("out-of-window results are left out", /Leave out anything dated before/.test(chat), true);
 check("unattended runs get the recency rule too", /pass recency to web_search/.test(job), true);
 check("forbids notifying what it can just say", /Do NOT use notify to tell them something/.test(chat), true);
-check("answers the current message, not the whole history", /Answer the CURRENT message only/.test(chat), true);
-check("one weather lookup, not one per remembered place", /not every place that came up earlier/.test(chat), true);
+check("answers the current message, not the whole history", /Scope is the CURRENT message/.test(chat), true);
+// Wrapping-tolerant: these assert the prompt's INTENT, and a reflowed line is not a
+// regression. Matching the literal line break is how this test broke the last time the
+// paragraph was reworded.
+check("one weather lookup, not one per remembered place", /not every place that\s+came up earlier/.test(chat), true);
+
+// The observed failure: "build me a site AND put it in a new directory AAA" created the
+// directory, declared itself done, and never wrote a file. The do-one-thing reading of
+// the scope rule above is what it was following, so the scope rule now has a counterpart.
+check("every part of the message gets done", /Do the WHOLE of the current message/.test(chat), true);
+check("the reply waits until nothing is undone", /re-read what they asked/.test(chat), true);
+check("a multi-part goal binds a chat turn", /A goal can have more than one part/.test(chat), true);
+check("a multi-part goal binds an unattended run too", /A goal can have more than one part/.test(job), true);
+check("an undone part may not be implied done", /is not a part your final reply may claim/.test(job), true);
 
 console.log("\nTHE UNATTENDED PROMPT — a ledger wants the account, not a queue entry");
 check("still asks what you did", /"summary":"<what you did/.test(job), true);

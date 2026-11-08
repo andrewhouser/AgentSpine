@@ -120,6 +120,30 @@ export const LLM_RETRIES = Number(env.LLM_RETRIES ?? "2");
 // onto the same retry instant.
 export const LLM_RETRY_BASE_MS = Number(env.LLM_RETRY_BASE_MS ?? "400");
 
+// --- How long one completion is allowed to take ---
+//
+// A flat timeout is wrong, because the thing being waited for is not a request but a
+// GENERATION, and its length is something we choose: the agent loop asks for up to
+// AGENT_STEP_MAX_TOKENS. Measured on this host the standard tier runs at 28-33 tok/s
+// (README "Model tiers"), so a 4096-token reply needs 125-146 SECONDS of generation. The
+// old flat 120s cap meant a step that actually used its budget could not finish inside
+// its own timeout -- the step was aborted at 120s, retried twice into the same wall, and
+// the run died with the SDK's "Request timed out." Writing a whole HTML page in one
+// write_file call is exactly that step.
+//
+// So the budget is derived from the work asked for: a deliberately pessimistic generation
+// speed, plus a fixed allowance for prefill and queueing, clamped at both ends. The speed
+// is a BUDGETING floor, not a measurement -- it should sit well under the benchmark so a
+// loaded host still fits, since this is a cap on waiting and costs nothing when the reply
+// arrives early.
+export const LLM_BUDGET_TOK_PER_S = Number(env.LLM_BUDGET_TOK_PER_S ?? "15");
+// Added on top of generation time: prompt prefill, model-host queueing, network.
+export const LLM_TIMEOUT_OVERHEAD_MS = Number(env.LLM_TIMEOUT_OVERHEAD_MS ?? "30000");
+// Never shorter than this (short calls keep the old behaviour) and never longer, so a
+// genuinely hung host still falls through to the next tier in bounded time.
+export const LLM_TIMEOUT_MIN_MS = Number(env.LLM_TIMEOUT_MIN_MS ?? "120000");
+export const LLM_TIMEOUT_MAX_MS = Number(env.LLM_TIMEOUT_MAX_MS ?? "600000");
+
 // --- Tools ---
 export const TAVILY_API_KEY = env.TAVILY_API_KEY ?? "";
 // CDP endpoint of a Chrome you launched with --remote-debugging-port. Use a DEDICATED

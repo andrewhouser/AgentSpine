@@ -14,6 +14,10 @@ import {
   CLOUD_MODEL,
   CLOUD_API_KEY,
   CLOUD_ENABLED,
+  LLM_BUDGET_TOK_PER_S,
+  LLM_TIMEOUT_MAX_MS,
+  LLM_TIMEOUT_MIN_MS,
+  LLM_TIMEOUT_OVERHEAD_MS,
 } from "./config.ts";
 import { record as recordTiming } from "./timing.ts";
 
@@ -27,10 +31,20 @@ import { record as recordTiming } from "./timing.ts";
  */
 export class LLMError extends Error {
   readonly retryable: boolean;
-  constructor(message: string, opts: { retryable?: boolean } = {}) {
+  /**
+   * The request hit OUR timeout rather than failing. Separated from `retryable` because the
+   * two call for opposite responses: a dropped socket is worth re-sending to the same host,
+   * while a timeout means this endpoint could not produce this reply inside the window we
+   * allowed — and re-sending the identical prompt with the identical window just buys the
+   * identical failure. `route()` reads this to fall through to the next tier immediately
+   * instead of spending three full timeouts on the same wall.
+   */
+  readonly timedOut: boolean;
+  constructor(message: string, opts: { retryable?: boolean; timedOut?: boolean } = {}) {
     super(message);
     this.name = "LLMError";
     this.retryable = opts.retryable ?? false;
+    this.timedOut = opts.timedOut ?? false;
   }
 }
 
@@ -70,6 +84,34 @@ const isTransient = (err: unknown): boolean => {
     return true;
   }
   return false;
+};
+
+/**
+ * Did this error come from the clock we set, rather than from the server? The OpenAI SDK
+ * surfaces an aborted request as `APIConnectionTimeoutError` with the message
+ * "Request timed out." — the exact string that reached the dashboard as a failed run.
+ * A 408 from the server is a real HTTP response and NOT one of these: that one is worth
+ * re-sending, which is why it is left to `isTransient` alone.
+ */
+const isOurTimeout = (err: unknown): boolean => {
+  if (typeof (err as { status?: number })?.status === "number") return false;
+  const name = String((err as { name?: string })?.name ?? "");
+  const msg = String((err as { message?: string })?.message ?? "");
+  return /timeout|timed out/i.test(`${name} ${msg}`);
+};
+
+/**
+ * How long to allow one completion, when the caller did not say.
+ *
+ * Derived from the completion budget rather than fixed, because the generation IS the wait:
+ * see the note on LLM_BUDGET_TOK_PER_S in config.ts for the measurements that made a flat
+ * 120s cap shorter than the work it was capping. With no `maxTokens` the caller is making a
+ * short structured call, and the old floor is exactly right for it.
+ */
+export const timeoutForTokens = (maxTokens?: number): number => {
+  if (!maxTokens || maxTokens <= 0) return LLM_TIMEOUT_MIN_MS;
+  const generation = (maxTokens / Math.max(1, LLM_BUDGET_TOK_PER_S)) * 1000;
+  return Math.min(LLM_TIMEOUT_MAX_MS, Math.max(LLM_TIMEOUT_MIN_MS, Math.round(generation + LLM_TIMEOUT_OVERHEAD_MS)));
 };
 
 export type Msg = ChatCompletionMessageParam;
@@ -217,8 +259,9 @@ export const chatReply = async (
   client: OpenAI,
   model: string,
   messages: Msg[],
-  { maxTokens, purpose, runId, step, temperature = 0.2, tier, timeoutMs = 120_000 }: ChatOpts = {},
+  { maxTokens, purpose, runId, step, temperature = 0.2, tier, timeoutMs }: ChatOpts = {},
 ): Promise<ChatReply> => {
+  const budgetMs = timeoutMs ?? timeoutForTokens(maxTokens);
   const isCloud = sameEndpoint(String(client.baseURL ?? ""), CLOUD_BASE_URL);
   // Every completion in the system funnels through here, which is what makes this the only
   // honest place to time one: a measurement taken a layer up would miss the retries and
@@ -246,7 +289,7 @@ export const chatReply = async (
         ...(maxTokens ? { max_tokens: maxTokens } : {}),
         ...(isCloud ? {} : NO_THINKING),
       } as ChatCompletionCreateParamsNonStreaming,
-      { timeout: timeoutMs },
+      { timeout: budgetMs },
     );
     // Timed before the shape checks below: the server did the work and we waited for it,
     // whether or not what came back is usable. A reply that burned 40 seconds and then
@@ -280,7 +323,17 @@ export const chatReply = async (
     if (err instanceof LLMError) throw err;
     // Everything else came from the SDK/transport layer; mark it retryable only if it looks
     // transient, so route() can re-attempt a briefly-unreachable host but not a 400.
-    throw new LLMError(err instanceof Error ? err.message : String(err), { retryable: isTransient(err) });
+    const timedOut = isOurTimeout(err);
+    throw new LLMError(
+      // The SDK's bare "Request timed out." names neither the clock that fired nor the
+      // budget it was measuring, which is what made this failure unreadable in the UI.
+      timedOut
+        ? `no reply within ${Math.round(budgetMs / 1000)}s (max_tokens ${maxTokens ?? "unset"})`
+        : err instanceof Error
+          ? err.message
+          : String(err),
+      { retryable: isTransient(err), timedOut },
+    );
   }
 };
 

@@ -9,9 +9,10 @@
  *   - WHERE: only inside `policy.fs.writableDirs` (deny by default, symlinks resolved on the
  *     nearest existing ancestor so a link cannot carry a write out). A project can only
  *     narrow that list, never widen it.
- *   - WHAT: text document types only (.md .txt .csv .json .html .yaml .yml). No scripts, no
- *     plists, no shell profiles — the files that turn "write a note" into "run something
- *     later" are not on the list. Hidden path segments (`.git`, `.ssh`, `.zshrc`) are refused.
+ *   - WHAT: documents and web source — see WRITE_EXTENSIONS below for the list and for what
+ *     stays off it. Shell and interpreter scripts, plists and shell profiles are still
+ *     refused: those are the files that turn "write a note" into "run something later".
+ *     Hidden path segments (`.git`, `.ssh`, `.zshrc`) are refused.
  *   - HOW MUCH: 1 MB.
  *   - UNDO: before a file is replaced or edited, the old version is copied to
  *     `<AgentSpine>/backups/`. Because the change can be taken back, it is classified
@@ -48,7 +49,60 @@ interface Args {
   path?: string;
 }
 
-export const WRITE_EXTENSIONS = [".md", ".txt", ".csv", ".json", ".html", ".yaml", ".yml"];
+/** Prose, data and config — what "save this for me" meant before sites were in scope. */
+const DOCUMENT_EXTENSIONS = [
+  ".csv",
+  ".json",
+  ".md",
+  ".svg",
+  ".toml",
+  ".txt",
+  ".webmanifest",
+  ".xml",
+  ".yaml",
+  ".yml",
+];
+
+/**
+ * What a working web page or web app is actually made of.
+ *
+ * These are source files, so this list is the point at which `write_file` stops being a
+ * note-taker and starts being able to produce something that runs. The reasoning for
+ * allowing it: a "one page site" the agent cannot give a stylesheet or a script to is not
+ * a site, and the alternative it reaches for — cramming an entire inlined document into a
+ * single JSON string argument — is the same call that blew the completion budget and timed
+ * the run out. Several small files are both the better artefact and the cheaper generation.
+ *
+ * What is deliberately still absent, since the allowlist is the whole gate: shell and
+ * interpreter scripts (.sh .bash .zsh .command .py .rb .pl .php), macOS automation
+ * (.plist .scpt .applescript .app). The line is not "can this text be executed" — a .js
+ * plainly can — but "does writing this file make something run LATER without the user
+ * choosing to run it". A React component does not; a LaunchAgent plist or a dotfile does,
+ * and hidden path segments are refused separately below for the same reason.
+ */
+const WEB_EXTENSIONS = [
+  ".astro",
+  ".cjs",
+  ".css",
+  ".cts",
+  ".gql",
+  ".graphql",
+  ".htm",
+  ".html",
+  ".jsx",
+  ".js",
+  ".less",
+  ".mjs",
+  ".mts",
+  ".sass",
+  ".scss",
+  ".svelte",
+  ".ts",
+  ".tsx",
+  ".vue",
+];
+
+export const WRITE_EXTENSIONS = [...DOCUMENT_EXTENSIONS, ...WEB_EXTENSIONS];
 export const MAX_WRITE_BYTES = 1_000_000;
 
 /** Set by `runner.ts` before each run: the project's folder, or null for the default. */
@@ -112,7 +166,9 @@ export const textTargetGate = (policy: Policy, target: string, { ext = true } = 
     if (!WRITE_EXTENSIONS.includes(e)) {
       return {
         allowed: false,
-        reason: `only text documents can be written (${WRITE_EXTENSIONS.join(" ")}); "${e || "no extension"}" is not one.`,
+        reason:
+          `"${e || "no extension"}" cannot be written. Allowed: documents ` +
+          `(${DOCUMENT_EXTENSIONS.join(" ")}) and web source (${WEB_EXTENSIONS.join(" ")}).`,
       };
     }
   }
@@ -148,7 +204,10 @@ export const writeFile: Tool = {
     "path to put it elsewhere. Provide the text as \"content\", or pass \"from_run\" with the #id of " +
     "an earlier output to save that output exactly as it was written — prefer this for plans, " +
     "drafts and reports. mode \"append\" adds to the end of an existing file instead of replacing it. " +
-    "Text types only (.md .txt .csv .json .html .yaml .yml). The previous version of a replaced file is " +
+    "Writes documents (.md .txt .csv .json .yaml .toml .xml .svg) and web source (.html .css .js .jsx " +
+    ".ts .tsx .mjs .vue .svelte .astro and the rest), so a site can be built as real separate files — " +
+    "one call per file is better than cramming a whole page into one. Shell and interpreter scripts " +
+    "(.sh .py .rb) and hidden files are refused. The previous version of a replaced file is " +
     "backed up automatically, so it never needs to ask first.",
   argsSchema: '{ "path": string, "content"?: string, "from_run"?: number, "mode"?: "write" | "append" }',
   classify: (a: Args): ClassifiedAction => {
