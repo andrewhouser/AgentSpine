@@ -27,7 +27,7 @@ export const ensureMorningBrief = (): boolean => {
     if (rawDb.prepare("SELECT 1 FROM seeds WHERE name = ?").get(BRIEF_NAME)) return false;
     rawDb.prepare("INSERT INTO seeds (name, created) VALUES (?, ?)").run(BRIEF_NAME, new Date().toISOString());
     // A brief you already made by hand is respected rather than duplicated.
-    if (store.listSchedules().some((s: any) => s.name === BRIEF_NAME)) return false;
+    if (store.listSchedules().some((s: any) => String(s.name).trim().toLowerCase() === BRIEF_NAME.toLowerCase())) return false;
     store.createSchedule(BRIEF_NAME, BRIEF_TASK, BRIEF_SPEC, true);
     return true;
   } catch (err) {

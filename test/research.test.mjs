@@ -11,6 +11,7 @@ const sources = await import("../src/research/sources.ts");
 const { sourcesList, sourceRead } = await import("../src/tools/sources.ts");
 const { ensureMorningBrief, BRIEF_NAME } = await import("../src/briefing.ts");
 const store = await import("../src/memory/store.ts");
+const rawDbReset = () => store.rawDb.prepare("DELETE FROM seeds WHERE name = ?").run(BRIEF_NAME);
 
 let passed = 0;
 let failed = 0;
@@ -36,6 +37,12 @@ check("a missing id is explained", /No source/.test(await sourceRead.run({ id: 9
 check("pruning removes only old rows", sources.pruneSources(60), 0);
 
 console.log("\nthe morning brief\n");
+// An existing brief with different capitalisation must be respected, not duplicated.
+store.createSchedule("morning BRIEF", "x", "weekdays at 8am", true);
+check("an existing brief of any capitalisation is respected", ensureMorningBrief(), false);
+check("and nothing was added", store.listSchedules().length, 1);
+for (const s of store.listSchedules()) store.deleteSchedule(s.id);
+rawDbReset();
 check("seeds once", ensureMorningBrief(), true);
 check("creates an ordinary, enabled schedule", store.listSchedules().filter((s) => s.name === BRIEF_NAME && s.enabled).length, 1);
 check("does not seed twice", ensureMorningBrief(), false);
