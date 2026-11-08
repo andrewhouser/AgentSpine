@@ -51,6 +51,30 @@ export interface Confirmation {
   ts: string;
 }
 
+/**
+ * An auto-approval proposal (LEARNING.md Phase 2): one `(tool, target)` shape the ledger
+ * says has been approved repeatedly and never once rejected, offered as the narrowest policy
+ * rule that would stop it queueing.
+ *
+ * Nothing stores a proposal — the server recomputes them from the confirmation ledger on
+ * every request. So a shape you reject once stops being proposed, and a shape already in
+ * `policy.autoApprove` stops appearing at all.
+ */
+export interface PromotionProposal {
+  /** How many times this exact shape was approved. Rejections are not a count: one is fatal. */
+  approvals: number;
+  /** The exact change this would make to policy.json, rendered server-side. */
+  diff: string;
+  /** Days between the first and last approval — the shape's track record. */
+  spanDays: number;
+  /** The most recent approval's own summary, as a sample of what the rule would cover. */
+  summary: string;
+  target: string;
+  tool: string;
+  /** The confirmation ids this rule would have auto-executed, and nothing else. */
+  wouldHaveAutoRun: number[];
+}
+
 export interface Conversation {
   archived: number;
   created: string;

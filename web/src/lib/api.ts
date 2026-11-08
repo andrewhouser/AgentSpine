@@ -23,6 +23,7 @@ import type {
   Memory,
   Project,
   ProjectSource,
+  PromotionProposal,
   Run,
   Schedule,
   Thread,
@@ -104,6 +105,18 @@ export const api = {
       { path },
     ),
 
+  /**
+   * Accept one auto-approval proposal.
+   *
+   * The only call in this client that widens what the assistant may do without asking, and
+   * the server side of it (`applyProposal`) is the only function anywhere that writes an
+   * `autoApprove` entry. Deliberately not reachable from any tool the model can invoke —
+   * see LEARNING.md invariant 1 — which is why it lives here and not in the agent's API.
+   * Idempotent: re-applying a rule that already exists answers `ok` and changes nothing.
+   */
+  applyProposal: (tool: string, target: string) =>
+    post<{ message: string; ok: boolean }>("/api/proposals", { target, tool }),
+
   approveConfirmation: (id: number) => post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/approve`),
 
   archiveConversation: (id: number) =>
@@ -156,7 +169,14 @@ export const api = {
 
   listAgents: () => request<Agent[]>("/api/agents"),
 
-  listConfirmations: () => request<Confirmation[]>("/api/confirmations"),
+  /**
+   * The approval queue. With no `state` the server answers the hundred most recent of any
+   * state, which is what the Approvals view wants; `"done"` asks for every resolved
+   * approval with no cap, which is what reading a proposal's evidence needs — a shape
+   * proposed on a long track record can cite a confirmation older than that hundred.
+   */
+  listConfirmations: (state?: string) =>
+    request<Confirmation[]>(`/api/confirmations${state ? `?state=${encodeURIComponent(state)}` : ""}`),
 
   listConversations: () => request<Conversation[]>("/api/conversations"),
 
@@ -186,6 +206,9 @@ export const api = {
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
 
   listProjects: () => request<Project[]>("/api/projects"),
+
+  /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
+  listProposals: () => request<PromotionProposal[]>("/api/proposals"),
 
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
