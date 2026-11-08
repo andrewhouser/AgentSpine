@@ -399,8 +399,24 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         tier: sizing.tier,
       });
       store.saveTrace(runId, trace);
-      store.finishRun(runId, "ok", summary);
-      publish(runId, { status: "ok", type: "run_end" });
+      /**
+       * A run whose tool calls errored did not do what it was asked, however fluent its
+       * closing summary. Reported "ok", a scheduled job that failed to save its own output
+       * looks identical to one that worked (observed: a daily brief whose two memory_save
+       * calls errored, finishing "ok"). Chat is exempt: there a person reads the answer and
+       * a recovered error is part of the conversation. Everywhere else it finishes "failed"
+       * with the cause first and the agent's own account kept after it.
+       */
+      const errored = kind === "chat" ? [] : store.erroredTools(runId);
+      if (errored.length) {
+        const names = [...new Set(errored)].join(", ");
+        const note = `${errored.length} tool call(s) errored (${names}). Agent's summary: ${summary}`;
+        store.finishRun(runId, "failed", note);
+        publish(runId, { status: "failed", type: "run_end" });
+      } else {
+        store.finishRun(runId, "ok", summary);
+        publish(runId, { status: "ok", type: "run_end" });
+      }
 
       // After the run is fully closed out, so a reflection failure cannot touch the result.
       // A recipe is learned only from a run that finished cleanly — no errored or rejected

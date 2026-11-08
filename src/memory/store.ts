@@ -494,6 +494,14 @@ export const runIsClean = (runId: number): boolean => {
   return rejected === 0;
 };
 
+/** Tools whose calls errored in this run, one entry per errored call. */
+export const erroredTools = (runId: number): string[] =>
+  (
+    db.prepare("SELECT tool FROM actions WHERE run_id = ? AND decision = 'error' ORDER BY id").all(runId) as {
+      tool: string;
+    }[]
+  ).map((r) => r.tool);
+
 export interface DeniedShape {
   tool: string;
   target: null | string;

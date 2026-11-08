@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var probing = false
     @State private var pushResult: String?
     @State private var pushing = false
+    @State private var devices: [RegisteredDevice] = []
+    @State private var devicesError: String?
 
     var body: some View {
         Form {
@@ -125,6 +127,43 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink("Auto-approval proposals") { ProposalsView() }
+                NavigationLink("Agents") { AgentsView() }
+                NavigationLink("Memory") { MemoryView() }
+                NavigationLink("Policy") { PolicyView() }
+            } header: {
+                Text("Assistant")
+            }
+            Section {
+                ForEach(devices) { device in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name ?? "Unnamed device")
+                        Text("\(device.environment) · …\(device.token.suffix(8)) · seen "
+                             + SpineDate.relative(device.seen))
+                            .font(.caption).foregroundStyle(.secondary).monospaced()
+                        if let disabled = device.disabled {
+                            Text("Disabled: \(device.detail ?? disabled)")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                    .swipeActions {
+                        Button("Forget", role: .destructive) {
+                            Task { await forget(device) }
+                        }
+                    }
+                }
+                if let devicesError {
+                    Text(devicesError).font(.footnote).foregroundStyle(.secondary)
+                } else if devices.isEmpty {
+                    Text("No devices registered").font(.footnote).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Registered devices")
+            } footer: {
+                Text("Swipe to forget. After a restore or reinstall the server keeps the old "
+                     + "token until you clear it here.")
+            }
+            Section {
                 TextField(UIDevice.current.name, text: Binding(
                     get: { settings.deviceName },
                     set: { settings.deviceName = $0 }
@@ -151,6 +190,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .task(id: settings.isConfigured) { await loadDevices() }
         .onChange(of: settings.isConfigured) { _, configured in
             // Entering a working server for the first time is the moment to register for push
             // — the token may already have been issued and discarded for want of somewhere to
@@ -192,6 +232,25 @@ struct SettingsView: View {
             push.registerIfAuthorized()
         } catch {
             probe = error.localizedDescription
+        }
+    }
+
+    private func loadDevices() async {
+        guard settings.isConfigured else { return }
+        do {
+            devices = try await APIClient.shared.devices()
+            devicesError = nil
+        } catch {
+            devicesError = error.localizedDescription
+        }
+    }
+
+    private func forget(_ device: RegisteredDevice) async {
+        do {
+            try await APIClient.shared.forgetDevice(device.id)
+            devices.removeAll { $0.id == device.id }
+        } catch {
+            devicesError = error.localizedDescription
         }
     }
 

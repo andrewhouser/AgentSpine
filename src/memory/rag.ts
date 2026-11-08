@@ -156,7 +156,17 @@ export const remember = async (text: string, kind = "note"): Promise<boolean> =>
   if (exact) return false;
 
   const embedder = await getEmbedder();
-  const vec = embedder ? await embedder(trimmed) : null;
+  // An unreachable embeddings endpoint must not lose the fact. It is stored without a vector
+  // (recall's keyword fallback still finds it) and the failure is logged rather than thrown.
+  // Before this, every memory_save errored with "fetch failed" whenever Ollama was down.
+  let vec: Float32Array | null = null;
+  if (embedder) {
+    try {
+      vec = await embedder(trimmed);
+    } catch (err) {
+      console.warn(`[rag] embedding failed, saving without a vector: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   if (vec) {
     // Reuses the vector we already computed rather than embedding the same text twice.

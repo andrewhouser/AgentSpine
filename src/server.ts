@@ -972,6 +972,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
        * five seconds later. Holding the response open would tie the hotkey's feedback to a
        * fetch that outlives the moment it was pressed in.
        */
+      // GET /api/meetings/:id/coach — the pollable half of the coach, for clients that cannot
+      // hold the event stream. { thinking, answer } where answer is null until one arrives.
+      if (m === "GET" && seg.length === 4 && seg[3] === "coach") {
+        const id = Number(seg[2]);
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        return sendJson(res, 200, meetings.coachState(id));
+      }
+
       if (m === "POST" && seg.length === 4 && seg[3] === "coach") {
         const id = Number(seg[2]);
         if (!MEETING_COACH_ENABLED) return sendJson(res, 403, { error: "MEETING_COACH_ENABLED is false" });
@@ -1131,13 +1139,6 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
     }
 
-    // /api/do  { task }
-    if (m === "POST" && seg[1] === "do" && seg.length === 2) {
-      const b = await readBody(req);
-      if (!b.task) return sendJson(res, 400, { error: "task required" });
-      const r = await runTask(String(b.task), { kind: "do" });
-      return sendJson(res, 200, r);
-    }
 
     return sendJson(res, 404, { error: `no route for ${m} ${p}` });
   } catch (err) {

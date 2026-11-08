@@ -1,20 +1,24 @@
 # AgentSpine for iPhone
 
-A native app that starts tasks, watches them run, approves what the broker queues, and —
-the actual reason it exists — gets AgentSpine's notifications their own icon on your home
-screen instead of a share of ntfy's.
+A native app that starts tasks, watches them run, approves what the broker queues, keeps an
+eye on what runs on a clock, and — the actual reason it exists — gets AgentSpine's
+notifications their own icon on your home screen instead of a share of ntfy's.
 
 It talks to the dashboard API over your tailnet and is never submitted to the App Store.
 You install it on your own phone from Xcode, where it lasts a year before it needs
 re-signing.
 
 ```
-Threads        the conversation list, and a composer that notifies you when the turn ends
-Thread         turns as they happen: every tool call with the broker's verdict on it, live
+Threads        the conversation list — rename, archive, delete — and a composer
+Thread         turns live: every tool call with its verdict, your photos, markdown replies
 Approvals      the queue, showing the whole proposed action — not a summary
-Activity       every run, including the scheduled and watcher ones with no thread
+Schedules      jobs that run on a clock: pause, edit, run now, and how the last few went
+Activity       every run, scheduled and watcher ones included; open one for its full trace
 Settings       the two settings, and the answer to "why didn't it buzz"
 ```
+
+The app is deliberately a subset of the dashboard. [ROADMAP.md](ROADMAP.md) records what it
+covers, what it does not, and why — along with the notes worth having before you add to it.
 
 ---
 

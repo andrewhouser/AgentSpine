@@ -4,6 +4,7 @@ import SwiftUI
 struct AgentSpineApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var state = AppState()
+    @State private var reader = ReadAloud()
 
     init() {
         // Categories before permission, so a notification arriving in the same second as the
@@ -17,6 +18,7 @@ struct AgentSpineApp: App {
                 .environment(state)
                 .environment(Settings.shared)
                 .environment(PushManager.shared)
+                .environment(reader)
         }
     }
 }

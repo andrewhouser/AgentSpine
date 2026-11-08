@@ -98,3 +98,16 @@
     padding: 18px 14px 48px;
   }
 }
+
+.edit {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-sizing: border-box;
+  color: inherit;
+  display: block;
+  font: inherit;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  width: 100%;
+}

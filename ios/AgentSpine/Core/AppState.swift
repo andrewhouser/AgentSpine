@@ -11,7 +11,13 @@ import Observation
 final class AppState {
     var conversations: [Conversation] = []
     var pendingApprovals: [Confirmation] = []
+    var projects: [Project] = []
     var recentRuns: [Run] = []
+
+    /// Project names by id, for labelling a thread without a second request per row.
+    var projectNames: [Int: String] {
+        Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0.name) })
+    }
 
     var loadError: String?
     var isLoading = false
@@ -39,9 +45,13 @@ final class AppState {
         async let threads = api.conversations()
         async let approvals = api.confirmations(state: "pending")
         async let runs = api.runs()
+        // Projects are only labels here, and a server with none is normal, so a failure to
+        // fetch them must not fail the refresh that the other three succeeded at.
+        async let projectList = try? api.projects()
 
         do {
             let (t, a, r) = try await (threads, approvals, runs)
+            projects = await projectList ?? []
             // Archived threads stay on the server and out of the way here: a phone is for the
             // thread you are in the middle of.
             conversations = t.filter { $0.archived == 0 }
@@ -83,9 +93,9 @@ final class AppState {
     }
 
     /// Start a thread and send the first message, which is what the compose button does.
-    func startThread(task: String) async -> Int? {
+    func startThread(task: String, projectID: Int? = nil) async -> Int? {
         do {
-            let conversation = try await api.createConversation()
+            let conversation = try await api.createConversation(projectID: projectID)
             _ = try await api.send(message: task, to: conversation.id)
             await refresh()
             return conversation.id

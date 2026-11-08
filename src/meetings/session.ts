@@ -291,9 +291,26 @@ const finalPass = async (meetingId: number, pcm: Buffer, listener: Listener): Pr
  */
 let coaching = false;
 
+/**
+ * The most recent coach exchange, kept so a client that cannot hold the event stream can
+ * poll for it. A phone loses its SSE connection across a lock or a cell handoff, and the
+ * answer is only ever emitted once; without this it would simply be missed. In memory
+ * only: coach notes are not part of the record, and a restart forgetting them is fine.
+ */
+export interface CoachState {
+  answer: CoachAnswer | null;
+  meetingId: number;
+  thinking: boolean;
+}
+let lastCoach: CoachState | null = null;
+
+export const coachState = (meetingId: number): CoachState =>
+  lastCoach?.meetingId === meetingId ? lastCoach : { answer: null, meetingId, thinking: false };
+
 export const askCoach = (meetingId: number): { busy: boolean } => {
   if (coaching) return { busy: true };
   coaching = true;
+  lastCoach = { answer: null, meetingId, thinking: true };
   emit({ kind: "coach", meetingId, thinking: true });
 
   // Detached: the caller gets "started" back immediately and the answer arrives on the stream
@@ -302,22 +319,20 @@ export const askCoach = (meetingId: number): { busy: boolean } => {
   void (async () => {
     try {
       const answer = await coach(meetingId);
+      lastCoach = { answer, meetingId, thinking: false };
       emit({ answer, kind: "coach", meetingId, thinking: false });
     } catch (err) {
       // `coach` handles its own failures, so this is belt to that braces — but an exception
       // escaping here would leave the panel spinning for the rest of the meeting, which is a
       // worse outcome than any error message.
-      emit({
-        answer: {
-          cards: { documents: [], meetings: [], memories: [], query: "" },
-          elapsedMs: 0,
-          notes: `(failed: ${(err as Error).message})`,
-          question: "",
-        },
-        kind: "coach",
-        meetingId,
-        thinking: false,
-      });
+      const failed: CoachAnswer = {
+        cards: { documents: [], meetings: [], memories: [], query: "" },
+        elapsedMs: 0,
+        notes: `(failed: ${(err as Error).message})`,
+        question: "",
+      };
+      lastCoach = { answer: failed, meetingId, thinking: false };
+      emit({ answer: failed, kind: "coach", meetingId, thinking: false });
     } finally {
       coaching = false;
     }

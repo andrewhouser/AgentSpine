@@ -26,38 +26,43 @@ struct ActivityView: View {
             }
 
             ForEach(state.recentRuns) { run in
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: symbol(for: run))
-                        .font(.caption)
-                        .foregroundStyle(tint(for: run))
-                        .frame(width: 18)
+                // Every row opens: a list of what ran is only half the point, and for a
+                // watcher or a scheduled brief there is no thread to read it in instead.
+                NavigationLink(value: run.id) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: symbol(for: run))
+                            .font(.caption)
+                            .foregroundStyle(tint(for: run))
+                            .frame(width: 18)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(run.task ?? "(no task recorded)")
-                            .font(.subheadline)
-                            .lineLimit(2)
-                        HStack(spacing: 6) {
-                            Text(run.kind)
-                            Text("·")
-                            Text(run.status)
-                            Text("·")
-                            Text(SpineDate.relative(run.started))
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        if let note = run.note, !note.isEmpty, run.status == "failed" {
-                            Text(note)
-                                .font(.caption2)
-                                .foregroundStyle(.red)
-                                .lineLimit(3)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(run.task ?? "(no task recorded)")
+                                .font(.subheadline)
+                                .lineLimit(2)
+                            HStack(spacing: 6) {
+                                Text(run.kind)
+                                Text("·")
+                                Text(run.status)
+                                Text("·")
+                                Text(SpineDate.relative(run.started))
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            if let note = run.note, !note.isEmpty, run.status == "failed" {
+                                Text(note)
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                                    .lineLimit(3)
+                            }
                         }
                     }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
             }
         }
         .listStyle(.plain)
         .navigationTitle("Activity")
+        .navigationDestination(for: Int.self) { RunDetailView(runID: $0) }
         .refreshable { await state.refresh() }
     }
 

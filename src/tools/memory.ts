@@ -18,8 +18,8 @@ export const memorySave: Tool = {
   }),
   checkPolicy: (p) => always(p),
   run: async (a) => {
-    await remember(String(a?.text ?? ""), a?.kind ?? "note");
-    return "saved to long-term memory.";
+    const saved = await remember(String(a?.text ?? ""), a?.kind ?? "note");
+    return saved ? "saved to long-term memory." : "not saved: already known (or empty).";
   },
 };
 

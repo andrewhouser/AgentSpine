@@ -1,8 +1,10 @@
 import Foundation
 
-/// Codable mirrors of what the AgentSpine API returns. Deliberately a *subset* — the server
-/// knows about meetings, projects, memories, schedules and voice, and this app is about four
-/// things: starting work, watching it, approving it, and being told about it.
+/// Codable mirrors of what the AgentSpine API returns. Still a *subset* — the server also
+/// knows about meetings, memories and voice, which stay on the dashboard for now because
+/// they are bound to the Mac's microphone or to a screen you can read a JSON dump on. What
+/// is here is what a phone is actually better at: starting work, watching it, approving it,
+/// being told about it, and now reaching the schedules and run history behind all of that.
 ///
 /// The server's JSON is snake_case because it comes straight out of SQLite rows, so most of
 /// these carry a `CodingKeys` to meet Swift halfway rather than renaming things server-side.
@@ -160,9 +162,126 @@ struct Run: Codable, Identifiable, Hashable {
     let id: Int
     let kind: String
     let note: String?
+    /// Set on a run the scheduler started. The ledger has always carried it and the API has
+    /// always returned it; it is read here so the Schedules tab can show a job's own
+    /// history rather than sending you to Activity to go looking for it.
+    let scheduleID: Int?
     let started: String
     let status: String
     let task: String?
+
+    enum CodingKeys: String, CodingKey {
+        case finished, id, kind, note, started, status, task
+        case scheduleID = "schedule_id"
+    }
+
+    var isFinished: Bool { status != "running" && status != "queued" }
+}
+
+/// One run in full: what it was asked, every tool call with the broker's verdict, and the
+/// raw conversation the model actually saw.
+///
+/// The trace is the reason this exists. It carries the standing context injected before the
+/// run — the profile and the recalled memories — which is the first thing you want when a
+/// run behaves oddly, because it shows what the assistant thought it knew going in.
+struct RunDetail: Codable {
+    let actions: [Action]
+    let run: Run
+    let trace: [TraceMessage]
+}
+
+struct TraceMessage: Codable, Identifiable, Hashable {
+    /// Nullable in the ledger (`messages.content TEXT`): an assistant message that was
+    /// nothing but tool calls carries no text. Optional here for that reason — decoding the
+    /// whole trace must not fail because one row of it was a tool call.
+    let content: String?
+    let role: String
+    let seq: Int
+
+    var id: Int { seq }
+
+    var text: String { content ?? "(no text — this message was tool calls)" }
+}
+
+// MARK: - Schedules
+
+/// A job that runs on a clock. A watcher is one of these whose task compares against stored
+/// state and stays silent unless something changed.
+struct Schedule: Codable, Identifiable, Hashable {
+    let enabled: Int
+    let id: Int
+    let lastRun: String?
+    let name: String
+    let nextRun: String?
+    /// Human-readable, e.g. "weekdays at 8:00am". Null only on a legacy row that still
+    /// carries `interval_minutes` instead.
+    let spec: String?
+    let task: String
+
+    enum CodingKeys: String, CodingKey {
+        case enabled, id, name, spec, task
+        case lastRun = "last_run"
+        case nextRun = "next_run"
+    }
+
+    var isEnabled: Bool { enabled != 0 }
+}
+
+// MARK: - Projects
+
+/// Only what a picker needs. Project *management* — sources, re-indexing, instructions —
+/// stays on the dashboard, where the paths it deals in actually exist.
+struct Project: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    /// Only on the list and detail routes; absent where a project is merely a label.
+    let instructions: String?
+    let chunks: Int?
+}
+
+struct ProjectSource: Codable, Identifiable, Hashable {
+    let chunkCount: Int
+    let fileCount: Int
+    let id: Int
+    /// `path` for an indexed directory, `meeting` for a transcript.
+    let kind: String
+    let lastIndexed: String?
+    let ref: String
+    let status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, ref, status
+        case chunkCount = "chunk_count"
+        case fileCount = "file_count"
+        case lastIndexed = "last_indexed"
+    }
+}
+
+struct ProjectDetail: Codable {
+    let chunks: Int
+    let conversations: [Conversation]
+    let project: Project
+    let sources: [ProjectSource]
+}
+
+/// What one indexing pass did. Every field is optional because a failed pass answers with
+/// only `error`.
+struct IngestResult: Codable, Hashable {
+    let added: Int?
+    let chunks: Int?
+    let error: String?
+    let removed: Int?
+    let skipped: [String]?
+    let unchanged: Int?
+    let updated: Int?
+
+    var summary: String {
+        if let error { return error }
+        var parts = ["\(added ?? 0) added", "\(updated ?? 0) updated",
+                     "\(removed ?? 0) removed", "\(unchanged ?? 0) unchanged"]
+        if let skipped, !skipped.isEmpty { parts.append("skipped: " + skipped.joined(separator: "; ")) }
+        return parts.joined(separator: ", ")
+    }
 }
 
 // MARK: - Streamed run events
@@ -271,4 +390,182 @@ enum SpineDate {
         guard let date = parse(string) else { return "" }
         return date.formatted(date: .omitted, time: .shortened)
     }
+}
+
+
+// MARK: - Memory, policy, proposals
+
+struct Memory: Codable, Identifiable, Hashable {
+    let id: Int
+    let kind: String
+    let text: String
+    let ts: String
+}
+
+/// An auto-approval proposal from `GET /api/proposals`.
+struct PromotionProposal: Codable, Identifiable, Hashable {
+    let approvals: Int
+    /// The exact change accepting would make to `policy.json`, rendered server-side.
+    let diff: String
+    let spanDays: Int
+    let summary: String
+    let target: String
+    let tool: String
+    let wouldHaveAutoRun: [Int]
+
+    var id: String { tool + "\u{0}" + target }
+}
+
+struct ProposalResult: Codable {
+    let message: String
+    let ok: Bool
+}
+
+
+// MARK: - Meetings
+
+struct Meeting: Codable, Identifiable, Hashable {
+    let device: String
+    let ended: String?
+    let id: Int
+    let note: String?
+    let projectID: Int?
+    let started: String
+    let status: String
+    let title: String?
+    let wordCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case device, ended, id, note, started, status, title
+        case projectID = "project_id"
+        case wordCount = "word_count"
+    }
+
+    var displayTitle: String {
+        if let title, !title.isEmpty { return title }
+        return "Meeting \(SpineDate.relative(started))"
+    }
+    var isRecording: Bool { status == "recording" }
+}
+
+struct MeetingSegment: Codable, Identifiable, Hashable {
+    let endMs: Int
+    let id: Int
+    let ord: Int
+    let startMs: Int
+    let text: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, ord, text
+        case endMs = "end_ms"
+        case startMs = "start_ms"
+    }
+
+    /// `m:ss` into the recording.
+    var timestamp: String {
+        let total = startMs / 1000
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+struct MeetingDecision: Codable, Hashable {
+    let quote: String?
+    let text: String
+}
+
+struct MeetingExtraction: Codable, Hashable {
+    let decisions: [MeetingDecision]
+    let note: String?
+    let status: String
+    let summary: String?
+    let topics: [String]
+}
+
+/// A candidate work item. Only `queued` reached the confirmation queue; the rest are kept so
+/// the extraction's false-positive rate stays visible, with the reason each was set aside.
+struct MeetingWorkItem: Codable, Identifiable, Hashable {
+    let confirmationID: Int?
+    let id: Int
+    let owner: String?
+    let quote: String?
+    let task: String
+    let verdict: String
+    let verdictNote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, owner, quote, task, verdict
+        case confirmationID = "confirmation_id"
+        case verdictNote = "verdict_note"
+    }
+
+    var wasQueued: Bool { verdict == "queued" }
+}
+
+struct MeetingDetail: Codable {
+    let extraction: MeetingExtraction?
+    let meeting: Meeting
+    let segments: [MeetingSegment]
+    let workItems: [MeetingWorkItem]
+}
+
+struct MeetingLiveStatus: Codable, Hashable {
+    let device: String?
+    let elapsedMs: Int
+    let meetingID: Int?
+    let pendingChunks: Int
+    let recording: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case device, recording
+        case elapsedMs = "elapsedMs"
+        case meetingID = "meetingId"
+        case pendingChunks
+    }
+}
+
+struct AudioDevices: Codable {
+    struct Device: Codable, Hashable {
+        let allowed: Bool
+        let name: String
+    }
+    let devices: [Device]
+    let enabled: Bool
+}
+
+struct ContextCard: Codable, Hashable {
+    let score: Double
+    let source: String
+    let text: String
+}
+
+struct ContextCards: Codable {
+    let documents: [ContextCard]
+    let meetings: [ContextCard]
+    let memories: [ContextCard]
+    let query: String
+}
+
+
+// MARK: - Agents and coach
+
+/// A Dispatch unit, parsed off `agents/*.md` by the server.
+struct AgentUnit: Codable, Identifiable, Hashable {
+    let description: String
+    let maxSteps: Int
+    let name: String
+    let tier: String
+    let tools: [String]
+
+    var id: String { name }
+}
+
+struct CoachAnswer: Codable, Hashable {
+    let notes: String
+    let question: String
+    let elapsedMs: Int
+}
+
+struct CoachState: Codable {
+    let answer: CoachAnswer?
+    let thinking: Bool
 }

@@ -306,6 +306,12 @@ export const api = {
 
   updateProject: (id: number, fields: { instructions?: string; name?: string }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
+  /**
+   * Change any of a schedule's name, task, schedule spec or enabled flag. Editing in place
+   * keeps `last_run`, which delete-and-recreate would lose.
+   */
+  updateSchedule: (id: number, fields: { enabled?: boolean; name?: string; schedule?: string; task?: string }) =>
+    request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
 
   /**
    * Send one image up and get its id back.
