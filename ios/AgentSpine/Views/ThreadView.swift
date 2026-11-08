@@ -44,7 +44,7 @@ struct ThreadView: View {
                     }
 
                     ForEach(thread?.turns ?? []) { turn in
-                        TurnView(turn: turn)
+                        TurnView(turn: turn, projectID: thread?.conversation.projectID)
                             .id("turn-\(turn.id)")
                     }
 
@@ -414,7 +414,14 @@ struct ThreadView: View {
 
 struct TurnView: View {
     let turn: Turn
+    /// The thread's project, so "Save to file" lands in its folder.
+    var projectID: Int?
     @Environment(ReadAloud.self) private var reader
+    @State private var starred: Bool?
+    @State private var saving = false
+    @State private var fileName = ""
+    @State private var notice: String?
+    @State private var showContext = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -469,6 +476,29 @@ struct TurnView: View {
                 }
                 if let summary = turn.summary, !summary.isEmpty {
                     Spacer()
+                    Menu {
+                        Button {
+                            let next = !(starred ?? turn.starred ?? false)
+                            starred = next
+                            Task { try? await APIClient.shared.star(runID: turn.id, starred: next) }
+                        } label: {
+                            Label((starred ?? turn.starred ?? false) ? "Unstar" : "Star", systemImage: (starred ?? turn.starred ?? false) ? "star.slash" : "star")
+                        }
+                        Button {
+                            fileName = "reply-\(turn.id).md"
+                            saving = true
+                        } label: {
+                            Label("Save to file…", systemImage: "square.and.arrow.down")
+                        }
+                        if let used = turn.contextUsed, !used.isEmpty {
+                            Button { showContext = true } label: {
+                                Label("Context used (\(used.count))", systemImage: "brain")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: (starred ?? turn.starred ?? false) ? "star.fill" : "ellipsis.circle")
+                    }
+                    .accessibilityLabel("Reply actions")
                     Button {
                         if reader.speaking && reader.current != summary { reader.stop() }
                         reader.toggle(summary)
@@ -480,6 +510,35 @@ struct TurnView: View {
             }
             .font(.caption2)
             .foregroundStyle(.tertiary)
+
+            if let notice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .alert("Save to file", isPresented: $saving) {
+            TextField("File name", text: $fileName)
+            Button("Save") {
+                Task {
+                    do {
+                        let r = try await APIClient.shared.saveReply(runID: turn.id, name: fileName, projectID: projectID)
+                        notice = "Saved to \(r.path)"
+                    } catch {
+                        notice = error.localizedDescription
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A bare name goes in the project's folder, or docs/ on the Mac.")
+        }
+        .sheet(isPresented: $showContext) {
+            NavigationStack {
+                List(turn.contextUsed ?? [], id: \.self) { Text($0).font(.footnote) }
+                    .navigationTitle("Context used")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showContext = false } } }
+            }
+            .presentationDetents([.medium, .large])
         }
     }
 }

@@ -314,6 +314,55 @@ export interface ChildRun {
   tier: null | string;
 }
 
+export interface Task {
+  client_id: null | number;
+  completed: null | string;
+  created: string;
+  due: null | string;
+  id: number;
+  kind: "followup" | "task";
+  notes: null | string;
+  status: "done" | "dropped" | "open";
+  title: string;
+  waiting_on: null | string;
+}
+
+export interface Client {
+  email: null | string;
+  id: number;
+  name: string;
+  next_action: null | string;
+  next_action_due: null | string;
+  notes: null | string;
+  status: string;
+  updated: string;
+}
+
+export interface TimeSummary {
+  entries: { client: null | string; day: string; id: number; minutes: number; note: null | string }[];
+  totals: { client: null | string; clientId: null | number; entries: number; label: string; minutes: number }[];
+}
+
+export interface SavedFile {
+  action: string;
+  bytes: number;
+  exists: boolean;
+  modified: null | string;
+  name: string;
+  path: string;
+  run_id: null | number;
+  ts: string;
+}
+
+export interface SearchHit {
+  conversationId: null | number;
+  conversationTitle: null | string;
+  finished: null | string;
+  runId: number;
+  snippet: string;
+  task: string;
+}
+
 export interface Turn {
   actions: Action[];
   /** Images the user sent with this turn. */
@@ -322,8 +371,11 @@ export interface Turn {
   children: ChildRun[];
   /** Approvals this turn raised that are still open. */
   confirmations: Confirmation[];
+  /** What the assistant had in front of it for this turn (short labels). */
+  contextUsed?: string[];
   finished: null | string;
   id: number;
+  starred?: boolean;
   started: string;
   status: string;
   summary: null | string;

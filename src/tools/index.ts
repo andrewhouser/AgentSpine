@@ -11,11 +11,11 @@ import { webRead } from "./web-read.ts";
 import { browserControl } from "./browser.ts";
 import { readFile, listDir } from "./read-file.ts";
 import { readMoreTool } from "./read-more.ts";
-import { writeFile } from "./write-file.ts";
+import { editFile, makeDir, moveFile, writeFile } from "./write-file.ts";
 import { gmailSearch } from "./gmail.ts";
 import { calendarUpcoming } from "./calendar.ts";
 import { memorySave, memoryRecall } from "./memory.ts";
-import { conversationDetail, recallOutput } from "./conversation.ts";
+import { conversationDetail, findPastOutput, recallOutput } from "./conversation.ts";
 import { notifyTool } from "./notify.ts";
 import { stateGet, stateSet } from "./state.ts";
 import { scheduleCreate, scheduleDelete, scheduleList, scheduleUpdate } from "./schedule.ts";
@@ -26,6 +26,9 @@ import { lookAtImage } from "./look-at-image.ts";
 import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
 import { subagent } from "./subagent.ts";
+import { clientList, clientUpsert, timeLog, timeReportTool } from "./clients.ts";
+import { sourceRead, sourcesList } from "./sources.ts";
+import { taskAdd, taskDone, taskList, taskUpdate } from "./tasks.ts";
 import { generateImage } from "./generate-image.ts";
 
 export const tools: Tool[] = [
@@ -33,17 +36,23 @@ export const tools: Tool[] = [
   notifyTool,
   webSearch,
   webRead,
+  sourcesList,
+  sourceRead,
   browserControl,
   readFile,
   listDir,
   readMoreTool,
   writeFile,
+  editFile,
+  moveFile,
+  makeDir,
   gmailSearch,
   calendarUpcoming,
   memorySave,
   memoryRecall,
   conversationDetail,
   recallOutput,
+  findPastOutput,
   stateGet,
   stateSet,
   scheduleList,
@@ -57,6 +66,14 @@ export const tools: Tool[] = [
   digestTool,
   draft,
   subagent,
+  taskAdd,
+  taskList,
+  taskUpdate,
+  taskDone,
+  clientUpsert,
+  clientList,
+  timeLog,
+  timeReportTool,
   generateImage,
 ];
 

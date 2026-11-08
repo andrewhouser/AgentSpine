@@ -11,22 +11,30 @@ import { api } from "../../lib/api.ts";
 import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
+import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { ConfirmationsView } from "../ConfirmationsView/ConfirmationsView.tsx";
+import { FilesView } from "../FilesView/FilesView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
 import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
+import { SearchView } from "../SearchView/SearchView.tsx";
 import { SettingsView } from "../SettingsView/SettingsView.tsx";
 import { Sidebar } from "../Sidebar/Sidebar.tsx";
+import { TasksView } from "../TasksView/TasksView.tsx";
 import styles from "./AppShell.module.css";
 
 const NO_PROJECTS: Project[] = [];
 
 const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
+  clients: "Clients",
   confirmations: "Approvals",
+  files: "Files",
   meetings: "Meetings",
   schedules: "Schedules",
+  search: "Search",
   settings: "Settings",
+  tasks: "Tasks",
 };
 
 /**
@@ -145,6 +153,10 @@ export const AppShell = () => {
         {route.view === "confirmations" && <ConfirmationsView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}
+        {route.view === "tasks" && <TasksView />}
+        {route.view === "files" && <FilesView />}
+        {route.view === "clients" && <ClientsView />}
+        {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
         {route.view === "project" && route.projectId !== null && (
           <ProjectView
             key={route.projectId}

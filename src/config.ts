@@ -254,7 +254,7 @@ export const RECIPE_MEMORY_MAX = Number(env.RECIPE_MEMORY_MAX ?? "200");
 // FACTS about the user ("prefers concise answers"), never "the thread on the 8th decided to
 // move auth to JWT". Off by default until you've watched what it writes. Pinned local like
 // reflection — a thread can quote your mail, and a summary of it must never reach the cloud.
-export const CONVERSATION_SUMMARY_ENABLED = (env.CONVERSATION_SUMMARY_ENABLED ?? "false") === "true";
+export const CONVERSATION_SUMMARY_ENABLED = (env.CONVERSATION_SUMMARY_ENABLED ?? "true") !== "false";
 // A thread is summarised only once it is genuinely "done": at least this many finished runs
 // (a one-turn thread is a question, not a conversation to remember)…
 export const CONVERSATION_SUMMARY_MIN_RUNS = Number(env.CONVERSATION_SUMMARY_MIN_RUNS ?? "3");

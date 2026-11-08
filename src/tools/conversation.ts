@@ -172,3 +172,38 @@ export const recallOutput: Tool = {
     return out.join("\n");
   },
 };
+
+interface FindArgs {
+  long_only?: boolean;
+  query?: string;
+}
+
+/**
+ * `find_past_output` — search every earlier conversation for something it wrote or was asked.
+ *
+ * `recall_output` needs a run id, which only exists in the background list of the CURRENT
+ * thread. "What was that business plan from last week?" starts in a new thread with no id at
+ * all; this is how it gets one.
+ */
+export const findPastOutput: Tool = {
+  name: "find_past_output",
+  description:
+    "Search ALL earlier conversations for something you wrote or were asked — a plan, draft, " +
+    "list, decision — by keywords. Returns run #ids with a snippet; pass an id to recall_output " +
+    "for the full text. Set long_only to restrict to substantial outputs (plans, reports).",
+  argsSchema: '{ "query": string, "long_only"?: boolean }',
+  classify: (): ClassifiedAction => ({ reversibility: "reversible", target: "conversations", summary: "Search past conversations" }),
+  checkPolicy: (_p: Policy): PolicyDecision => ({ allowed: true, reason: "local conversation history access" }),
+  run: async (a: FindArgs) => {
+    const q = String(a?.query ?? "").trim();
+    if (q.length < 2) return 'ERROR: find_past_output needs a "query".';
+    const rows = store.searchRuns(q, { limit: 8, minNoteChars: a?.long_only ? 800 : 0 });
+    if (!rows.length) return `Nothing in past conversations matches "${q}".`;
+    return rows
+      .map((r: any) => {
+        const note = oneLine(String(r.note ?? ""));
+        return `#${r.id} (${r.conversationTitle ?? "untitled"}, ${String(r.finished ?? "").slice(0, 10)}, ${note.length} chars) asked: "${clip(oneLine(String(r.task ?? "")), 80)}" -> ${clip(note, 140)}`;
+      })
+      .join("\n");
+  },
+};

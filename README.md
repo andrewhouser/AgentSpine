@@ -1368,6 +1368,36 @@ The refresh token is stored `0600` at `~/.config/agentspine/google-token.json`, 
 repo. Now tasks like *"summarize what's on my calendar tomorrow and notify me"* or *"triage
 my unread inbox and save anything urgent to memory"* work.
 
+## The personal-assistant layer
+
+Written 2026-11-08 (plan: [docs/PLAN-assistant-upgrade.md](docs/PLAN-assistant-upgrade.md)).
+
+**Less asking, more undo.** Overwriting or editing a file backs the old one up to `backups/`
+and just runs. `policy.trust.chatAutoTools` (default: `schedule_create/update/delete`, `draft`)
+lists tools whose irreversible calls skip the approval queue **in a live chat turn only** —
+schedules, watchers, the heartbeat and subagents still queue. Still gated: browser
+submit/buy/delete, and `mac_control` sends to anyone you did not name.
+
+**Tasks and follow-ups** — `task_add / task_list / task_update / task_done`, the Tasks page and
+tab. "Remind me to call the dentist Friday" is one call with a due time; a passed due time
+becomes a push (re-nudged daily while overdue). A follow-up is a task with `waiting_on`.
+
+**Files** — `write_file` (create, replace, `mode: "append"`), `edit_file`, `move_file`,
+`make_dir`; `read_file` also reads `.docx/.rtf/.html` and PDFs (PDFKit, no install). Everything
+written is listed on the Files page; each reply has **Save to file**.
+
+**Memory and search** — `find_past_output` searches every old conversation; the Search page
+does too; replies can be starred; **Context used** under a reply shows which memories,
+documents and earlier turns it had. Idle threads are summarised into long-term memory by
+default (`CONVERSATION_SUMMARY_ENABLED=false` to stop).
+
+**Briefing and research** — a "Morning brief" schedule (weekdays 7:30am) is created once on first
+start; edit or delete it on the Schedules page. Every page `web_read` fetches is kept as a
+numbered source (`sources_list`, `source_read`), and the `researcher` unit writes cited reports.
+
+**Clients and time** — `client_upsert`, `client_list`, `time_log`, `time_report`; the Clients
+page. A client's dated next action also becomes a task.
+
 ## Saving files (`write_file`)
 
 Ask it to "save the business plan as BUSINESSPLAN.md" and it will. A bare filename is saved in
@@ -1375,9 +1405,9 @@ the project's own folder when the chat is inside a project that has one (its fir
 source), otherwise in `docs/` in this repo; give a full path to put it elsewhere. It can only
 write inside `policy.fs.writableDirs` (default `~/Developer`; a project can narrow it, never
 widen it), only text document types (`.md .txt .csv .json .html .yaml .yml`), never hidden
-files, at most 1 MB. Creating a new file just happens; replacing an existing one waits for your
-approval. To save something it wrote earlier it passes `from_run` with that turn's #id, so the
-stored text is written exactly rather than retyped.
+files, at most 1 MB. Creating a new file just happens, and so does replacing or editing an
+existing one — the old version is copied to `backups/` first. To save something it wrote earlier it
+passes `from_run` with that turn's #id, so the stored text is written exactly rather than retyped.
 
 ## Updating & restarting the service
 

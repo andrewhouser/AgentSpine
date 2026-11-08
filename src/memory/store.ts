@@ -159,6 +159,10 @@ addColumn("conversations", "summarized", "TEXT");
 // this is kept current after every turn and injected into the thread's own next turn.
 addColumn("conversations", "thread_summary", "TEXT");
 addColumn("conversations", "thread_summary_run", "INTEGER");
+// What the assistant had in front of it for a run (JSON list of short labels), so the thread
+// can answer "why did it say that?". And a star for messages worth finding again.
+addColumn("runs", "context_used", "TEXT");
+addColumn("runs", "starred", "INTEGER");
 addColumn("confirmations", "run_id", "INTEGER");
 addColumn("confirmations", "token", "TEXT");
 // LEARNING §Phase 0: approval latency = resolved − ts. `ts` is when the question was
@@ -401,6 +405,41 @@ export const markInterruptedRuns = (): number => {
 
 export const listRuns = (limit = 50): any[] =>
   db.prepare("SELECT * FROM runs ORDER BY id DESC LIMIT ?").all(limit);
+
+export const setRunContext = (id: number, used: string[]): void => {
+  db.prepare("UPDATE runs SET context_used = ? WHERE id = ?").run(JSON.stringify(used.slice(0, 40)), id);
+};
+
+export const setRunStarred = (id: number, starred: boolean): boolean =>
+  db.prepare("UPDATE runs SET starred = ? WHERE id = ?").run(starred ? 1 : 0, id).changes > 0;
+
+/** Starred replies, newest first, with the thread they belong to. */
+export const starredRuns = (limit = 100): any[] =>
+  db
+    .prepare(
+      "SELECT r.id, r.task, r.note, r.finished, r.conversation_id AS conversationId, c.title AS conversationTitle " +
+        "FROM runs r LEFT JOIN conversations c ON c.id = r.conversation_id WHERE r.starred = 1 ORDER BY r.id DESC LIMIT ?",
+    )
+    .all(limit);
+
+/**
+ * Search finished chat runs by words in what was asked or answered. Every word must appear
+ * (LIKE, case-insensitive), so "business plan" finds the plan and not every mention of
+ * business. `minNoteChars` restricts to long outputs — the deliverables.
+ */
+export const searchRuns = (query: string, { limit = 20, minNoteChars = 0 }: { limit?: number; minNoteChars?: number } = {}): any[] => {
+  const words = (String(query).toLowerCase().match(/[a-z0-9]{2,}/g) ?? []).slice(0, 6);
+  if (!words.length) return [];
+  const like = words.map(() => "(LOWER(COALESCE(r.task,'')) LIKE ? OR LOWER(COALESCE(r.note,'')) LIKE ? OR LOWER(COALESCE(c.title,'')) LIKE ?)").join(" AND ");
+  const args: (number | string)[] = words.flatMap((w) => [`%${w}%`, `%${w}%`, `%${w}%`]);
+  return db
+    .prepare(
+      "SELECT r.id, r.task, r.note, r.finished, r.conversation_id AS conversationId, c.title AS conversationTitle " +
+        "FROM runs r LEFT JOIN conversations c ON c.id = r.conversation_id " +
+        `WHERE r.status = 'ok' AND r.kind = 'chat' AND LENGTH(COALESCE(r.note,'')) >= ? AND ${like} ORDER BY r.id DESC LIMIT ?`,
+    )
+    .all(minNoteChars, ...args, limit);
+};
 
 export const getRun = (id: number): any =>
   db.prepare("SELECT * FROM runs WHERE id = ?").get(id);

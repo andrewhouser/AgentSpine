@@ -161,11 +161,18 @@ export const executeCall = async (
       ? tool.directed(call.args, run)
       : null;
   const userDirected = !!directed && (policy.userDirected?.actions ?? []).includes(`${call.tool}.${directed.action}`);
+  // Standing trust for a named tool, honoured only while a person is in the chat (see
+  // Policy.trust). `run.conversational` is set by the runner for chat turns alone.
+  const chatTrusted =
+    classified.reversibility === "irreversible" &&
+    !!run?.conversational &&
+    (policy.trust?.chatAutoTools ?? []).includes(call.tool);
   const mustConfirm =
     classified.reversibility === "irreversible" &&
     policy.autoExecute.irreversibleAlwaysConfirm &&
     !preApproved &&
-    !userDirected;
+    !userDirected &&
+    !chatTrusted;
   const canAutoRun =
     classified.reversibility === "reversible" ? policy.autoExecute.reversible : !mustConfirm;
 
@@ -227,7 +234,11 @@ export const executeCall = async (
     return record(
       classified,
       "executed",
-      userDirected && directed ? `${output}\n[ran without confirmation: ${directed.reason}]` : output,
+      userDirected && directed
+        ? `${output}\n[ran without confirmation: ${directed.reason}]`
+        : chatTrusted
+          ? `${output}\n[ran without confirmation: ${call.tool} is trusted in live chat (policy.trust)]`
+          : output,
     );
   } catch (err) {
     const output = `ERROR: ${err instanceof Error ? err.message : String(err)}`;

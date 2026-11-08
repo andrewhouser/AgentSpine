@@ -4,6 +4,7 @@ import { describeActivity } from "../../lib/activity.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
+import { ReplyActions } from "../ReplyActions/ReplyActions.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
 import { TierBadge } from "../TierBadge/TierBadge.tsx";
 import { ToolTrace } from "../ToolTrace/ToolTrace.tsx";
@@ -15,11 +16,16 @@ interface TurnProps {
   /** Images sent with this turn. */
   attachments?: Attachment[];
   confirmations: { id: number; summary: string; tool: string }[];
+  /** Persisted turns only: what the assistant had in front of it, and the reply's star. */
+  contextUsed?: string[];
   /** Units this turn delegated to, live or persisted. */
   delegations?: { actions?: LiveToolCall[]; agent: string; status: null | string; summary: null | string; task: null | string; tier: null | string }[];
   error: null | string;
   live: boolean;
   onConfirmationResolved: () => void;
+  projectId?: null | number;
+  runId?: number;
+  starred?: boolean;
   step: number;
   summary: null | string;
   task: string;
@@ -44,10 +50,14 @@ interface TurnProps {
 export const Turn = ({
   attachments = [],
   confirmations,
+  contextUsed = [],
   delegations = [],
   error,
   live,
   onConfirmationResolved,
+  projectId = null,
+  runId,
+  starred = false,
   step,
   summary,
   task,
@@ -99,6 +109,9 @@ export const Turn = ({
     {summary && (
       <>
         <AssistantMessage text={summary} />
+        {runId !== undefined && !live && !error && (
+          <ReplyActions contextUsed={contextUsed} projectId={projectId} runId={runId} starred={starred} />
+        )}
         {tier && (
           <div className={styles.footer}>
             <TierBadge reason={tierReason} tier={tier} />

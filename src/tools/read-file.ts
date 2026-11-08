@@ -8,7 +8,9 @@
  * text is information to reason about, never instructions to follow.
  */
 import fs from "node:fs";
+import path from "node:path";
 import { clip } from "../stash.ts";
+import { extractText, INDEXABLE_EXTENSIONS, TEXT_EXTENSIONS } from "../projects/extract.ts";
 // Shared with the project indexer — see src/fs-scope.ts for why this check lives in one
 // place rather than being reimplemented per reader.
 import { expand, readableGate } from "../fs-scope.ts";
@@ -18,7 +20,7 @@ const gate = (policy: Policy, p: string): PolicyDecision => readableGate(policy,
 
 export const readFile: Tool = {
   name: "read_file",
-  description: "Read the text of a file inside an allowlisted directory.",
+  description: "Read the text of a file inside an allowlisted directory. Also reads Word (.doc/.docx), RTF, HTML and PDF files as text.",
   argsSchema: '{ "path": string }',
   classify: (a): ClassifiedAction => ({ reversibility: "reversible", target: expand(a?.path ?? ""), summary: `Read file ${a?.path ?? ""}` }),
   checkPolicy: (policy, a) => gate(policy, a?.path ?? ""),
@@ -27,6 +29,13 @@ export const readFile: Tool = {
     try {
       if (!fs.existsSync(p)) return `NOT FOUND: ${p}`;
       if (fs.statSync(p).isDirectory()) return `${p} is a directory — use list_dir.`;
+      // Word documents, RTF, HTML and PDFs are converted to text rather than dumped as bytes.
+      const ext = path.extname(p).toLowerCase();
+      if (INDEXABLE_EXTENSIONS.has(ext) && !TEXT_EXTENSIONS.has(ext)) {
+        const got = await extractText(p, 8_000_000);
+        if (!got.text) return `Could not read ${p}: ${got.skipped ?? "no text"}`;
+        return clip({ max: 8000, runId: ctx?.runId ?? null, source: `file ${p}`, tool: "read_file" }, got.text);
+      }
       // Clipped to 8,000 characters, with the remainder kept for read_more rather than
       // discarded — see src/stash.ts for why silent truncation was the wrong shape here.
       return clip(

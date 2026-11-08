@@ -5,7 +5,18 @@ import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
 import styles from "./Sidebar.module.css";
 
-export type View = "activity" | "chat" | "confirmations" | "meetings" | "project" | "schedules" | "settings";
+export type View =
+  | "activity"
+  | "chat"
+  | "clients"
+  | "confirmations"
+  | "files"
+  | "meetings"
+  | "project"
+  | "schedules"
+  | "search"
+  | "settings"
+  | "tasks";
 
 interface SidebarProps {
   activeConversation: null | number;
@@ -24,6 +35,10 @@ interface SidebarProps {
 }
 
 const NAV: { key: View; label: string }[] = [
+  { key: "search", label: "Search" },
+  { key: "tasks", label: "Tasks" },
+  { key: "files", label: "Files" },
+  { key: "clients", label: "Clients" },
   { key: "confirmations", label: "Approvals" },
   { key: "meetings", label: "Meetings" },
   { key: "schedules", label: "Schedules" },

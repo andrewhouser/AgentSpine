@@ -8,6 +8,7 @@ import path from "node:path";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentspine-write-"));
 process.env.SPINE_DB_PATH = path.join(root, "t.db");
+process.env.AGENTSPINE_BACKUP_DIR = path.join(root, "backups");
 const allowed = path.join(root, "allowed");
 const outside = path.join(root, "outside");
 fs.mkdirSync(allowed);
@@ -15,7 +16,9 @@ fs.mkdirSync(outside);
 fs.symlinkSync(outside, path.join(allowed, "escape"));
 
 const store = await import("../src/memory/store.ts");
-const { writeFile, setWriteDefault, resolveTarget } = await import("../src/tools/write-file.ts");
+const { writeFile, editFile, moveFile, makeDir, setWriteDefault, resolveTarget, BACKUP_DIR } = await import("../src/tools/write-file.ts");
+const { listDeliverables, isDeliverable } = await import("../src/deliverables.ts");
+const { readFile } = await import("../src/tools/read-file.ts");
 const { narrowPolicy } = await import("../src/projects/narrow-policy.ts");
 
 let passed = 0;
@@ -53,7 +56,7 @@ check("oversize content is refused", gate({ content: "x".repeat(1_000_001), path
 console.log("\nnew vs existing\n");
 check("a new file is reversible", writeFile.classify({ content: "hi", path: "new.md" }).reversibility, "reversible");
 fs.writeFileSync(path.join(allowed, "old.md"), "old");
-check("an existing file is irreversible (needs approval)", writeFile.classify({ content: "hi", path: "old.md" }).reversibility, "irreversible");
+check("an existing file is still reversible — it is backed up", writeFile.classify({ content: "hi", path: "old.md" }).reversibility, "reversible");
 
 console.log("\nrunning it\n");
 const out = await writeFile.run({ content: "hello", path: "sub/dir/note.md" });
@@ -76,6 +79,46 @@ const none = narrowPolicy({ ...policy, apps: { allow: [] }, web: {}, browser: {}
 check("an empty overlay list removes write access", none.fs.writableDirs, []);
 const widened = narrowPolicy({ ...policy, apps: { allow: [] }, web: {}, browser: {}, google: {} }, { fs: { writableDirs: [root] } });
 check("an overlay cannot widen it", widened.fs.writableDirs, []);
+
+console.log("\nappend, edit, move, mkdir, backups\n");
+const doc = path.join(allowed, "notes.md");
+await writeFile.run({ content: "one\ntwo", path: "notes.md" });
+await writeFile.run({ content: "three", mode: "append", path: "notes.md" });
+check("append adds to the end on its own line", fs.readFileSync(doc, "utf8"), "one\ntwo\nthree");
+const rep = await writeFile.run({ content: "fresh", path: "notes.md" });
+check("replacing reports where the old version went", /previous version kept at/.test(rep), true);
+check("the backup holds the old text", fs.readdirSync(BACKUP_DIR).some((f) => fs.readFileSync(path.join(BACKUP_DIR, f), "utf8") === "one\ntwo\nthree"), true);
+await writeFile.run({ content: "alpha beta alpha", path: "e.md" });
+check("edit refuses an ambiguous match", (await editFile.run({ find: "alpha", path: "e.md", replace: "X" })).startsWith("NOT CHANGED"), true);
+check("edit replaces all when asked", /replaced 2/.test(await editFile.run({ all: true, find: "alpha", path: "e.md", replace: "X" })), true);
+check("and the file reflects it", fs.readFileSync(path.join(allowed, "e.md"), "utf8"), "X beta X");
+check("edit on a missing file is denied", editFile.checkPolicy(policy, { find: "a", path: "nope.md", replace: "b" }).allowed, false);
+check("edit outside writableDirs is denied", editFile.checkPolicy(policy, { find: "a", path: path.join(outside, "a.md"), replace: "b" }).allowed, false);
+check("move works", /Moved/.test(await moveFile.run({ from: "e.md", to: "moved/e2.md" })), true);
+check("move will not clobber", moveFile.checkPolicy(policy, { from: "moved/e2.md", to: "notes.md" }).allowed, false);
+check("move out of bounds is denied", moveFile.checkPolicy(policy, { from: "notes.md", to: path.join(outside, "n.md") }).allowed, false);
+check("make_dir inside is allowed", makeDir.checkPolicy(policy, { path: "newdir/deeper" }).allowed, true);
+check("make_dir outside is denied", makeDir.checkPolicy(policy, { path: path.join(outside, "d") }).allowed, false);
+check("all file tools are reversible", [writeFile, editFile, moveFile, makeDir].every((t) => t.classify({ path: "notes.md", from: "notes.md", to: "z.md" }).reversibility === "reversible"), true);
+
+console.log("\nthe deliverables ledger\n");
+await writeFile.run({ content: "ledger", path: "ledger.md" }, { runId: 1 });
+const listed = listDeliverables();
+check("a write is recorded", listed.some((d) => d.name === "ledger.md" && d.exists && d.run_id === 1), true);
+check("the ledger gates reads", isDeliverable(path.join(allowed, "ledger.md")) && !isDeliverable("/etc/hosts"), true);
+check("each path appears once, newest first", new Set(listed.map((d) => d.path)).size, listed.length);
+
+console.log("\nread_file understands rich formats\n");
+const html = path.join(allowed, "rich.html");
+fs.writeFileSync(html, "<html><body><h1>Quarterly Plan</h1><p>Ship the thing.</p></body></html>");
+const got = await readFile.run({ path: html }, {});
+check("html is read as plain text, not markup", /Quarterly Plan/.test(got) && !/<h1>/.test(got), true);
+const pdf = "/System/Library/ProductDocuments/ProductGuides/ENERGY STAR.pdf";
+if (fs.existsSync(pdf)) {
+  const copy = path.join(allowed, "guide.pdf");
+  fs.copyFileSync(pdf, copy);
+  check("a PDF is read as text", /ENERGY STAR/.test(await readFile.run({ path: copy }, {})), true);
+} else console.log("  SKIP  no sample PDF on this machine");
 
 fs.rmSync(root, { force: true, recursive: true });
 console.log(`\n${passed} passed, ${failed} failed\n`);

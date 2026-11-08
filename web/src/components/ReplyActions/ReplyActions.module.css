@@ -1,0 +1,44 @@
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+
+.btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+}
+
+.btn:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.on {
+  color: var(--warn);
+}
+
+.note {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
+.context {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+}
+
+.context ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

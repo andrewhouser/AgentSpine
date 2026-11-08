@@ -10,6 +10,7 @@
  */
 import { openScratchPage } from "./browser.ts";
 import { clip } from "../stash.ts";
+import { saveSource } from "../research/sources.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
 
 interface Args {
@@ -48,7 +49,15 @@ const run = async (args: Args, ctx: ToolContext): Promise<string> => {
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
     const text = await page.evaluate(() => document.body?.innerText ?? "");
-    return clip({ max: 6000, runId: ctx?.runId ?? null, source: `page ${page.url()}`, tool: "web_read" }, text);
+    // Kept, so a report can cite it and it can be re-read later (src/research/sources.ts).
+    let tag = "";
+    try {
+      const title = await page.title().catch(() => "");
+      tag = `[kept as source #${saveSource(page.url(), title || null, text, ctx?.runId ?? null)} — cite as [source #N]]\n`;
+    } catch {
+      /* a ledger problem must not cost the read */
+    }
+    return tag + clip({ max: 6000, runId: ctx?.runId ?? null, source: `page ${page.url()}`, tool: "web_read" }, text);
   } catch (err) {
     return `ERROR: could not read ${url}: ${err instanceof Error ? err.message : String(err)}`;
   } finally {

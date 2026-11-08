@@ -26,6 +26,11 @@
     "actions": ["mac_control.send_mail", "mac_control.send_message", "mac_control.create_event", "mac_control.create_reminder", "mac_control.create_note"]
   },
 
+  "trust": {
+    "//": "Tools whose irreversible calls run WITHOUT the confirmation queue, but only inside a live chat turn where you are typing. Schedules, watchers, the heartbeat and subagents still queue. Remove a name to put it back behind approval. Not listed on purpose: browser submit/buy/delete, and mac_control sends to anyone you did not name (those stay gated by userDirected).",
+    "chatAutoTools": ["schedule_create", "schedule_update", "schedule_delete", "draft"]
+  },
+
   "web": {
     "searchEnabled": true,
     "//": "Domains a future read-only web_fetch tool may read.",

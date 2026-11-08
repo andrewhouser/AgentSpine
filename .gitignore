@@ -58,3 +58,7 @@ ios/build/
 
 # EventKit helper binary (built by update.sh / on first use)
 services/eventkit/.build/
+backups/
+# Files the assistant saves for you (write_file's default folder)
+docs/*
+!docs/PLAN-*.md

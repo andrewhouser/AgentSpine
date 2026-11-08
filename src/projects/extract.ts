@@ -113,6 +113,8 @@ export const extractText = async (file: string, maxBytes: number): Promise<Extra
 
   if (PDF_EXTENSIONS.has(ext)) {
     if (!(await has("pdftotext"))) {
+      // macOS ships PDFKit, reachable with no install through JavaScript for Automation.
+      if (process.platform === "darwin") return pdfKitText(file);
       return { skipped: "needs pdftotext — install with: brew install poppler", text: "" };
     }
     try {
@@ -130,8 +132,28 @@ export const extractText = async (file: string, maxBytes: number): Promise<Extra
   return { skipped: "unsupported format", text: "" };
 };
 
+/**
+ * PDF text via Apple's PDFKit, driven by `osascript -l JavaScript`. The path is an argv
+ * element, never interpolated into the script, so a hostile filename is still only data.
+ */
+const PDFKIT_SCRIPT =
+  'ObjC.import("PDFKit"); function run(a){ var d=$.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(a[0])); ' +
+  'if(!d) return ""; var s=d.string; return s ? ObjC.unwrap(s) : ""; }';
+
+const pdfKitText = async (file: string): Promise<Extracted> => {
+  try {
+    const { stdout } = await run("/usr/bin/osascript", ["-l", "JavaScript", "-e", PDFKIT_SCRIPT, file], {
+      maxBuffer: MAX_OUTPUT_BYTES,
+      timeout: EXTRACT_TIMEOUT_MS,
+    });
+    return stdout.trim() ? { text: stdout } : { skipped: "no extractable text (a scanned PDF?)", text: "" };
+  } catch (err) {
+    return { skipped: `PDFKit failed: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`, text: "" };
+  }
+};
+
 /** What the UI shows about which formats this machine can actually index right now. */
 export const converterStatus = async (): Promise<{ pdf: boolean; rich: boolean }> => ({
-  pdf: await has("pdftotext"),
+  pdf: (await has("pdftotext")) || process.platform === "darwin",
   rich: process.platform === "darwin",
 });

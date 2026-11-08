@@ -405,6 +405,75 @@ final class APIClient {
         try await sendRaw(req, using: longSession)
     }
 
+    // MARK: - Tasks, files, clients, search
+
+    func todos(status: String = "open") async throws -> [TodoItem] {
+        try await send(request("/api/tasks", query: ["status": status]), as: [TodoItem].self)
+    }
+
+    /// `due` is plain words ("friday 3pm") or ISO; the server parses it and says so in a 400
+    /// when it cannot, which is worth showing verbatim.
+    @discardableResult
+    func addTodo(title: String, due: String?, waitingOn: String?) async throws -> TodoItem {
+        var body: [String: Any] = ["title": title]
+        if let due, !due.isEmpty { body["due"] = due }
+        if let waitingOn, !waitingOn.isEmpty { body["waitingOn"] = waitingOn; body["kind"] = "followup" }
+        return try await send(jsonRequest("/api/tasks", method: "POST", body: body), as: TodoItem.self)
+    }
+
+    func setTodoDone(_ id: Int, done: Bool) async throws {
+        try await sendRaw(
+            jsonRequest("/api/tasks/\(id)", method: "PATCH", body: ["status": done ? "done" : "open"])
+        )
+    }
+
+    func deleteTodo(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/tasks/\(id)", method: "DELETE"))
+    }
+
+    func clients() async throws -> [Client] {
+        try await send(request("/api/clients"), as: [Client].self)
+    }
+
+    @discardableResult
+    func upsertClient(name: String, status: String? = nil, email: String? = nil) async throws -> Client {
+        var body: [String: Any] = ["name": name]
+        if let status { body["status"] = status }
+        if let email, !email.isEmpty { body["email"] = email }
+        return try await send(jsonRequest("/api/clients", method: "POST", body: body), as: Client.self)
+    }
+
+    func deleteClient(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/clients/\(id)", method: "DELETE"))
+    }
+
+    func timeSummary(days: Int = 30) async throws -> TimeSummary {
+        try await send(request("/api/time", query: ["days": String(days)]), as: TimeSummary.self)
+    }
+
+    func savedFiles() async throws -> [SavedFile] {
+        try await send(request("/api/files"), as: [SavedFile].self)
+    }
+
+    func fileContent(_ path: String) async throws -> FileContent {
+        try await send(request("/api/files/content", query: ["path": path]), as: FileContent.self)
+    }
+
+    /// Save one reply as a file in the project's folder, or `docs/` on the Mac.
+    func saveReply(runID: Int, name: String, projectID: Int?) async throws -> SavedPath {
+        var body: [String: Any] = ["runId": runID, "name": name]
+        if let projectID { body["projectId"] = projectID }
+        return try await send(jsonRequest("/api/files/save", method: "POST", body: body), as: SavedPath.self)
+    }
+
+    func star(runID: Int, starred: Bool) async throws {
+        try await sendRaw(jsonRequest("/api/runs/\(runID)/star", method: "POST", body: ["starred": starred]))
+    }
+
+    func search(_ q: String) async throws -> [SearchHit] {
+        try await send(request("/api/search", query: ["q": q]), as: [SearchHit].self)
+    }
+
     // MARK: - Memory, policy, proposals
 
     func memories(query: String? = nil) async throws -> [Memory] {

@@ -127,6 +127,12 @@ export interface Policy {
    * later — never qualify, because nobody said anything in them.
    */
   userDirected?: { actions: string[]; enabled: boolean };
+  /**
+   * Tools whose irreversible calls run without confirmation in a LIVE CHAT turn — a person is
+   * typing and watching. Never applies to schedules, watchers, heartbeats or subagents, which
+   * have nobody to ask but also nobody to blame. Absent means none.
+   */
+  trust?: { chatAutoTools?: string[] };
 }
 
 /**

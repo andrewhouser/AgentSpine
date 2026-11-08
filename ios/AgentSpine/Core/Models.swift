@@ -133,6 +133,9 @@ struct Turn: Codable, Identifiable, Hashable {
     let summary: String?
     let task: String?
     let tier: String?
+    /// What the assistant had in front of it for this turn; absent from older servers.
+    let contextUsed: [String]?
+    let starred: Bool?
 
     var isRunning: Bool { status == "running" || status == "queued" }
 }
@@ -392,6 +395,90 @@ enum SpineDate {
     }
 }
 
+
+// MARK: - Tasks, files, clients, search
+
+/// Named `TodoItem`, not `Task`: a type called `Task` would shadow Swift concurrency's.
+struct TodoItem: Codable, Identifiable, Hashable {
+    let id: Int
+    let title: String
+    let notes: String?
+    /// "task", or "followup" for something you are waiting on someone else for.
+    let kind: String
+    let status: String
+    let due: String?
+    let waitingOn: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, notes, kind, status, due
+        case waitingOn = "waiting_on"
+    }
+
+    var isDone: Bool { status == "done" }
+    var isFollowUp: Bool { kind == "followup" }
+    var dueDate: Date? { SpineDate.parse(due) }
+    var isOverdue: Bool { !isDone && (dueDate.map { $0 < Date() } ?? false) }
+}
+
+struct Client: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let email: String?
+    let status: String
+    let nextAction: String?
+    let nextActionDue: String?
+    let notes: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, email, status, notes
+        case nextAction = "next_action"
+        case nextActionDue = "next_action_due"
+    }
+}
+
+struct TimeTotal: Codable, Hashable {
+    let client: String?
+    let label: String
+    let minutes: Int
+}
+
+struct TimeSummary: Codable {
+    let totals: [TimeTotal]
+}
+
+/// A file the assistant wrote for you.
+struct SavedFile: Codable, Identifiable, Hashable {
+    let path: String
+    let name: String
+    let action: String
+    let bytes: Int
+    let exists: Bool
+    let ts: String
+
+    var id: String { path }
+}
+
+struct FileContent: Codable {
+    let path: String
+    let text: String
+    let truncated: Bool
+}
+
+struct SearchHit: Codable, Identifiable, Hashable {
+    let conversationId: Int?
+    let conversationTitle: String?
+    let finished: String?
+    let runId: Int
+    let snippet: String
+    let task: String
+
+    var id: Int { runId }
+}
+
+struct SavedPath: Codable {
+    let message: String
+    let path: String
+}
 
 // MARK: - Memory, policy, proposals
 

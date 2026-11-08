@@ -66,8 +66,16 @@ import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
-import { VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
+import { BASE, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
+import { isDeliverable, listDeliverables } from "./deliverables.ts";
+import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
+import { addTask, deleteTask, getTask, listTasks, updateTask } from "./tasks/store.ts";
+import { sweepDueTasks } from "./tasks/sweep.ts";
+import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
+import { ensureMorningBrief } from "./briefing.ts";
+import { pruneSources } from "./research/sources.ts";
+import { parseWhen } from "./tasks/when.ts";
 import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
@@ -490,6 +498,15 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             tier: c.tier,
           })),
           tier: r.tier,
+          // What the assistant had in front of it, and whether this reply is starred.
+          contextUsed: (() => {
+            try {
+              return r.context_used ? JSON.parse(r.context_used) : [];
+            } catch {
+              return [];
+            }
+          })(),
+          starred: !!r.starred,
           // Still-open approvals belong with the turn that raised them, so they survive a
           // reload and don't strand the user in a separate queue to answer them.
           confirmations: store.pendingConfirmationsForRun(r.id),
@@ -1099,6 +1116,132 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (m === "GET" && seg[1] === "agents" && seg.length === 2)
       return sendJson(res, 200, Object.values(loadAgents()));
 
+    // /api/clients , /api/time — the light client list and time tracker (src/clients).
+    if (seg[1] === "clients") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listClients(url.searchParams.get("status") ?? "all"));
+      if (m === "POST" && seg.length === 2) {
+        const b = await readBody(req);
+        if (!String(b.name ?? "").trim()) return sendJson(res, 400, { error: "name required" });
+        let due: null | string | undefined;
+        if (b.nextActionDue !== undefined) {
+          due = b.nextActionDue ? parseWhen(b.nextActionDue) : null;
+          if (b.nextActionDue && !due) return sendJson(res, 400, { error: "could not read that due time" });
+        }
+        return sendJson(res, 200, upsertClient(String(b.name), { email: b.email, nextAction: b.nextAction, nextActionDue: due, note: b.note, status: b.status }));
+      }
+      if (m === "DELETE" && seg.length === 3) return sendJson(res, 200, { ok: deleteClient(Number(seg[2])) });
+    }
+    if (m === "GET" && seg[1] === "time" && seg.length === 2) {
+      const days = Number(url.searchParams.get("days") ?? 30) || 30;
+      return sendJson(res, 200, {
+        entries: listTime(days),
+        totals: timeReport(days).map((t) => ({ ...t, label: fmtMinutes(t.minutes) })),
+      });
+    }
+
+    // /api/search?q= — across every conversation: titles, questions, and answers.
+    if (m === "GET" && seg[1] === "search" && seg.length === 2) {
+      const q = String(url.searchParams.get("q") ?? "").trim();
+      if (q.length < 2) return sendJson(res, 200, []);
+      const clip = (t: string, n: number) => t.replace(/\s+/g, " ").trim().slice(0, n);
+      const hits = store.searchRuns(q, { limit: 40 }).map((r: any) => {
+        const note = String(r.note ?? "");
+        const word = (q.toLowerCase().match(/[a-z0-9]{2,}/g) ?? [])[0] ?? "";
+        const at = Math.max(0, note.toLowerCase().indexOf(word) - 60);
+        return {
+          conversationId: r.conversationId,
+          conversationTitle: r.conversationTitle,
+          finished: r.finished,
+          runId: r.id,
+          snippet: clip(note.slice(at, at + 220), 220),
+          task: clip(String(r.task ?? ""), 140),
+        };
+      });
+      return sendJson(res, 200, hits);
+    }
+
+    // /api/starred, POST /api/runs/:id/star {starred}
+    if (m === "GET" && seg[1] === "starred" && seg.length === 2) return sendJson(res, 200, store.starredRuns(100));
+    if (m === "POST" && seg[1] === "runs" && seg.length === 4 && seg[3] === "star") {
+      const b = await readBody(req);
+      const ok = store.setRunStarred(Number(seg[2]), b.starred !== false);
+      return sendJson(res, ok ? 200 : 404, { ok, starred: b.starred !== false });
+    }
+
+    // /api/files — what the assistant has written for you (src/deliverables.ts).
+    if (seg[1] === "files") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listDeliverables(200));
+
+      // GET /api/files/content?path= — only paths in the ledger are served, whatever the policy
+      // says about the folder around them.
+      if (m === "GET" && seg.length === 3 && seg[2] === "content") {
+        const file = String(url.searchParams.get("path") ?? "");
+        if (!isDeliverable(file) || !fs.existsSync(file)) return sendJson(res, 404, { error: "no such file" });
+        const raw = fs.readFileSync(file, "utf8");
+        return sendJson(res, 200, { path: file, text: raw.slice(0, 200_000), truncated: raw.length > 200_000 });
+      }
+
+      // POST /api/files/save {runId, name, projectId?} — save one reply as a file, in the
+      // project's folder or docs/. The "Save to file" button; same gates as write_file.
+      if (m === "POST" && seg.length === 3 && seg[2] === "save") {
+        const b = await readBody(req);
+        const run = store.getRun(Number(b.runId));
+        if (!run || !String(run.note ?? "").trim()) return sendJson(res, 404, { error: "that reply has no text to save" });
+        let name = path.basename(String(b.name ?? "").trim() || `reply-${run.id}.md`);
+        if (!WRITE_EXTENSIONS.includes(path.extname(name).toLowerCase())) name += ".md";
+        const dir = projectWriteDir(b.projectId ?? null) ?? path.join(BASE, "docs");
+        const args = { from_run: run.id, path: path.join(dir, name) };
+        const policy = loadPolicy();
+        const gate = writeFile.checkPolicy(policy, args);
+        if (!gate.allowed) return sendJson(res, 403, { error: gate.reason });
+        const out = await writeFile.run(args, { policy, runId: run.id });
+        return sendJson(res, 200, { message: out, path: args.path });
+      }
+    }
+
+    // /api/tasks ... — the assistant's own to-do list and follow-ups (src/tasks).
+    if (seg[1] === "tasks") {
+      if (m === "GET" && seg.length === 2) {
+        const st = url.searchParams.get("status") ?? "open";
+        return sendJson(res, 200, listTasks({ limit: 300, status: (["open", "done", "dropped", "all"].includes(st) ? st : "open") as any }));
+      }
+      if (m === "POST" && seg.length === 2) {
+        const b = await readBody(req);
+        if (!String(b.title ?? "").trim()) return sendJson(res, 400, { error: "title required" });
+        let due: null | string = null;
+        if (b.due) {
+          due = parseWhen(b.due);
+          if (!due) return sendJson(res, 400, { error: `could not read the due time ${JSON.stringify(b.due)}` });
+        }
+        const id = addTask({
+          clientId: b.clientId ?? null,
+          due,
+          kind: b.kind === "followup" ? "followup" : "task",
+          notes: b.notes ?? null,
+          projectId: b.projectId ?? null,
+          title: String(b.title),
+          waitingOn: b.waitingOn ?? null,
+        });
+        return sendJson(res, 200, getTask(id));
+      }
+      if (m === "PATCH" && seg.length === 3) {
+        const b = await readBody(req);
+        const id = Number(seg[2]);
+        if (!getTask(id)) return sendJson(res, 404, { error: "no such task" });
+        const patch: any = {};
+        for (const k of ["title", "notes", "status", "waitingOn"]) if (k in b) patch[k] = b[k];
+        if ("due" in b) {
+          if (!b.due) patch.due = null;
+          else {
+            patch.due = parseWhen(b.due);
+            if (!patch.due) return sendJson(res, 400, { error: `could not read the due time ${JSON.stringify(b.due)}` });
+          }
+        }
+        return sendJson(res, 200, updateTask(id, patch));
+      }
+      if (m === "DELETE" && seg.length === 3) return sendJson(res, 200, { ok: deleteTask(Number(seg[2])) });
+    }
+
     // /api/schedules ...
     if (seg[1] === "schedules") {
       if (m === "GET" && seg.length === 2) return sendJson(res, 200, store.listSchedules());
@@ -1169,6 +1312,8 @@ const prune = async (): Promise<void> => {
       );
     }
     // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.
+    const dropped = pruneSources(60);
+    if (dropped) console.log(`pruned: ${dropped} fetched sources older than 60 days`);
     const words = meetingStore.pruneTranscripts(TRANSCRIPT_RETENTION_DAYS);
     if (words) console.log(`pruned: ${words} meeting transcript segments past the retention window`);
 
@@ -1292,8 +1437,12 @@ http.createServer(handle).listen(PORT, HOST, () => {
     }`,
   );
 });
+if (ensureMorningBrief()) console.log('  seeded a "Morning brief" schedule (weekdays 7:30am) — edit or delete it on the Schedules page');
 runScheduler();
 setInterval(runScheduler, SCHEDULER_TICK_MS);
+// Due tasks and follow-ups become notifications.
+void sweepDueTasks();
+setInterval(() => void sweepDueTasks(), 60_000).unref();
 prune();
 setInterval(prune, PRUNE_INTERVAL_MS).unref();
 watchdog();

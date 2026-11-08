@@ -199,6 +199,7 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
                 summary: c.summary,
                 tool: c.tool,
               }))}
+              contextUsed={turn.contextUsed}
               delegations={turn.children.map((c) => ({
                 actions: c.actions.map(fromAction),
                 agent: c.agent ?? "?",
@@ -211,6 +212,9 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
               key={turn.id}
               live={false}
               onConfirmationResolved={reloadThread}
+              projectId={thread?.conversation.project_id ?? null}
+              runId={turn.id}
+              starred={turn.starred}
               step={0}
               summary={turn.status === "failed" ? null : turn.summary}
               task={turn.task ?? ""}

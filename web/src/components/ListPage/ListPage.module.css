@@ -1,0 +1,156 @@
+/* Shared by the simple list pages: Tasks, Files, Clients, Search. */
+.page {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+.empty {
+  color: var(--text-faint);
+  padding: 24px 0;
+  text-align: center;
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  min-width: 8rem;
+  padding: 7px 10px;
+}
+
+.grow {
+  flex: 1 1 14rem;
+}
+
+.card {
+  align-items: flex-start;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 11px;
+  margin-bottom: 8px;
+  padding: 11px 14px;
+}
+
+.cardStack {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  padding: 11px 14px;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.done {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.meta {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.7188rem;
+  margin-top: 3px;
+}
+
+.overdue {
+  color: var(--danger);
+}
+
+.chip {
+  background: var(--bg-inset);
+  border-radius: 100px;
+  color: var(--text-dim);
+  font-size: 0.7188rem;
+  padding: 1px 9px;
+}
+
+.snippet {
+  color: var(--text-dim);
+  font-size: 0.8438rem;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.button {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 0.7813rem;
+  padding: 4px 11px;
+}
+
+.button:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.button:disabled {
+  opacity: 0.55;
+}
+
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.primary:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  opacity: 0.9;
+}
+
+.check {
+  margin-top: 4px;
+}
+
+.preview {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  margin-top: 9px;
+  max-height: 22rem;
+  overflow: auto;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
+.toolbar {
+  align-items: center;
+  color: var(--text-faint);
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.8125rem;
+  margin-bottom: 10px;
+}

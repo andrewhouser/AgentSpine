@@ -15,10 +15,14 @@ export interface Route {
 
 const VIEW_PATHS: Record<Exclude<View, "chat" | "project">, string> = {
   activity: "/activity",
+  clients: "/clients",
   confirmations: "/approvals",
+  files: "/files",
   meetings: "/meetings",
   schedules: "/schedules",
+  search: "/search",
   settings: "/settings",
+  tasks: "/tasks",
 };
 
 export const readRoute = (): Route => {

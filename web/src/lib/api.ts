@@ -11,6 +11,7 @@ import type {
   Agent,
   Attachment,
   AudioDevices,
+  Client,
   Confirmation,
   Conversation,
   DictationStatus,
@@ -25,8 +26,12 @@ import type {
   ProjectSource,
   PromotionProposal,
   Run,
+  SavedFile,
   Schedule,
+  SearchHit,
+  Task,
   Thread,
+  TimeSummary,
   VisionStatus,
   VoiceStatus,
   WakeResult,
@@ -98,13 +103,18 @@ export const meetingStreamUrl = (after: number): string => {
   return `/api/meetings/stream?${params}`;
 };
 
+const patch = <T>(path: string, body: unknown): Promise<T> =>
+  request<T>(path, { body: JSON.stringify(body), method: "PATCH" });
+
 export const api = {
   addProjectSource: (projectId: number, path: string) =>
     post<{ result: IngestResult; source: ProjectSource }>(
       `/api/projects/${projectId}/sources`,
       { path },
     ),
-
+  // --- tasks, files, clients, search (the personal-assistant surface) ---
+  addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; title: string; waitingOn?: string }) =>
+    post<Task>("/api/tasks", fields),
   /**
    * Accept one auto-approval proposal.
    *
@@ -116,36 +126,30 @@ export const api = {
    */
   applyProposal: (tool: string, target: string) =>
     post<{ message: string; ok: boolean }>("/api/proposals", { target, tool }),
-
   approveConfirmation: (id: number) => post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/approve`),
-
   archiveConversation: (id: number) =>
     request<Conversation>(`/api/conversations/${id}`, {
       body: JSON.stringify({ archived: true }),
       method: "PATCH",
     }),
-
   /**
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
    */
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
-
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
-
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
-
   createSchedule: (name: string, schedule: string, task: string) =>
     post<Schedule>("/api/schedules", { name, schedule, task }),
-
+  deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
   deleteConversation: (id: number) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: "DELETE" }),
-
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
-
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
 
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
+
+  deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
   /**
    * Upload a recording made in the browser and get the words back.
@@ -165,9 +169,14 @@ export const api = {
   /** Re-run extraction. Returns as soon as it has started; the event stream reports the end. */
   extractMeeting: (id: number) => post<{ meetingId: number; started: boolean }>(`/api/meetings/${id}/extract`),
 
+  fileContent: (path: string) =>
+    request<{ path: string; text: string; truncated: boolean }>(`/api/files/content?path=${encodeURIComponent(path)}`),
+
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
   listAgents: () => request<Agent[]>("/api/agents"),
+
+  listClients: () => request<Client[]>("/api/clients"),
 
   /**
    * The approval queue. With no `state` the server answers the hundred most recent of any
@@ -200,6 +209,8 @@ export const api = {
       method: "POST",
     }),
 
+  listFiles: () => request<SavedFile[]>("/api/files"),
+
   listMeetings: (limit = 50) => request<Meeting[]>(`/api/meetings?limit=${limit}`),
 
   listMemories: (query?: string) =>
@@ -213,6 +224,10 @@ export const api = {
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
   listSchedules: () => request<Schedule[]>("/api/schedules"),
+
+  listTasks: (status: "all" | "done" | "open" = "open") => request<Task[]>(`/api/tasks?status=${status}`),
+
+  listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
 
   meeting: (id: number, pass: "final" | "live" = "final") =>
     request<{
@@ -256,6 +271,11 @@ export const api = {
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 
+  saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
+    post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
+
+  search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
+
   sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
     post<{ conversationId: number; runId: number }>(`/api/conversations/${conversationId}/messages`, {
       attachmentIds,
@@ -288,6 +308,8 @@ export const api = {
     return res.blob();
   },
 
+  starRun: (runId: number, starred: boolean) => post<{ ok: boolean }>(`/api/runs/${runId}/star`, { starred }),
+
   startDictation: () => post<{ device: string }>("/api/dictate/start"),
 
   startMeeting: (device: string, projectId: null | number, title?: string) =>
@@ -306,6 +328,7 @@ export const api = {
 
   updateProject: (id: number, fields: { instructions?: string; name?: string }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
+
   /**
    * Change any of a schedule's name, task, schedule spec or enabled flag. Editing in place
    * keeps `last_run`, which delete-and-recreate would lose.
@@ -313,6 +336,8 @@ export const api = {
   updateSchedule: (id: number, fields: { enabled?: boolean; name?: string; schedule?: string; task?: string }) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
 
+  updateTask: (id: number, fields: { due?: null | string; notes?: string; status?: "done" | "dropped" | "open"; title?: string }) =>
+    patch<Task>(`/api/tasks/${id}`, fields),
   /**
    * Send one image up and get its id back.
    *
@@ -333,6 +358,15 @@ export const api = {
       method: "POST",
     });
   },
+
+  upsertClient: (fields: {
+    email?: string;
+    name: string;
+    nextAction?: string;
+    nextActionDue?: string;
+    note?: string;
+    status?: string;
+  }) => post<Client>("/api/clients", fields),
 
   visionStatus: () => request<VisionStatus>("/api/vision"),
 

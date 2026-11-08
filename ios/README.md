@@ -10,9 +10,14 @@ re-signing.
 
 ```
 Threads        the conversation list — rename, archive, delete — and a composer
-Thread         turns live: every tool call with its verdict, your photos, markdown replies
+Thread         turns live: every tool call with its verdict, your photos, markdown replies;
+               under each reply: star, save to file, and the context it was written from
 Approvals      the queue, showing the whole proposed action — not a summary
 Schedules      jobs that run on a clock: pause, edit, run now, and how the last few went
+Tasks          to-dos and follow-ups, with due times; the Mac pushes when one falls due
+Files          everything the assistant has saved for you, with a preview
+Clients        light client list, next actions, and where the last 30 days of time went
+Search         every thread — your questions and its answers
 Activity       every run, scheduled and watcher ones included; open one for its full trace
 Settings       the two settings, and the answer to "why didn't it buzz"
 ```
