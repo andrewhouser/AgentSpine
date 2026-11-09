@@ -825,6 +825,10 @@ src/                 the agent — no build step, two runtime dependencies
     weather.ts     weather — Open-Meteo forecast, keyless
     weather-alerts.ts  weather_alerts — thresholds applied in code, not by the model
     git-status.ts  git_status — read-only branch/dirty/recent-commits
+    git-write.ts   git_write — branch/add/commit/diff on its own branch; closed verb list
+    run-command.ts run_command / commands_list — run a command YOU declared, read the output
+    command-output.ts  reduces a build log to the verdict and the first failure
+    look-at-file.ts look_at_file — point the vision tier at an image on disk, e.g. a screenshot
     digest.ts      digest — computed summary of its own recent activity
     draft.ts       draft — composes mail/events for YOU to send; adds no OAuth scope
   google/
@@ -1274,6 +1278,303 @@ The honest split, because public search engines serve a CAPTCHA to headless brow
 Idiomatic flow: `web_search` (Tavily) to find URLs → `browser` navigate/read (headless) to
 read them. Both feed the model UNTRUSTED-tagged text, clipped to a cap with the remainder
 kept for `read_more` — see "Long results" below.
+
+## The build loop — running what it wrote
+
+> *"Add a `--json` flag to the exporter and make the tests pass."*
+
+Until this existed the assistant could write code and had no way to find out whether it
+worked. It could read a repo, write a file, and that was the end of the loop — so every line
+it wrote was written into the dark. Iterative building needs one more move: **run something
+and read what came back.**
+
+```jsonc
+"build": {                                   // policy.json — absent means denied, as always
+  "enabled": true,
+  "repos": {
+    "~/Developer/mycrate": {
+      "gitWrite": true,
+      "defaultBranch": "main",
+      "commands": {
+        "test":   { "argv": ["cargo", "test", "--message-format=json"], "parse": "cargo-json", "timeoutMs": 600000 },
+        "clippy": { "argv": ["cargo", "clippy", "--message-format=json"], "parse": "cargo-json" }
+      }
+    }
+  }
+}
+```
+
+**The model picks a repo and a command NAME. It never supplies a command line.** That is
+`git_status`'s rule — *the model chooses a repo path, never a git command* — generalised, and
+it is the whole security design. There is no shell: `argv` is an array and goes straight to
+`execFile`, so a filename with `;` in it is an argument and nothing else. A general
+`shell(cmd)` tool was the alternative and was rejected: it cannot be allowlisted, cannot be
+classified honestly, and would make every other gate in `broker.ts` decorative.
+
+### Why `run_command` is REVERSIBLE, which is the decision the rest rests on
+
+An irreversible classification would queue every invocation for approval, and one feature is
+thirty invocations. Nobody approves forty cards — they turn the gate off, and a gate that
+gets turned off protects nothing. Same reasoning `write_file` already uses for backups: an
+approval nobody reads protects less than an undo that always exists.
+
+What *earns* reversible is that the argv is **yours**. `cargo test` run twice changes nothing
+you cannot re-run. The rails that remain are the ones that suit a loop rather than a
+decision: the repo allowlist, the name allowlist, a per-command `timeoutMs`, and
+
+```jsonc
+"budgets": { "perRun": { "tools": { "run_command": 25 } } }
+```
+
+which is the right instrument for a build loop that has stopped converging.
+
+Be clear-eyed about what declaring a command means: a `test` script, a `build.rs` and a
+Makefile rule are all code, so declaring one says *I trust this repo's build to run on this
+machine*. That is why `repos` is a map and not a boolean. The child's environment is an
+allowlist rather than an inheritance for the same reason — the dashboard's own env holds
+`OPENAI_API_KEY`, `DASHBOARD_TOKEN` and the APNs key path, and `npm test` in a repo with one
+bad dependency is exactly the thing that would read them.
+
+### The log is reduced before the model sees it
+
+`weather_alerts`' lesson, applied to builds: *the tool does the arithmetic, the model does
+the prose.* A parser per family turns 4,000 lines into the two facts that drive the next
+step — did it pass, and what broke first:
+
+```
+$ cargo test --message-format=json
+in ~/Developer/mycrate — FAILED (exit 101) in 12.4s
+
+1 compile error:
+  src/export.rs:88  mismatched types
+```
+
+`parse` names one of `cargo-json`, `tsc`, `eslint`, `tap`, `xcodebuild`, or `generic` — which
+is the honest fallback (lines mentioning a failure, then the tail, since nearly every tool
+states its verdict last). Nothing is thrown away: the full output is clipped through
+`stash.ts`, so `read_more` reaches the rest.
+
+### iOS and Rust, and seeing what it built
+
+Rust needs no code at all — `cargo` already speaks JSON, and `cargo-json` reads it:
+
+```jsonc
+"~/Developer/mycrate": {
+  "gitWrite": true,
+  "commands": {
+    "test":   { "argv": ["cargo", "test", "--message-format=json"], "parse": "cargo-json", "timeoutMs": 600000 },
+    "clippy": { "argv": ["cargo", "clippy", "--message-format=json", "--", "-D", "warnings"], "parse": "cargo-json" },
+    "build":  { "argv": ["cargo", "build"], "timeoutMs": 600000 }
+  }
+}
+```
+
+Xcode is the one that needed real work:
+
+```jsonc
+"~/Developer/AgentSpine/ios": {
+  "gitWrite": true,
+  "commands": {
+    "build": { "argv": ["xcodebuild", "-scheme", "AgentSpine", "-destination", "platform=iOS Simulator,name=iPhone 17", "build"],
+               "parse": "xcodebuild", "timeoutMs": 900000 },
+    "test":  { "argv": ["xcodebuild", "-scheme", "AgentSpine", "-destination", "platform=iOS Simulator,name=iPhone 17", "test"],
+               "parse": "xcodebuild", "timeoutMs": 1200000 },
+    "shot":  { "argv": ["xcrun", "simctl", "io", "booted", "screenshot", "--type=png", "/tmp/agentspine-sim.png"] }
+  }
+}
+```
+
+**The `xcodebuild` parser separates four kinds of failure, because they have four different
+fixes** — and a loop told only `** BUILD FAILED **` will edit Swift to fix any of them:
+
+| | the fix is |
+|---|---|
+| `xcodebuild: error: …` (no such scheme, no matching destination) | the declaration in `policy.json`, never the code — so it is reported first and says so |
+| `File.swift:12:3: error: …` | the code. What the loop should act on |
+| a bare `error: …` with no file (signing, provisioning) | a build setting; no amount of editing Swift will help |
+| `ld:` / `clang: error:` | usually a file missing from the target |
+
+Two things in there came from capturing real output rather than guessing at it. Swift echoes
+every diagnostic into a source snippet that **repeats the message**, so the obvious
+implementation — filter for lines containing `error:` — reports two errors when there is
+one, and sends the loop hunting a second bug that never existed. And CoreSimulator writes
+several timestamped lines containing the word ERROR on a **successful** build, which is why
+Xcode cannot fall back to the `generic` parser: it would call a clean build broken. There is
+a test asserting exactly that.
+
+Not implemented: `-resultBundlePath` with `xcrun xcresulttool`, which would hand back the
+same facts as JSON instead of being scraped. It wants a subprocess and a real build to
+verify, and the sandbox this was written in blocks the XPC CoreSimulator needs — so it is
+left to whoever can run one.
+
+### And then it can look at it
+
+`look_at_file` points the vision tier at an image on disk:
+
+```
+run_command  { repo: "…/ios", name: "shot" }
+look_at_file { path: "/tmp/agentspine-sim.png", question: "is the Approve button fully on screen?" }
+```
+
+That closes a real gap: *the button is off the bottom of the screen* appears in no compiler
+output. It is a separate tool from `look_at_image` rather than a `path` argument on it,
+because the two have different gates — `look_at_image`'s is structural (every byte it can
+reach is a file the user attached to this thread), and bolting a filesystem path onto it
+would quietly replace that with a configured one. `look_at_file`'s gate is the ordinary
+`policy.fs.readableDirs`.
+
+The image is copied into `attachments/` and recorded, not read in place, which buys three
+things: **the user sees the screenshot** in the thread rather than taking the agent's word
+for it, `look_at_image` can ask a follow-up by id, and nothing gets written next to the
+original — `modelImageFile` caches a downscaled copy beside whatever file it is handed,
+which pointed at a repo would drop a stray sibling into your working tree. `storeImage`
+also sniffs the file signature, so `look_at_file` on a `.png` that is not one is a clean
+refusal rather than bytes posted to a model.
+
+### Work happens on a branch
+
+`backups/` is the right undo for "save my business plan" and the wrong one for a forty-step
+refactor across nine files. For code the undo is git, so `git_write` exists — with a **closed
+verb list**: `add`, `branch`, `commit`, `diff`, `push`, `restore`, `stash`, `switch`.
+
+Absent on purpose, and not an oversight: `reset`, `clean`, `rebase`, `merge`, `cherry-pick`,
+history rewrites, and every form of `--force`.
+
+The classification turns on **which branch is checked out**, which is a fact about the world
+rather than a claim by the model — so `classify()` reads it with a synchronous read-only
+`git rev-parse` instead of taking it from an argument:
+
+| | |
+|---|---|
+| `diff`, `branch`, `switch`, `add`, `stash` | reversible |
+| `commit` on an `agentspine/…` branch | reversible — a branch it created |
+| `commit` anywhere else | **queued for approval** |
+| `restore` (discards uncommitted work) | **queued**, and it needs explicit paths |
+| `push` | **queued**, and only where `"allowPush": true` |
+
+A *prefix* rather than a protected-branch list, because a list has to enumerate every branch
+that matters and will silently auto-commit to the one nobody thought of. The prefix inverts
+that: unattended commits are possible only on branches the agent made, and a default branch
+named something this code has never heard of queues like everything else.
+
+One thing on the record rather than discovered later: `git commit` runs the repository's own
+hooks, and a `pre-commit` hook is arbitrary code. It is your code in your repo — the same
+trust declaring a `test` command already states — but it does not pass through the
+declaration gate.
+
+### The unit that does the iterating
+
+`MAX_STEPS` is 10, and "make the tests pass" is thirty to sixty steps. Raising it would let
+every chat turn run forty steps, so instead there is a unit — `agents/builder.md`, `tier:
+deep`, `maxSteps: 40` — whose brief is the loop: branch, read, edit, run, read the **first**
+failure, fix that one thing, run again, and **stop after two runs that do not reduce the
+failure count**.
+
+Delegating it is also what keeps it affordable. A child returns only its summary, so forty
+steps of compiler output are read once by the builder instead of riding in the parent thread
+for every remaining step — the strongest case in the system for the property the Dispatch
+board already had.
+
+```
+subagent builder "add a --json flag to the exporter in ~/Developer/mycrate and make the tests pass"
+```
+
+It is pinned to `deep` deliberately. Agentic coding is the hardest thing you can ask of a
+model — long context held precisely across dozens of steps, exact diffs, no drift — and the
+`standard` tier is a ~3B-active MoE on a host MODELS.md already calls full. Local-first is
+untouched where it matters: `resolveTier` pins `sensitivity: "private"` away from `deep` **in
+code**, so mail, calendar and `profile.md` stay local regardless, and a project overlay can
+only narrow — a project holding client code can pin itself local and accept a smaller builder.
+
+### Reviewing it — the Builds page
+
+`Builds` in the sidebar, and a Builds tab on the phone. One row per run that ran a command
+or touched git: the repo, the verdict, the branch, every command with what it returned, and
+a **Diff** button.
+
+```
+mycrate · passed                                      [ Diff ]
+agentspine/add-json-flag · run #412 · 2 commits · 3 files written
+add a --json flag to the exporter
+git branch: ran   test: FAILED (exit 101)   test: PASSED (exit 0)   git commit: ran
+```
+
+**There is no builds table.** Everything on that page was already recorded: `broker.ts`
+writes a row to `actions` for every call it decides on, and `deliverables` holds every file
+written. A build is therefore a *query* ([src/builds.ts](src/builds.ts)), not a new kind of
+object — and a second store of the same events is a second store that can disagree with the
+first. One happy side effect: builds appear retroactively, because the data was always there.
+
+Three details that are load-bearing rather than cosmetic:
+
+**The verdict is three-valued.** A run that only branched and committed never ran a command,
+so it has no verdict. Showing that as a red cross would be a lie about the one thing the row
+exists to say at a glance.
+
+**The diff is the branch against its merge-base with the default branch** (`main...branch`),
+which answers *what did this change* rather than *what has happened on main since*.
+
+**Untracked files are listed separately, by name.** `git diff` cannot see a file git is not
+tracking, and a brand-new source file the loop wrote and never staged is exactly what a
+reviewer most needs to be told about — it would otherwise be invisible in every view while
+sitting in the working tree. Staged-but-uncommitted work shows too, since the diff is taken
+against `HEAD` rather than the index.
+
+And the path in an actions row is **data out of a log, not an authorisation**: before running
+git, `buildDiff` re-checks the repo against `policy.build.repos` through the same `findRepo`
+the tools use. A repo that is no longer declared is refused, whatever the log says.
+
+### Writing code, and the two things that still ask
+
+`write_file` writes program source as of Phase 4 — `.rs .swift .go .py .rb .java .kt .kts
+.c .cc .cpp .h .hpp .cs .m .mm .sql .proto .zig .gradle` — on top of documents and web
+source. `.py` and `.rb` joined the list because the rule was never coherent without them:
+it has always been *does writing this file make something run later without the user
+choosing to run it*, and by that test `.py` is no different from `.mjs`, which has been
+writable all along.
+
+What stays refused is the set where **something else does the invoking**: `.sh .bash .zsh
+.command` (a double-click runs them), `.php .pl .cgi` (a server already running executes
+them the moment they land), `.plist .scpt .applescript` (macOS picks them up itself), and
+anything hidden — which is where `.git/hooks`, `.zshrc` and `.env` live.
+
+**Build manifests are writable but wait for your approval.** `package.json`, `Cargo.toml`,
+`build.rs`, `Package.swift`, `pyproject.toml`, `setup.py`, `requirements.txt`, lockfiles,
+`*.gradle`, `CMakeLists.txt` classify irreversible and land in the queue with the path
+shown.
+
+Be precise about why, because it is easy to claim too much. Once `.ts` and `.rs` are
+writable at all, *code that runs during a build* cannot be gated by filename — the build
+compiles and runs the repo's own source, which is the entire point of letting the agent
+edit it. The diff is the review step for that. What a manifest does that source does not is
+pull in **new code from outside the repo**, or run on a lifecycle hook: a `scripts` entry, a
+`build-dependencies` line, a changed version in a lockfile. A one-line manifest change is
+something a person can actually review, which is why that is the cut — and it is a cut, not
+a wall.
+
+There is no setting to turn it off, for the same reason `schedule_*` writes have none: a
+knob there is a knob that gets left on.
+
+### It cannot change its own permissions or trusted context
+
+`policy.json`, `profile.md`, `goals.md` and `agents/*.md` **cannot be written by any tool**.
+
+This was a hole until Phase 4 rather than a decision, and it is worth stating plainly: it
+was fixed on 2026-11-09, having shipped with `write_file` in `d97e766`. `policy.json` is a
+`.json` file inside `~/Developer`, so the extension allowlist and `writableDirs` both said
+yes, the write classified reversible, and it **auto-executed with no approval** — directly
+against the invariant LEARNING.md states and `tools/schedule.ts` repeats, that *a run able
+to widen its own permissions would make deny-by-default a suggestion*. `profile.md` was the
+same shape and arguably worse: it is injected as a **system** message on every run, so a
+line written there outranks everything the model is told elsewhere.
+
+Refused rather than queued, because LEARNING.md invariant 1 says the write happens from a
+human click and never from a tool call — and a confirmation card holding a 200-line JSON
+diff is exactly the thing that gets waved through. All four are editable in the dashboard.
+
+`src/` is deliberately not on that list: changing this project's code is work the builder is
+for, and a code change is reviewable as a diff. Those four files change what runs, or what
+is trusted, with no diff anyone would see.
 
 ## Local files
 

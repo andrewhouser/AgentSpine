@@ -49,7 +49,7 @@
   },
 
   "fs": {
-    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]. writableDirs is the (separate, narrower-by-default) list write_file may create text files in; absent or empty = it can write nothing. Overwriting an existing file always waits for your approval.",
+    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]. writableDirs is the (separate, narrower-by-default) list write_file may create text files in; absent or empty = it can write nothing. Overwriting or editing a file does NOT wait for approval — the old version is copied to backups/ first, which is why it is classified reversible. Two exceptions: a build manifest (package.json, Cargo.toml, build.rs, Package.swift, a lockfile, *.gradle) is queued for your approval because it decides what code the build fetches and runs, and AgentSpine's own policy.json, profile.md, goals.md and agents/*.md cannot be written by any tool at all.",
     "readableDirs": ["~/Desktop", "~/Developer"],
     "writableDirs": ["~/Developer"]
   },
@@ -83,6 +83,23 @@
   "git": {
     "//": "Absolute repo directories git_status may read. Read-only: branch, uncommitted files, recent commits. Empty = no repo access. e.g. [\"~/Developer\"]",
     "repoDirs": ["~/Developer"]
+  },
+
+  "build": {
+    "//": "The build loop. Each repo listed here is one the agent may work in: it can run the commands declared under it, and — with gitWrite — branch, stage, commit and diff. The model picks a repo and a command NAME; it can never supply a command line, and nothing it can call adds an entry here. Declaring a command is a statement that you trust THAT repo's build to run on this machine, since a test script and a build.rs are both code. allowPush is separate and absent by default; a push still waits for your approval even when allowed. parse names a reducer in src/tools/command-output.ts: cargo-json, eslint, tap, tsc, xcodebuild, or generic.",
+    "enabled": true,
+    "repos": {
+      "~/Developer/AgentSpine": {
+        "gitWrite": true,
+        "defaultBranch": "main",
+        "commands": {
+          "test": { "argv": ["npm", "run", "test"], "parse": "tap", "timeoutMs": 300000, "description": "the whole suite" },
+          "typecheck": { "argv": ["npx", "tsc", "-p", "tsconfig.json", "--noEmit"], "parse": "tsc", "timeoutMs": 180000, "description": "server types" },
+          "lint": { "argv": ["npx", "eslint", "."], "parse": "eslint", "timeoutMs": 180000, "description": "web client only — src/ is not linted" },
+          "webbuild": { "argv": ["npm", "run", "web:build"], "timeoutMs": 300000, "description": "vite build of web/" }
+        }
+      }
+    }
   },
 
   "audio": {

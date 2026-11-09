@@ -14,6 +14,8 @@
  * Fallback is always *downward into local*: if the chosen tier's server is down we try
  * standard, and only reach for cloud when the caller allowed it. A tier being unreachable
  * must never quietly upgrade a private request.
+ *
+ * `vision` is the exception, and `fallbacksFor` below is where it is made.
  */
 import { LLM_RETRIES, LLM_RETRY_BASE_MS } from "./config.ts";
 import { chatReply, clientFor, LLMError } from "./llm.ts";
@@ -105,6 +107,29 @@ const sendWithRetry = async (config: TierConfig, messages: Msg[], opts: ChatOpts
   throw lastErr;
 };
 
+/**
+ * Which tiers may answer for `chosen` when `chosen` cannot.
+ *
+ * ## `vision` has no substitute, and this is the second place that has to know it
+ *
+ * `tiers.ts` states the rule at length and `resolveTier` enforces half of it: a request for
+ * `vision` is never quietly resolved to `standard`, because the text servers cannot read an
+ * image — `mlx_lm.server` answers a non-text content part with `Only 'text' content type is
+ * supported`, and the standard model's weights carry no vision tower regardless.
+ *
+ * The other half is here, and it was missing. `resolveTier` decides where a call goes before
+ * it is made; this decides where it goes when the endpoint it chose turns out to be down. A
+ * vision endpoint that is unreachable used to fall back to `standard`, which posted the image
+ * to a server that cannot read one — so "the vision server is down" arrived as an HTTP 400
+ * about content parts, sending whoever read it to look in entirely the wrong place.
+ *
+ * So: no fallbacks for vision. The honest failure is that there is nothing else that can see.
+ */
+export const fallbacksFor = (chosen: Tier, sensitivity: Sensitivity): Tier[] => {
+  if (chosen === "vision") return [];
+  return sensitivity === "private" ? ["standard"] : ["standard", "deep"];
+};
+
 export const route = async (messages: Msg[], opts: RouteOpts = {}): Promise<RouteResult> => {
   const { prefer = "local", sensitivity = "normal", tier = "standard", ...chatOpts } = opts;
 
@@ -124,7 +149,7 @@ export const route = async (messages: Msg[], opts: RouteOpts = {}): Promise<Rout
     // rejected reported only "Request timed out." — the cloud leg left no trace at all, in
     // the log or on screen, and there was no way to tell from the dashboard whether it had
     // even been attempted. What reaches the user now names each tier and what it said.
-    const fallbacks: Tier[] = sensitivity === "private" ? ["standard"] : ["standard", "deep"];
+    const fallbacks = fallbacksFor(chosen.tier, sensitivity);
     const failures = [`${chosen.tier}: ${reason(err)}`];
     for (const next of fallbacks) {
       const config = tierConfig(next);
@@ -146,7 +171,11 @@ export const route = async (messages: Msg[], opts: RouteOpts = {}): Promise<Rout
         console.warn(`[router] fallback ${next} also failed: ${reason(fallbackErr)}`);
       }
     }
-    throw new LLMError(`every model tier failed — ${failures.join("; ")}`, {
+    const message =
+      chosen.tier === "vision"
+        ? `the vision endpoint could not answer, and no other tier can read an image — ${failures.join("; ")}`
+        : `every model tier failed — ${failures.join("; ")}`;
+    throw new LLMError(message, {
       retryable: err instanceof LLMError && err.retryable,
       timedOut: err instanceof LLMError && err.timedOut,
     });

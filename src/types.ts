@@ -18,6 +18,38 @@ export interface PolicyDecision {
   reason: string;
 }
 
+/**
+ * One command `run_command` may invoke, as declared in policy.json.
+ *
+ * `argv` is the whole point: an array, passed straight to `execFile`, written by a human.
+ * The model picks the NAME this sits under and never supplies any part of this object, which
+ * is what lets the call be classified reversible — see src/tools/run-command.ts.
+ */
+export interface DeclaredCommand {
+  /** argv[0] is the binary; the rest are arguments. Never a shell string. */
+  argv: string[];
+  /** Shown to the model beside the name, e.g. "unit tests, ~40s". */
+  description?: string;
+  /** Extra environment for this command only (RUSTFLAGS, DEVELOPER_DIR). The child's env is otherwise an allowlist, not an inheritance. */
+  env?: Record<string, string>;
+  /** Which parser in src/tools/command-output.ts reduces the output. Unknown or absent falls back to `generic`. */
+  parse?: string;
+  /** Wall-clock cap for this command. Defaults to COMMAND_TIMEOUT_MS, capped at COMMAND_MAX_TIMEOUT_MS. */
+  timeoutMs?: number;
+}
+
+/** A repo the agent may work in, and what it may do there. */
+export interface BuildRepo {
+  /** Whether `git_write` may push this repo to its remote. Absent = denied; a push still queues for approval. */
+  allowPush?: boolean;
+  /** Runnable commands, keyed by the name the model asks for. */
+  commands?: Record<string, DeclaredCommand>;
+  /** The branch `git_write switch` may return to, besides the ones it created. Defaults to "main". */
+  defaultBranch?: string;
+  /** Whether `git_write` may touch this repo at all. Absent = denied; `git_status` is unaffected. */
+  gitWrite?: boolean;
+}
+
 export interface Policy {
   version: number;
   autoExecute: {
@@ -41,6 +73,16 @@ export interface Policy {
    */
   weather?: { enabled: boolean };
   git?: { repoDirs: string[] };
+  /**
+   * The build loop (docs/PLAN-build-loop.md). Absent = denied, like every other optional
+   * surface: `run_command`, `commands_list` and `git_write` are all unreachable without it.
+   *
+   * `repos` is a map and not a boolean because declaring a command for a repo is a statement
+   * that you trust THAT repo's build to run on this machine — a `test` script, a `build.rs`
+   * and a Makefile rule are all code, and the declaration is where that is decided. Nothing
+   * the model can call can add a repo or a command here.
+   */
+  build?: { enabled: boolean; repos?: Record<string, BuildRepo> };
   /**
    * Draft-not-send (SPEC §5, preferred path). Enabling this grants NO new OAuth scope —
    * drafts are proposed text reviewed in the confirmation queue, and approving one writes

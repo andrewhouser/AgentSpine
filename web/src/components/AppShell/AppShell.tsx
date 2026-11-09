@@ -10,6 +10,7 @@ import { useStatus } from "../../hooks/useStatus.ts";
 import { api } from "../../lib/api.ts";
 import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
+import { BuildsView } from "../BuildsView/BuildsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { ConfirmationsView } from "../ConfirmationsView/ConfirmationsView.tsx";
@@ -149,6 +150,7 @@ export const AppShell = () => {
         </div>
 
         {route.view === "activity" && <ActivityView />}
+        {route.view === "builds" && <BuildsView />}
         {route.view === "schedules" && <SchedulesView />}
         {route.view === "confirmations" && <ConfirmationsView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}

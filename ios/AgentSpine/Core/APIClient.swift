@@ -343,6 +343,23 @@ final class APIClient {
         try await send(request("/api/runs", query: ["limit": String(limit)]), as: [Run].self)
     }
 
+    // MARK: - Builds
+
+    func builds(limit: Int = 40) async throws -> [Build] {
+        try await send(request("/api/builds", query: ["limit": String(limit)]), as: [Build].self)
+    }
+
+    /// The diff for one build. The server shells out to git for this, so it gets the longer
+    /// patience — a large patch on a cold repo is not a ten-second request.
+    func buildDiff(_ runID: Int) async throws -> BuildDiff {
+        let data = try await sendRaw(request("/api/builds/\(runID)/diff"), using: longSession)
+        do {
+            return try JSONDecoder().decode(BuildDiff.self, from: data)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+    }
+
     /// One run in full, including the raw trace. Not cheap — a long run's trace is the whole
     /// conversation the model saw — so it is fetched only when a row is actually opened.
     func run(_ id: Int) async throws -> RunDetail {

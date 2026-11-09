@@ -18,6 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAgents } from "./agents.ts";
+import { buildDiff, listBuilds } from "./builds.ts";
 import { loadPolicy } from "./config.ts";
 import { cardsFor } from "./meetings/context.ts";
 import * as meetings from "./meetings/session.ts";
@@ -451,6 +452,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       const run = store.getRun(id);
       if (!run) return sendJson(res, 404, { error: "no such run" });
       return sendJson(res, 200, { run, trace: store.getTrace(id), actions: store.listActions(id) });
+    }
+
+    // /api/builds , /api/builds/:runId/diff — a view over the actions log, not a table of
+    // its own. See src/builds.ts for why, and for the second authorisation on the diff.
+    if (m === "GET" && seg[1] === "builds") {
+      if (seg.length === 2) return sendJson(res, 200, listBuilds(Number(url.searchParams.get("limit") ?? 40)));
+      if (seg.length === 4 && seg[3] === "diff") {
+        const out = await buildDiff(Number(seg[2]));
+        return sendJson(res, "error" in out ? 404 : 200, out);
+      }
     }
 
     // /api/conversations ...

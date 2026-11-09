@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Eleven tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
+/// Twelve tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
 ///
 /// The approvals tab carries a badge because it is the only tab that represents work *blocked
 /// on you* — everything else is informational, and a badge on an informational tab is how a
 /// badge stops meaning anything.
 struct RootView: View {
     enum Tab: Hashable {
-        case threads, tasks, approvals, schedules, projects, files, clients, search, meetings, activity, settings
+        case threads, tasks, approvals, schedules, projects, files, clients, search, meetings, builds, activity, settings
     }
 
     @Environment(AppState.self) private var state
@@ -78,6 +78,12 @@ struct RootView: View {
             }
             .tabItem { Label("Meetings", systemImage: "person.2.wave.2") }
             .tag(Tab.meetings)
+
+            NavigationStack {
+                BuildsView()
+            }
+            .tabItem { Label("Builds", systemImage: "hammer") }
+            .tag(Tab.builds)
 
             NavigationStack {
                 ActivityView()

@@ -18,7 +18,9 @@
  * no vision tower to use even if it accepted one.
  *
  * That is why nothing here ever *sizes* a task to `vision`, and why `resolveTier` will not
- * silently fall back to it or away from it. Attachments decide it, in `runner.ts`, before
+ * silently fall back to it or away from it. `fallbacksFor` in router.ts is the second half of
+ * that rule — it decides where a call goes when the endpoint chosen here turns out to be down,
+ * and it gives `vision` no fallbacks at all for exactly the reason above. Attachments decide it, in `runner.ts`, before
  * sizing happens — and a turn carrying an image gets a perception pass on this endpoint
  * whose text output is handed to whichever tier then does the actual work. See src/vision.ts
  * for why the seeing model is not also the one holding the tools.

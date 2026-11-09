@@ -9,6 +9,12 @@ This is a handoff: it assumes you know the project but not this particular stret
 
 ## Where things stand
 
+> **Added 2026-11-09:** a **Builds** tab (`Views/BuildsView.swift`), for the build loop in
+> docs/PLAN-build-loop.md — `GET /api/builds` and `/api/builds/:id/diff`. It was written
+> without Xcode: this sandbox blocks `swift-plugin-server`, so SwiftUI macros cannot expand
+> and the module cannot be type-checked. Every file parses (`swiftc -parse`, clean), and that
+> is all that has been proved — **press ⌘R before trusting it**.
+>
 > Phase 2 (dictation, tier, memory/policy/proposals, projects, meetings, read-aloud) is below
 > and brings coverage to roughly 50 of 55; the table is the phase 1 snapshot.
 

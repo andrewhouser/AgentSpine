@@ -11,6 +11,8 @@ import type {
   Agent,
   Attachment,
   AudioDevices,
+  Build,
+  BuildDiff,
   Client,
   Confirmation,
   Conversation,
@@ -136,6 +138,9 @@ export const api = {
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
    */
+  /** The diff for one build — see src/builds.ts. */
+  buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
+
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
   createProject: (name: string, instructions = "") =>
@@ -175,6 +180,9 @@ export const api = {
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
   listAgents: () => request<Agent[]>("/api/agents"),
+
+  /** Runs that built or tested something, newest first. */
+  listBuilds: (limit = 40) => request<Build[]>(`/api/builds?limit=${limit}`),
 
   listClients: () => request<Client[]>("/api/clients"),
 

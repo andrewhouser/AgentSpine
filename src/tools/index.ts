@@ -22,6 +22,9 @@ import { scheduleCreate, scheduleDelete, scheduleList, scheduleUpdate } from "./
 import { weather } from "./weather.ts";
 import { weatherAlerts } from "./weather-alerts.ts";
 import { gitStatus } from "./git-status.ts";
+import { gitWrite } from "./git-write.ts";
+import { commandsList, runCommand } from "./run-command.ts";
+import { lookAtFile } from "./look-at-file.ts";
 import { lookAtImage } from "./look-at-image.ts";
 import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
@@ -62,7 +65,11 @@ export const tools: Tool[] = [
   weather,
   weatherAlerts,
   gitStatus,
+  gitWrite,
+  commandsList,
+  runCommand,
   lookAtImage,
+  lookAtFile,
   digestTool,
   draft,
   subagent,

@@ -446,6 +446,56 @@ struct TimeSummary: Codable {
     let totals: [TimeTotal]
 }
 
+// MARK: - Builds
+
+/// One command a build run issued, with the verdict the tool reported.
+struct BuildCommand: Codable, Hashable {
+    let decision: String
+    let name: String
+    let ts: String
+    let verdict: String
+}
+
+/// A run that built or tested something. Derived on the server from the actions log
+/// rather than stored — see src/builds.ts — so old runs appear here too.
+struct Build: Codable, Identifiable, Hashable {
+    let branch: String?
+    let commands: [BuildCommand]
+    let commits: Int
+    let files: [String]
+    /// Three-valued on purpose: nil means no command ran, which is not the same as failing.
+    let ok: Bool?
+    let repo: String?
+    let runID: Int
+    let started: String
+    let status: String?
+    let task: String?
+
+    var id: Int { runID }
+
+    enum CodingKeys: String, CodingKey {
+        case branch, commands, commits, files, ok, repo, started, status, task
+        case runID = "run_id"
+    }
+
+    var verdict: String {
+        guard let ok else { return "no command ran" }
+        return ok ? "passed" : "failed"
+    }
+
+    var repoName: String { repo?.split(separator: "/").last.map(String.init) ?? "—" }
+}
+
+struct BuildDiff: Codable {
+    let base: String?
+    let branch: String?
+    let patch: String
+    let repo: String
+    let stat: String
+    let uncommitted: String
+    let untracked: [String]
+}
+
 /// A file the assistant wrote for you.
 struct SavedFile: Codable, Identifiable, Hashable {
     let path: String

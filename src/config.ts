@@ -935,3 +935,25 @@ export const loadGoogleCreds = (): { clientId: string; clientSecret: string } | 
   }
   return null;
 };
+
+// --- The build loop (docs/PLAN-build-loop.md) ---
+// Default wall-clock cap for a declared command. Two minutes covers a type check, a lint and
+// most test suites; a `cargo build` from cold or an `xcodebuild` wants its own timeoutMs in
+// policy.json rather than a bigger default here, because the cap is also what stops a hung
+// build holding the serial run queue.
+export const COMMAND_TIMEOUT_MS = Number(env.COMMAND_TIMEOUT_MS ?? "120000");
+// The ceiling a per-command timeoutMs is clamped to. A declaration asking for an hour is
+// almost always a typo, and the failure it produces — one run occupying the queue until
+// someone notices — looks like the whole system having hung.
+export const COMMAND_MAX_TIMEOUT_MS = Number(env.COMMAND_MAX_TIMEOUT_MS ?? "1800000");
+// Visible characters of command output. Larger than read_file's 8,000 because a build log's
+// useful part is spread through it, and the parsers in tools/command-output.ts have already
+// put the verdict at the top; the remainder is kept for read_more either way.
+export const COMMAND_OUTPUT_CHARS = Number(env.COMMAND_OUTPUT_CHARS ?? "12000");
+// Visible characters when the command PASSED. Smaller, because a successful build log is
+// mostly noise — hundreds of lines all saying the same thing — and it would otherwise ride
+// in the loop's context for every remaining step. Not tiny, though: some commands are run
+// FOR their output (a codegen script, a dependency listing), and the point of the cap is to
+// stop a clean `npm test` costing 12,000 characters, not to withhold a report. The rest is
+// kept behind a read_more ref either way.
+export const COMMAND_OUTPUT_PASS_CHARS = Number(env.COMMAND_OUTPUT_PASS_CHARS ?? "2000");

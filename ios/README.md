@@ -18,6 +18,8 @@ Tasks          to-dos and follow-ups, with due times; the Mac pushes when one fa
 Files          everything the assistant has saved for you, with a preview
 Clients        light client list, next actions, and where the last 30 days of time went
 Search         every thread — your questions and its answers
+Builds         runs that built or tested something: verdict, branch, every command, and the
+               diff — committed, staged, and the files git is not tracking at all
 Activity       every run, scheduled and watcher ones included; open one for its full trace
 Settings       the two settings, and the answer to "why didn't it buzz"
 ```

@@ -7,6 +7,7 @@ import styles from "./Sidebar.module.css";
 
 export type View =
   | "activity"
+  | "builds"
   | "chat"
   | "clients"
   | "confirmations"
@@ -42,6 +43,7 @@ const NAV: { key: View; label: string }[] = [
   { key: "confirmations", label: "Approvals" },
   { key: "meetings", label: "Meetings" },
   { key: "schedules", label: "Schedules" },
+  { key: "builds", label: "Builds" },
   { key: "activity", label: "Activity" },
   { key: "settings", label: "Settings" },
 ];

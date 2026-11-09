@@ -343,6 +343,40 @@ export interface TimeSummary {
   totals: { client: null | string; clientId: null | number; entries: number; label: string; minutes: number }[];
 }
 
+export interface BuildCommand {
+  decision: string;
+  name: string;
+  ts: string;
+  verdict: string;
+}
+
+/** One run that ran a command or touched git. Derived from the actions log — see src/builds.ts. */
+export interface Build {
+  branch: null | string;
+  commands: BuildCommand[];
+  commits: number;
+  files: string[];
+  finished: null | string;
+  kind: null | string;
+  ok: boolean | null;
+  repo: null | string;
+  run_id: number;
+  started: string;
+  status: null | string;
+  summary: null | string;
+  task: null | string;
+}
+
+export interface BuildDiff {
+  base: null | string;
+  branch: null | string;
+  patch: string;
+  repo: string;
+  stat: string;
+  uncommitted: string;
+  untracked: string[];
+}
+
 export interface SavedFile {
   action: string;
   bytes: number;
