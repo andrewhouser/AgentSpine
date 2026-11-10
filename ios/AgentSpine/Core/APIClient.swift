@@ -447,6 +447,13 @@ final class APIClient {
         )
     }
 
+    /// Move a task into a project, or out of one with nil.
+    func setTodoProject(_ id: Int, projectID: Int?) async throws {
+        try await sendRaw(
+            jsonRequest("/api/tasks/\(id)", method: "PATCH", body: ["projectId": projectID as Any? ?? NSNull()])
+        )
+    }
+
     func deleteTodo(_ id: Int) async throws {
         try await sendRaw(jsonRequest("/api/tasks/\(id)", method: "DELETE"))
     }
@@ -748,6 +755,17 @@ final class APIClient {
 
     func stopMeeting() async throws {
         try await sendRaw(jsonRequest("/api/meetings/stop", method: "POST"))
+    }
+
+    /// Re-make the final transcript from kept audio; `speakers` pins the head count.
+    func reprocessMeeting(_ id: Int, speakers: Int?) async throws {
+        var body: [String: Any] = [:]
+        if let speakers, speakers > 0 { body["speakers"] = speakers }
+        try await sendRaw(jsonRequest("/api/meetings/\(id)/reprocess", method: "POST", body: body))
+    }
+
+    func deleteMeetingAudio(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/meetings/\(id)/audio", method: "DELETE"))
     }
 
     /// Name a detected speaker; an empty name goes back to "Speaker N".

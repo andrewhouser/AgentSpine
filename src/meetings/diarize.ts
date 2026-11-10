@@ -8,7 +8,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 
-import { DIARIZE_ENABLED, DIARIZE_MODEL_DIR, DIARIZE_PYTHON, DIARIZE_SCRIPT, DIARIZE_SPEAKERS } from "../config.ts";
+import { DIARIZE_ENABLED, DIARIZE_MAX_SPEAKERS, DIARIZE_MODEL_DIR, DIARIZE_PYTHON, DIARIZE_SCRIPT, DIARIZE_SPEAKERS } from "../config.ts";
 import type { Turn } from "./utterances.ts";
 
 export interface Diarization {
@@ -18,14 +18,17 @@ export interface Diarization {
 
 export type DiarizeResult = { ok: false; reason: string } | ({ ok: true } & Diarization);
 
-export const diarize = (wav: string): Promise<DiarizeResult> =>
+/** `speakers` pins the head count for this run (0 or omitted: use the setting, else detect). */
+export const diarize = (wav: string, speakers = 0): Promise<DiarizeResult> =>
   new Promise((resolve) => {
     if (!DIARIZE_ENABLED) return resolve({ ok: false, reason: "speaker detection is turned off" });
     if (!fs.existsSync(DIARIZE_PYTHON) || !fs.existsSync(DIARIZE_SCRIPT)) {
       return resolve({ ok: false, reason: "speaker detection is not set up (see services/diarize/README.md)" });
     }
     const args = [DIARIZE_SCRIPT, wav, "--models", DIARIZE_MODEL_DIR];
-    if (DIARIZE_SPEAKERS > 0) args.push("--speakers", String(DIARIZE_SPEAKERS));
+    args.push("--max-speakers", String(DIARIZE_MAX_SPEAKERS));
+    const pinned = speakers > 0 ? speakers : DIARIZE_SPEAKERS;
+    if (pinned > 0) args.push("--speakers", String(pinned));
 
     const proc = spawn(DIARIZE_PYTHON, args, { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";

@@ -196,6 +196,8 @@ struct MeetingDetailView: View {
     @State private var error: String?
     @State private var renaming = false
     @State private var newTitle = ""
+    @State private var reprocessing = false
+    @State private var headCount = ""
     @State private var renamingSpeaker: SpeakerTurn?
     @State private var speakerName = ""
     @State private var extracting = false
@@ -233,6 +235,11 @@ struct MeetingDetailView: View {
                         }
                         Button("Re-run extraction") { Task { await extract() } }
                             .disabled(extracting || meeting.isRecording)
+                        if meeting.hasKeptAudio {
+                            Button("Re-run transcript…") { headCount = ""; reprocessing = true }
+                                .disabled(meeting.isRecording || meeting.status == "transcribing")
+                            Button("Delete kept audio", role: .destructive) { Task { await dropAudio() } }
+                        }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
@@ -241,6 +248,14 @@ struct MeetingDetailView: View {
             TextField("Title", text: $newTitle)
             Button("Save") { Task { await rename() } }
             Button("Cancel", role: .cancel) {}
+        }
+        .alert("Re-run transcript", isPresented: $reprocessing) {
+            TextField("People in the meeting (blank = detect)", text: $headCount)
+                .keyboardType(.numberPad)
+            Button("Re-run") { Task { await reprocess() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Re-makes the transcript from the kept audio. Speaker names are reset and work items are not re-extracted.")
         }
         .alert(
             "Who is this?",
@@ -270,6 +285,9 @@ struct MeetingDetailView: View {
             LabeledContent("Status", value: meeting.status)
             LabeledContent("Started", value: SpineDate.relative(meeting.started))
             LabeledContent("Device", value: meeting.device)
+            if meeting.hasKeptAudio, let until = SpineDate.parse(meeting.audioExpires) {
+                LabeledContent("Audio kept until", value: until.formatted(date: .omitted, time: .shortened))
+            }
             LabeledContent("Words", value: String(meeting.wordCount))
             if let id = meeting.projectID,
                let project = state.projects.first(where: { $0.id == id }) {
@@ -440,6 +458,20 @@ struct MeetingDetailView: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func reprocess() async {
+        do {
+            try await APIClient.shared.reprocessMeeting(meetingID, speakers: Int(headCount))
+            await load()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func dropAudio() async {
+        do {
+            try await APIClient.shared.deleteMeetingAudio(meetingID)
+            await load()
+        } catch { self.error = error.localizedDescription }
     }
 
     private func renameSpeaker() async {

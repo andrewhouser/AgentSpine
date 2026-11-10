@@ -9,10 +9,30 @@
 import { describeTask, addTask, getTask, listTasks, updateTask } from "../tasks/store.ts";
 import type { TaskKind, TaskStatus } from "../tasks/store.ts";
 import { parseWhen } from "../tasks/when.ts";
+import { getProject } from "../projects/store.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
 const classify = (summary: string) => (): ClassifiedAction => ({ reversibility: "reversible", summary, target: "tasks" });
 const allow = (_p: Policy): PolicyDecision => ({ allowed: true, reason: "local task list" });
+
+/**
+ * Which project a call means. `"this"` (or nothing, on creation) is the project the current
+ * conversation belongs to; `"none"` takes a task out of its project; a number must be a real
+ * project. The model is never asked for a numeric id it cannot know — it was not told one,
+ * and a guessed id would file work under the wrong project without anyone noticing.
+ * `undefined` means "leave it as it is"; an Error names what went wrong.
+ */
+const projectOf = (raw: unknown, ctxProject: null | number | undefined, defaultToContext: boolean): null | number | undefined => {
+  if (raw === undefined || raw === null || raw === "") return defaultToContext ? (ctxProject ?? null) : undefined;
+  if (raw === "none") return null;
+  if (raw === "this" || raw === true) {
+    if (ctxProject == null) throw new Error('this conversation is not inside a project, so "this" has no meaning here');
+    return ctxProject;
+  }
+  const id = Number(raw);
+  if (Number.isInteger(id) && getProject(id)) return id;
+  throw new Error(`no project ${JSON.stringify(raw)}; use "this" for the current project or "none" for no project`);
+};
 
 const idOf = (a: any): number => Number(a?.id ?? a?.task_id);
 
@@ -30,8 +50,9 @@ export const taskAdd: Tool = {
   description:
     "Add a to-do or a follow-up to the user's task list. Use kind \"followup\" with waiting_on for " +
     "something they are waiting on someone else for. due can be an ISO date/time or plain words " +
-    "(\"tomorrow 3pm\", \"friday\", \"in 2 days\"); it triggers a reminder notification when it passes.",
-  argsSchema: '{ "title": string, "due"?: string, "notes"?: string, "kind"?: "task" | "followup", "waiting_on"?: string }',
+    "(\"tomorrow 3pm\", \"friday\", \"in 2 days\"); it triggers a reminder notification when it passes. " +
+    "Inside a project's conversation the task is filed under that project automatically.",
+  argsSchema: '{ "title": string, "due"?: string, "notes"?: string, "kind"?: "task" | "followup", "waiting_on"?: string, "project"?: "this" | "none" }',
   classify: classify("Add a task"),
   checkPolicy: allow,
   run: async (a: any, ctx) => {
@@ -43,12 +64,18 @@ export const taskAdd: Tool = {
     } catch (e) {
       return `ERROR: ${e instanceof Error ? e.message : String(e)}`;
     }
+    let projectId: null | number | undefined;
+    try {
+      projectId = projectOf(a?.project ?? a?.project_id, ctx?.run?.projectId, true);
+    } catch (e) {
+      return `ERROR: ${e instanceof Error ? e.message : String(e)}`;
+    }
     const id = addTask({
       clientId: a?.client_id ?? null,
       due: due ?? null,
       kind: (a?.kind === "followup" ? "followup" : "task") as TaskKind,
       notes: a?.notes ?? null,
-      projectId: a?.project_id ?? null,
+      projectId: projectId ?? null,
       sourceRun: ctx?.runId ?? null,
       title,
       waitingOn: a?.waiting_on ?? null,
@@ -62,13 +89,20 @@ export const taskList: Tool = {
   description:
     "List the user's tasks and follow-ups, overdue and soonest-due first. status defaults to \"open\"; " +
     "due_within_days limits to what is due (or overdue) by then.",
-  argsSchema: '{ "status"?: "open" | "done" | "dropped" | "all", "due_within_days"?: number }',
+  argsSchema: '{ "status"?: "open" | "done" | "dropped" | "all", "due_within_days"?: number, "project"?: "this" }',
   classify: classify("List tasks"),
   checkPolicy: allow,
-  run: async (a: any) => {
+  run: async (a: any, ctx) => {
+    let projectId: null | number | undefined;
+    try {
+      projectId = a?.project === "this" ? projectOf("this", ctx?.run?.projectId, false) ?? undefined : undefined;
+    } catch (e) {
+      return `ERROR: ${e instanceof Error ? e.message : String(e)}`;
+    }
     const status = (["open", "done", "dropped", "all"].includes(a?.status) ? a.status : "open") as "all" | TaskStatus;
     const rows = listTasks({
       dueWithinDays: a?.due_within_days != null ? Number(a.due_within_days) : undefined,
+      projectId,
       status,
     });
     return rows.length ? rows.map(describeTask).join("\n") : `No ${status === "all" ? "" : `${status} `}tasks.`;
@@ -79,11 +113,13 @@ export const taskUpdate: Tool = {
   name: "task_update",
   description:
     "Change a task by id: title, due (\"none\" clears it), notes, waiting_on, or status " +
-    "(\"open\" | \"done\" | \"dropped\"). Moving the due date schedules a fresh reminder.",
-  argsSchema: '{ "id": number, "title"?: string, "due"?: string, "notes"?: string, "waiting_on"?: string, "status"?: "open" | "done" | "dropped" }',
+    "(\"open\" | \"done\" | \"dropped\"). Moving the due date schedules a fresh reminder. " +
+    "project: \"this\" files it under the current conversation's project (to classify tasks " +
+    "created earlier), \"none\" takes it out of its project.",
+  argsSchema: '{ "id": number, "title"?: string, "due"?: string, "notes"?: string, "waiting_on"?: string, "status"?: "open" | "done" | "dropped", "project"?: "this" | "none" }',
   classify: classify("Update a task"),
   checkPolicy: allow,
-  run: async (a: any) => {
+  run: async (a: any, ctx) => {
     const id = idOf(a);
     if (!Number.isFinite(id) || !getTask(id)) return `No task #${a?.id ?? "?"}. task_list shows valid ids.`;
     let due: null | string | undefined;
@@ -93,7 +129,13 @@ export const taskUpdate: Tool = {
       return `ERROR: ${e instanceof Error ? e.message : String(e)}`;
     }
     const status = ["open", "done", "dropped"].includes(a?.status) ? (a.status as TaskStatus) : undefined;
-    const t = updateTask(id, { due, notes: a?.notes, status, title: a?.title, waitingOn: a?.waiting_on });
+    let projectId: null | number | undefined;
+    try {
+      projectId = projectOf(a?.project, ctx?.run?.projectId, false);
+    } catch (e) {
+      return `ERROR: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    const t = updateTask(id, { due, notes: a?.notes, projectId, status, title: a?.title, waitingOn: a?.waiting_on });
     return `Updated: ${describeTask(t!)}`;
   },
 };

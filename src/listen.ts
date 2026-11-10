@@ -101,6 +101,8 @@ if (command === "devices") {
   listener.release();
   process.exit(0);
 } else if (command === "prune") {
+  const { pruneAudio } = await import("./meetings/audio.ts");
+  console.log(`removed ${pruneAudio()} kept recording(s) past their time`);
   const would = meetingStore.pruneTranscripts(TRANSCRIPT_RETENTION_DAYS, true);
   const done = meetingStore.pruneTranscripts(TRANSCRIPT_RETENTION_DAYS);
   console.log(
@@ -108,7 +110,28 @@ if (command === "devices") {
       ? `removed ${done} of ${would} transcript segments older than ${TRANSCRIPT_RETENTION_DAYS} days`
       : "TRANSCRIPT_RETENTION_DAYS is 0 — transcripts are kept forever, nothing to do",
   );
+} else if (command === "reprocess") {
+  // npm run listen reprocess <meeting id> [speakers]
+  const id = Number(arg);
+  const speakers = Number(process.argv[4] ?? 0);
+  if (!Number.isInteger(id) || id <= 0) {
+    console.error("usage: npm run listen reprocess <meeting id> [speakers]");
+    process.exit(1);
+  }
+  const { reprocessMeeting } = await import("./meetings/session.ts");
+  const started = await reprocessMeeting(id, { speakers: speakers > 0 ? speakers : 0 });
+  if (!started.ok) {
+    console.error(started.reason);
+    process.exit(1);
+  }
+  // The work is detached; wait for the meeting to leave `transcribing`.
+  while (meetingStore.getMeeting(id)?.status === "transcribing") await new Promise((r) => setTimeout(r, 1000));
+  const after = meetingStore.getMeeting(id);
+  console.log(`${after?.status}: ${after?.note ?? ""}`);
+  console.log(`${meetingStore.segments(id).length} sentences; speakers: ${meetingStore.speakers(id).map((s) => s.name).join(", ") || "none"}`);
+  console.log("Extraction was not re-run (it would queue the same work items again) — re-run it from the dashboard if you want it redone.");
+  process.exit(0);
 } else {
-  console.error(`unknown command: ${command}\nTry: devices | status | record <seconds> | prune`);
+  console.error(`unknown command: ${command}\nTry: devices | status | record <seconds> | prune | reprocess <id> [speakers]`);
   process.exit(1);
 }

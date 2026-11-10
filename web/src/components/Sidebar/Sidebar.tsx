@@ -37,6 +37,9 @@ interface SidebarProps {
   view: View;
 }
 
+/** Conversations shown under a project before "N more…". */
+const PROJECT_CHATS_SHOWN = 5;
+
 const NAV: { key: View; label: string }[] = [
   { key: "search", label: "Search" },
   { key: "tasks", label: "Tasks" },
@@ -76,6 +79,8 @@ export const Sidebar = ({
   view,
 }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  // Conversations inside a project live under it, not in the general list.
+  const loose = conversations.filter((c) => c.project_id === null || !projects.some((p) => p.id === c.project_id));
   const toggle = (): void => {
     const next = !collapsed;
     setCollapsed(next);
@@ -104,20 +109,41 @@ export const Sidebar = ({
         </button>
       </div>
       {projects.length === 0 && <div className={styles.none}>None yet.</div>}
-      {projects.map((p) => (
-        <button
-          className={`${styles.projectItem} ${view === "project" && p.id === activeProject ? styles.projectActive : ""}`}
-          key={p.id}
-          onClick={() => onSelectProject(p.id)}
-          type="button"
-        >
-          {p.name}
-        </button>
-      ))}
+      {projects.map((p) => {
+        // A project's own conversations sit under it, the most recent few; the project page has the rest.
+        const mine = conversations.filter((c) => c.project_id === p.id);
+        return (
+          <div key={p.id}>
+            <button
+              className={`${styles.projectItem} ${view === "project" && p.id === activeProject ? styles.projectActive : ""}`}
+              onClick={() => onSelectProject(p.id)}
+              type="button"
+            >
+              {p.name}
+            </button>
+            {mine.slice(0, PROJECT_CHATS_SHOWN).map((c) => (
+              <div className={styles.nested} key={c.id}>
+                <ConversationItem
+                  active={view === "chat" && c.id === activeConversation}
+                  conversation={c}
+                  onDelete={() => onDeleteConversation(c.id)}
+                  onRename={(title) => onRenameConversation(c.id, title)}
+                  onSelect={() => onSelectConversation(c.id)}
+                />
+              </div>
+            ))}
+            {mine.length > PROJECT_CHATS_SHOWN && (
+              <button className={`${styles.nested} ${styles.more}`} onClick={() => onSelectProject(p.id)} type="button">
+                {mine.length - PROJECT_CHATS_SHOWN} more…
+              </button>
+            )}
+          </div>
+        );
+      })}
 
       <div className={styles.sectionLabel} style={{ marginTop: 14 }}>Conversations</div>
-      {conversations.length === 0 && <div className={styles.none}>Nothing yet.</div>}
-      {conversations.map((c) => (
+      {loose.length === 0 && <div className={styles.none}>Nothing yet.</div>}
+      {loose.map((c) => (
         <ConversationItem
           active={view === "chat" && c.id === activeConversation}
           conversation={c}

@@ -80,13 +80,20 @@ interface Turn {
   speakerName: null | string;
 }
 
+/** A colour per distinct name, in order of first appearance, so one person is one colour. */
+const voiceOf = (turns: Turn[], turn: Turn): number => {
+  const names = [...new Set(turns.filter((t) => t.speaker !== null).map((t) => t.speakerName))];
+  return names.indexOf(turn.speakerName) % 6;
+};
+
 /** Consecutive sentences by the same speaker read as one paragraph under their name. */
 const toTurns = (segments: MeetingSegment[]): Turn[] => {
   const turns: Turn[] = [];
   for (const s of segments) {
     const last = turns.at(-1);
     const speaker = s.speaker ?? null;
-    if (last && speaker !== null && last.speaker === speaker) last.segments.push(s);
+    // By name, not index: two detected voices you have both called "Julie" are one person.
+    if (last && speaker !== null && last.speakerName === (s.speaker_name ?? null)) last.segments.push(s);
     else turns.push({ segments: [s], speaker, speakerName: s.speaker_name ?? null });
   }
   return turns;
@@ -345,6 +352,8 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   const [problem, setProblem] = useState<null | string>(null);
   const [open, setOpen] = useState<null | number>(null);
   const [detail, setDetail] = useState<MeetingDetail>(NO_DETAIL);
+  // Fixed at mount: "has this recording expired" is judged against when you opened the page.
+  const [openedAt] = useState(() => Date.now());
 
   const load = useCallback(async (id: number): Promise<void> => {
     const { extraction, segments, speakers, workItems } = await api.meeting(id);
@@ -467,6 +476,29 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     if (next === null) return;
     await api.setSpeakerName(meetingId, turn.speaker, next);
     await load(meetingId);
+  };
+
+  const reprocess = async (id: number): Promise<void> => {
+    const answer = window.prompt(
+      "Re-make the transcript from the kept audio. How many people were in the meeting? Leave blank to detect.\n" +
+        "Speaker names you gave are reset, and work items are not re-extracted.",
+      "",
+    );
+    if (answer === null) return;
+    const n = Number(answer);
+    setProblem(null);
+    try {
+      await api.reprocessMeeting(id, Number.isInteger(n) && n > 0 ? n : undefined);
+      reloadMeetings();
+    } catch (err) {
+      setProblem((err as Error).message);
+    }
+  };
+
+  const dropAudio = async (id: number): Promise<void> => {
+    if (!window.confirm("Delete the kept recording now? Re-running the transcript will no longer be possible.")) return;
+    await api.deleteMeetingAudio(id);
+    reloadMeetings();
   };
 
   const assign = async (id: number, value: string): Promise<void> => {
@@ -612,6 +644,23 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
           </div>
 
           {m.note && <div className={styles.rowNote}>{m.note}</div>}
+          {m.audio_expires && new Date(m.audio_expires).getTime() > openedAt && (
+            <div className={styles.rowNote}>
+              Audio kept until {when(m.audio_expires)} ·{" "}
+              <button
+                className={styles.linkButton}
+                disabled={m.status === "recording" || m.status === "transcribing"}
+                onClick={() => void reprocess(m.id)}
+                type="button"
+              >
+                Re-run transcript
+              </button>{" "}
+              ·{" "}
+              <button className={styles.linkButton} onClick={() => void dropAudio(m.id)} type="button">
+                Delete audio
+              </button>
+            </div>
+          )}
 
           {open === m.id && (
             <>
@@ -620,7 +669,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                 {detail.segments.length === 0 && (
                   <p className={styles.waiting}>No transcript kept for this meeting.</p>
                 )}
-                {toTurns(detail.segments).map((turn) =>
+                {toTurns(detail.segments).map((turn, _i, all) =>
                   turn.speaker === null ? (
                     turn.segments.map((s) => (
                       <p className={styles.line} key={s.id}>
@@ -632,7 +681,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                     <div className={styles.turn} key={turn.segments[0].id}>
                       <div className={styles.turnHead}>
                         <button
-                          className={`${styles.speaker} ${styles[`voice${turn.speaker % 6}`]}`}
+                          className={`${styles.speaker} ${styles[`voice${voiceOf(all, turn)}`]}`}
                           onClick={() => void renameSpeaker(m.id, turn)}
                           title="Rename this speaker"
                           type="button"

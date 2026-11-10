@@ -40,6 +40,84 @@ struct ConversationsView: View {
         }
     }
 
+    /// Projects that have threads, each with theirs, in the order the server lists projects.
+    private var projectSections: [(project: Project, threads: [Conversation])] {
+        state.projects.compactMap { project in
+            let threads = state.conversations.filter { $0.projectID == project.id }
+            return threads.isEmpty ? nil : (project, threads)
+        }
+    }
+
+    /// Threads with no project, or whose project this app does not know about.
+    private var looseThreads: [Conversation] {
+        let known = Set(state.projects.map(\.id))
+        return state.conversations.filter { $0.projectID == nil || !known.contains($0.projectID!) }
+    }
+
+    /// One thread row. Inside a project's own section the project is the heading, so the row
+    /// does not repeat it.
+    @ViewBuilder
+    private func row(_ conversation: Conversation, showProject: Bool) -> some View {
+        NavigationLink(value: conversation.id) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(conversation.displayTitle)
+                    .font(.body)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(SpineDate.relative(conversation.updated))
+                    if let tier = conversation.tier {
+                        Text("·")
+                        Text(tier).textCase(.lowercase)
+                    }
+                    // A thread in a project reads that project's indexed sources,
+                    // which changes what its answers are based on. Now that a
+                    // thread can be filed into one from this app, the list has to
+                    // say which — otherwise the picker sets something invisible.
+                    if showProject, let id = conversation.projectID, let name = state.projectNames[id] {
+                        Text("·")
+                        Label(name, systemImage: "folder")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            // Archive, not delete, as the swipe's main verb. Archiving is also what
+            // folds the thread into cross-conversation memory on the server, so it
+            // is the useful one; a destructive swipe on a phone in a pocket is the
+            // wrong default. Delete is here too, but behind a confirmation — it
+            // takes the thread's photographs off the server's disk with it.
+            Button {
+                Task {
+                    try? await APIClient.shared.archive(conversation.id)
+                    await state.refresh()
+                }
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            .tint(.indigo)
+
+            Button(role: .destructive) {
+                prompt = .delete(conversation)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading) {
+            // The auto-titler names a thread from its first turn and sometimes names
+            // it badly; a thread you cannot rename is one you learn to scroll past.
+            Button {
+                newTitle = conversation.title ?? ""
+                prompt = .rename(conversation)
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            .tint(.gray)
+        }
+    }
+
     var body: some View {
         List {
             if let error = state.loadError {
@@ -61,64 +139,17 @@ struct ConversationsView: View {
                 }
             }
 
-            ForEach(state.conversations) { conversation in
-                NavigationLink(value: conversation.id) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(conversation.displayTitle)
-                            .font(.body)
-                            .lineLimit(2)
-                        HStack(spacing: 6) {
-                            Text(SpineDate.relative(conversation.updated))
-                            if let tier = conversation.tier {
-                                Text("·")
-                                Text(tier).textCase(.lowercase)
-                            }
-                            // A thread in a project reads that project's indexed sources,
-                            // which changes what its answers are based on. Now that a
-                            // thread can be filed into one from this app, the list has to
-                            // say which — otherwise the picker sets something invisible.
-                            if let id = conversation.projectID, let name = state.projectNames[id] {
-                                Text("·")
-                                Label(name, systemImage: "folder")
-                                    .labelStyle(.titleAndIcon)
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+            // A project's threads sit under it, as in the web sidebar; everything else follows.
+            ForEach(projectSections, id: \.project.id) { section in
+                Section {
+                    ForEach(section.threads) { row($0, showProject: false) }
+                } header: {
+                    Label(section.project.name, systemImage: "folder")
                 }
-                .swipeActions(edge: .trailing) {
-                    // Archive, not delete, as the swipe's main verb. Archiving is also what
-                    // folds the thread into cross-conversation memory on the server, so it
-                    // is the useful one; a destructive swipe on a phone in a pocket is the
-                    // wrong default. Delete is here too, but behind a confirmation — it
-                    // takes the thread's photographs off the server's disk with it.
-                    Button {
-                        Task {
-                            try? await APIClient.shared.archive(conversation.id)
-                            await state.refresh()
-                        }
-                    } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                    .tint(.indigo)
-
-                    Button(role: .destructive) {
-                        prompt = .delete(conversation)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-                .swipeActions(edge: .leading) {
-                    // The auto-titler names a thread from its first turn and sometimes names
-                    // it badly; a thread you cannot rename is one you learn to scroll past.
-                    Button {
-                        newTitle = conversation.title ?? ""
-                        prompt = .rename(conversation)
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    .tint(.gray)
+            }
+            if !looseThreads.isEmpty {
+                Section(projectSections.isEmpty ? "" : "Conversations") {
+                    ForEach(looseThreads) { row($0, showProject: true) }
                 }
             }
         }

@@ -160,6 +160,8 @@ export const subagent: Tool = {
         budgetRunId,
         context: def.instructions ? [def.instructions] : [],
         maxSteps: def.maxSteps,
+        // A helper working inside a project files its work under that project too.
+        projectId: ctx.run?.projectId ?? null,
         tier: def.tier,
         tools,
       });

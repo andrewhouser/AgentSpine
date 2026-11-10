@@ -596,8 +596,19 @@ export const DIARIZE_ENABLED = (env.DIARIZE_ENABLED ?? "true") !== "false";
 export const DIARIZE_PYTHON = env.DIARIZE_PYTHON ?? path.join(import.meta.dirname, "..", "services", "diarize", ".venv", "bin", "python");
 export const DIARIZE_SCRIPT = env.DIARIZE_SCRIPT ?? path.join(import.meta.dirname, "..", "services", "diarize", "diarize.py");
 export const DIARIZE_MODEL_DIR = env.DIARIZE_MODEL_DIR ?? path.join(os.homedir(), ".diarize-models");
+/**
+ * Keep each meeting's audio for this many hours after it ends, so the final pass and speaker
+ * detection can be re-run with different settings. 0 (the default) keeps nothing: audio lives
+ * in memory and is gone when the final pass finishes. Turning this on means a recording of
+ * other people's voices sits on this disk for that long — a deliberate choice, so it is off.
+ */
+export const MEETING_KEEP_AUDIO_HOURS = Number(env.MEETING_KEEP_AUDIO_HOURS ?? "0");
+/** Where kept audio goes: owner-only, outside the repo, never synced by git. */
+export const MEETING_AUDIO_DIR = env.MEETING_AUDIO_DIR ?? path.join(os.homedir(), ".agentspine", "meeting-audio");
 /** Known number of speakers, or 0 to detect. Pinning it is the most reliable accuracy lever. */
 export const DIARIZE_SPEAKERS = Number(env.DIARIZE_SPEAKERS ?? "0");
+/** The most speakers ever reported when detecting; a 43-speaker "meeting" is over-splitting, not a crowd. */
+export const DIARIZE_MAX_SPEAKERS = Number(env.DIARIZE_MAX_SPEAKERS ?? "8");
 /**
  * Hard ceiling on a single meeting, in minutes. Audio is held in memory (16kHz mono is
  * ~1.9 MB/minute), so this is also the memory ceiling: 4 hours is ~460 MB. The real reason

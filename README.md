@@ -432,11 +432,24 @@ Speaker comes from detection alone, never from Whisper's word timings — those 
 inside a window (measured), too loose to align against turns. Name a speaker in the dashboard
 or the app ("Speaker 2" → "Priya") and the name applies to every line and to later extraction,
 which also gets the labels so work-item owners come from who said it. Set `DIARIZE_SPEAKERS`
-when you know the head count. Without the setup, or when detection looks like it lost speech,
+when you know the head count. Detection over-splits real recordings (one person becomes several
+"speakers"), so a speaker with a trivial share of the talking is folded into their neighbour and
+the count is capped at `DIARIZE_MAX_SPEAKERS` (8); name two detected voices the same and they read
+as one person. Without the setup, or when detection looks like it lost speech,
 you still get sentences, just unlabelled; the meeting's note says which happened. The live
 pass is unchanged and has no speakers.
 
-**Audio is never retained.** It is held in memory (~1.9 MB/minute, bounded by
+**Keeping audio while you tune this (opt-in).** `MEETING_KEEP_AUDIO_HOURS=1` keeps each
+recording as FLAC for that many hours, in an owner-only folder outside the repo
+(`MEETING_AUDIO_DIR`, ~60 MB an hour), and deletes it when the time is up — checked every five
+minutes, not daily. While it exists the meeting shows "Audio kept until …" with **Re-run
+transcript** (optionally pinning the head count) and **Delete audio**; `npm run listen
+reprocess <id> [speakers]` does the same from a terminal. A re-run replaces the transcript,
+resets speaker names (a new run may number people differently) and does not re-extract, since
+that would queue the same work items twice. Off by default, because it is other people's voices
+on disk: tell the room.
+
+**Audio is never retained unless you turn that on.** It is held in memory (~1.9 MB/minute, bounded by
 `MEETING_MAX_MINUTES`) and each chunk (and, with speaker detection, each speaker-turn clip) touches disk only as a
 temp WAV that is unlinked in a `finally`, because `whisper-cli` has no stdin mode. That is "never *retained* on disk" rather
 than "never touches disk" — if the distinction matters to you, point `TMPDIR` at a RAM disk.

@@ -196,6 +196,12 @@ export interface RunContext {
   conversational: boolean;
   /** The user's message for this run, verbatim. */
   goal: string;
+  /**
+   * The project this run belongs to — the conversation's project, or one a schedule named.
+   * Tools that create or file things (tasks) default to it, so work done inside a project
+   * stays attributed to that project without the model having to know its numeric id.
+   */
+  projectId?: null | number;
 }
 
 export interface ToolContext {

@@ -11,6 +11,7 @@
  * adds to, lists, completes and gets reminded by.
  */
 import { rawDb } from "../memory/store.ts";
+import { getProject } from "../projects/store.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS tasks (
@@ -178,5 +179,6 @@ export const dueForNudge = (renudgeHours = 24, at: Date = new Date()): TaskRow[]
 export const describeTask = (t: TaskRow): string => {
   const due = t.due ? ` — due ${new Date(t.due).toLocaleString()}` : "";
   const wait = t.kind === "followup" && t.waiting_on ? ` (waiting on ${t.waiting_on})` : "";
-  return `#${t.id} [${t.kind}${t.status !== "open" ? `, ${t.status}` : ""}] ${t.title}${wait}${due}`;
+  const project = t.project_id != null ? getProject(t.project_id)?.name : undefined;
+  return `#${t.id} [${t.kind}${t.status !== "open" ? `, ${t.status}` : ""}] ${t.title}${wait}${due}${project ? ` {project: ${project}}` : ""}`;
 };

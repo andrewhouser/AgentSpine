@@ -150,7 +150,10 @@ export const api = {
     post<Schedule>("/api/schedules", { name, schedule, task }),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
   deleteConversation: (id: number) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: "DELETE" }),
+  /** Delete a meeting's kept recording now. */
+  deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
+
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
 
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
@@ -278,6 +281,10 @@ export const api = {
   renameConversation: (id: number, title: string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
 
+  /** Re-make the final transcript from kept audio; `speakers` pins the head count (omit to detect). */
+  reprocessMeeting: (id: number, speakers?: number) =>
+    post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
+
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
@@ -351,7 +358,7 @@ export const api = {
   updateSchedule: (id: number, fields: { enabled?: boolean; name?: string; schedule?: string; task?: string }) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
 
-  updateTask: (id: number, fields: { due?: null | string; notes?: string; status?: "done" | "dropped" | "open"; title?: string }) =>
+  updateTask: (id: number, fields: { due?: null | string; notes?: string; projectId?: null | number; status?: "done" | "dropped" | "open"; title?: string }) =>
     patch<Task>(`/api/tasks/${id}`, fields),
   /**
    * Send one image up and get its id back.

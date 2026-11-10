@@ -166,6 +166,8 @@ export interface ProjectSource {
 export type MeetingStatus = "abandoned" | "done" | "failed" | "recording" | "transcribing";
 
 export interface Meeting {
+  /** When the kept recording is deleted, ISO; null when none is kept. */
+  audio_expires: null | string;
   device: string;
   ended: null | string;
   id: number;

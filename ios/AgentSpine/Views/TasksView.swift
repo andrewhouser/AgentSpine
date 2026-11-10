@@ -72,6 +72,14 @@ struct TasksView: View {
                         }
                     }
                 }
+                .contextMenu {
+                    Menu("Move to project") {
+                        Button("No project") { Task { await move(item, to: nil) } }
+                        ForEach(projects) { project in
+                            Button(project.name) { Task { await move(item, to: project.id) } }
+                        }
+                    }
+                }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
                         Task { await remove(item) }
@@ -146,6 +154,15 @@ struct TasksView: View {
     private func toggle(_ item: TodoItem) async {
         do {
             try await APIClient.shared.setTodoDone(item.id, done: !item.isDone)
+            await load()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func move(_ item: TodoItem, to projectID: Int?) async {
+        do {
+            try await APIClient.shared.setTodoProject(item.id, projectID: projectID)
             await load()
         } catch {
             actionError = error.localizedDescription

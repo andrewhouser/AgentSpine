@@ -262,6 +262,8 @@ export interface AgentResult {
 }
 
 export interface AgentOpts {
+  /** The project this run belongs to; reaches tools as `ctx.run.projectId`. */
+  projectId?: null | number;
   /**
    * Which run's id budgets are counted against. Differs from `runId` only inside a
    * subagent, where audit rows belong to the child but per-run caps must be counted across
@@ -642,6 +644,7 @@ export const runAgent = async (
       const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
         conversational,
         goal,
+        projectId: opts.projectId ?? null,
       });
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
 

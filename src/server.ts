@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
 import { loadPolicy } from "./config.ts";
+import { deleteAudio, pruneAudio } from "./meetings/audio.ts";
 import { fileQueuedItems } from "./meetings/extract.ts";
 import { cardsFor } from "./meetings/context.ts";
 import * as meetings from "./meetings/session.ts";
@@ -1027,6 +1028,22 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         return sendJson(res, 202, { meetingId: id, started: true });
       }
 
+      // POST /api/meetings/:id/reprocess — re-make the final transcript from kept audio.
+      // Body: { speakers?: number } pins the head count. 404 when no audio is kept.
+      if (m === "POST" && seg.length === 4 && seg[3] === "reprocess") {
+        const b = await readBody(req);
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        const n = Number(b?.speakers ?? 0);
+        const r = await meetings.reprocessMeeting(id, { speakers: Number.isInteger(n) && n > 0 && n <= 20 ? n : 0 });
+        return r.ok ? sendJson(res, 200, { started: true }) : sendJson(res, 409, { error: r.reason });
+      }
+
+      // DELETE /api/meetings/:id/audio — delete the kept recording now.
+      if (m === "DELETE" && seg.length === 4 && seg[3] === "audio") {
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        return sendJson(res, 200, { deleted: deleteAudio(id) });
+      }
+
       // PATCH /api/meetings/:id/speakers — name a speaker ("Speaker 2" → "Priya"). An empty
       // name puts it back. Applies to the transcript view and to any later extraction.
       if (m === "PATCH" && seg.length === 4 && seg[3] === "speakers") {
@@ -1266,6 +1283,11 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         if (!getTask(id)) return sendJson(res, 404, { error: "no such task" });
         const patch: any = {};
         for (const k of ["title", "notes", "status", "waitingOn"]) if (k in b) patch[k] = b[k];
+        if ("projectId" in b) {
+          const pid = b.projectId == null ? null : Number(b.projectId);
+          if (pid !== null && !projects.getProject(pid)) return sendJson(res, 400, { error: "no such project" });
+          patch.projectId = pid;
+        }
         if ("due" in b) {
           if (!b.due) patch.due = null;
           else {
@@ -1350,6 +1372,8 @@ const prune = async (): Promise<void> => {
     // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.
     const dropped = pruneSources(60);
     if (dropped) console.log(`pruned: ${dropped} fetched sources older than 60 days`);
+    const audio = pruneAudio();
+    if (audio) console.log(`pruned: ${audio} kept meeting recording(s) past their time`);
     const words = meetingStore.pruneTranscripts(TRANSCRIPT_RETENTION_DAYS);
     if (words) console.log(`pruned: ${words} meeting transcript segments past the retention window`);
 
@@ -1481,5 +1505,8 @@ void sweepDueTasks();
 setInterval(() => void sweepDueTasks(), 60_000).unref();
 prune();
 setInterval(prune, PRUNE_INTERVAL_MS).unref();
+// Kept recordings are measured in hours, so they cannot wait for the daily prune.
+pruneAudio();
+setInterval(pruneAudio, 5 * 60_000).unref();
 watchdog();
 setInterval(watchdog, CONFIRM_SWEEP_MS).unref();

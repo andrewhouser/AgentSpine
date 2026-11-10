@@ -105,6 +105,12 @@ try {
   // already there
 }
 
+try {
+  rawDb.exec("ALTER TABLE meetings ADD COLUMN audio_expires TEXT");
+} catch {
+  // already there
+}
+
 const now = (): string => new Date().toISOString();
 
 /** `recording` while capture runs, `transcribing` during the final pass, then a terminal state. */
@@ -112,6 +118,8 @@ export type MeetingStatus = "recording" | "transcribing" | "done" | "failed" | "
 export type Pass = "live" | "final";
 
 export interface MeetingRow {
+  /** When the kept recording is deleted, ISO; null when none is kept. */
+  audio_expires: null | string;
   device: string;
   ended: null | string;
   id: number;
@@ -174,6 +182,27 @@ export const setStatus = (id: number, status: MeetingStatus, note?: string): voi
 
 export const setProject = (id: number, projectId: null | number): void => {
   rawDb.prepare("UPDATE meetings SET project_id = ? WHERE id = ?").run(projectId, id);
+};
+
+export const setAudioExpires = (id: number, iso: null | string): void => {
+  rawDb.prepare("UPDATE meetings SET audio_expires = ? WHERE id = ?").run(iso, id);
+};
+
+/** Meetings whose kept audio is past its time (or all that have any, with no cutoff). */
+export const meetingsWithAudio = (expiredBefore?: string): number[] =>
+  (
+    rawDb
+      .prepare(
+        expiredBefore
+          ? "SELECT id FROM meetings WHERE audio_expires IS NOT NULL AND audio_expires <= ?"
+          : "SELECT id FROM meetings WHERE audio_expires IS NOT NULL",
+      )
+      .all(...(expiredBefore ? [expiredBefore] : [])) as { id: number }[]
+  ).map((r) => r.id);
+
+/** Speaker names belong to one detection run; a new run may number people differently. */
+export const clearSpeakerNames = (meetingId: number): void => {
+  rawDb.prepare("DELETE FROM meeting_speakers WHERE meeting_id = ?").run(meetingId);
 };
 
 export const setTitle = (id: number, title: string): void => {

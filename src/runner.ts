@@ -368,6 +368,14 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         used.push(`project instructions (${project.name})`);
       }
     }
+    if (project) {
+      // Said plainly because the tools act on it: without this the model has no way to know
+      // that "the project" is a thing its task tools can file work under.
+      context.push(
+        `This conversation belongs to the project "${project.name}". Tasks you add are filed under it automatically. ` +
+          'To file a task created earlier under it, call task_update with project "this".',
+      );
+    }
     const projectKnowledge = project ? await knowledgeFor(project.id, task) : "";
     // Both are UNTRUSTED-tagged blocks bound for the same slot — project excerpts are file
     // content, the description is what a model saw in a picture — so they are simply
@@ -446,6 +454,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         // worse than no tool.
         imagesAvailable: conversationHasImages || attachmentIds.length > 0,
         knowledge,
+        projectId: project?.id ?? null,
         tier: sizing.tier,
       });
       store.saveTrace(runId, trace);

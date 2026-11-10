@@ -41,7 +41,7 @@ export const finalTranscript = async (
   meetingId: number,
   pcm: Buffer,
   wav: string,
-  opts: { liveWords: number; prompt?: string },
+  opts: { liveWords: number; prompt?: string; speakers?: number },
 ): Promise<FinalTranscript> => {
   const model = WHISPER_FINAL_MODEL;
   const whole = async (note: string): Promise<FinalTranscript> => ({
@@ -51,7 +51,7 @@ export const finalTranscript = async (
     ),
   });
 
-  const found = await diarize(wav);
+  const found = await diarize(wav, opts.speakers);
   if (!found.ok) return whole(found.reason);
   if (found.speakers < 2) return whole("one speaker detected — no speaker labels");
 

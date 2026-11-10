@@ -50,6 +50,7 @@ import { checkAudioPolicy, Listener, writeWav } from "../senses/listen.ts";
 import type { Policy } from "../types.ts";
 import { coach } from "./coach.ts";
 import type { CoachAnswer } from "./coach.ts";
+import { keepAudio, loadAudio } from "./audio.ts";
 import { cardsFor } from "./context.ts";
 import type { ContextCards } from "./context.ts";
 import { extractMeeting } from "./extract.ts";
@@ -242,8 +243,10 @@ const finish = async (meetingId: number, reason: string): Promise<void> => {
  * transcript is worth far more than a clean error.
  */
 const finalPass = async (meetingId: number, pcm: Buffer, listener: Listener): Promise<void> => {
-  const wav = path.join(os.tmpdir(), `spine-meeting-${meetingId}.wav`);
   try {
+    // Before anything that can fail: a pass that dies half way is exactly what kept audio is for.
+    await keepAudio(meetingId, pcm);
+
     const liveWords = store.transcriptText(meetingId, "live").split(/\s+/).filter(Boolean).length;
     if (liveWords < MEETING_MIN_WORDS) {
       store.setStatus(meetingId, "done", `only ${liveWords} words — skipped the final pass`);
@@ -251,19 +254,7 @@ const finalPass = async (meetingId: number, pcm: Buffer, listener: Listener): Pr
       return;
     }
 
-    writeWav(wav, pcm);
-    const prompt = MEETING_CORRECTIONS.map(([, right]) => right).join(", ") || undefined;
-
-    const { note, utterances } = await finalTranscript(meetingId, pcm, wav, { liveWords, prompt });
-    const segs = utterances.map((u) => ({ ...u, text: applyCorrections(u.text) }));
-    const notes = note;
-    store.replacePass(meetingId, "final", segs);
-
-    const meeting = store.getMeeting(meetingId);
-    if (meeting?.project_id) await indexIntoProject(meetingId, meeting.project_id);
-
-    store.setStatus(meetingId, "done", notes);
-    emit({ kind: "status", meetingId, note: `final transcript: ${segs.length} sentences; ${notes}`, status: "done" });
+    await buildFinalTranscript(meetingId, pcm, { liveWords });
 
     // Detached on purpose. Extraction takes about a minute per half hour of meeting, and
     // `finally` below releases the retained audio — several hundred megabytes on a long
@@ -274,9 +265,72 @@ const finalPass = async (meetingId: number, pcm: Buffer, listener: Listener): Pr
     store.setStatus(meetingId, "failed", note);
     emit({ kind: "status", meetingId, note, status: "failed" });
   } finally {
-    fs.rmSync(wav, { force: true });
     listener.release();
   }
+};
+
+/** Transcribe `pcm`, store it as the final pass, file it under its project, mark the meeting done. */
+const buildFinalTranscript = async (
+  meetingId: number,
+  pcm: Buffer,
+  opts: { liveWords: number; resetNames?: boolean; speakers?: number },
+): Promise<void> => {
+  const wav = path.join(os.tmpdir(), `spine-meeting-${meetingId}.wav`);
+  try {
+    writeWav(wav, pcm);
+    const prompt = MEETING_CORRECTIONS.map(([, right]) => right).join(", ") || undefined;
+    const { note, utterances } = await finalTranscript(meetingId, pcm, wav, { ...opts, prompt });
+    const segs = utterances.map((u) => ({ ...u, text: applyCorrections(u.text) }));
+    if (opts.resetNames) store.clearSpeakerNames(meetingId);
+    store.replacePass(meetingId, "final", segs);
+
+    const meeting = store.getMeeting(meetingId);
+    if (meeting?.project_id) await indexIntoProject(meetingId, meeting.project_id);
+
+    store.setStatus(meetingId, "done", note);
+    emit({ kind: "status", meetingId, note: `final transcript: ${segs.length} sentences; ${note}`, status: "done" });
+  } finally {
+    fs.rmSync(wav, { force: true });
+  }
+};
+
+const reprocessing = new Set<number>();
+
+/**
+ * Re-make a finished meeting's final transcript from its kept audio, optionally pinning the
+ * number of speakers. Detached like the original pass: it returns once it is accepted and
+ * progress arrives as status events. Speaker names are cleared (once the new transcript is ready) because a new detection run
+ * may number the people differently — carrying "Speaker 2 = Priya" over would mislabel them.
+ * Extraction is NOT re-run automatically: it would queue the same work items a second time.
+ */
+export const reprocessMeeting = async (
+  meetingId: number,
+  opts: { speakers?: number } = {},
+): Promise<{ ok: false; reason: string } | { ok: true }> => {
+  const meeting = store.getMeeting(meetingId);
+  if (!meeting) return { ok: false, reason: "no such meeting" };
+  if (meeting.status === "recording" || meeting.status === "transcribing" || reprocessing.has(meetingId)) {
+    return { ok: false, reason: "this meeting is still being processed" };
+  }
+  const pcm = await loadAudio(meetingId);
+  if (!pcm) return { ok: false, reason: "no audio is kept for this meeting (it was not kept, or has expired)" };
+
+  reprocessing.add(meetingId);
+  store.setStatus(meetingId, "transcribing", "re-making the transcript from kept audio");
+  emit({ kind: "status", meetingId, note: "re-making the transcript from kept audio", status: "transcribing" });
+  void (async () => {
+    try {
+      const liveWords = store.transcriptText(meetingId, "live").split(/\s+/).filter(Boolean).length;
+      await buildFinalTranscript(meetingId, pcm, { liveWords, resetNames: true, speakers: opts.speakers });
+    } catch (err) {
+      const note = `re-run failed (previous transcript kept): ${(err as Error).message}`;
+      store.setStatus(meetingId, "done", note);
+      emit({ kind: "status", meetingId, note, status: "done" });
+    } finally {
+      reprocessing.delete(meetingId);
+    }
+  })();
+  return { ok: true };
 };
 
 /**

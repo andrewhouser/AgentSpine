@@ -185,3 +185,21 @@
   color: var(--text);
   font-weight: 500;
 }
+
+.nested {
+  margin-left: 12px;
+}
+
+.more {
+  background: none;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 9px;
+  text-align: left;
+}
+
+.more:hover {
+  color: var(--text);
+}

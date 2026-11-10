@@ -157,6 +157,21 @@ export const TasksView = ({ embedded = false, projectId, projects = [] }: TasksV
               </div>
               {t.notes && <div className={styles.snippet}>{t.notes}</div>}
             </div>
+            {!embedded && projects.length > 0 && (
+              <select
+                aria-label={`Project for "${t.title}"`}
+                className={styles.input}
+                onChange={(e) => void api.updateTask(t.id, { projectId: e.target.value === "" ? null : Number(e.target.value) }).then(refresh)}
+                value={t.project_id ?? ""}
+              >
+                <option value="">No project</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               className={styles.button}
               onClick={() => void api.deleteTask(t.id).then(refresh)}

@@ -565,6 +565,8 @@ struct ProposalResult: Codable {
 // MARK: - Meetings
 
 struct Meeting: Codable, Identifiable, Hashable {
+    /// When the kept recording is deleted; nil when none is kept.
+    let audioExpires: String?
     let device: String
     let ended: String?
     let id: Int
@@ -577,6 +579,7 @@ struct Meeting: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case device, ended, id, note, started, status, title
+        case audioExpires = "audio_expires"
         case projectID = "project_id"
         case wordCount = "word_count"
     }
@@ -586,6 +589,11 @@ struct Meeting: Codable, Identifiable, Hashable {
         return "Meeting \(SpineDate.relative(started))"
     }
     var isRecording: Bool { status == "recording" }
+    /// True while a kept recording still exists, so the transcript can be re-made.
+    var hasKeptAudio: Bool {
+        guard let date = SpineDate.parse(audioExpires) else { return false }
+        return date > Date()
+    }
 }
 
 struct MeetingSegment: Codable, Identifiable, Hashable {
