@@ -111,6 +111,18 @@ const listed = await commandsList.run({}, ctx);
 check("it names the repo", listed.includes(repo), true);
 check("it names a command and its argv", /ok: \/bin\/echo hello-from-policy/.test(listed), true);
 check("it says where git_write is allowed", /\[git_write allowed\]/.test(listed), true);
+console.log("\nrepo defaulting and denial hints\n");
+{
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), "agentspine-other-"));
+  const two = { build: { enabled: true, repos: { [repo]: { commands: { test: commands.test ?? Object.values(commands)[0] } }, [other]: { commands: { build: Object.values(commands)[0] } } } } };
+  const denied = gate({ name: "build", repo }, two);
+  check("wrong repo is denied", denied.allowed, false);
+  check("denial names the repo that has it", denied.reason.includes(other), true);
+  const { setWriteDefault } = await import("../src/tools/write-file.ts");
+  setWriteDefault(other);
+  check("omitted repo defaults to the project folder", gate({ name: "build" }, two).allowed, true);
+  setWriteDefault(null);
+}
 check("it is denied when build is off", commandsList.checkPolicy({ build: { enabled: false } }).allowed, false);
 check("it is reversible", commandsList.classify({}).reversibility, "reversible");
 

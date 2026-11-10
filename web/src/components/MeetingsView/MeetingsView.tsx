@@ -33,6 +33,7 @@ import type {
   MeetingEvent,
   MeetingExtraction,
   MeetingSegment,
+  MeetingSpeaker,
   MeetingWorkItem,
   Project,
 } from "../../lib/types.ts";
@@ -67,10 +68,29 @@ const REJECTION: Record<string, string> = {
 interface MeetingDetail {
   extraction: MeetingExtraction | null;
   segments: MeetingSegment[];
+  speakers: MeetingSpeaker[];
   workItems: MeetingWorkItem[];
 }
 
-const NO_DETAIL: MeetingDetail = { extraction: null, segments: [], workItems: [] };
+const NO_DETAIL: MeetingDetail = { extraction: null, segments: [], speakers: [], workItems: [] };
+
+interface Turn {
+  segments: MeetingSegment[];
+  speaker: null | number;
+  speakerName: null | string;
+}
+
+/** Consecutive sentences by the same speaker read as one paragraph under their name. */
+const toTurns = (segments: MeetingSegment[]): Turn[] => {
+  const turns: Turn[] = [];
+  for (const s of segments) {
+    const last = turns.at(-1);
+    const speaker = s.speaker ?? null;
+    if (last && speaker !== null && last.speaker === speaker) last.segments.push(s);
+    else turns.push({ segments: [s], speaker, speakerName: s.speaker_name ?? null });
+  }
+  return turns;
+};
 
 /**
  * The sidecar: what we already know about whatever is being said right now.
@@ -190,7 +210,8 @@ interface ExtractionPanelProps {
 const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
   const { extraction, segments, workItems } = detail;
   const queued = workItems.filter((w) => w.verdict === "queued");
-  const rejected = workItems.filter((w) => w.verdict !== "queued");
+  const filed = workItems.filter((w) => w.verdict === "filed");
+  const rejected = workItems.filter((w) => w.verdict !== "queued" && w.verdict !== "filed");
 
   if (!extraction) {
     return segments.length ? (
@@ -199,7 +220,7 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
           Extract work items
         </button>
         <span className={styles.hint}>
-          Runs locally — a summary and decisions are saved, work items go to Approvals for you to
+          Runs locally — a summary and decisions are saved, work items go to the project's tasks (or Approvals when there is no project) for you to
           confirm.
         </span>
       </div>
@@ -264,6 +285,22 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
         </>
       )}
 
+      {filed.length > 0 && (
+        <>
+          <h3 className={styles.extractHead}>
+            Added to the project's tasks <a className={styles.queueLink} href="/tasks">Tasks →</a>
+          </h3>
+          <ul className={styles.list}>
+            {filed.map((w) => (
+              <li className={styles.item} key={w.id}>
+                {w.task}
+                {w.owner && <span className={styles.owner}>{w.owner}</span>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       {rejected.length > 0 && (
         <>
           <h3 className={styles.extractHead}>
@@ -310,8 +347,8 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   const [detail, setDetail] = useState<MeetingDetail>(NO_DETAIL);
 
   const load = useCallback(async (id: number): Promise<void> => {
-    const { extraction, segments, workItems } = await api.meeting(id);
-    setDetail({ extraction, segments, workItems });
+    const { extraction, segments, speakers, workItems } = await api.meeting(id);
+    setDetail({ extraction, segments, speakers: speakers ?? [], workItems });
   }, []);
 
   // Extraction finishes minutes after the meeting does, so it arrives on the stream rather
@@ -412,6 +449,24 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const rename = async (m: { id: number; title: null | string }): Promise<void> => {
+    const next = window.prompt("Rename meeting", m.title ?? `Meeting ${m.id}`);
+    if (next === null || !next.trim()) return;
+    await api.setMeetingTitle(m.id, next.trim());
+    reloadMeetings();
+  };
+
+  const renameSpeaker = async (meetingId: number, turn: Turn): Promise<void> => {
+    if (turn.speaker === null) return;
+    const next = window.prompt(
+      "Who is this? Renames every line by this speaker. Re-run extraction to use the name in work items.",
+      turn.speakerName ?? "",
+    );
+    if (next === null) return;
+    await api.setSpeakerName(meetingId, turn.speaker, next);
+    await load(meetingId);
   };
 
   const assign = async (id: number, value: string): Promise<void> => {
@@ -528,6 +583,15 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
             <button className={styles.rowTitle} onClick={() => void openMeeting(m.id)} type="button">
               {m.title ?? `Meeting ${m.id}`}
             </button>
+            <button
+              aria-label="Rename meeting"
+              className={styles.rename}
+              onClick={() => void rename(m)}
+              title="Rename"
+              type="button"
+            >
+              ✎
+            </button>
             <span className={`${styles.badge} ${styles[m.status]}`}>{m.status}</span>
             <span className={styles.meta}>
               {when(m.started)} · {m.word_count} words
@@ -556,12 +620,31 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                 {detail.segments.length === 0 && (
                   <p className={styles.waiting}>No transcript kept for this meeting.</p>
                 )}
-                {detail.segments.map((s) => (
-                  <p className={styles.line} key={s.id}>
-                    <span className={styles.stamp}>{clock(s.start_ms)}</span>
-                    {s.text}
-                  </p>
-                ))}
+                {toTurns(detail.segments).map((turn) =>
+                  turn.speaker === null ? (
+                    turn.segments.map((s) => (
+                      <p className={styles.line} key={s.id}>
+                        <span className={styles.stamp}>{clock(s.start_ms)}</span>
+                        {s.text}
+                      </p>
+                    ))
+                  ) : (
+                    <div className={styles.turn} key={turn.segments[0].id}>
+                      <div className={styles.turnHead}>
+                        <button
+                          className={`${styles.speaker} ${styles[`voice${turn.speaker % 6}`]}`}
+                          onClick={() => void renameSpeaker(m.id, turn)}
+                          title="Rename this speaker"
+                          type="button"
+                        >
+                          {turn.speakerName}
+                        </button>
+                        <span className={styles.stamp}>{clock(turn.segments[0].start_ms)}</span>
+                      </div>
+                      <p className={styles.turnText}>{turn.segments.map((s) => s.text).join(" ")}</p>
+                    </div>
+                  ),
+                )}
               </div>
             </>
           )}

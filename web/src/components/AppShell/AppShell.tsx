@@ -155,7 +155,7 @@ export const AppShell = () => {
         {route.view === "confirmations" && <ConfirmationsView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}
-        {route.view === "tasks" && <TasksView />}
+        {route.view === "tasks" && <TasksView projects={projects} />}
         {route.view === "files" && <FilesView />}
         {route.view === "clients" && <ClientsView />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}

@@ -47,7 +47,7 @@ import {
 } from "../config.ts";
 import type { Policy } from "../types.ts";
 
-const SAMPLE_RATE = 16_000;
+export const SAMPLE_RATE = 16_000;
 const BYTES_PER_SAMPLE = 2;
 const BYTES_PER_SECOND = SAMPLE_RATE * BYTES_PER_SAMPLE;
 
@@ -120,55 +120,67 @@ interface WhisperJson {
 }
 
 /**
- * Run whisper-cli over one WAV and return its segments.
- *
- * `-nt` suppresses timestamps in the text output but JSON keeps its own offsets, which is
- * what we read. `prompt` biases the decoder toward names it would otherwise mangle — worth
- * passing, but see MEETING_CORRECTIONS in config.ts for why it is not sufficient on its own.
+ * One whisper-cli run over one or more WAVs, loading the model once. Each input's JSON lands
+ * next to it as `<wav>.json`; they are read back in input order and removed.
  */
-export const transcribeFile = (
-  wav: string,
+const runWhisper = (
+  wavs: string[],
   model: string,
-  opts: { prompt?: string; threads?: number } = {},
-): Promise<Segment[]> =>
+  opts: { prompt?: string; threads?: number },
+): Promise<WhisperJson[]> =>
   new Promise((resolve, reject) => {
-    const out = `${wav}.out`;
-    const args = [
-      "-m", path.join(WHISPER_MODEL_DIR, model),
-      "-f", wav,
-      "-oj", "-of", out,
-      "-nt",
-      "--no-prints",
-    ];
+    const args = ["-m", path.join(WHISPER_MODEL_DIR, model), "-oj", "-nt", "--no-prints"];
     if (opts.threads) args.push("-t", String(opts.threads));
     if (opts.prompt) args.push("--prompt", opts.prompt);
+    for (const wav of wavs) args.push("-f", wav);
 
     const proc = spawn(WHISPER_BIN, args, { stdio: ["ignore", "ignore", "pipe"] });
     let err = "";
     proc.stderr.on("data", (d: Buffer) => (err += d.toString()));
     proc.on("error", (e) => reject(new Error(`${WHISPER_BIN} failed to start: ${e.message}`)));
     proc.on("close", (code) => {
-      const json = `${out}.json`;
+      const files = wavs.map((w) => `${w}.json`);
       try {
-        if (code !== 0 && !fs.existsSync(json)) {
+        if (code !== 0 && !files.every((f) => fs.existsSync(f))) {
           return reject(new Error(`${WHISPER_BIN} exited ${code}: ${err.slice(-400)}`));
         }
-        const parsed = JSON.parse(fs.readFileSync(json, "utf8")) as WhisperJson;
-        const segs = (parsed.transcription ?? [])
-          .map((t) => ({
-            endMs: t.offsets?.to ?? 0,
-            startMs: t.offsets?.from ?? 0,
-            text: (t.text ?? "").trim(),
-          }))
-          .filter((s) => s.text.length > 0);
-        resolve(segs);
+        resolve(files.map((f) => JSON.parse(fs.readFileSync(f, "utf8")) as WhisperJson));
       } catch (e) {
         reject(new Error(`could not read whisper output: ${(e as Error).message}`));
       } finally {
-        fs.rmSync(json, { force: true });
+        for (const f of files) fs.rmSync(f, { force: true });
       }
     });
   });
+
+const toSegments = (parsed: WhisperJson): Segment[] =>
+  (parsed.transcription ?? [])
+    .map((t) => ({
+      endMs: t.offsets?.to ?? 0,
+      startMs: t.offsets?.from ?? 0,
+      text: (t.text ?? "").trim(),
+    }))
+    .filter((s) => s.text.length > 0);
+
+/**
+ * Run whisper-cli over one WAV and return its segments.
+ *
+ * `-nt` suppresses timestamps in the text output but JSON keeps its own offsets, which is
+ * what we read. `prompt` biases the decoder toward names it would otherwise mangle — worth
+ * passing, but see MEETING_CORRECTIONS in config.ts for why it is not sufficient on its own.
+ */
+export const transcribeFile = async (
+  wav: string,
+  model: string,
+  opts: { prompt?: string; threads?: number } = {},
+): Promise<Segment[]> => toSegments((await runWhisper([wav], model, opts))[0]);
+
+/** Many WAVs, one model load; segments per input, in input order. */
+export const transcribeFiles = async (
+  wavs: string[],
+  model: string,
+  opts: { prompt?: string; threads?: number } = {},
+): Promise<Segment[][]> => (wavs.length ? (await runWhisper(wavs, model, opts)).map(toSegments) : []);
 
 /** Whisper emits these when it hears nothing — noise, not words. */
 const NON_SPEECH = /^[\s.]*(\[[^\]]*\]|\([^)]*\)|\*[^*]*\*)[\s.]*$/;

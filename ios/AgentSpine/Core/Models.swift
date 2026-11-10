@@ -408,10 +408,13 @@ struct TodoItem: Codable, Identifiable, Hashable {
     let status: String
     let due: String?
     let waitingOn: String?
+    /// The project this belongs to — meeting work items on a project land here.
+    let projectID: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, title, notes, kind, status, due
         case waitingOn = "waiting_on"
+        case projectID = "project_id"
     }
 
     var isDone: Bool { status == "done" }
@@ -591,11 +594,16 @@ struct MeetingSegment: Codable, Identifiable, Hashable {
     let ord: Int
     let startMs: Int
     let text: String
+    /// 0-based speaker index; nil on the live pass or when speaker detection did not run.
+    let speaker: Int?
+    /// A name you gave the speaker, else "Speaker N".
+    let speakerName: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, ord, text
+        case id, ord, text, speaker
         case endMs = "end_ms"
         case startMs = "start_ms"
+        case speakerName = "speaker_name"
     }
 
     /// `m:ss` into the recording.
@@ -636,6 +644,39 @@ struct MeetingWorkItem: Codable, Identifiable, Hashable {
     }
 
     var wasQueued: Bool { verdict == "queued" }
+    /// Went straight onto a project's task list instead of Approvals.
+    var wasFiled: Bool { verdict == "filed" }
+}
+
+/// A person in a finished meeting, as detected from the audio.
+struct MeetingSpeaker: Codable, Hashable {
+    let index: Int
+    let name: String
+}
+
+/// Consecutive sentences by one speaker, shown as a paragraph under their name.
+struct SpeakerTurn: Identifiable {
+    let id: Int
+    let speaker: Int?
+    let speakerName: String?
+    let segments: [MeetingSegment]
+
+    var text: String { segments.map(\.text).joined(separator: " ") }
+
+    static func group(_ segments: [MeetingSegment]) -> [SpeakerTurn] {
+        var turns: [SpeakerTurn] = []
+        for s in segments {
+            if let last = turns.last, s.speaker != nil, last.speaker == s.speaker {
+                turns[turns.count - 1] = SpeakerTurn(
+                    id: last.id, speaker: last.speaker, speakerName: last.speakerName,
+                    segments: last.segments + [s]
+                )
+            } else {
+                turns.append(SpeakerTurn(id: s.id, speaker: s.speaker, speakerName: s.speakerName, segments: [s]))
+            }
+        }
+        return turns
+    }
 }
 
 struct MeetingDetail: Codable {

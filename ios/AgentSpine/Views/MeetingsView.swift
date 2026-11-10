@@ -196,6 +196,8 @@ struct MeetingDetailView: View {
     @State private var error: String?
     @State private var renaming = false
     @State private var newTitle = ""
+    @State private var renamingSpeaker: SpeakerTurn?
+    @State private var speakerName = ""
     @State private var extracting = false
     @State private var coach: CoachState?
     @State private var asking = false
@@ -239,6 +241,16 @@ struct MeetingDetailView: View {
             TextField("Title", text: $newTitle)
             Button("Save") { Task { await rename() } }
             Button("Cancel", role: .cancel) {}
+        }
+        .alert(
+            "Who is this?",
+            isPresented: Binding(get: { renamingSpeaker != nil }, set: { if !$0 { renamingSpeaker = nil } })
+        ) {
+            TextField("Name", text: $speakerName)
+            Button("Save") { Task { await renameSpeaker() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Renames every line by this speaker. Re-run extraction to use the name in work items.")
         }
         .refreshable { await load() }
         .task {
@@ -356,10 +368,10 @@ struct MeetingDetailView: View {
                         HStack(alignment: .firstTextBaseline) {
                             Text(item.task)
                             Spacer()
-                            Text(item.verdict)
+                            Text(item.wasFiled ? "added to project tasks" : item.verdict)
                                 .font(.caption2)
                                 .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(item.wasQueued ? Color.green.opacity(0.2)
+                                .background(item.wasQueued || item.wasFiled ? Color.green.opacity(0.2)
                                                            : Color.secondary.opacity(0.2),
                                             in: Capsule())
                         }
@@ -377,7 +389,8 @@ struct MeetingDetailView: View {
             } header: {
                 Text("Work items")
             } footer: {
-                Text("Only “queued” items reached Approvals. The rest are kept, with their "
+                Text("“Queued” items are waiting in Approvals; “added to project tasks” went straight "
+                     + "onto the project's list. The rest are kept, with their "
                      + "reasons, so the false-positive rate stays visible.")
             }
         }
@@ -388,11 +401,29 @@ struct MeetingDetailView: View {
             if segments.isEmpty {
                 Text("No transcript yet.").foregroundStyle(.secondary)
             }
-            ForEach(segments) { segment in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(segment.timestamp)
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    Text(segment.text)
+            ForEach(SpeakerTurn.group(segments)) { turn in
+                if let name = turn.speakerName {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Button(name) {
+                                speakerName = name.hasPrefix("Speaker ") ? "" : name
+                                renamingSpeaker = turn
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .buttonStyle(.borderless)
+                            Text(turn.segments[0].timestamp)
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        Text(turn.text)
+                    }
+                } else {
+                    ForEach(turn.segments) { segment in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(segment.timestamp)
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            Text(segment.text)
+                        }
+                    }
                 }
             }
         }
@@ -409,6 +440,14 @@ struct MeetingDetailView: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func renameSpeaker() async {
+        guard let turn = renamingSpeaker, let index = turn.speaker else { return }
+        do {
+            try await APIClient.shared.renameSpeaker(meetingID, index: index, to: speakerName)
+            await load()
+        } catch { self.error = error.localizedDescription }
     }
 
     private func rename() async {

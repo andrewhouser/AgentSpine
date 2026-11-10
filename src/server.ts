@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
 import { loadPolicy } from "./config.ts";
+import { fileQueuedItems } from "./meetings/extract.ts";
 import { cardsFor } from "./meetings/context.ts";
 import * as meetings from "./meetings/session.ts";
 import * as meetingStore from "./meetings/store.ts";
@@ -982,6 +983,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           extraction: meetingStore.getExtraction(id) ?? null,
           meeting,
           segments: meetingStore.segments(id, pass),
+          speakers: meetingStore.speakers(id),
           workItems: meetingStore.workItems(id),
         });
       }
@@ -1025,6 +1027,18 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         return sendJson(res, 202, { meetingId: id, started: true });
       }
 
+      // PATCH /api/meetings/:id/speakers — name a speaker ("Speaker 2" → "Priya"). An empty
+      // name puts it back. Applies to the transcript view and to any later extraction.
+      if (m === "PATCH" && seg.length === 4 && seg[3] === "speakers") {
+        const b = await readBody(req);
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        const index = Number(b?.index);
+        if (!Number.isInteger(index) || index < 0 || typeof b?.name !== "string")
+          return sendJson(res, 400, { error: "index and name required" });
+        meetingStore.setSpeakerName(id, index, b.name);
+        return sendJson(res, 200, meetingStore.speakers(id));
+      }
+
       // PATCH /api/meetings/:id — retitle, or file it under a project after the fact
       if (m === "PATCH" && seg.length === 3) {
         const b = await readBody(req);
@@ -1038,6 +1052,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           // Doing it here rather than only at stop() is the whole point of assign-after —
           // you often don't know which project a meeting was about until it's over.
           if (projectId && meeting.status === "done") await meetings.indexIntoProject(id, projectId);
+          // Items already waiting in Approvals move onto the project's task list.
+          if (projectId) fileQueuedItems(id, projectId);
         }
         return sendJson(res, 200, meetingStore.getMeeting(id));
       }
@@ -1214,7 +1230,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (seg[1] === "tasks") {
       if (m === "GET" && seg.length === 2) {
         const st = url.searchParams.get("status") ?? "open";
-        return sendJson(res, 200, listTasks({ limit: 300, status: (["open", "done", "dropped", "all"].includes(st) ? st : "open") as any }));
+        const pid = Number(url.searchParams.get("projectId"));
+        return sendJson(
+          res,
+          200,
+          listTasks({
+            limit: 300,
+            projectId: Number.isInteger(pid) && pid > 0 ? pid : undefined,
+            status: (["open", "done", "dropped", "all"].includes(st) ? st : "open") as any,
+          }),
+        );
       }
       if (m === "POST" && seg.length === 2) {
         const b = await readBody(req);

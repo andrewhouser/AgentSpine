@@ -99,6 +99,14 @@
           "webbuild": { "argv": ["npm", "run", "web:build"], "timeoutMs": 300000, "description": "vite build of web/" }
         }
       }
+      ,
+      "~/Developer/MetronomeApp": {
+        "gitWrite": true,
+        "defaultBranch": "main",
+        "commands": {
+          "build": { "argv": ["xcodebuild", "-project", "MetronomeApp.xcodeproj", "-scheme", "MetronomeApp", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "CODE_SIGNING_ALLOWED=NO", "build"], "parse": "xcodebuild", "timeoutMs": 600000, "description": "compile for the iOS simulator (no signing)" }
+        }
+      }
     }
   },
 

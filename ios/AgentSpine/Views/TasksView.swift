@@ -12,6 +12,13 @@ struct TasksView: View {
     @State private var loadError: String?
     @State private var actionError: String?
     @State private var adding = false
+    @State private var projects: [Project] = []
+    @State private var filterProject: Int?
+
+    private func projectName(_ id: Int?) -> String? {
+        guard let id else { return nil }
+        return projects.first { $0.id == id }?.name
+    }
 
     var body: some View {
         List {
@@ -47,6 +54,9 @@ struct TasksView: View {
                             .strikethrough(item.isDone)
                             .foregroundStyle(item.isDone ? .secondary : .primary)
                         HStack(spacing: 6) {
+                            if let name = projectName(item.projectID) {
+                                Label(name, systemImage: "folder")
+                            }
                             if item.isFollowUp, let who = item.waitingOn {
                                 Label("waiting on \(who)", systemImage: "hourglass")
                             }
@@ -76,11 +86,26 @@ struct TasksView: View {
         .refreshable { await load() }
         .task { await load() }
         .onChange(of: showDone) { Task { await load() } }
+        .onChange(of: filterProject) { Task { await load() } }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Toggle(isOn: $showDone) { Image(systemName: "checkmark.circle") }
                     .toggleStyle(.button)
                     .accessibilityLabel("Show completed")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker("Project", selection: $filterProject) {
+                        Text("All projects").tag(Int?.none)
+                        ForEach(projects) { project in
+                            Text(project.name).tag(Int?.some(project.id))
+                        }
+                    }
+                } label: {
+                    Image(systemName: filterProject == nil ? "line.3.horizontal.decrease.circle"
+                                                           : "line.3.horizontal.decrease.circle.fill")
+                }
+                .accessibilityLabel("Filter by project")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { adding = true } label: { Image(systemName: "plus") }
@@ -89,7 +114,9 @@ struct TasksView: View {
         }
         .sheet(isPresented: $adding) {
             AddTodoSheet { title, due, waitingOn in
-                try await APIClient.shared.addTodo(title: title, due: due, waitingOn: waitingOn)
+                try await APIClient.shared.addTodo(
+                    title: title, due: due, waitingOn: waitingOn, projectID: filterProject
+                )
                 await load()
             }
         }
@@ -105,7 +132,10 @@ struct TasksView: View {
 
     private func load() async {
         do {
-            items = try await APIClient.shared.todos(status: showDone ? "all" : "open")
+            if projects.isEmpty { projects = (try? await APIClient.shared.projects()) ?? [] }
+            items = try await APIClient.shared.todos(
+                status: showDone ? "all" : "open", projectID: filterProject
+            )
             loadError = nil
         } catch {
             loadError = error.localizedDescription

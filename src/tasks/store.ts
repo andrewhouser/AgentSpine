@@ -93,16 +93,21 @@ export interface ListOpts {
   /** Only tasks due within this many days from now (overdue included). */
   dueWithinDays?: number;
   limit?: number;
+  projectId?: number;
   status?: "all" | TaskStatus;
 }
 
 /** Open work first: overdue and soonest-due, then undated, newest last. */
-export const listTasks = ({ dueWithinDays, limit = 100, status = "open" }: ListOpts = {}): TaskRow[] => {
+export const listTasks = ({ dueWithinDays, limit = 100, projectId, status = "open" }: ListOpts = {}): TaskRow[] => {
   const where: string[] = [];
   const args: (number | string)[] = [];
   if (status !== "all") {
     where.push("status = ?");
     args.push(status);
+  }
+  if (projectId != null) {
+    where.push("project_id = ?");
+    args.push(projectId);
   }
   if (dueWithinDays != null) {
     where.push("due IS NOT NULL AND due <= ?");

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { Task } from "../../lib/types.ts";
+import type { Project, Task } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -12,10 +12,22 @@ const NONE: Task[] = [];
 const dueText = (iso: null | string): string =>
   iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "no due date";
 
+interface TasksViewProps {
+  /** Embedded on a project page: fixed to that project, no page header. */
+  embedded?: boolean;
+  /** Fixed project for this list; new tasks are filed under it. */
+  projectId?: number;
+  /** Project names for the label and filter. */
+  projects?: Project[];
+}
+
 /** The assistant's own to-do list and follow-ups. The same list it reads and writes in chat. */
-export const TasksView = () => {
+export const TasksView = ({ embedded = false, projectId, projects = [] }: TasksViewProps = {}) => {
   const [showDone, setShowDone] = useState(false);
-  const [tasks, refresh] = useResource(() => api.listTasks(showDone ? "all" : "open"), NONE);
+  const [filter, setFilter] = useState("");
+  const activeProject = projectId ?? (filter ? Number(filter) : undefined);
+  const [tasks, refresh] = useResource(() => api.listTasks(showDone ? "all" : "open", activeProject), NONE);
+  const projectName = (id: null | number): null | string => projects.find((p) => p.id === id)?.name ?? null;
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
   const [waitingOn, setWaitingOn] = useState("");
@@ -29,6 +41,7 @@ export const TasksView = () => {
       await api.addTask({
         due: due.trim() || undefined,
         kind: waitingOn.trim() ? "followup" : "task",
+        projectId: activeProject,
         title: title.trim(),
         waitingOn: waitingOn.trim() || undefined,
       });
@@ -48,10 +61,12 @@ export const TasksView = () => {
 
   return (
     <div className={styles.page}>
-      <PageHeader
-        subtitle="To-dos and things you're waiting on. Ask in chat ('remind me to call the dentist Friday') or add them here — it nudges you when one falls due."
-        title="Tasks"
-      />
+      {!embedded && (
+        <PageHeader
+          subtitle="To-dos and things you're waiting on. Ask in chat ('remind me to call the dentist Friday') or add them here — it nudges you when one falls due."
+          title="Tasks"
+        />
+      )}
 
       <form
         className={styles.form}
@@ -99,6 +114,24 @@ export const TasksView = () => {
           />{" "}
           Show completed
         </label>
+        {!embedded && projects.length > 0 && (
+          <select
+            aria-label="Filter by project"
+            className={styles.input}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setTimeout(refresh, 0);
+            }}
+            value={filter}
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {tasks.length === 0 && <div className={styles.empty}>Nothing on the list.</div>}
@@ -117,6 +150,7 @@ export const TasksView = () => {
             <div className={styles.body}>
               <div className={`${styles.title} ${t.status === "done" ? styles.done : ""}`}>{t.title}</div>
               <div className={`${styles.meta} ${overdue ? styles.overdue : ""}`}>
+                {!embedded && projectName(t.project_id) ? `${projectName(t.project_id)} · ` : ""}
                 {t.kind === "followup" && t.waiting_on ? `waiting on ${t.waiting_on} · ` : ""}
                 {overdue ? "overdue · " : ""}
                 {dueText(t.due)}

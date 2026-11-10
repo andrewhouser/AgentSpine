@@ -42,12 +42,11 @@ import {
   MEETING_CORRECTIONS,
   MEETING_EXTRACT_ENABLED,
   MEETING_MIN_WORDS,
-  WHISPER_FINAL_MODEL,
 } from "../config.ts";
 import { getEmbedder, toBlob } from "../memory/rag.ts";
 import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
-import { checkAudioPolicy, Listener, transcribeFile, writeWav } from "../senses/listen.ts";
+import { checkAudioPolicy, Listener, writeWav } from "../senses/listen.ts";
 import type { Policy } from "../types.ts";
 import { coach } from "./coach.ts";
 import type { CoachAnswer } from "./coach.ts";
@@ -55,6 +54,7 @@ import { cardsFor } from "./context.ts";
 import type { ContextCards } from "./context.ts";
 import { extractMeeting } from "./extract.ts";
 import * as store from "./store.ts";
+import { finalTranscript } from "./transcript.ts";
 
 export interface MeetingEvent {
   kind: "segment" | "status" | "error" | "extraction" | "context" | "coach";
@@ -253,19 +253,17 @@ const finalPass = async (meetingId: number, pcm: Buffer, listener: Listener): Pr
 
     writeWav(wav, pcm);
     const prompt = MEETING_CORRECTIONS.map(([, right]) => right).join(", ") || undefined;
-    const segs = await transcribeFile(wav, WHISPER_FINAL_MODEL, { prompt });
 
-    store.replacePass(
-      meetingId,
-      "final",
-      segs.map((s) => ({ end_ms: s.endMs, start_ms: s.startMs, text: applyCorrections(s.text) })),
-    );
+    const { note, utterances } = await finalTranscript(meetingId, pcm, wav, { liveWords, prompt });
+    const segs = utterances.map((u) => ({ ...u, text: applyCorrections(u.text) }));
+    const notes = note;
+    store.replacePass(meetingId, "final", segs);
 
     const meeting = store.getMeeting(meetingId);
     if (meeting?.project_id) await indexIntoProject(meetingId, meeting.project_id);
 
-    store.setStatus(meetingId, "done");
-    emit({ kind: "status", meetingId, note: `final transcript: ${segs.length} segments`, status: "done" });
+    store.setStatus(meetingId, "done", notes);
+    emit({ kind: "status", meetingId, note: `final transcript: ${segs.length} sentences; ${notes}`, status: "done" });
 
     // Detached on purpose. Extraction takes about a minute per half hour of meeting, and
     // `finally` below releases the retained audio — several hundred megabytes on a long

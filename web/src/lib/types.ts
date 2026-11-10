@@ -182,8 +182,17 @@ export interface MeetingSegment {
   end_ms: number;
   id: number;
   ord: number;
+  /** 0-based speaker index; null/absent on the live pass or when detection did not run. */
+  speaker?: null | number;
+  /** A name you gave the speaker, else "Speaker N". */
+  speaker_name?: null | string;
   start_ms: number;
   text: string;
+}
+
+export interface MeetingSpeaker {
+  index: number;
+  name: string;
 }
 
 /** One audio input, and whether policy.audio.devices lists it. */
@@ -289,7 +298,7 @@ export interface MeetingExtraction {
  * the rest are kept so the extraction's false-positive rate stays visible rather than
  * being quietly edited out of the record.
  */
-export type WorkItemVerdict = "already-done" | "not-a-task" | "queued" | "unanchored" | "unverified";
+export type WorkItemVerdict = "already-done" | "filed" | "not-a-task" | "queued" | "unanchored" | "unverified";
 
 export interface MeetingWorkItem {
   confirmation_id: null | number;
@@ -322,6 +331,7 @@ export interface Task {
   id: number;
   kind: "followup" | "task";
   notes: null | string;
+  project_id: null | number;
   status: "done" | "dropped" | "open";
   title: string;
   waiting_on: null | string;

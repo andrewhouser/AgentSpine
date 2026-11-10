@@ -61,7 +61,14 @@ rawDb.exec(`
     ord INTEGER NOT NULL,
     start_ms INTEGER NOT NULL,
     end_ms INTEGER NOT NULL,
-    text TEXT NOT NULL
+    text TEXT NOT NULL,
+    speaker INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS meeting_speakers (
+    meeting_id INTEGER NOT NULL,
+    idx INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    PRIMARY KEY (meeting_id, idx)
   );
   CREATE INDEX IF NOT EXISTS idx_segments_meeting ON meeting_segments (meeting_id, pass, ord);
   CREATE INDEX IF NOT EXISTS idx_meetings_project ON meetings (project_id);
@@ -91,6 +98,13 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_work_items_meeting ON meeting_work_items (meeting_id);
 `);
 
+// Databases created before speaker detection have no `speaker` column.
+try {
+  rawDb.exec("ALTER TABLE meeting_segments ADD COLUMN speaker INTEGER");
+} catch {
+  // already there
+}
+
 const now = (): string => new Date().toISOString();
 
 /** `recording` while capture runs, `transcribing` during the final pass, then a terminal state. */
@@ -114,6 +128,10 @@ export interface SegmentRow {
   end_ms: number;
   id: number;
   ord: number;
+  /** 0-based speaker index from diarization; null on the live pass or when it did not run. */
+  speaker?: null | number;
+  /** The name to show for `speaker`: a name you gave it, else "Speaker N". Null with no speaker. */
+  speaker_name?: null | string;
   start_ms: number;
   text: string;
 }
@@ -179,15 +197,17 @@ export const addSegment = (
 export const replacePass = (
   meetingId: number,
   pass: Pass,
-  segments: { end_ms: number; start_ms: number; text: string }[],
+  segments: { end_ms: number; speaker?: null | number; start_ms: number; text: string }[],
 ): void => {
   rawDb.exec("BEGIN");
   try {
     rawDb.prepare("DELETE FROM meeting_segments WHERE meeting_id = ? AND pass = ?").run(meetingId, pass);
     const insert = rawDb.prepare(
-      "INSERT INTO meeting_segments (meeting_id, pass, ord, start_ms, end_ms, text) VALUES (?,?,?,?,?,?)",
+      "INSERT INTO meeting_segments (meeting_id, pass, ord, start_ms, end_ms, text, speaker) VALUES (?,?,?,?,?,?,?)",
     );
-    segments.forEach((s, i) => insert.run(meetingId, pass, i, Math.round(s.start_ms), Math.round(s.end_ms), s.text));
+    segments.forEach((s, i) =>
+      insert.run(meetingId, pass, i, Math.round(s.start_ms), Math.round(s.end_ms), s.text, s.speaker ?? null),
+    );
     const words = segments.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0);
     rawDb
       .prepare("UPDATE meetings SET word_count = ?, transcribed_at = ? WHERE id = ?")
@@ -205,13 +225,47 @@ export const replacePass = (
  * a meeting ending and its final pass finishing, the rough ones are the best available.
  */
 export const segments = (meetingId: number, pass: Pass = "final"): SegmentRow[] => {
-  const rows = rawDb
-    .prepare("SELECT id, ord, start_ms, end_ms, text FROM meeting_segments WHERE meeting_id = ? AND pass = ? ORDER BY ord")
-    .all(meetingId, pass) as unknown as SegmentRow[];
+  const read = (p: Pass): SegmentRow[] => {
+    const rows = rawDb
+      .prepare(
+        "SELECT s.id, s.ord, s.start_ms, s.end_ms, s.text, s.speaker, n.name AS custom " +
+          "FROM meeting_segments s LEFT JOIN meeting_speakers n ON n.meeting_id = s.meeting_id AND n.idx = s.speaker " +
+          "WHERE s.meeting_id = ? AND s.pass = ? ORDER BY s.ord",
+      )
+      .all(meetingId, p) as unknown as (SegmentRow & { custom: null | string })[];
+    return rows.map(({ custom, ...row }) => ({
+      ...row,
+      speaker_name: row.speaker == null ? null : (custom ?? defaultSpeakerName(row.speaker)),
+    }));
+  };
+  const rows = read(pass);
   if (rows.length || pass === "live") return rows;
-  return rawDb
-    .prepare("SELECT id, ord, start_ms, end_ms, text FROM meeting_segments WHERE meeting_id = ? AND pass = 'live' ORDER BY ord")
-    .all(meetingId) as unknown as SegmentRow[];
+  return read("live");
+};
+
+export const defaultSpeakerName = (index: number): string => `Speaker ${index + 1}`;
+
+/** Every speaker in a meeting with the name currently shown for each. */
+export const speakers = (meetingId: number): { index: number; name: string }[] => {
+  const used = rawDb
+    .prepare("SELECT DISTINCT speaker FROM meeting_segments WHERE meeting_id = ? AND pass = 'final' AND speaker IS NOT NULL ORDER BY speaker")
+    .all(meetingId) as { speaker: number }[];
+  const names = new Map(
+    (rawDb.prepare("SELECT idx, name FROM meeting_speakers WHERE meeting_id = ?").all(meetingId) as { idx: number; name: string }[]).map(
+      (r) => [r.idx, r.name],
+    ),
+  );
+  return used.map(({ speaker }) => ({ index: speaker, name: names.get(speaker) ?? defaultSpeakerName(speaker) }));
+};
+
+/** Name a speaker. An empty name clears it back to "Speaker N". */
+export const setSpeakerName = (meetingId: number, index: number, name: string): void => {
+  const clean = name.trim().slice(0, 80);
+  if (!clean) rawDb.prepare("DELETE FROM meeting_speakers WHERE meeting_id = ? AND idx = ?").run(meetingId, index);
+  else
+    rawDb
+      .prepare("INSERT INTO meeting_speakers (meeting_id, idx, name) VALUES (?,?,?) ON CONFLICT(meeting_id, idx) DO UPDATE SET name = excluded.name")
+      .run(meetingId, index, clean);
 };
 
 /**
@@ -250,7 +304,7 @@ export type ExtractionStatus = "running" | "done" | "failed";
  * noise with a timestamp, and pushing it at a human would spend the one thing the
  * confirmation queue runs on, which is their willingness to read it.
  */
-export type Verdict = "already-done" | "not-a-task" | "queued" | "unanchored" | "unverified";
+export type Verdict = "already-done" | "filed" | "not-a-task" | "queued" | "unanchored" | "unverified";
 
 export interface Decision {
   quote: null | string;
@@ -372,6 +426,11 @@ export const addWorkItem = (
       .run(meetingId, item.task, item.owner, item.quote, item.startMs, item.verdict, item.verdictNote).lastInsertRowid,
   );
 
+/** Re-rule a work item after the fact — used when a meeting is filed under a project late. */
+export const setWorkItemVerdict = (id: number, verdict: Verdict, note: null | string): void => {
+  rawDb.prepare("UPDATE meeting_work_items SET verdict = ?, verdict_note = ? WHERE id = ?").run(verdict, note, id);
+};
+
 export const setWorkItemConfirmation = (id: number, confirmationId: number): void => {
   rawDb.prepare("UPDATE meeting_work_items SET confirmation_id = ? WHERE id = ?").run(confirmationId, id);
 };
@@ -404,6 +463,10 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
   if (dryRun || n === 0) return n;
   rawDb
     .prepare("DELETE FROM meeting_segments WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
+    .run(cutoff);
+  // Speaker names go with the words they labelled.
+  rawDb
+    .prepare("DELETE FROM meeting_speakers WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
     .run(cutoff);
   rawDb
     .prepare(

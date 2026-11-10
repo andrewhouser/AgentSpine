@@ -424,15 +424,18 @@ final class APIClient {
 
     // MARK: - Tasks, files, clients, search
 
-    func todos(status: String = "open") async throws -> [TodoItem] {
-        try await send(request("/api/tasks", query: ["status": status]), as: [TodoItem].self)
+    func todos(status: String = "open", projectID: Int? = nil) async throws -> [TodoItem] {
+        var query = ["status": status]
+        if let projectID { query["projectId"] = String(projectID) }
+        return try await send(request("/api/tasks", query: query), as: [TodoItem].self)
     }
 
     /// `due` is plain words ("friday 3pm") or ISO; the server parses it and says so in a 400
     /// when it cannot, which is worth showing verbatim.
     @discardableResult
-    func addTodo(title: String, due: String?, waitingOn: String?) async throws -> TodoItem {
+    func addTodo(title: String, due: String?, waitingOn: String?, projectID: Int? = nil) async throws -> TodoItem {
         var body: [String: Any] = ["title": title]
+        if let projectID { body["projectId"] = projectID }
         if let due, !due.isEmpty { body["due"] = due }
         if let waitingOn, !waitingOn.isEmpty { body["waitingOn"] = waitingOn; body["kind"] = "followup" }
         return try await send(jsonRequest("/api/tasks", method: "POST", body: body), as: TodoItem.self)
@@ -745,6 +748,13 @@ final class APIClient {
 
     func stopMeeting() async throws {
         try await sendRaw(jsonRequest("/api/meetings/stop", method: "POST"))
+    }
+
+    /// Name a detected speaker; an empty name goes back to "Speaker N".
+    func renameSpeaker(_ meetingID: Int, index: Int, to name: String) async throws {
+        try await sendRaw(
+            jsonRequest("/api/meetings/\(meetingID)/speakers", method: "PATCH", body: ["index": index, "name": name])
+        )
     }
 
     func retitleMeeting(_ id: Int, to title: String) async throws {

@@ -32,6 +32,7 @@ import { subagent } from "./subagent.ts";
 import { clientList, clientUpsert, timeLog, timeReportTool } from "./clients.ts";
 import { sourceRead, sourcesList } from "./sources.ts";
 import { taskAdd, taskDone, taskList, taskUpdate } from "./tasks.ts";
+import { scaffoldIosApp } from "./scaffold-ios.ts";
 import { generateImage } from "./generate-image.ts";
 
 export const tools: Tool[] = [
@@ -49,6 +50,7 @@ export const tools: Tool[] = [
   editFile,
   moveFile,
   makeDir,
+  scaffoldIosApp,
   gmailSearch,
   calendarUpcoming,
   memorySave,

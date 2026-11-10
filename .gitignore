@@ -62,3 +62,6 @@ backups/
 # Files the assistant saves for you (write_file's default folder)
 docs/*
 !docs/PLAN-*.md
+
+# Python venv for the speaker-diarization helper (services/diarize).
+services/diarize/.venv/

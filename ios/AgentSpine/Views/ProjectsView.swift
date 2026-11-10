@@ -194,6 +194,7 @@ struct ProjectDetailView: View {
                 }
                 .disabled(addingSource || newPath.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+            ProjectTasksSection(projectID: projectID)
             if let threads = detail?.conversations, !threads.isEmpty {
                 Section("Threads") {
                     ForEach(threads) { thread in
@@ -279,6 +280,91 @@ struct ProjectDetailView: View {
                 projectID: projectID, path: newPath.trimmingCharacters(in: .whitespaces)
             ).summary
             newPath = ""
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// The project's own task list: what meetings filed here, plus anything added by hand.
+private struct ProjectTasksSection: View {
+    let projectID: Int
+    @State private var items: [TodoItem] = []
+    @State private var newTitle = ""
+    @State private var error: String?
+
+    var body: some View {
+        Section {
+            ForEach(items) { item in
+                HStack(alignment: .top, spacing: 10) {
+                    Button {
+                        Task { await toggle(item) }
+                    } label: {
+                        Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(item.isDone ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .strikethrough(item.isDone)
+                            .foregroundStyle(item.isDone ? .secondary : .primary)
+                        if let notes = item.notes, !notes.isEmpty {
+                            Text(notes).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", role: .destructive) { Task { await remove(item) } }
+                }
+            }
+            if items.isEmpty { Text("No tasks yet.").foregroundStyle(.secondary) }
+            HStack {
+                TextField("Add a task", text: $newTitle).onSubmit { Task { await add() } }
+                Button("Add") { Task { await add() } }
+                    .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+        } header: {
+            Text("Tasks")
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            items = try await APIClient.shared.todos(status: "all", projectID: projectID)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func add() async {
+        let title = newTitle.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return }
+        do {
+            try await APIClient.shared.addTodo(title: title, due: nil, waitingOn: nil, projectID: projectID)
+            newTitle = ""
+            error = nil
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func toggle(_ item: TodoItem) async {
+        do {
+            try await APIClient.shared.setTodoDone(item.id, done: !item.isDone)
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func remove(_ item: TodoItem) async {
+        do {
+            try await APIClient.shared.deleteTodo(item.id)
             await load()
         } catch {
             self.error = error.localizedDescription

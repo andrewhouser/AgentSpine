@@ -22,6 +22,7 @@ import type {
   Meeting,
   MeetingExtraction,
   MeetingSegment,
+  MeetingSpeaker,
   MeetingWorkItem,
   Memory,
   Project,
@@ -115,7 +116,7 @@ export const api = {
       { path },
     ),
   // --- tasks, files, clients, search (the personal-assistant surface) ---
-  addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; title: string; waitingOn?: string }) =>
+  addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; projectId?: number; title: string; waitingOn?: string }) =>
     post<Task>("/api/tasks", fields),
   /**
    * Accept one auto-approval proposal.
@@ -233,7 +234,8 @@ export const api = {
 
   listSchedules: () => request<Schedule[]>("/api/schedules"),
 
-  listTasks: (status: "all" | "done" | "open" = "open") => request<Task[]>(`/api/tasks?status=${status}`),
+  listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
+    request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
 
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
 
@@ -242,6 +244,7 @@ export const api = {
       extraction: MeetingExtraction | null;
       meeting: Meeting;
       segments: MeetingSegment[];
+      speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
 
@@ -299,6 +302,10 @@ export const api = {
 
   setMeetingTitle: (id: number, title: string) =>
     request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
+
+  /** Name a speaker in a finished meeting; an empty name goes back to "Speaker N". */
+  setSpeakerName: (id: number, index: number, name: string) =>
+    request<MeetingSpeaker[]>(`/api/meetings/${id}/speakers`, { body: JSON.stringify({ index, name }), method: "PATCH" }),
 
   /** Synthesise `text`. Resolves to WAV audio; rejects with the service's own reason. */
   speak: async (text: string): Promise<Blob> => {

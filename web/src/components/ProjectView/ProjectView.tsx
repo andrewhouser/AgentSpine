@@ -5,6 +5,7 @@ import type { Conversation, Project, ProjectSource } from "../../lib/types.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
+import { TasksView } from "../TasksView/TasksView.tsx";
 import styles from "./ProjectView.module.css";
 
 interface ProjectViewProps {
@@ -183,6 +184,11 @@ export const ProjectView = ({
           </button>
         </div>
         {error && <div className={styles.error}>{error}</div>}
+      </section>
+
+      <section>
+        <h2 className={styles.subhead}>Tasks</h2>
+        <TasksView embedded projectId={projectId} />
       </section>
 
       <section>

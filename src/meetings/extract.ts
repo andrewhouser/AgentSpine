@@ -48,6 +48,7 @@ import {
 import { chat, clientFor, extractJson } from "../llm.ts";
 import type { Msg } from "../llm.ts";
 import * as memory from "../memory/store.ts";
+import { addTask } from "../tasks/store.ts";
 import { route } from "../router.ts";
 import * as store from "./store.ts";
 
@@ -123,7 +124,9 @@ export const windowSegments = (segments: store.SegmentRow[], maxWords: number): 
 
 /** Timestamped transcript, so the model can locate what it quotes and a reader can check it. */
 export const render = (segments: store.SegmentRow[]): string =>
-  segments.map((s) => `[${clock(s.start_ms)}] ${s.text.trim()}`).join("\n");
+  segments
+    .map((s) => `[${clock(s.start_ms)}] ${s.speaker_name ? `${s.speaker_name}: ` : ""}${s.text.trim()}`)
+    .join("\n");
 
 /**
  * Where a quote actually occurs in the transcript, or null if it does not.
@@ -134,7 +137,20 @@ export const render = (segments: store.SegmentRow[]): string =>
  * merge two segments — while eight consecutive words is far more than a fabricated quote
  * lands by accident.
  */
-export const anchor = (quote: string, segments: store.SegmentRow[]): null | number => {
+export const stripLabel = (quote: string, segments: store.SegmentRow[]): string => {
+  let q = quote.trim().replace(/^\[\d+:\d{2}(?::\d{2})?\]\s*/, "");
+  for (const name of new Set(segments.map((s) => s.speaker_name).filter((n): n is string => !!n))) {
+    if (q.startsWith(`${name}:`)) {
+      q = q.slice(name.length + 1).trim();
+      break;
+    }
+  }
+  return q;
+};
+
+export const anchor = (rawQuote: string, segments: store.SegmentRow[]): null | number => {
+  // A model told to omit the "[0:12] Priya:" prefix still sometimes copies it.
+  const quote = stripLabel(rawQuote, segments);
   const words = normalize(quote).split(" ").filter(Boolean);
   if (!words.length) return null;
 
@@ -200,7 +216,7 @@ const think = async (messages: Msg[], maxTokens: number): Promise<string> => {
 /** Which model to record as having done the extraction. */
 export const extractionModel = (): string => (MEETING_EXTRACT_BASE_URL ? MEETING_EXTRACT_MODEL : "standard tier");
 
-const PROPOSE_SYSTEM = `You are reading a transcript of a meeting produced by speech recognition. It has no speaker labels and contains transcription errors.
+const PROPOSE_SYSTEM = `You are reading a transcript of a meeting produced by speech recognition. Lines may begin with a speaker label ("Priya:" or "Speaker 2:") from automatic speaker detection, which is usually right but not always; it also contains transcription errors.
 
 Return ONE JSON object with exactly these keys:
 
@@ -211,6 +227,8 @@ Return ONE JSON object with exactly these keys:
 
 Rules:
 - A decision is a choice the group settled on. Someone agreeing to do a piece of work is a work item, not a decision; do not list the same thing as both.
+- When a work item is clearly taken on by a labelled speaker ("I'll send it"), set owner to that speaker's label. Do not guess an owner the transcript does not support.
+- A quote is the words spoken, WITHOUT the "[0:12]" timestamp or the speaker label in front of them.
 - Every quote must be copied verbatim from the transcript. Do not tidy it, correct its grammar, or compose one. An item whose quote is not in the transcript is discarded.
 - A work item is a FUTURE commitment that is not yet done. Something described as already finished is NOT a work item however important it sounds: "we came up with guidelines", "we went git native", "we created templates" are accomplishments, not tasks.
 - Empty arrays are a normal and correct answer. Most passages of most meetings contain no work items at all.
@@ -453,6 +471,23 @@ export const extractMeeting = async (meetingId: number): Promise<ExtractionResul
         continue;
       }
 
+      // A project meeting's commitments belong on that project's task list, not in the
+      // approval box. They have already passed the anchor and strict checks, a task is
+      // reversible (delete it), and the project list is where they will be looked for.
+      if (meeting.project_id) {
+        const taskId = fileAsTask(meeting, candidate, startMs, meeting.project_id);
+        store.addWorkItem(meetingId, {
+          owner: candidate.owner,
+          quote: candidate.quote,
+          startMs,
+          task: candidate.task,
+          verdict: "filed",
+          verdictNote: `added to the project's tasks (#${taskId})`,
+        });
+        queued++;
+        continue;
+      }
+
       // Gate three: a human. Approving runs `memory_save`, which is the only way one of
       // these reaches long-term memory.
       const workItemId = store.addWorkItem(meetingId, {
@@ -515,4 +550,35 @@ const queueWorkItem = (meeting: store.MeetingRow, item: Candidate, startMs: numb
     },
     `Work item from "${where}": ${item.task}${item.owner ? ` (${item.owner})` : ""}`,
   );
+};
+
+const fileAsTask = (meeting: store.MeetingRow, item: Candidate, startMs: number, projectId: number): number => {
+  const where = meeting.title ?? `meeting ${meeting.id}`;
+  const notes = `From "${where}" on ${meeting.started.slice(0, 10)}, said at ${clock(startMs)}: "${item.quote}"`;
+  return addTask({
+    notes,
+    projectId,
+    title: item.owner ? `${item.task} (${item.owner})` : item.task,
+  });
+};
+
+/**
+ * A meeting is often filed under a project only after it ends, by which time its work items
+ * are already sitting in the approval box. Move the ones still pending onto the project's
+ * task list. Returns how many moved.
+ */
+export const fileQueuedItems = (meetingId: number, projectId: number): number => {
+  const meeting = store.getMeeting(meetingId);
+  if (!meeting) return 0;
+  let moved = 0;
+  for (const w of store.workItems(meetingId)) {
+    if (w.verdict !== "queued" || w.confirmation_id == null) continue;
+    const conf = memory.getConfirmation(w.confirmation_id);
+    if (!conf || conf.state !== "pending") continue;
+    const taskId = fileAsTask(meeting, { owner: w.owner, quote: w.quote ?? "", task: w.task }, w.start_ms ?? 0, projectId);
+    memory.setConfirmation(conf.id, "done", `filed as project task #${taskId}`);
+    store.setWorkItemVerdict(w.id, "filed", `added to the project's tasks (#${taskId})`);
+    moved++;
+  }
+  return moved;
 };

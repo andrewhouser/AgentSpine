@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { Status } from "../../hooks/useStatus.ts";
 import type { Conversation, Project } from "../../lib/types.ts";
 
@@ -48,6 +50,16 @@ const NAV: { key: View; label: string }[] = [
   { key: "settings", label: "Settings" },
 ];
 
+const COLLAPSE_KEY = "sidebar-nav-collapsed";
+
+const readCollapsed = (): boolean => {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
 export const Sidebar = ({
   activeConversation,
   activeProject,
@@ -62,7 +74,19 @@ export const Sidebar = ({
   projects,
   status,
   view,
-}: SidebarProps) => (
+}: SidebarProps) => {
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggle = (): void => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+    } catch {
+      // storage blocked: the toggle still works for this session
+    }
+  };
+
+  return (
   <nav className={styles.sidebar}>
     <div className={styles.head}>
       <span className={styles.brand}>AgentSpine</span>
@@ -106,6 +130,21 @@ export const Sidebar = ({
     </div>
 
     <div className={styles.nav}>
+      <button
+        aria-expanded={!collapsed}
+        className={styles.navToggle}
+        onClick={toggle}
+        title={collapsed ? "Show menu" : "Hide menu"}
+        type="button"
+      >
+        <span>Menu</span>
+        {collapsed && status.pendingConfirmations > 0 && (
+          <span className={styles.badge}>{status.pendingConfirmations}</span>
+        )}
+        <span className={styles.chevron}>{collapsed ? "▴" : "▾"}</span>
+      </button>
+      {!collapsed && (
+        <div className={styles.navGrid}>
       {NAV.map((item) => (
         <button
           className={`${styles.navItem} ${view === item.key ? styles.navActive : ""}`}
@@ -120,8 +159,11 @@ export const Sidebar = ({
           )}
         </button>
       ))}
+        </div>
+      )}
     </div>
 
     <StatusIndicator status={status} />
   </nav>
-);
+  );
+};

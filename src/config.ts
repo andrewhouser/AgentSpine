@@ -588,6 +588,17 @@ export const WHISPER_FINAL_MODEL = env.WHISPER_FINAL_MODEL ?? "ggml-large-v3-tur
  */
 export const MEETING_CHUNK_SECONDS = Number(env.MEETING_CHUNK_SECONDS ?? "5");
 /**
+ * Speaker detection (diarization) on the final transcript. Runs services/diarize/diarize.py
+ * in its own venv (sherpa-onnx, CPU, no accounts); see services/diarize/README.md. When it is
+ * unavailable the transcript is still split into sentences, just without speaker labels.
+ */
+export const DIARIZE_ENABLED = (env.DIARIZE_ENABLED ?? "true") !== "false";
+export const DIARIZE_PYTHON = env.DIARIZE_PYTHON ?? path.join(import.meta.dirname, "..", "services", "diarize", ".venv", "bin", "python");
+export const DIARIZE_SCRIPT = env.DIARIZE_SCRIPT ?? path.join(import.meta.dirname, "..", "services", "diarize", "diarize.py");
+export const DIARIZE_MODEL_DIR = env.DIARIZE_MODEL_DIR ?? path.join(os.homedir(), ".diarize-models");
+/** Known number of speakers, or 0 to detect. Pinning it is the most reliable accuracy lever. */
+export const DIARIZE_SPEAKERS = Number(env.DIARIZE_SPEAKERS ?? "0");
+/**
  * Hard ceiling on a single meeting, in minutes. Audio is held in memory (16kHz mono is
  * ~1.9 MB/minute), so this is also the memory ceiling: 4 hours is ~460 MB. The real reason
  * it exists is a capture that was never stopped — a forgotten recording is both a privacy

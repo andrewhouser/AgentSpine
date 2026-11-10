@@ -51,6 +51,7 @@ import path from "node:path";
 import { COMMAND_MAX_TIMEOUT_MS, COMMAND_OUTPUT_CHARS, COMMAND_OUTPUT_PASS_CHARS, COMMAND_TIMEOUT_MS } from "../config.ts";
 import { expand, real } from "../fs-scope.ts";
 import { clip } from "../stash.ts";
+import { writeDefaultDir } from "./write-file.ts";
 import type { BuildRepo, ClassifiedAction, DeclaredCommand, Policy, PolicyDecision, Tool } from "../types.ts";
 import { summarise, type CommandResult } from "./command-output.ts";
 
@@ -81,6 +82,25 @@ export const findRepo = (policy: Policy, target: string): null | ResolvedRepo =>
   }
   return best;
 };
+
+/**
+ * The repo a call means. An explicit `repo` wins; otherwise the folder this chat writes into
+ * (the project's folder), if it sits inside a declared repo. Without this a model working in
+ * MetronomeApp that forgot to restate the path got AgentSpine's own repo — the only one it had
+ * seen in commands_list — and was told "build" does not exist there.
+ */
+export const repoArg = (policy: Policy, a: any): string => {
+  const given = String(a?.repo ?? "").trim();
+  if (given) return given;
+  const dflt = writeDefaultDir();
+  return findRepo(policy, dflt) ? dflt : "";
+};
+
+/** Declared repos that DO have a command of this name — for a denial that points somewhere. */
+const reposWith = (policy: Policy, name: string): string[] =>
+  Object.entries(policy.build?.repos ?? {})
+    .filter(([, conf]) => conf.commands?.[name])
+    .map(([declared]) => declared);
 
 const commandNames = (conf: BuildRepo): string[] => Object.keys(conf.commands ?? {}).sort();
 
@@ -195,29 +215,29 @@ export const runCommand: Tool = {
     "check, a linter, a build — and read what it printed. You choose the repo and the " +
     "command NAME; you cannot supply a command line. Call commands_list first to see what " +
     "exists. Use it after every edit: a change you have not run is not a result.",
-  argsSchema: '{ "repo": string, "name": string }',
+  argsSchema: '{ "repo"?: string, "name": string }',
   classify: (a): ClassifiedAction => ({
     // Reversible: the argv is the user's, declared in policy, and running it again produces
     // the same effect. See the header for why this classification is the load-bearing one.
     reversibility: "reversible",
-    summary: `Run "${a?.name ?? ""}" in ${a?.repo ?? ""}`,
-    target: `${expand(a?.repo ?? "")}#${a?.name ?? ""}`,
+    summary: `Run "${a?.name ?? ""}" in ${a?.repo || writeDefaultDir()}`,
+    target: `${expand(a?.repo || writeDefaultDir())}#${a?.name ?? ""}`,
   }),
   checkPolicy: (policy, a): PolicyDecision => {
     if (!policy.build?.enabled)
       return { allowed: false, reason: "policy.build.enabled is not set — no commands may run (deny by default)." };
 
-    const repoArg = String(a?.repo ?? "");
+    const repoGiven = repoArg(policy, a);
     const name = String(a?.name ?? "");
-    if (!repoArg) return { allowed: false, reason: "no repo given. Call commands_list to see the declared repos." };
+    if (!repoGiven) return { allowed: false, reason: "no repo given. Call commands_list to see the declared repos." };
     if (!name) return { allowed: false, reason: "no command name given. Call commands_list to see what is declared." };
 
-    const found = findRepo(policy, repoArg);
+    const found = findRepo(policy, repoGiven);
     if (!found)
       return {
         allowed: false,
         reason:
-          `${expand(repoArg)} is not inside any repo declared in policy.build.repos (deny by default). ` +
+          `${expand(repoGiven)} is not inside any repo declared in policy.build.repos (deny by default). ` +
           `Declared: ${Object.keys(policy.build.repos ?? {}).join(", ") || "(none)"}.`,
       };
 
@@ -227,6 +247,9 @@ export const runCommand: Tool = {
         allowed: false,
         reason:
           `"${name}" is not declared for ${found.root}. Available: ${commandNames(found.conf).join(", ") || "(none)"}. ` +
+          (reposWith(policy, name).length
+            ? `"${name}" IS declared for ${reposWith(policy, name).join(", ")} — if that is the project you are working in, pass it as "repo". `
+            : "") +
           `A command has to be added to policy.json by hand — you cannot create one.`,
       };
     if (!Array.isArray(declared.argv) || !declared.argv.length || typeof declared.argv[0] !== "string")
@@ -235,7 +258,7 @@ export const runCommand: Tool = {
     return { allowed: true, reason: `declared as "${name}" for ${found.root}` };
   },
   run: async (a, ctx) => {
-    const found = findRepo(ctx.policy, String(a?.repo ?? ""));
+    const found = findRepo(ctx.policy, repoArg(ctx.policy, a));
     // checkPolicy has already proved both of these; the guards are here so this function is
     // honest on its own rather than relying on its caller's order of operations.
     if (!found) return "DENIED: no declared repo for that path.";
