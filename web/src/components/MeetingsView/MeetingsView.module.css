@@ -588,3 +588,35 @@
 .linkButton:hover:not(:disabled) {
   text-decoration: underline;
 }
+
+.tagBar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.tag {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 10px;
+}
+
+button.tag {
+  cursor: pointer;
+}
+
+.tagOn {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.tagBar .linkButton {
+  font-size: 12px;
+}

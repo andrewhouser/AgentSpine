@@ -223,7 +223,15 @@ export const api = {
 
   listFiles: () => request<SavedFile[]>("/api/files"),
 
-  listMeetings: (limit = 50) => request<Meeting[]>(`/api/meetings?limit=${limit}`),
+  listMeetings: (limit = 50, tags: string[] = []) =>
+    request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
+
+  /** Every meeting tag in use, with counts. */
+  meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),
+
+  /** Replace a meeting's tags. */
+  setMeetingTags: (id: number, tags: string[]) =>
+    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
 
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),

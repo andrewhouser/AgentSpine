@@ -351,6 +351,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<null | string>(null);
   const [open, setOpen] = useState<null | number>(null);
+  const [filterTags, setFilterTags] = useState<string[]>([]);
   const [detail, setDetail] = useState<MeetingDetail>(NO_DETAIL);
   // Fixed at mount: "has this recording expired" is judged against when you opened the page.
   const [openedAt] = useState(() => Date.now());
@@ -477,6 +478,20 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     await api.setSpeakerName(meetingId, turn.speaker, next);
     await load(meetingId);
   };
+
+  const editTags = async (m: Meeting): Promise<void> => {
+    const next = window.prompt("Tags, comma separated (e.g. standup, hooks)", (m.tags ?? []).join(", "));
+    if (next === null) return;
+    await api.setMeetingTags(m.id, next.split(","));
+    reloadMeetings();
+  };
+
+  const toggleFilter = (tag: string): void =>
+    setFilterTags((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]));
+
+  const allTags = [...new Set(meetings.flatMap((m) => m.tags ?? []))].sort();
+  // A meeting must carry every selected tag, matching what the assistant's meeting_list does.
+  const shown = meetings.filter((m) => filterTags.every((t) => (m.tags ?? []).includes(t)));
 
   const reprocess = async (id: number): Promise<void> => {
     const answer = window.prompt(
@@ -608,8 +623,31 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
 
       <h2 className={styles.subhead}>Recorded</h2>
       {meetings.length === 0 && <div className={styles.empty}>Nothing recorded yet.</div>}
+      {meetings.length > 0 && shown.length === 0 && (
+        <div className={styles.empty}>No meetings have all of: {filterTags.join(", ")}.</div>
+      )}
+      {allTags.length > 0 && (
+        <div className={styles.tagBar}>
+          {allTags.map((t) => (
+            <button
+              aria-pressed={filterTags.includes(t)}
+              className={`${styles.tag} ${filterTags.includes(t) ? styles.tagOn : ""}`}
+              key={t}
+              onClick={() => toggleFilter(t)}
+              type="button"
+            >
+              {t}
+            </button>
+          ))}
+          {filterTags.length > 0 && (
+            <button className={styles.linkButton} onClick={() => setFilterTags([])} type="button">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
-      {meetings.map((m) => (
+      {shown.map((m) => (
         <div className={styles.row} key={m.id}>
           <div className={styles.rowHead}>
             <button className={styles.rowTitle} onClick={() => void openMeeting(m.id)} type="button">
@@ -641,6 +679,17 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className={styles.tagBar}>
+            {(m.tags ?? []).map((t) => (
+              <span className={styles.tag} key={t}>
+                {t}
+              </span>
+            ))}
+            <button className={styles.linkButton} onClick={() => void editTags(m)} type="button">
+              {(m.tags ?? []).length ? "Edit tags" : "Add tags"}
+            </button>
           </div>
 
           {m.note && <div className={styles.rowNote}>{m.note}</div>}

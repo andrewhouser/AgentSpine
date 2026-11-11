@@ -936,15 +936,22 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (m === "GET" && seg.length === 3 && seg[2] === "stream")
         return streamMeetings(req, res, Number(url.searchParams.get("after") ?? -1));
 
+      // /api/meetings/tags — every tag in use, with counts
+      if (m === "GET" && seg.length === 3 && seg[2] === "tags") return sendJson(res, 200, meetingStore.allTags());
+
+      // GET /api/meetings?tag=a,b&since=ISO — `tag` takes a comma list; a meeting must have all
       if (m === "GET" && seg.length === 2) {
         const projectId = url.searchParams.get("project");
+        const tag = url.searchParams.get("tag");
         return sendJson(
           res,
           200,
-          meetingStore.listMeetings(
-            Number(url.searchParams.get("limit") ?? 50),
-            projectId === null ? undefined : Number(projectId),
-          ),
+          meetingStore.findMeetings({
+            limit: Number(url.searchParams.get("limit") ?? 50),
+            projectId: projectId === null ? undefined : Number(projectId),
+            since: url.searchParams.get("since") ?? undefined,
+            tags: tag ? tag.split(",") : [],
+          }),
         );
       }
 
@@ -1062,6 +1069,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const meeting = meetingStore.getMeeting(id);
         if (!meeting) return sendJson(res, 404, { error: "no such meeting" });
         if (typeof b?.title === "string") meetingStore.setTitle(id, b.title);
+        if (Array.isArray(b?.tags)) meetingStore.setTags(id, b.tags.map(String));
         if (b && "projectId" in b) {
           const projectId = b.projectId == null ? null : Number(b.projectId);
           meetingStore.setProject(id, projectId);

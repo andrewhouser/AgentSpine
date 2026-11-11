@@ -175,6 +175,7 @@ export interface Meeting {
   project_id: null | number;
   started: string;
   status: MeetingStatus;
+  tags?: string[];
   title: null | string;
   transcribed_at: null | string;
   word_count: number;

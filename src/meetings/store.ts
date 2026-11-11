@@ -96,6 +96,12 @@ rawDb.exec(`
     confirmation_id INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_work_items_meeting ON meeting_work_items (meeting_id);
+  CREATE TABLE IF NOT EXISTS meeting_tags (
+    meeting_id INTEGER NOT NULL,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (meeting_id, tag)
+  );
+  CREATE INDEX IF NOT EXISTS idx_meeting_tags_tag ON meeting_tags (tag);
 `);
 
 // Databases created before speaker detection have no `speaker` column.
@@ -127,6 +133,8 @@ export interface MeetingRow {
   project_id: null | number;
   started: string;
   status: MeetingStatus;
+  /** Lowercase labels, sorted. Filled in by the list/get readers below. */
+  tags?: string[];
   title: null | string;
   transcribed_at: null | string;
   word_count: number;
@@ -151,15 +159,82 @@ export const startMeeting = (device: string, projectId: null | number, title?: s
       .run(projectId, title ?? null, device, now()).lastInsertRowid,
   );
 
-export const getMeeting = (id: number): MeetingRow | undefined =>
-  rawDb.prepare("SELECT * FROM meetings WHERE id = ?").get(id) as MeetingRow | undefined;
+/** Tags are case-insensitive labels: trimmed, lowercased, inner whitespace collapsed to "-". */
+export const normalizeTag = (raw: string): string =>
+  raw.trim().toLowerCase().replace(/^#/, "").replace(/\s+/g, "-").slice(0, 40);
 
-export const listMeetings = (limit = 50, projectId?: number): MeetingRow[] =>
-  (projectId === undefined
-    ? rawDb.prepare("SELECT * FROM meetings ORDER BY id DESC LIMIT ?").all(limit)
-    : rawDb
-        .prepare("SELECT * FROM meetings WHERE project_id = ? ORDER BY id DESC LIMIT ?")
-        .all(projectId, limit)) as unknown as MeetingRow[];
+const tagMap = (ids: number[]): Map<number, string[]> => {
+  const map = new Map<number, string[]>();
+  if (!ids.length) return map;
+  const rows = rawDb
+    .prepare(`SELECT meeting_id, tag FROM meeting_tags WHERE meeting_id IN (${ids.map(() => "?").join(",")}) ORDER BY tag`)
+    .all(...ids) as { meeting_id: number; tag: string }[];
+  for (const r of rows) map.set(r.meeting_id, [...(map.get(r.meeting_id) ?? []), r.tag]);
+  return map;
+};
+
+const withTags = (rows: MeetingRow[]): MeetingRow[] => {
+  const tags = tagMap(rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, tags: tags.get(r.id) ?? [] }));
+};
+
+export const getMeeting = (id: number): MeetingRow | undefined => {
+  const row = rawDb.prepare("SELECT * FROM meetings WHERE id = ?").get(id) as MeetingRow | undefined;
+  return row ? withTags([row])[0] : undefined;
+};
+
+export interface MeetingFilter {
+  /** Only meetings started at or after this ISO time. */
+  since?: string;
+  /** Only meetings started before this ISO time. */
+  until?: string;
+  limit?: number;
+  projectId?: number;
+  /** Meetings must carry every one of these tags. */
+  tags?: string[];
+}
+
+export const listMeetings = (limit = 50, projectId?: number, tags: string[] = []): MeetingRow[] =>
+  findMeetings({ limit, projectId, tags });
+
+export const findMeetings = (f: MeetingFilter = {}): MeetingRow[] => {
+  const where: string[] = [];
+  const args: (number | string)[] = [];
+  if (f.projectId !== undefined) (where.push("project_id = ?"), args.push(f.projectId));
+  if (f.since) (where.push("started >= ?"), args.push(f.since));
+  if (f.until) (where.push("started < ?"), args.push(f.until));
+  const tags = [...new Set((f.tags ?? []).map(normalizeTag).filter(Boolean))];
+  if (tags.length) {
+    where.push(
+      `id IN (SELECT meeting_id FROM meeting_tags WHERE tag IN (${tags.map(() => "?").join(",")}) GROUP BY meeting_id HAVING COUNT(*) = ?)`,
+    );
+    args.push(...tags, tags.length);
+  }
+  const sql = `SELECT * FROM meetings${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY id DESC LIMIT ?`;
+  return withTags(rawDb.prepare(sql).all(...args, f.limit ?? 50) as unknown as MeetingRow[]);
+};
+
+/** Replace a meeting's tags wholesale. Returns the normalized set stored. */
+export const setTags = (meetingId: number, tags: string[]): string[] => {
+  const clean = [...new Set(tags.map(normalizeTag).filter(Boolean))].sort().slice(0, 20);
+  rawDb.exec("BEGIN");
+  try {
+    rawDb.prepare("DELETE FROM meeting_tags WHERE meeting_id = ?").run(meetingId);
+    const ins = rawDb.prepare("INSERT INTO meeting_tags (meeting_id, tag) VALUES (?,?)");
+    for (const t of clean) ins.run(meetingId, t);
+    rawDb.exec("COMMIT");
+  } catch (err) {
+    rawDb.exec("ROLLBACK");
+    throw err;
+  }
+  return clean;
+};
+
+/** Every tag in use with how many meetings carry it, most used first. */
+export const allTags = (): { count: number; tag: string }[] =>
+  rawDb
+    .prepare("SELECT tag, COUNT(*) AS count FROM meeting_tags GROUP BY tag ORDER BY count DESC, tag")
+    .all() as unknown as { count: number; tag: string }[];
 
 /**
  * The one meeting that may be capturing right now. There is one microphone, so this is a
