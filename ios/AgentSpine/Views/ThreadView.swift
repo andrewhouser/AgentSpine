@@ -43,12 +43,12 @@ struct ThreadView: View {
                         ErrorNotice(message: error) { Task { await load() } }
                     }
 
-                    ForEach(thread?.turns ?? []) { turn in
+                    ForEach(ledgerTurns) { turn in
                         TurnView(turn: turn, projectID: thread?.conversation.projectID)
                             .id("turn-\(turn.id)")
                     }
 
-                    if stream.isLive || stream.transportNote != nil {
+                    if showsLiveTurn {
                         LiveTurnView(task: liveTask ?? "", stream: stream)
                             .id("live")
                     }
@@ -102,6 +102,22 @@ struct ThreadView: View {
                 Task { await send(spoken: true) }
             }
         }
+    }
+
+    /// Whether the turn in flight is being drawn from the stream.
+    private var showsLiveTurn: Bool { stream.isLive || stream.transportNote != nil }
+
+    /// The finished turns, minus the one the live view is already drawing.
+    ///
+    /// The ledger carries a run from the moment it is created, not from the moment it ends, so
+    /// any reload that happens while a run is in flight returns that run as a turn — which is
+    /// every time a thread is opened on a run started elsewhere, the first message of a new
+    /// thread included. Without this the message would be drawn twice: once as a finished-looking
+    /// turn, once above the live step counter.
+    private var ledgerTurns: [Turn] {
+        let turns = thread?.turns ?? []
+        guard showsLiveTurn, let live = stream.runID else { return turns }
+        return turns.filter { $0.id != live }
     }
 
     private var handsFreeButton: some View {

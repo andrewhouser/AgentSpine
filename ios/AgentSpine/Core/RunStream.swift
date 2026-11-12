@@ -53,7 +53,9 @@ final class RunStream {
 
     private var task: Task<Void, Never>?
     private var lastSeq = -1
-    private var runID: Int?
+    /// The run being streamed. Read by the thread so the same turn is not drawn twice — once
+    /// from the ledger and once from here — when a reload finds the run already in flight.
+    private(set) var runID: Int?
 
     var isLive: Bool {
         switch phase {
