@@ -177,7 +177,10 @@ export const startMeeting = async (
   }
 
   active = { cards: startCards(meetingId), listener, meetingId };
-  if (policy.audio?.announce !== false) announce("This meeting is being transcribed.");
+  // Off unless `audio.announce` is explicitly true. The spoken line is for rooms where the
+  // people being recorded would not otherwise know; it is not wanted on a machine capturing
+  // its own operator, so enabling it is a deliberate act rather than something to turn off.
+  if (policy.audio?.announce === true) announce("This meeting is being transcribed.");
   emit({ kind: "status", meetingId, note: `recording from ${opts.device}`, status: "recording" });
   return { meetingId };
 };

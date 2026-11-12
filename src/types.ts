@@ -122,9 +122,11 @@ export interface Policy {
    * default for reading public web pages and an unreasonable one for a microphone, where
    * the failure mode is recording a room nobody agreed to record.
    *
-   * `announce` makes the capture say so out loud when it starts. Recording other people is
-   * the one capability here whose risk lands on someone who is not the operator, and they
-   * cannot object to something they do not know is happening.
+   * `announce` makes the capture say so out loud when it starts, for a room where the people
+   * being recorded would not otherwise know — recording other people is the one capability
+   * here whose risk lands on someone who is not the operator. It is off unless set to exactly
+   * `true`: a Mac capturing its own operator has nobody to tell, and a line spoken into the
+   * room is the wrong default for that, which is the common case.
    */
   audio?: { enabled: boolean; devices: string[]; announce?: boolean };
   /**

@@ -40,7 +40,7 @@ if (command === "devices") {
   const allowed = policy.audio?.devices ?? [];
 
   console.log(`policy.audio.enabled: ${policy.audio?.enabled === true}`);
-  console.log(`announce on start:    ${policy.audio?.announce !== false}\n`);
+  console.log(`announce on start:    ${policy.audio?.announce === true}\n`);
 
   if (!found.length) {
     console.log("ffmpeg reported no audio input devices.");
@@ -54,7 +54,7 @@ if (command === "devices") {
   const ungranted = found.filter((n) => !allowed.includes(n));
   if (ungranted.length) {
     console.log(`\nTo allow one, add it to policy.json:\n`);
-    console.log(`  "audio": { "enabled": true, "devices": ${JSON.stringify([ungranted[0]])}, "announce": true }`);
+    console.log(`  "audio": { "enabled": true, "devices": ${JSON.stringify([ungranted[0]])} }`);
   }
 } else if (command === "status") {
   const policy = loadPolicy();

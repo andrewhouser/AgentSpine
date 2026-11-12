@@ -867,7 +867,9 @@ npm run tick | loop    # legacy single-goal heartbeat
 > 1. **`policy.audio` inverts the allowlist convention.** `devices: []` means **no**
 >    microphone, not any. An empty allowlist is a fine default for reading public web pages
 >    and a bad one for a microphone, where the cost of being wrong lands on people who never
->    agreed to be recorded. `announce` speaks a line on start for the same reason.
+>    agreed to be recorded. `announce` speaks a line on start for the same reason, but it is
+>    opt-in (exactly `true`) rather than on by default: the common case is capturing your own
+>    meeting on your own Mac, where there is nobody to tell and the line is just noise.
 > 2. **The UI click is the consent; the tool call is not.** Starting capture from the
 >    dashboard runs directly — a human pressing Record has already given the only consent the
 >    queue collects, and routing it through an approval they must then go and grant is
