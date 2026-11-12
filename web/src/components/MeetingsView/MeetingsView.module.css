@@ -580,6 +580,13 @@
   padding: 0;
 }
 
+/* Sits with the other .linkButton rules rather than down with the tag bar, so the
+   .linkButton selectors stay in ascending specificity order — stylelint's
+   no-descending-specificity. It only sets a size, so it collides with none of them. */
+.tagBar .linkButton {
+  font-size: 12px;
+}
+
 .linkButton:disabled {
   color: var(--text-faint);
   cursor: default;
@@ -615,8 +622,4 @@ button.tag {
   background: var(--accent-soft);
   border-color: var(--accent-line);
   color: var(--accent);
-}
-
-.tagBar .linkButton {
-  font-size: 12px;
 }

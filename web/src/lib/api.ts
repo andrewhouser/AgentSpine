@@ -226,13 +226,6 @@ export const api = {
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
 
-  /** Every meeting tag in use, with counts. */
-  meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),
-
-  /** Replace a meeting's tags. */
-  setMeetingTags: (id: number, tags: string[]) =>
-    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
-
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
 
@@ -262,6 +255,9 @@ export const api = {
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
+
+  /** Every meeting tag in use, with counts. */
+  meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),
 
   /**
    * What to say aloud for a reply: cleaned of markup and cut into pieces to synthesise in turn,
@@ -314,6 +310,10 @@ export const api = {
   /** File a finished meeting under a project — this is what indexes its transcript. */
   setMeetingProject: (id: number, projectId: null | number) =>
     request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ projectId }), method: "PATCH" }),
+
+  /** Replace a meeting's tags. */
+  setMeetingTags: (id: number, tags: string[]) =>
+    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
 
   setMeetingTitle: (id: number, title: string) =>
     request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
