@@ -724,10 +724,12 @@ final class APIClient {
     // stream: a phone cannot hold a connection through a lock, a backgrounding and a cell
     // handoff.
 
-    func meetings(limit: Int = 50) async throws -> [Meeting] {
-        try await send(
-            request("/api/meetings", query: ["limit": String(limit)]), as: [Meeting].self
-        )
+    /// `tags` narrows the history to meetings carrying *every* one of them, which is how the
+    /// server reads the comma list and how the assistant's `meeting_list` tool filters too.
+    func meetings(limit: Int = 50, tags: [String] = []) async throws -> [Meeting] {
+        var query = ["limit": String(limit)]
+        if !tags.isEmpty { query["tag"] = tags.joined(separator: ",") }
+        return try await send(request("/api/meetings", query: query), as: [Meeting].self)
     }
 
     func meetingLive() async throws -> MeetingLiveStatus {
@@ -777,6 +779,25 @@ final class APIClient {
 
     func retitleMeeting(_ id: Int, to title: String) async throws {
         try await sendRaw(jsonRequest("/api/meetings/\(id)", method: "PATCH", body: ["title": title]))
+    }
+
+    /// Every tag in use with how many meetings carry it, most used first.
+    func meetingTags() async throws -> [MeetingTagCount] {
+        try await send(request("/api/meetings/tags"), as: [MeetingTagCount].self)
+    }
+
+    /// Replace a meeting's tags wholesale — there is no add/remove route, so a caller sends
+    /// the whole set it wants.
+    ///
+    /// Returns the set the server actually stored, which is not necessarily what went in: it
+    /// lower-cases, trims, de-duplicates, sorts and caps at 20. Render from the return value
+    /// rather than from what was typed, or the screen quietly disagrees with the database.
+    @discardableResult
+    func setMeetingTags(_ id: Int, to tags: [String]) async throws -> [String] {
+        try await send(
+            jsonRequest("/api/meetings/\(id)", method: "PATCH", body: ["tags": tags]),
+            as: Meeting.self
+        ).tagList
     }
 
     /// Pass nil to take it out of its project. Filing a finished meeting indexes its

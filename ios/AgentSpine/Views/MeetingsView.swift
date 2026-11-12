@@ -11,6 +11,11 @@ struct MeetingsView: View {
     @State private var loading = false
     @State private var showStart = false
     @State private var stopping = false
+    /// The one tag the history is narrowed to, or nil for everything. The server can filter
+    /// on several at once; one is all a phone-sized toolbar menu can express, and in practice
+    /// one tag is already a short enough list to scroll.
+    @State private var filterTag: String?
+    @State private var tagCounts: [MeetingTagCount] = []
 
     var body: some View {
         List {
@@ -53,16 +58,41 @@ struct MeetingsView: View {
                                 Text(SpineDate.relative(meeting.started))
                             }
                             .font(.caption).foregroundStyle(.secondary)
+                            if !meeting.tagList.isEmpty {
+                                Text(meeting.tagList.joined(separator: " · "))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
                 if meetings.isEmpty && !loading && error == nil {
-                    Text("No meetings yet.").foregroundStyle(.secondary)
+                    Text(emptyMessage).foregroundStyle(.secondary)
                 }
+            } header: {
+                if let filterTag { Text("Tagged “\(filterTag)”") }
             }
         }
         .navigationTitle("Meetings")
         .toolbar {
+            if !tagCounts.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        // A Picker inside the menu gives the checkmark on the active tag for
+                        // free, so the toolbar icon is not the only sign a filter is on.
+                        Picker("Tag", selection: $filterTag) {
+                            Text("All meetings").tag(String?.none)
+                            ForEach(tagCounts) { entry in
+                                Text("\(entry.tag) (\(entry.count))").tag(String?.some(entry.tag))
+                            }
+                        }
+                    } label: {
+                        Image(systemName: filterTag == nil
+                              ? "line.3.horizontal.decrease.circle"
+                              : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .accessibilityLabel("Filter by tag")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showStart = true } label: { Image(systemName: "mic.badge.plus") }
                     .disabled(live?.recording == true)
@@ -72,6 +102,7 @@ struct MeetingsView: View {
         .sheet(isPresented: $showStart) {
             StartMeetingSheet { await load() }
         }
+        .onChange(of: filterTag) { Task { await load() } }
         .refreshable { await load() }
         .task {
             // Poll the live snapshot while this screen is up; `.task` cancels on disappear.
@@ -79,6 +110,11 @@ struct MeetingsView: View {
                 await load()
                 try? await Task.sleep(for: .seconds(live?.recording == true ? 3 : 15))
             }
+        }
+        .task {
+            // Not in the poll loop: the vocabulary only changes when someone edits tags, and
+            // this re-runs on the way back from a detail screen, which is exactly when it did.
+            tagCounts = (try? await APIClient.shared.meetingTags()) ?? []
         }
         .overlay { if loading && meetings.isEmpty { ProgressView() } }
     }
@@ -88,11 +124,18 @@ struct MeetingsView: View {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
+    private var emptyMessage: String {
+        if let filterTag { return "No meetings tagged “\(filterTag)”." }
+        return "No meetings yet."
+    }
+
     private func load() async {
         loading = true
         defer { loading = false }
         do {
-            async let list = APIClient.shared.meetings()
+            // Filtering happens on the server, not here: it is one query parameter, and it
+            // means the `limit` window holds 50 matches rather than 50 of everything.
+            async let list = APIClient.shared.meetings(tags: filterTag.map { [$0] } ?? [])
             async let status = APIClient.shared.meetingLive()
             (meetings, live) = try await (list, status)
             error = nil
@@ -203,8 +246,19 @@ struct MeetingDetailView: View {
     @State private var extracting = false
     @State private var coach: CoachState?
     @State private var asking = false
+    /// What the server last said this meeting's tags are — set from a load or from the reply
+    /// to an edit, never from what was typed. See `setTags`.
+    @State private var tags: [String] = []
+    @State private var tagCounts: [MeetingTagCount] = []
+    @State private var addingTag = false
+    @State private var newTag = ""
+    @State private var savingTags = false
 
     private var recording: Bool { detail?.meeting.isRecording == true }
+    /// The tags on offer when adding: in use somewhere, but not already on this meeting.
+    private var offerableTags: [MeetingTagCount] {
+        tagCounts.filter { !tags.contains($0.tag) }
+    }
 
     var body: some View {
         List {
@@ -213,6 +267,7 @@ struct MeetingDetailView: View {
             }
             if let detail {
                 header(detail.meeting)
+                tagsSection(detail.meeting)
                 if recording { coachSection }
                 if recording, let cards { contextSection(cards) }
                 if let extraction = detail.extraction { summarySection(extraction) }
@@ -249,6 +304,14 @@ struct MeetingDetailView: View {
             Button("Save") { Task { await rename() } }
             Button("Cancel", role: .cancel) {}
         }
+        .alert("Add tag", isPresented: $addingTag) {
+            TextField("Tag", text: $newTag)
+            Button("Add") { Task { await setTags(tags + [newTag]) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("One label, like “standup”. The server lower-cases it and turns spaces into "
+                 + "dashes, so what appears afterwards may not be exactly what you typed.")
+        }
         .alert("Re-run transcript", isPresented: $reprocessing) {
             TextField("People in the meeting (blank = detect)", text: $headCount)
                 .keyboardType(.numberPad)
@@ -278,6 +341,10 @@ struct MeetingDetailView: View {
                 try? await Task.sleep(for: .seconds(busy ? 4 : 30))
             }
         }
+        .task {
+            // Fetched once rather than on every poll: this is only the list of tags to offer.
+            tagCounts = (try? await APIClient.shared.meetingTags()) ?? []
+        }
     }
 
     private func header(_ meeting: Meeting) -> some View {
@@ -295,6 +362,55 @@ struct MeetingDetailView: View {
             }
             if let note = meeting.note, !note.isEmpty {
                 Text(note).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// A finished meeting's tags, with one add and one remove.
+    ///
+    /// Hidden while recording: tags are how you find a meeting again afterwards, and there is
+    /// nothing to find until it has stopped. The server will happily tag a live one.
+    @ViewBuilder
+    private func tagsSection(_ meeting: Meeting) -> some View {
+        if !meeting.isRecording {
+            Section {
+                ForEach(tags, id: \.self) { tag in
+                    HStack {
+                        Label(tag, systemImage: "tag")
+                        Spacer()
+                        Button(role: .destructive) {
+                            Task { await setTags(tags.filter { $0 != tag }) }
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(savingTags)
+                        .accessibilityLabel("Remove tag \(tag)")
+                    }
+                }
+                Menu {
+                    // The tags already in use come first so the vocabulary stays small: left
+                    // to retyping, "hooks" and "hook" both end up in the list within a week.
+                    ForEach(offerableTags) { entry in
+                        Button("\(entry.tag) (\(entry.count))") {
+                            Task { await setTags(tags + [entry.tag]) }
+                        }
+                    }
+                    Button("New tag…") { newTag = ""; addingTag = true }
+                } label: {
+                    HStack {
+                        Label("Add tag", systemImage: "plus.circle")
+                        Spacer()
+                        if savingTags { ProgressView() }
+                    }
+                }
+                .disabled(savingTags)
+            } header: {
+                Text("Tags")
+            } footer: {
+                Text("Lower-cased, de-duplicated and sorted by the server, up to 20 per "
+                     + "meeting. They filter the meetings list here and in the dashboard, and "
+                     + "narrow what the assistant searches.")
             }
         }
     }
@@ -450,6 +566,7 @@ struct MeetingDetailView: View {
     private func load() async {
         do {
             detail = try await APIClient.shared.meeting(meetingID)
+            if let meeting = detail?.meeting { tags = meeting.tagList }
             if detail?.meeting.isRecording == true {
                 cards = try? await APIClient.shared.meetingContext(meetingID)
                 coach = try? await APIClient.shared.coachState(meetingID)
@@ -486,6 +603,21 @@ struct MeetingDetailView: View {
         do {
             try await APIClient.shared.retitleMeeting(meetingID, to: newTitle)
             await load()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    /// Send the whole set this meeting should have — adding and removing are both this call,
+    /// because the route replaces the set wholesale.
+    private func setTags(_ next: [String]) async {
+        savingTags = true
+        defer { savingTags = false }
+        do {
+            // Render the set the server stored, not the one just sent: typing "Standup " has
+            // to show up as "standup", or the screen quietly disagrees with the database and
+            // with every other client. Cheaper than a whole detail reload for the same truth.
+            tags = try await APIClient.shared.setMeetingTags(meetingID, to: next)
+            // A tag invented here has to appear in the offer list on the next meeting.
+            tagCounts = (try? await APIClient.shared.meetingTags()) ?? tagCounts
         } catch { self.error = error.localizedDescription }
     }
 

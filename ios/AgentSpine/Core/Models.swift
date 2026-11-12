@@ -574,11 +574,14 @@ struct Meeting: Codable, Identifiable, Hashable {
     let projectID: Int?
     let started: String
     let status: String
+    /// Lower-cased labels the server normalizes and sorts; absent from older servers, which
+    /// is why this is optional even though a current server sends `[]` for an untagged one.
+    let tags: [String]?
     let title: String?
     let wordCount: Int
 
     enum CodingKeys: String, CodingKey {
-        case device, ended, id, note, started, status, title
+        case device, ended, id, note, started, status, tags, title
         case audioExpires = "audio_expires"
         case projectID = "project_id"
         case wordCount = "word_count"
@@ -588,12 +591,25 @@ struct Meeting: Codable, Identifiable, Hashable {
         if let title, !title.isEmpty { return title }
         return "Meeting \(SpineDate.relative(started))"
     }
+    /// The tags to show. Nothing downstream has to care that an old server sends none.
+    var tagList: [String] { tags ?? [] }
     var isRecording: Bool { status == "recording" }
     /// True while a kept recording still exists, so the transcript can be re-made.
     var hasKeptAudio: Bool {
         guard let date = SpineDate.parse(audioExpires) else { return false }
         return date > Date()
     }
+}
+
+/// One row of `/api/meetings/tags`: a tag in use and how many meetings carry it.
+///
+/// The server orders these most-used first, which is the order to offer them in: the tag you
+/// reach for next is nearly always one you have used a lot already.
+struct MeetingTagCount: Codable, Identifiable, Hashable {
+    let count: Int
+    let tag: String
+
+    var id: String { tag }
 }
 
 struct MeetingSegment: Codable, Identifiable, Hashable {
