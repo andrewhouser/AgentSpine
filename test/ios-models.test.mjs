@@ -123,6 +123,26 @@ log(noTarget, "run_command", { name: "test" }, "", "error", "ERROR: could not ru
 fs.writeFileSync(path.join(root, "builds.json"), JSON.stringify(listBuilds()));
 fs.writeFileSync(path.join(root, "diff.json"), JSON.stringify(await buildDiff(full)));
 
+// --- /api/meetings/live while recording ---
+// The phone polls this every few seconds. `elapsedMs` comes from the listener's byte count,
+// and ffmpeg's pipe reads are arbitrary lengths, so the count is rarely a whole number of
+// milliseconds. 2,749,066 bytes is the reading that produced 85908.3125 on a real device and
+// failed the whole decode. Shaped exactly as `liveStatus()` in src/meetings/session.ts
+// returns it, which can't be called here without a running ffmpeg capture.
+const { Listener } = await import("../src/senses/listen.ts");
+const listener = new Listener({ device: "USB PnP Sound Device", live: true });
+listener.retainedBytes = 2_749_066;
+fs.writeFileSync(
+  path.join(root, "live.json"),
+  JSON.stringify({
+    device: "USB PnP Sound Device",
+    elapsedMs: listener.elapsedMs,
+    meetingId: 12,
+    pendingChunks: listener.pendingChunks,
+    recording: true,
+  }),
+);
+
 // --- the models, taken from the app rather than restated ---
 const modelsPath = path.join(REPO, "ios", "AgentSpine", "Core", "Models.swift");
 const models = fs.readFileSync(modelsPath, "utf8");
@@ -137,6 +157,10 @@ const section = models.slice(from, to);
 for (const needle of ["struct BuildCommand", "struct Build:", "struct BuildDiff"]) {
   if (!section.includes(needle)) throw new Error(`the extracted section is missing ${needle} — markers moved?`);
 }
+const liveFrom = models.indexOf("struct MeetingLiveStatus:");
+const liveTo = liveFrom < 0 ? -1 : models.indexOf("\n}\n", liveFrom);
+if (liveFrom < 0 || liveTo < 0) throw new Error(`could not find struct MeetingLiveStatus in ${modelsPath}`);
+const liveSection = models.slice(liveFrom, liveTo + 3);
 
 const main = [
   "",
@@ -178,12 +202,21 @@ const main = [
   '    print("  FAIL  decoding threw: \\(error)")',
   "    failed += 1",
   "}",
+  "do {",
+  "    let live = try dec.decode(MeetingLiveStatus.self, from: load(CommandLine.arguments[3]))",
+  '    check("live status decodes mid-recording", live.recording)',
+  '    check("elapsedMs is whole milliseconds", live.elapsedMs == 85908, "\\(live.elapsedMs)")',
+  '    check("meetingId maps onto meetingID", live.meetingID == 12, "\\(live.meetingID ?? -1)")',
+  "} catch {",
+  '    print("  FAIL  live status threw: \\(error)")',
+  "    failed += 1",
+  "}",
   'print("RESULT \\(passed) \\(failed)")',
   "exit(failed == 0 ? 0 : 1)",
 ].join("\n");
 
 const swiftFile = path.join(root, "decode.swift");
-fs.writeFileSync(swiftFile, "import Foundation\n\n" + section + main);
+fs.writeFileSync(swiftFile, "import Foundation\n\n" + section + "\n" + liveSection + main);
 
 // --- compile and run ---
 const binary = path.join(root, "decode");
@@ -202,13 +235,15 @@ try {
 let output = "";
 let code = 0;
 try {
-  output = execFileSync(binary, [path.join(root, "builds.json"), path.join(root, "diff.json")], { encoding: "utf8" });
+  output = execFileSync(binary, [path.join(root, "builds.json"), path.join(root, "diff.json"), path.join(root, "live.json")], {
+    encoding: "utf8",
+  });
 } catch (err) {
   output = String(err.stdout ?? "");
   code = 1;
 }
 
-console.log("\nthe app's own Build/BuildCommand/BuildDiff, decoding real /api/builds output\n");
+console.log("\nthe app's own Build/BuildCommand/BuildDiff and MeetingLiveStatus, decoding real server output\n");
 console.log(output.split("\n").filter((l) => !l.startsWith("RESULT")).join("\n").trimEnd());
 
 const tally = /RESULT (\d+) (\d+)/.exec(output);

@@ -221,9 +221,19 @@ export class Listener extends EventEmitter {
     this.opts = opts;
   }
 
-  /** Milliseconds of audio captured so far. */
+  /**
+   * Whole milliseconds of audio captured so far.
+   *
+   * Floored because it goes out on the wire in `/api/meetings/live`, and the iOS app decodes
+   * it as `Int`. ffmpeg hands over pipe reads of arbitrary length, so `retainedBytes` is
+   * rarely a multiple of 32 (one millisecond at 16 kHz, 16-bit mono), and the raw quotient
+   * is a fraction such as 85908.3125. JavaScript doesn't care, but Swift's `JSONDecoder`
+   * refuses a fractional number for an `Int` field ("Number 85908.3125 is not representable
+   * in Swift") and fails the whole response, which blanked the phone's Meetings screen for
+   * as long as a recording ran.
+   */
   get elapsedMs(): number {
-    return (this.retainedBytes / BYTES_PER_SECOND) * 1000;
+    return Math.floor((this.retainedBytes / BYTES_PER_SECOND) * 1000);
   }
 
   /** Chunks captured but not yet transcribed. Non-zero means transcription is behind. */
