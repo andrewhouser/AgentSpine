@@ -52,6 +52,18 @@ const barTitle = (route: Route, conversations: Conversation[], projects: Project
   return VIEW_TITLES[route.view] ?? "AgentSpine";
 };
 
+const SIDEBAR_KEY = "sidebar-hidden";
+/** Matches the breakpoint in AppShell.module.css where the sidebar becomes a drawer. */
+const NARROW = "(width <= 820px)";
+
+const readSidebarHidden = (): boolean => {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
 export const AppShell = () => {
   const { conversations, create, refresh, remove, rename } = useConversations();
   const [projects, reloadProjects] = useResource(api.listProjects, NO_PROJECTS);
@@ -59,6 +71,29 @@ export const AppShell = () => {
   const [statusKey, setStatusKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [namingProject, setNamingProject] = useState(false);
+  // Desktop only: narrow screens already have the drawer, which is its own show/hide.
+  const [sidebarHidden, setSidebarHidden] = useState(readSidebarHidden);
+
+  const setHidden = useCallback((hidden: boolean) => {
+    setSidebarHidden(hidden);
+    try {
+      localStorage.setItem(SIDEBAR_KEY, hidden ? "1" : "0");
+    } catch {
+      // storage blocked: it still works for this session
+    }
+  }, []);
+
+  // ⌘B / Ctrl+B, the shortcut editors use for the same thing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== "b" || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (window.matchMedia(NARROW).matches) return;
+      e.preventDefault();
+      setHidden(!sidebarHidden);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setHidden, sidebarHidden]);
   const status = useStatus(statusKey);
 
   // Keep the URL and the view in step in both directions, so a conversation or project can
@@ -120,7 +155,9 @@ export const AppShell = () => {
   }, [refresh]);
 
   return (
-    <div className={`${styles.shell} ${drawerOpen ? styles.drawerOpen : ""}`}>
+    <div
+      className={`${styles.shell} ${drawerOpen ? styles.drawerOpen : ""} ${sidebarHidden ? styles.sidebarHidden : ""}`}
+    >
       {namingProject && (
         <PromptDialog
           label="Project name"
@@ -134,6 +171,7 @@ export const AppShell = () => {
         activeConversation={route.conversationId}
         activeProject={route.projectId}
         conversations={conversations}
+        onCollapse={() => setHidden(true)}
         onDeleteConversation={(id) => void deleteConversation(id)}
         onNewChat={() => void newChat()}
         onNewProject={() => setNamingProject(true)}
@@ -154,10 +192,15 @@ export const AppShell = () => {
       <main className={styles.main}>
         <div className={styles.topBar}>
           <button
-            aria-expanded={drawerOpen}
-            aria-label="Menu"
+            aria-expanded={drawerOpen || !sidebarHidden}
+            aria-label={sidebarHidden ? "Show sidebar" : "Menu"}
             className={styles.menuButton}
-            onClick={() => setDrawerOpen((v) => !v)}
+            onClick={() => {
+              // One button, two jobs: the drawer on a phone, the collapsed column on a desktop.
+              if (window.matchMedia(NARROW).matches) setDrawerOpen((v) => !v);
+              else setHidden(false);
+            }}
+            title="Show sidebar (⌘B)"
             type="button"
           >
             ☰

@@ -90,6 +90,21 @@
 }
 
 /*
+ * Desktop collapse. The column leaves the layout entirely and the top bar, normally
+ * phone-only, comes back to carry the button that reopens it. Scoped to wide screens so the
+ * drawer behaviour below is untouched by a saved "hidden" preference.
+ */
+@media (width > 820px) {
+  .sidebarHidden > nav {
+    display: none;
+  }
+
+  .sidebarHidden .topBar {
+    display: flex;
+  }
+}
+
+/*
  * Below this width the sidebar stops being a column and becomes a drawer over the content.
  * 254px of permanent sidebar out of a ~400px viewport leaves nothing to read, and this app
  * is dense — tool cards, traces, JSON — so the content needs the whole width.

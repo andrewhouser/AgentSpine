@@ -26,6 +26,7 @@ interface SidebarProps {
   activeConversation: null | number;
   activeProject: null | number;
   conversations: Conversation[];
+  onCollapse: () => void;
   onDeleteConversation: (id: number) => void;
   onNewChat: () => void;
   onNewProject: () => void;
@@ -79,6 +80,7 @@ export const Sidebar = ({
   activeConversation,
   activeProject,
   conversations,
+  onCollapse,
   onDeleteConversation,
   onNewChat,
   onNewProject,
@@ -122,6 +124,15 @@ export const Sidebar = ({
   <nav className={styles.sidebar}>
     <div className={styles.head}>
       <span className={styles.brand}>AgentSpine</span>
+      <button
+        aria-label="Hide sidebar"
+        className={styles.collapse}
+        onClick={onCollapse}
+        title="Hide sidebar (⌘B)"
+        type="button"
+      >
+        ‹
+      </button>
     </div>
 
     <button className={styles.newChat} onClick={onNewChat} type="button">

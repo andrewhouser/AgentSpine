@@ -48,7 +48,7 @@ import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
 import { checkAudioPolicy, Listener, writeWav } from "../senses/listen.ts";
 import type { Policy } from "../types.ts";
-import { coach } from "./coach.ts";
+import { chat, coach } from "./coach.ts";
 import type { CoachAnswer } from "./coach.ts";
 import { keepAudio, loadAudio } from "./audio.ts";
 import { cardsFor } from "./context.ts";
@@ -58,7 +58,7 @@ import * as store from "./store.ts";
 import { finalTranscript } from "./transcript.ts";
 
 export interface MeetingEvent {
-  kind: "segment" | "status" | "error" | "extraction" | "context" | "coach";
+  kind: "segment" | "status" | "error" | "extraction" | "context" | "coach" | "chat";
   meetingId: number;
   seq: number;
   /** Present on `segment`. */
@@ -71,8 +71,10 @@ export interface MeetingEvent {
   cards?: ContextCards;
   /** Present on `coach`. Absent while one is still generating. */
   answer?: CoachAnswer;
-  /** Present on `coach`: true while the model is still working. */
+  /** Present on `coach` and `chat`: true while the model is still working. */
   thinking?: boolean;
+  /** Present on `chat`: the message just stored (the question, then the answer). */
+  chat?: store.ChatRow;
 }
 
 interface Active {
@@ -362,6 +364,37 @@ let lastCoach: CoachState | null = null;
 export const coachState = (meetingId: number): CoachState =>
   lastCoach?.meetingId === meetingId ? lastCoach : { answer: null, meetingId, thinking: false };
 
+/**
+ * Ask the in-meeting assistant a typed question.
+ *
+ * Shares the coach's single-flight flag, because both want the one local model and a second
+ * request queued behind the first would answer a moment that has passed. The question is
+ * stored and emitted straight away so it appears in the thread at once; the answer follows.
+ */
+export const askChat = (meetingId: number, question: string): { busy: boolean; message?: store.ChatRow } => {
+  if (coaching) return { busy: true };
+  coaching = true;
+  const earlier = store.listChat(meetingId);
+  const message = store.addChat(meetingId, "user", question);
+  emit({ chat: message, kind: "chat", meetingId, thinking: true });
+  void (async () => {
+    try {
+      const reply = await chat(meetingId, question, earlier);
+      const stored = store.addChat(meetingId, "assistant", reply.text, {
+        elapsedMs: reply.elapsedMs,
+        failed: reply.failed,
+      });
+      emit({ chat: stored, kind: "chat", meetingId, thinking: false });
+    } catch (err) {
+      // `chat` handles its own failures; this keeps an escape from leaving the box spinning.
+      const stored = store.addChat(meetingId, "assistant", `(failed: ${(err as Error).message})`, { failed: true });
+      emit({ chat: stored, kind: "chat", meetingId, thinking: false });
+    } finally {
+      coaching = false;
+    }
+  })();
+  return { busy: false, message };
+};
 export const askCoach = (meetingId: number): { busy: boolean } => {
   if (coaching) return { busy: true };
   coaching = true;

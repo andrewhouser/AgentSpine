@@ -124,10 +124,17 @@ const meetingLabel = (ref: string): string => {
  * Never throws. This runs on a timer during a live meeting, and a retrieval failure must cost
  * one empty refresh rather than interrupting a capture that cannot be repeated.
  */
-export const cardsFor = async (meetingId: number, seconds?: number): Promise<ContextCards> => {
-  const query = rollingWindow(meetingId, seconds);
+export const cardsFor = async (
+  meetingId: number,
+  seconds?: number,
+  /** A typed question to retrieve against instead of the rolling window. */
+  asked?: string,
+): Promise<ContextCards> => {
+  const query = asked ?? rollingWindow(meetingId, seconds);
   // A few words of "okay so, um" retrieves noise against any corpus. Wait for real speech.
-  if (query.split(/\s+/).filter(Boolean).length < 8) return EMPTY_CARDS;
+  // A typed question is deliberate and short ("what did we decide on pricing?"), so it gets a
+  // lower bar than speech picked up from a room.
+  if (query.split(/\s+/).filter(Boolean).length < (asked === undefined ? 8 : 3)) return EMPTY_CARDS;
 
   try {
     const embedder = await getEmbedder();

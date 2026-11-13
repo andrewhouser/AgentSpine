@@ -9,7 +9,32 @@
 }
 
 .head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
   padding: 16px 14px 10px;
+}
+
+.collapse {
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 1.125rem;
+  line-height: 1;
+  padding: 1px 7px 3px;
+}
+
+.collapse:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* The drawer on narrow screens closes by its scrim or a pick; this is the desktop control. */
+@media (width <= 820px) {
+  .collapse {
+    display: none;
+  }
 }
 
 .brand {

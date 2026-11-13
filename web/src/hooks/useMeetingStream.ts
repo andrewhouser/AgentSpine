@@ -12,9 +12,9 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-import type { CoachAnswer, ContextCards, MeetingEvent, MeetingStatus } from "../lib/types.ts";
+import type { ChatMessage, CoachAnswer, ContextCards, MeetingEvent, MeetingStatus } from "../lib/types.ts";
 
-import { meetingStreamUrl } from "../lib/api.ts";
+import { api, meetingStreamUrl } from "../lib/api.ts";
 
 export interface LiveLine {
   key: number;
@@ -27,6 +27,10 @@ export interface LiveMeeting {
   answer: CoachAnswer | null;
   /** Retrieved context for what is being said now. Null until the first refresh lands. */
   cards: ContextCards | null;
+  /** The typed Q&A for the meeting on screen, oldest first. */
+  chat: ChatMessage[];
+  /** True while a typed question is waiting on its answer. */
+  chatBusy: boolean;
   /** True while the model is working on an answer. */
   coaching: boolean;
   /** The most recent error, or null. Transcription failing one chunk is not fatal. */
@@ -40,12 +44,21 @@ export interface LiveMeeting {
 const EMPTY: LiveMeeting = {
   answer: null,
   cards: null,
+  chat: [],
+  chatBusy: false,
   coaching: false,
   error: null,
   lines: [],
   meetingId: null,
   note: null,
   status: null,
+};
+
+/** Union by id, oldest first: the same message can arrive from the stream and from a history fetch. */
+const mergeChat = (a: ChatMessage[], b: ChatMessage[]): ChatMessage[] => {
+  const byId = new Map<number, ChatMessage>();
+  for (const m of [...a, ...b]) byId.set(m.id, m);
+  return [...byId.values()].sort((x, y) => x.id - y.id);
 };
 
 /**
@@ -73,7 +86,42 @@ export const useMeetingStream = (onStatus?: (event: MeetingEvent) => void): Live
     let retry: number | undefined;
     let closed = false;
 
+    /**
+     * Ask the server whether it is recording, rather than trusting the replay buffer to still
+     * hold the "recording" status event. It keeps only the last 500 events, so after a page
+     * reload or a long meeting that event can be gone, and the page would show no Stop button
+     * for a microphone that is live. The stream still drives everything after this.
+     */
+    const syncLive = async (): Promise<void> => {
+      try {
+        const server = await api.meetingLive();
+        if (closed) return;
+        // The thread is saved server-side, so a reload mid-meeting gets it back rather than
+        // an empty box over a conversation that is still there.
+        if (server.recording && server.meetingId !== null) {
+          const meetingId = server.meetingId;
+          const saved = await api.meetingChat(meetingId);
+          if (closed) return;
+          setLive((prev) => ({
+            ...prev,
+            chat: mergeChat(prev.meetingId === meetingId ? prev.chat : [], saved),
+            meetingId,
+          }));
+        }
+        setLive((prev) => {
+          if (server.recording && prev.status !== "recording") {
+            return { ...prev, meetingId: server.meetingId, status: "recording" };
+          }
+          // Stale "recording" with nothing capturing: the stop event was missed.
+          if (!server.recording && prev.status === "recording") return { ...prev, status: null };
+          return prev;
+        });
+      } catch {
+        // The stream's own retry covers a server that is down; nothing to show here.
+      }
+    };
     const open = (): void => {
+      void syncLive();
       source = new EventSource(meetingStreamUrl(lastSeq.current));
 
       source.onmessage = (message) => {
@@ -100,6 +148,14 @@ export const useMeetingStream = (onStatus?: (event: MeetingEvent) => void): Live
           // delivered to the subscriber below instead, and changes nothing on the deck.
           if (event.kind === "extraction") return prev;
           if (event.kind === "context") return { ...prev, cards: event.cards ?? null };
+          if (event.kind === "chat" && event.chat) {
+            return {
+              ...prev,
+              chat: mergeChat(prev.meetingId === event.meetingId ? prev.chat : [], [event.chat]),
+              chatBusy: event.thinking === true,
+              meetingId: event.meetingId,
+            };
+          }
           if (event.kind === "coach")
             return {
               ...prev,
@@ -110,11 +166,25 @@ export const useMeetingStream = (onStatus?: (event: MeetingEvent) => void): Live
               answer: event.answer ?? prev.answer,
               coaching: event.thinking === true,
             };
+          // The meeting is over and its transcript is in the Recorded list, so the live panel
+          // empties instead of lingering with the last chunk of words and a stale note. While
+          // "transcribing" the lines stay: they are the only thing to read during that wait.
+          // A failed pass keeps its note, since that is the one place the reason is shown.
+          if (event.status === "done" || event.status === "abandoned" || event.status === "failed") {
+            return {
+              ...EMPTY,
+              meetingId: event.meetingId,
+              note: event.status === "failed" ? (event.note ?? null) : null,
+              status: event.status,
+            };
+          }
           return {
             // Cards and answers belong to the meeting that was being recorded; a new one
             // starts blank rather than showing what was retrieved during the last.
             answer: prev.meetingId === event.meetingId ? prev.answer : null,
             cards: prev.meetingId === event.meetingId ? prev.cards : null,
+            chat: prev.meetingId === event.meetingId ? prev.chat : [],
+            chatBusy: prev.meetingId === event.meetingId ? prev.chatBusy : false,
             coaching: prev.meetingId === event.meetingId ? prev.coaching : false,
             error: null,
             lines: prev.meetingId === event.meetingId ? prev.lines : [],

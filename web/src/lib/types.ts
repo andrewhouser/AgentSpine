@@ -223,7 +223,8 @@ export interface LiveStatus {
 export interface MeetingEvent {
   answer?: CoachAnswer;
   cards?: ContextCards;
-  kind: "coach" | "context" | "error" | "extraction" | "segment" | "status";
+  chat?: ChatMessage;
+  kind: "chat" | "coach" | "context" | "error" | "extraction" | "segment" | "status";
   meetingId: number;
   note?: string;
   segment?: { endMs: number; startMs: number; text: string };
@@ -243,6 +244,18 @@ export interface DictationStatus {
   /** Whether the server's own microphone can be used right now. */
   serverMic: boolean;
   serverMicReason: string;
+}
+
+/** Mirrors ChatRow in src/meetings/store.ts: one line of the in-meeting chat. */
+export interface ChatMessage {
+  created: string;
+  elapsed_ms: null | number;
+  /** An answer that could not be produced; shown, but never fed back into a prompt. */
+  failed: boolean;
+  id: number;
+  meeting_id: number;
+  role: "assistant" | "user";
+  text: string;
 }
 
 /** Mirrors CoachAnswer in src/meetings/coach.ts. */

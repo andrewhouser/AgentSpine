@@ -990,6 +990,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         return sendJson(res, 200, {
           extraction: meetingStore.getExtraction(id) ?? null,
           meeting,
+          chat: meetingStore.listChat(id),
           segments: meetingStore.segments(id, pass),
           speakers: meetingStore.speakers(id),
           workItems: meetingStore.workItems(id),
@@ -1018,6 +1019,27 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         return sendJson(res, 200, meetings.coachState(id));
       }
 
+      // GET /api/meetings/:id/chat — the saved thread, oldest first
+      if (m === "GET" && seg.length === 4 && seg[3] === "chat") {
+        const id = Number(seg[2]);
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        return sendJson(res, 200, meetingStore.listChat(id));
+      }
+      // POST /api/meetings/:id/chat {question} — ask the in-meeting assistant. Returns once the
+      // question is stored; the answer arrives on the event stream like the coach's does.
+      if (m === "POST" && seg.length === 4 && seg[3] === "chat") {
+        const id = Number(seg[2]);
+        if (!MEETING_COACH_ENABLED) return sendJson(res, 403, { error: "MEETING_COACH_ENABLED is false" });
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        const b = await readBody(req);
+        const question = typeof b.question === "string" ? b.question.trim() : "";
+        if (!question) return sendJson(res, 400, { error: "question is required" });
+        if (question.length > 500) return sendJson(res, 400, { error: "question is over 500 characters" });
+        const result = meetings.askChat(id, question);
+        return result.busy
+          ? sendJson(res, 429, { error: "already working on the last one" })
+          : sendJson(res, 202, result.message);
+      }
       if (m === "POST" && seg.length === 4 && seg[3] === "coach") {
         const id = Number(seg[2]);
         if (!MEETING_COACH_ENABLED) return sendJson(res, 403, { error: "MEETING_COACH_ENABLED is false" });

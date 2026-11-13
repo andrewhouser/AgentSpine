@@ -623,3 +623,7 @@ button.tag {
   border-color: var(--accent-line);
   color: var(--accent);
 }
+
+.savedChat {
+  margin: 10px 0;
+}

@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   AudioDevices,
+  ChatMessage,
   CoachAnswer,
   ContextCard,
   ContextCards,
@@ -42,6 +43,7 @@ import { useMeetingStream } from "../../hooks/useMeetingStream.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog.tsx";
+import { ChatThread, MeetingChat } from "../MeetingChat/MeetingChat.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import { TagDialog } from "../TagDialog/TagDialog.tsx";
@@ -69,13 +71,14 @@ const REJECTION: Record<string, string> = {
 };
 
 interface MeetingDetail {
+  chat: ChatMessage[];
   extraction: MeetingExtraction | null;
   segments: MeetingSegment[];
   speakers: MeetingSpeaker[];
   workItems: MeetingWorkItem[];
 }
 
-const NO_DETAIL: MeetingDetail = { extraction: null, segments: [], speakers: [], workItems: [] };
+const NO_DETAIL: MeetingDetail = { chat: [], extraction: null, segments: [], speakers: [], workItems: [] };
 
 interface Turn {
   segments: MeetingSegment[];
@@ -161,12 +164,15 @@ const CoachPanel = ({ answer, coaching }: { answer: CoachAnswer | null; coaching
 interface SidecarProps {
   answer: CoachAnswer | null;
   cards: ContextCards | null;
+  chat: ChatMessage[];
+  chatBusy: boolean;
   coaching: boolean;
+  onAsk: (question: string) => Promise<void>;
   onCoach: () => void;
   projectId: null | number;
 }
 
-const Sidecar = ({ answer, cards, coaching, onCoach, projectId }: SidecarProps) => {
+const Sidecar = ({ answer, cards, chat, chatBusy, coaching, onAsk, onCoach, projectId }: SidecarProps) => {
   const total = cards ? cards.documents.length + cards.meetings.length + cards.memories.length : 0;
 
   return (
@@ -180,6 +186,7 @@ const Sidecar = ({ answer, cards, coaching, onCoach, projectId }: SidecarProps) 
       </div>
 
       <CoachPanel answer={answer} coaching={coaching} />
+      <MeetingChat busy={coaching} messages={chat} onAsk={onAsk} pending={chatBusy} />
       {total === 0 && (
         <p className={styles.waiting}>
           {cards === null
@@ -369,8 +376,8 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   const [openedAt] = useState(() => Date.now());
 
   const load = useCallback(async (id: number): Promise<void> => {
-    const { extraction, segments, speakers, workItems } = await api.meeting(id);
-    setDetail({ extraction, segments, speakers: speakers ?? [], workItems });
+    const { chat, extraction, segments, speakers, workItems } = await api.meeting(id);
+    setDetail({ chat: chat ?? [], extraction, segments, speakers: speakers ?? [], workItems });
   }, []);
 
   // Extraction finishes minutes after the meeting does, so it arrives on the stream rather
@@ -430,6 +437,23 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     setDetail(NO_DETAIL);
     await load(id);
   };
+
+  const askNow = useCallback(
+    async (question: string): Promise<void> => {
+      if (live.meetingId === null) throw new Error("nothing is recording");
+      try {
+        await api.askMeetingChat(live.meetingId, question);
+      } catch (err) {
+        // A 429 means the model is mid-answer; say so in words rather than a status code.
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          /already working/i.test(message) ? "Still working on the last one — try again in a moment." : message,
+          { cause: err },
+        );
+      }
+    },
+    [live.meetingId],
+  );
 
   const coachNow = useCallback((): void => {
     if (live.meetingId === null || !recording || live.coaching) return;
@@ -658,7 +682,10 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
               <Sidecar
                 answer={live.answer}
                 cards={live.cards}
+                chat={live.chat}
+                chatBusy={live.chatBusy}
                 coaching={live.coaching}
+                onAsk={askNow}
                 onCoach={coachNow}
                 projectId={projectId}
               />
@@ -760,6 +787,12 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
           {open === m.id && (
             <>
               <ExtractionPanel busy={busy} detail={detail} onExtract={() => void extract(m.id)} />
+              {detail.chat.length > 0 && (
+                <div className={styles.savedChat}>
+                  <h4 className={styles.cardHead}>Asked during the meeting</h4>
+                  <ChatThread messages={detail.chat} />
+                </div>
+              )}
               <div className={styles.full}>
                 {detail.segments.length === 0 && (
                   <p className={styles.waiting}>No transcript kept for this meeting.</p>

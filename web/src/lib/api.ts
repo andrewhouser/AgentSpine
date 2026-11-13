@@ -13,6 +13,7 @@ import type {
   AudioDevices,
   Build,
   BuildDiff,
+  ChatMessage,
   Client,
   Confirmation,
   Conversation,
@@ -135,13 +136,15 @@ export const api = {
       body: JSON.stringify({ archived: true }),
       method: "PATCH",
     }),
+  askMeetingChat: (id: number, question: string) =>
+    post<ChatMessage>(`/api/meetings/${id}/chat`, { question }),
+
   /**
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
    */
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
-
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
   createProject: (name: string, instructions = "") =>
@@ -245,12 +248,16 @@ export const api = {
 
   meeting: (id: number, pass: "final" | "live" = "final") =>
     request<{
+      chat?: ChatMessage[];
       extraction: MeetingExtraction | null;
       meeting: Meeting;
       segments: MeetingSegment[];
       speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
+
+  /** The saved in-meeting chat, oldest first. */
+  meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
 
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 

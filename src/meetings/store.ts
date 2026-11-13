@@ -102,6 +102,16 @@ rawDb.exec(`
     PRIMARY KEY (meeting_id, tag)
   );
   CREATE INDEX IF NOT EXISTS idx_meeting_tags_tag ON meeting_tags (tag);
+  CREATE TABLE IF NOT EXISTS meeting_chat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL,
+    created TEXT NOT NULL,
+    role TEXT NOT NULL,
+    text TEXT NOT NULL,
+    elapsed_ms INTEGER,
+    failed INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_meeting_chat_meeting ON meeting_chat (meeting_id);
 `);
 
 // Databases created before speaker detection have no `speaker` column.
@@ -229,6 +239,50 @@ export const setTags = (meetingId: number, tags: string[]): string[] => {
   }
   return clean;
 };
+
+/**
+ * The questions typed to the in-meeting assistant, and what it answered.
+ *
+ * Kept with the meeting because a question asked mid-meeting is often the most useful thing
+ * to find afterwards. An answer that failed is stored too, flagged, so the thread reads the
+ * way it happened — but it is never fed back into a later prompt.
+ */
+export interface ChatRow {
+  created: string;
+  elapsed_ms: null | number;
+  failed: boolean;
+  id: number;
+  meeting_id: number;
+  role: "assistant" | "user";
+  text: string;
+}
+export const addChat = (
+  meetingId: number,
+  role: ChatRow["role"],
+  text: string,
+  opts: { elapsedMs?: number; failed?: boolean } = {},
+): ChatRow => {
+  const created = now();
+  const res = rawDb
+    .prepare("INSERT INTO meeting_chat (meeting_id, created, role, text, elapsed_ms, failed) VALUES (?,?,?,?,?,?)")
+    .run(meetingId, created, role, text, opts.elapsedMs ?? null, opts.failed ? 1 : 0);
+  return {
+    created,
+    elapsed_ms: opts.elapsedMs ?? null,
+    failed: !!opts.failed,
+    id: Number(res.lastInsertRowid),
+    meeting_id: meetingId,
+    role,
+    text,
+  };
+};
+export const listChat = (meetingId: number): ChatRow[] =>
+  (
+    rawDb.prepare("SELECT * FROM meeting_chat WHERE meeting_id = ? ORDER BY id").all(meetingId) as unknown as (Omit<
+      ChatRow,
+      "failed"
+    > & { failed: number })[]
+  ).map((r) => ({ ...r, failed: r.failed === 1 }));
 
 /** Every tag in use with how many meetings carry it, most used first. */
 export const allTags = (): { count: number; tag: string }[] =>
@@ -571,6 +625,10 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
   // Speaker names go with the words they labelled.
   rawDb
     .prepare("DELETE FROM meeting_speakers WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
+    .run(cutoff);
+  // In-meeting chat answers quote the transcript, so they follow it out.
+  rawDb
+    .prepare("DELETE FROM meeting_chat WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
     .run(cutoff);
   rawDb
     .prepare(
