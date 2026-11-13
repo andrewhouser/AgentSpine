@@ -11,6 +11,11 @@ struct ConversationsView: View {
     @State private var openThread: Int?
     @State private var newTitle = ""
     @State private var prompt: Prompt?
+    /// The project a new task is being composed for, when started from its header's "+".
+    @State private var composeProjectID: Int?
+    /// Projects folded shut, as comma-separated ids. Kept in defaults so the list opens the
+    /// way it was left; a `Set<Int>` is not an `@AppStorage` type, hence the string.
+    @AppStorage("conversations-folded-projects") private var foldedRaw = ""
 
     /// Rename and delete share one `.alert`, for the same reason the schedules screen shares
     /// one `.sheet`: two presentation modifiers of the same kind on one view silently do not
@@ -40,12 +45,65 @@ struct ConversationsView: View {
         }
     }
 
-    /// Projects that have threads, each with theirs, in the order the server lists projects.
+    /// Every project with its threads, in the order the server lists projects. Empty ones are
+    /// included: their header is where the "+" lives, and a project you cannot start a thread
+    /// in is one you cannot get started.
     private var projectSections: [(project: Project, threads: [Conversation])] {
-        state.projects.compactMap { project in
-            let threads = state.conversations.filter { $0.projectID == project.id }
-            return threads.isEmpty ? nil : (project, threads)
+        state.projects.map { project in
+            (project, state.conversations.filter { $0.projectID == project.id })
         }
+    }
+
+    private var folded: Set<Int> {
+        Set(foldedRaw.split(separator: ",").compactMap { Int($0) })
+    }
+
+    private func setFolded(_ id: Int, _ isFolded: Bool) {
+        var next = folded
+        if isFolded { next.insert(id) } else { next.remove(id) }
+        foldedRaw = next.sorted().map(String.init).joined(separator: ",")
+    }
+
+    /// A project's header: tap the name to fold or unfold its threads, "+" to start one in it.
+    @ViewBuilder
+    private func header(for project: Project, count: Int) -> some View {
+        let isFolded = folded.contains(project.id)
+        HStack(spacing: 8) {
+            Button {
+                withAnimation { setFolded(project.id, !isFolded) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(isFolded ? 0 : 90))
+                    Label(project.name, systemImage: "folder")
+                    if isFolded && count > 0 {
+                        Text("\(count)").foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(project.name), \(isFolded ? "collapsed" : "expanded")")
+            .accessibilityHint("Shows or hides this project's threads")
+
+            Button {
+                // Open the section so the thread is there when it is created.
+                setFolded(project.id, false)
+                composeProjectID = project.id
+                draft = ""
+                isComposing = true
+            } label: {
+                Image(systemName: "plus.circle")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!settings.isConfigured)
+            .accessibilityLabel("New thread in \(project.name)")
+        }
+        .textCase(nil)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.secondary)
     }
 
     /// Threads with no project, or whose project this app does not know about.
@@ -142,9 +200,11 @@ struct ConversationsView: View {
             // A project's threads sit under it, as in the web sidebar; everything else follows.
             ForEach(projectSections, id: \.project.id) { section in
                 Section {
-                    ForEach(section.threads) { row($0, showProject: false) }
+                    if !folded.contains(section.project.id) {
+                        ForEach(section.threads) { row($0, showProject: false) }
+                    }
                 } header: {
-                    Label(section.project.name, systemImage: "folder")
+                    header(for: section.project, count: section.threads.count)
                 }
             }
             if !looseThreads.isEmpty {
@@ -160,6 +220,7 @@ struct ConversationsView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     draft = ""
+                    composeProjectID = nil
                     isComposing = true
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -169,7 +230,7 @@ struct ConversationsView: View {
             }
         }
         .sheet(isPresented: $isComposing) {
-            NewTaskSheet(draft: $draft, isSending: $isSending) { task, projectID in
+            NewTaskSheet(draft: $draft, isSending: $isSending, initialProjectID: composeProjectID) { task, projectID in
                 if let id = await state.startThread(task: task, projectID: projectID) {
                     isComposing = false
                     openThread = id
@@ -225,6 +286,8 @@ struct ConversationsView: View {
 struct NewTaskSheet: View {
     @Binding var draft: String
     @Binding var isSending: Bool
+    /// Preselects the picker when the sheet was opened from a project's own "+".
+    var initialProjectID: Int?
     let send: (String, Int?) async -> Void
 
     @Environment(AppState.self) private var state
@@ -292,7 +355,10 @@ struct NewTaskSheet: View {
                     }
                 }
             }
-            .onAppear { focused = true }
+            .onAppear {
+                focused = true
+                projectID = initialProjectID
+            }
         }
     }
 }

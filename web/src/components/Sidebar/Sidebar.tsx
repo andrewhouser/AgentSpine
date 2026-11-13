@@ -4,6 +4,7 @@ import type { Status } from "../../hooks/useStatus.ts";
 import type { Conversation, Project } from "../../lib/types.ts";
 
 import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
+import { ProjectGroup } from "../ProjectGroup/ProjectGroup.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
 import styles from "./Sidebar.module.css";
 
@@ -28,7 +29,9 @@ interface SidebarProps {
   onDeleteConversation: (id: number) => void;
   onNewChat: () => void;
   onNewProject: () => void;
+  onNewProjectChat: (projectId: number) => void;
   onRenameConversation: (id: number, title: string) => void;
+  onRenameProject: (id: number, name: string) => void;
   onSelectConversation: (id: number) => void;
   onSelectProject: (id: number) => void;
   onSelectView: (view: View) => void;
@@ -36,9 +39,6 @@ interface SidebarProps {
   status: Status;
   view: View;
 }
-
-/** Conversations shown under a project before "N more…". */
-const PROJECT_CHATS_SHOWN = 5;
 
 const NAV: { key: View; label: string }[] = [
   { key: "search", label: "Search" },
@@ -55,6 +55,18 @@ const NAV: { key: View; label: string }[] = [
 
 const COLLAPSE_KEY = "sidebar-nav-collapsed";
 
+const PROJECTS_COLLAPSED_KEY = "sidebar-projects-collapsed";
+
+/** Ids of projects the user has folded shut. */
+const readCollapsedProjects = (): Set<number> => {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(PROJECTS_COLLAPSED_KEY) ?? "[]");
+    return new Set(Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number") : []);
+  } catch {
+    return new Set();
+  }
+};
+
 const readCollapsed = (): boolean => {
   try {
     return localStorage.getItem(COLLAPSE_KEY) === "1";
@@ -70,7 +82,9 @@ export const Sidebar = ({
   onDeleteConversation,
   onNewChat,
   onNewProject,
+  onNewProjectChat,
   onRenameConversation,
+  onRenameProject,
   onSelectConversation,
   onSelectProject,
   onSelectView,
@@ -79,6 +93,7 @@ export const Sidebar = ({
   view,
 }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [foldedProjects, setFoldedProjects] = useState(readCollapsedProjects);
   // Conversations inside a project live under it, not in the general list.
   const loose = conversations.filter((c) => c.project_id === null || !projects.some((p) => p.id === c.project_id));
   const toggle = (): void => {
@@ -88,6 +103,18 @@ export const Sidebar = ({
       localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
     } catch {
       // storage blocked: the toggle still works for this session
+    }
+  };
+
+  const setProjectFolded = (id: number, folded: boolean): void => {
+    const next = new Set(foldedProjects);
+    if (folded) next.add(id);
+    else next.delete(id);
+    setFoldedProjects(next);
+    try {
+      localStorage.setItem(PROJECTS_COLLAPSED_KEY, JSON.stringify([...next]));
+    } catch {
+      // storage blocked: folding still works for this session
     }
   };
 
@@ -109,37 +136,28 @@ export const Sidebar = ({
         </button>
       </div>
       {projects.length === 0 && <div className={styles.none}>None yet.</div>}
-      {projects.map((p) => {
-        // A project's own conversations sit under it, the most recent few; the project page has the rest.
-        const mine = conversations.filter((c) => c.project_id === p.id);
-        return (
-          <div key={p.id}>
-            <button
-              className={`${styles.projectItem} ${view === "project" && p.id === activeProject ? styles.projectActive : ""}`}
-              onClick={() => onSelectProject(p.id)}
-              type="button"
-            >
-              {p.name}
-            </button>
-            {mine.slice(0, PROJECT_CHATS_SHOWN).map((c) => (
-              <div className={styles.nested} key={c.id}>
-                <ConversationItem
-                  active={view === "chat" && c.id === activeConversation}
-                  conversation={c}
-                  onDelete={() => onDeleteConversation(c.id)}
-                  onRename={(title) => onRenameConversation(c.id, title)}
-                  onSelect={() => onSelectConversation(c.id)}
-                />
-              </div>
-            ))}
-            {mine.length > PROJECT_CHATS_SHOWN && (
-              <button className={`${styles.nested} ${styles.more}`} onClick={() => onSelectProject(p.id)} type="button">
-                {mine.length - PROJECT_CHATS_SHOWN} more…
-              </button>
-            )}
-          </div>
-        );
-      })}
+      {projects.map((p) => (
+        <ProjectGroup
+          active={view === "project" && p.id === activeProject}
+          activeConversation={activeConversation}
+          chatActive={view === "chat"}
+          collapsed={foldedProjects.has(p.id)}
+          conversations={conversations.filter((c) => c.project_id === p.id)}
+          key={p.id}
+          onDeleteConversation={onDeleteConversation}
+          onNewConversation={() => {
+            // Open the group so the new conversation is visible when it appears.
+            setProjectFolded(p.id, false);
+            onNewProjectChat(p.id);
+          }}
+          onRename={(name) => onRenameProject(p.id, name)}
+          onRenameConversation={onRenameConversation}
+          onSelect={() => onSelectProject(p.id)}
+          onSelectConversation={onSelectConversation}
+          onToggle={() => setProjectFolded(p.id, !foldedProjects.has(p.id))}
+          project={p}
+        />
+      ))}
 
       <div className={styles.sectionLabel} style={{ marginTop: 14 }}>Conversations</div>
       {loose.length === 0 && <div className={styles.none}>Nothing yet.</div>}

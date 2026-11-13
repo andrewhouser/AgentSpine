@@ -17,6 +17,7 @@ import { ConfirmationsView } from "../ConfirmationsView/ConfirmationsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
+import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
 import { SearchView } from "../SearchView/SearchView.tsx";
 import { SettingsView } from "../SettingsView/SettingsView.tsx";
@@ -57,6 +58,7 @@ export const AppShell = () => {
   const [route, setRoute] = useState(readRoute);
   const [statusKey, setStatusKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [namingProject, setNamingProject] = useState(false);
   const status = useStatus(statusKey);
 
   // Keep the URL and the view in step in both directions, so a conversation or project can
@@ -95,12 +97,15 @@ export const AppShell = () => {
     go({ conversationId: created.id, view: "chat" });
   };
 
-  const newProject = async (): Promise<void> => {
-    const name = window.prompt("Project name");
-    if (!name?.trim()) return;
-    const created = await api.createProject(name.trim());
+  const newProject = async (name: string): Promise<void> => {
+    const created = await api.createProject(name);
     reloadProjects();
     go({ projectId: created.id, view: "project" });
+  };
+
+  const renameProject = async (id: number, name: string): Promise<void> => {
+    await api.updateProject(id, { name });
+    reloadProjects();
   };
 
   const deleteConversation = async (id: number): Promise<void> => {
@@ -116,14 +121,25 @@ export const AppShell = () => {
 
   return (
     <div className={`${styles.shell} ${drawerOpen ? styles.drawerOpen : ""}`}>
+      {namingProject && (
+        <PromptDialog
+          label="Project name"
+          onClose={() => setNamingProject(false)}
+          onSubmit={newProject}
+          submitLabel="Create"
+          title="New project"
+        />
+      )}
       <Sidebar
         activeConversation={route.conversationId}
         activeProject={route.projectId}
         conversations={conversations}
         onDeleteConversation={(id) => void deleteConversation(id)}
         onNewChat={() => void newChat()}
-        onNewProject={() => void newProject()}
+        onNewProject={() => setNamingProject(true)}
+        onNewProjectChat={(projectId) => void newChat(projectId)}
         onRenameConversation={(id, title) => void rename(id, title)}
+        onRenameProject={(id, name) => void renameProject(id, name)}
         onSelectConversation={(id) => go({ conversationId: id, view: "chat" })}
         onSelectProject={(id) => go({ projectId: id, view: "project" })}
         onSelectView={(view) => go({ conversationId: route.conversationId, view })}

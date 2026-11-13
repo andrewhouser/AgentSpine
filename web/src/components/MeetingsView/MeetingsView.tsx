@@ -41,7 +41,10 @@ import type {
 import { useMeetingStream } from "../../hooks/useMeetingStream.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
+import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
+import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
+import { TagDialog } from "../TagDialog/TagDialog.tsx";
 import styles from "./MeetingsView.module.css";
 
 const NO_MEETINGS: Meeting[] = [];
@@ -339,6 +342,13 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
   );
 };
 
+/** The one-off question dialogs a meeting row can open (tags have their own state). */
+type MeetingDialog =
+  | { id: number; kind: "dropAudio" }
+  | { id: number; kind: "reprocess" }
+  | { kind: "rename"; meeting: Meeting }
+  | { kind: "speaker"; meetingId: number; name: null | string; speaker: number };
+
 interface MeetingsViewProps {
   projects: Project[];
 }
@@ -352,6 +362,8 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   const [problem, setProblem] = useState<null | string>(null);
   const [open, setOpen] = useState<null | number>(null);
   const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [tagging, setTagging] = useState<Meeting | null>(null);
+  const [dialog, setDialog] = useState<MeetingDialog | null>(null);
   const [detail, setDetail] = useState<MeetingDetail>(NO_DETAIL);
   // Fixed at mount: "has this recording expired" is judged against when you opened the page.
   const [openedAt] = useState(() => Date.now());
@@ -461,28 +473,18 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     }
   };
 
-  const rename = async (m: { id: number; title: null | string }): Promise<void> => {
-    const next = window.prompt("Rename meeting", m.title ?? `Meeting ${m.id}`);
-    if (next === null || !next.trim()) return;
-    await api.setMeetingTitle(m.id, next.trim());
+  const rename = async (id: number, title: string): Promise<void> => {
+    await api.setMeetingTitle(id, title);
     reloadMeetings();
   };
 
-  const renameSpeaker = async (meetingId: number, turn: Turn): Promise<void> => {
-    if (turn.speaker === null) return;
-    const next = window.prompt(
-      "Who is this? Renames every line by this speaker. Re-run extraction to use the name in work items.",
-      turn.speakerName ?? "",
-    );
-    if (next === null) return;
-    await api.setSpeakerName(meetingId, turn.speaker, next);
+  const renameSpeaker = async (meetingId: number, speaker: number, name: string): Promise<void> => {
+    await api.setSpeakerName(meetingId, speaker, name);
     await load(meetingId);
   };
 
-  const editTags = async (m: Meeting): Promise<void> => {
-    const next = window.prompt("Tags, comma separated (e.g. standup, hooks)", (m.tags ?? []).join(", "));
-    if (next === null) return;
-    await api.setMeetingTags(m.id, next.split(","));
+  const saveTags = async (id: number, tags: string[]): Promise<void> => {
+    await api.setMeetingTags(id, tags);
     reloadMeetings();
   };
 
@@ -493,25 +495,13 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   // A meeting must carry every selected tag, matching what the assistant's meeting_list does.
   const shown = meetings.filter((m) => filterTags.every((t) => (m.tags ?? []).includes(t)));
 
-  const reprocess = async (id: number): Promise<void> => {
-    const answer = window.prompt(
-      "Re-make the transcript from the kept audio. How many people were in the meeting? Leave blank to detect.\n" +
-        "Speaker names you gave are reset, and work items are not re-extracted.",
-      "",
-    );
-    if (answer === null) return;
-    const n = Number(answer);
-    setProblem(null);
-    try {
-      await api.reprocessMeeting(id, Number.isInteger(n) && n > 0 ? n : undefined);
-      reloadMeetings();
-    } catch (err) {
-      setProblem((err as Error).message);
-    }
+  const reprocess = async (id: number, people: string): Promise<void> => {
+    const n = Number(people);
+    await api.reprocessMeeting(id, Number.isInteger(n) && n > 0 ? n : undefined);
+    reloadMeetings();
   };
 
   const dropAudio = async (id: number): Promise<void> => {
-    if (!window.confirm("Delete the kept recording now? Re-running the transcript will no longer be possible.")) return;
     await api.deleteMeetingAudio(id);
     reloadMeetings();
   };
@@ -523,6 +513,62 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
 
   return (
     <div className={styles.page}>
+      {tagging && (
+        <TagDialog
+          initial={tagging.tags ?? []}
+          onClose={() => setTagging(null)}
+          onSave={(tags) => saveTags(tagging.id, tags)}
+          subject={tagging.title ?? `Meeting ${tagging.id}`}
+        />
+      )}
+      {dialog?.kind === "rename" && (
+        <PromptDialog
+          initial={dialog.meeting.title ?? `Meeting ${dialog.meeting.id}`}
+          label="Meeting title"
+          onClose={() => setDialog(null)}
+          onSubmit={(title) => rename(dialog.meeting.id, title)}
+          title="Rename meeting"
+        />
+      )}
+      {dialog?.kind === "speaker" && (
+        <PromptDialog
+          allowEmpty
+          description={"Renames every line by this speaker.\nRe-run extraction to use the name in work items."}
+          initial={dialog.name ?? ""}
+          label="Speaker name"
+          onClose={() => setDialog(null)}
+          onSubmit={(name) => renameSpeaker(dialog.meetingId, dialog.speaker, name)}
+          placeholder="Who is this?"
+          title="Name this speaker"
+        />
+      )}
+      {dialog?.kind === "reprocess" && (
+        <PromptDialog
+          allowEmpty
+          description={
+            "Re-makes the transcript from the kept audio. How many people were in the meeting? Leave blank to detect.\n" +
+            "Speaker names you gave are reset, and work items are not re-extracted."
+          }
+          inputMode="numeric"
+          label="Number of people"
+          onClose={() => setDialog(null)}
+          onSubmit={(people) => reprocess(dialog.id, people)}
+          placeholder="Detect automatically"
+          submitLabel="Re-make transcript"
+          title="Re-make transcript"
+          validate={(v) => (v === "" || /^[1-9]\d*$/.test(v) ? null : "Enter a whole number, or leave blank.")}
+        />
+      )}
+      {dialog?.kind === "dropAudio" && (
+        <ConfirmDialog
+          confirmLabel="Delete recording"
+          danger
+          message="Delete the kept recording now? Re-running the transcript will no longer be possible."
+          onClose={() => setDialog(null)}
+          onConfirm={() => dropAudio(dialog.id)}
+          title="Delete recording"
+        />
+      )}
       <PageHeader
         subtitle="Captured on this machine, transcribed locally. Audio is never saved — only the words."
         title="Meetings"
@@ -656,7 +702,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
             <button
               aria-label="Rename meeting"
               className={styles.rename}
-              onClick={() => void rename(m)}
+              onClick={() => setDialog({ kind: "rename", meeting: m })}
               title="Rename"
               type="button"
             >
@@ -687,7 +733,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                 {t}
               </span>
             ))}
-            <button className={styles.linkButton} onClick={() => void editTags(m)} type="button">
+            <button className={styles.linkButton} onClick={() => setTagging(m)} type="button">
               {(m.tags ?? []).length ? "Edit tags" : "Add tags"}
             </button>
           </div>
@@ -699,13 +745,13 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
               <button
                 className={styles.linkButton}
                 disabled={m.status === "recording" || m.status === "transcribing"}
-                onClick={() => void reprocess(m.id)}
+                onClick={() => setDialog({ id: m.id, kind: "reprocess" })}
                 type="button"
               >
                 Re-run transcript
               </button>{" "}
               ·{" "}
-              <button className={styles.linkButton} onClick={() => void dropAudio(m.id)} type="button">
+              <button className={styles.linkButton} onClick={() => setDialog({ id: m.id, kind: "dropAudio" })} type="button">
                 Delete audio
               </button>
             </div>
@@ -718,8 +764,9 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                 {detail.segments.length === 0 && (
                   <p className={styles.waiting}>No transcript kept for this meeting.</p>
                 )}
-                {toTurns(detail.segments).map((turn, _i, all) =>
-                  turn.speaker === null ? (
+                {toTurns(detail.segments).map((turn, _i, all) => {
+                  const speaker = turn.speaker;
+                  return speaker === null ? (
                     turn.segments.map((s) => (
                       <p className={styles.line} key={s.id}>
                         <span className={styles.stamp}>{clock(s.start_ms)}</span>
@@ -731,7 +778,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                       <div className={styles.turnHead}>
                         <button
                           className={`${styles.speaker} ${styles[`voice${voiceOf(all, turn)}`]}`}
-                          onClick={() => void renameSpeaker(m.id, turn)}
+                          onClick={() => setDialog({ kind: "speaker", meetingId: m.id, name: turn.speakerName ?? null, speaker })}
                           title="Rename this speaker"
                           type="button"
                         >
@@ -741,8 +788,8 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                       </div>
                       <p className={styles.turnText}>{turn.segments.map((s) => s.text).join(" ")}</p>
                     </div>
-                  ),
-                )}
+                  );
+                })}
               </div>
             </>
           )}

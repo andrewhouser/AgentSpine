@@ -1115,7 +1115,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (m === "PATCH" && seg.length === 3) {
         const b = await readBody(req);
         const patch: projects.ProjectFields = {};
-        if (typeof b.name === "string") patch.name = b.name;
+        if (typeof b.name === "string" && b.name.trim()) patch.name = b.name.trim();
         if (typeof b.instructions === "string") patch.instructions = b.instructions;
         // Stored as given; `narrowPolicy` is what guarantees it can only ever restrict, so
         // there is nothing to validate away here — an overlay asking for more simply

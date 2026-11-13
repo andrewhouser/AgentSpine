@@ -8,9 +8,32 @@ struct ProjectsView: View {
     @State private var projects: [Project] = []
     @State private var error: String?
     @State private var loading = false
-    @State private var creating = false
     @State private var newName = ""
-    @State private var pendingDelete: Project?
+    @State private var prompt: Prompt?
+
+    /// Create, rename and delete share one `.alert`: two alert modifiers on one view do not
+    /// both fire reliably (the same trap as the Conversations rename/delete pair).
+    private enum Prompt: Identifiable {
+        case create
+        case delete(Project)
+        case rename(Project)
+
+        var id: String {
+            switch self {
+            case .create: return "create"
+            case .delete(let p): return "delete-\(p.id)"
+            case .rename(let p): return "rename-\(p.id)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .create: return "New project"
+            case .delete: return "Delete this project?"
+            case .rename: return "Rename project"
+            }
+        }
+    }
 
     var body: some View {
         List {
@@ -29,8 +52,17 @@ struct ProjectsView: View {
                         }
                     }
                 }
-                .swipeActions {
-                    Button("Delete", role: .destructive) { pendingDelete = project }
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", role: .destructive) { prompt = .delete(project) }
+                }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        newName = project.name
+                        prompt = .rename(project)
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    .tint(.gray)
                 }
             }
             if projects.isEmpty && !loading && error == nil {
@@ -40,24 +72,37 @@ struct ProjectsView: View {
         .navigationTitle("Projects")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { newName = ""; creating = true } label: { Image(systemName: "plus") }
+                Button { newName = ""; prompt = .create } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New project")
             }
         }
-        .alert("New project", isPresented: $creating) {
-            TextField("Name", text: $newName)
-            Button("Create") { Task { await create() } }
-            Button("Cancel", role: .cancel) {}
-        }
         .alert(
-            "Delete this project?",
-            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-            presenting: pendingDelete
-        ) { project in
-            Button("Delete", role: .destructive) { Task { await delete(project) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { project in
-            Text("\(project.name) and its indexed sources are removed from the server.")
+            prompt?.title ?? "",
+            isPresented: Binding(get: { prompt != nil }, set: { if !$0 { prompt = nil } }),
+            presenting: prompt
+        ) { prompt in
+            switch prompt {
+            case .create:
+                TextField("Name", text: $newName)
+                Button("Create") { Task { await create() } }
+                Button("Cancel", role: .cancel) {}
+            case .rename(let project):
+                TextField("Name", text: $newName)
+                Button("Save") { Task { await rename(project) } }
+                Button("Cancel", role: .cancel) {}
+            case .delete(let project):
+                Button("Delete", role: .destructive) { Task { await delete(project) } }
+                Button("Cancel", role: .cancel) {}
+            }
+        } message: { prompt in
+            switch prompt {
+            case .delete(let project):
+                Text("\(project.name) and its indexed sources are removed from the server.")
+            case .rename:
+                Text("Threads and indexed sources stay with the project.")
+            case .create:
+                EmptyView()
+            }
         }
         .refreshable { await load() }
         .task { await load() }
@@ -69,6 +114,17 @@ struct ProjectsView: View {
         guard !name.isEmpty else { return }
         do {
             _ = try await APIClient.shared.createProject(name: name, instructions: "")
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func rename(_ project: Project) async {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != project.name else { return }
+        do {
+            try await APIClient.shared.renameProject(project.id, to: name)
             await load()
         } catch {
             self.error = error.localizedDescription

@@ -1,0 +1,125 @@
+.dialog {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  max-height: min(80vh, 36rem);
+  max-width: min(92vw, 28rem);
+  padding: 0;
+  width: 100%;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 16px 6px;
+}
+
+.title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.close {
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 1.125rem;
+  line-height: 1;
+  padding: 2px 7px;
+}
+
+.close:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 16px 12px;
+}
+
+.footer {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 16px;
+}
+
+.description {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0 0 10px;
+  white-space: pre-line;
+}
+
+.input {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.8438rem;
+  padding: 7px 10px;
+  width: 100%;
+}
+
+.input:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--focus);
+}
+
+.primary,
+.secondary {
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  padding: 6px 14px;
+}
+
+.primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--on-accent);
+}
+
+.primary:disabled {
+  opacity: 0.6;
+}
+
+.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.secondary {
+  background: none;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.secondary:hover {
+  background: var(--bg-inset);
+}
+
+.problem {
+  color: var(--danger);
+  flex: 1;
+  font-size: 0.75rem;
+}

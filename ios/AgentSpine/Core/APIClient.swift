@@ -587,6 +587,14 @@ final class APIClient {
         )
     }
 
+    /// Rename only. The PATCH route updates just the fields it is sent, so this cannot touch
+    /// the project's instructions the way `updateProject` would if they were stale.
+    func renameProject(_ id: Int, to name: String) async throws {
+        try await sendRaw(
+            jsonRequest("/api/projects/\(id)", method: "PATCH", body: ["name": name])
+        )
+    }
+
     /// Adds and indexes inline, so the answer says whether the path was even allowed.
     func addSource(projectID: Int, path: String) async throws -> IngestResult {
         struct Reply: Codable { let result: IngestResult }

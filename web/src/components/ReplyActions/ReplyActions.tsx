@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { api } from "../../lib/api.ts";
+import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import styles from "./ReplyActions.module.css";
 
 interface ReplyActionsProps {
@@ -18,6 +19,7 @@ export const ReplyActions = ({ contextUsed, projectId, runId, starred: initially
   const [starred, setStarred] = useState(initiallyStarred);
   const [saved, setSaved] = useState("");
   const [showContext, setShowContext] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const toggleStar = async (): Promise<void> => {
     const next = !starred;
@@ -29,19 +31,25 @@ export const ReplyActions = ({ contextUsed, projectId, runId, starred: initially
     }
   };
 
-  const save = async (): Promise<void> => {
-    const name = window.prompt("Save this reply as (a bare name goes in your project folder or docs/)", `reply-${runId}.md`);
-    if (!name?.trim()) return;
-    try {
-      const r = await api.saveReplyAsFile(runId, name.trim(), projectId);
-      setSaved(`Saved to ${r.path}`);
-    } catch (err) {
-      setSaved(err instanceof Error ? err.message : String(err));
-    }
+  const save = async (name: string): Promise<void> => {
+    // Errors go back to the dialog, which stays open so the name can be fixed.
+    const r = await api.saveReplyAsFile(runId, name, projectId);
+    setSaved(`Saved to ${r.path}`);
   };
 
   return (
     <>
+      {saving && (
+        <PromptDialog
+          description="A bare name goes in your project folder or docs/."
+          initial={`reply-${runId}.md`}
+          label="File name"
+          onClose={() => setSaving(false)}
+          onSubmit={save}
+          submitLabel="Save"
+          title="Save reply to file"
+        />
+      )}
       <div className={styles.row}>
         <button
           aria-label={starred ? "Unstar this reply" : "Star this reply"}
@@ -51,7 +59,7 @@ export const ReplyActions = ({ contextUsed, projectId, runId, starred: initially
         >
           {starred ? "★ Starred" : "☆ Star"}
         </button>
-        <button className={styles.btn} onClick={() => void save()} type="button">
+        <button className={styles.btn} onClick={() => setSaving(true)} type="button">
           Save to file
         </button>
         {contextUsed.length > 0 && (
