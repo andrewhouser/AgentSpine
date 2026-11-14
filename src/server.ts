@@ -75,6 +75,7 @@ import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
 import { addTask, deleteTask, getTask, listTasks, updateTask } from "./tasks/store.ts";
 import { sweepDueTasks } from "./tasks/sweep.ts";
+import { sweepDueCards } from "./study/sweep.ts";
 import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
 import { ensureMorningBrief } from "./briefing.ts";
 import { pruneSources } from "./research/sources.ts";
@@ -1533,6 +1534,9 @@ setInterval(runScheduler, SCHEDULER_TICK_MS);
 // Due tasks and follow-ups become notifications.
 void sweepDueTasks();
 setInterval(() => void sweepDueTasks(), 60_000).unref();
+// Flash cards that have come due earn one nudge a day.
+void sweepDueCards();
+setInterval(() => void sweepDueCards(), 10 * 60_000).unref();
 prune();
 setInterval(prune, PRUNE_INTERVAL_MS).unref();
 // Kept recordings are measured in hours, so they cannot wait for the daily prune.
