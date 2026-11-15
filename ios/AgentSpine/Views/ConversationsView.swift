@@ -80,6 +80,9 @@ struct ConversationsView: View {
                     if isFolded && count > 0 {
                         Text("\(count)").foregroundStyle(.secondary)
                     }
+                    if isFolded && state.conversations.contains(where: { $0.projectID == project.id && $0.needsYou }) {
+                        AttentionDot()
+                    }
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -117,9 +120,10 @@ struct ConversationsView: View {
     @ViewBuilder
     private func row(_ conversation: Conversation, showProject: Bool) -> some View {
         NavigationLink(value: conversation.id) {
+            HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(conversation.displayTitle)
-                    .font(.body)
+                    .font(.body.weight(conversation.needsYou ? .semibold : .regular))
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(SpineDate.relative(conversation.updated))
@@ -139,6 +143,12 @@ struct ConversationsView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            }
+            // Something in this thread is waiting on you — an approval. Open it to answer.
+            if conversation.needsYou {
+                Spacer(minLength: 0)
+                AttentionDot()
+            }
             }
         }
         .swipeActions(edge: .trailing) {

@@ -6,7 +6,8 @@ import UserNotifications
 /// Where a tapped notification should land.
 enum DeepLink: Equatable {
     case conversation(Int)
-    case approvals
+    /// The thread list — where the blue dots are.
+    case threads
 }
 
 /// Notification permission, the device token, the Approve/Reject buttons, and what a tap does.
@@ -203,8 +204,12 @@ final class PushManager: NSObject {
             }
         } catch {
             // Nothing useful to show: there is no UI on a lock screen. Open the app on the
-            // approvals tab so the question is the first thing seen.
-            pendingDeepLink = .approvals
+            // thread that asked, so the question is the first thing seen.
+            if let conversationID = userInfo["conversationId"] as? Int {
+                pendingDeepLink = .conversation(conversationID)
+            } else {
+                pendingDeepLink = .threads
+            }
         }
     }
 }
@@ -242,12 +247,12 @@ extension PushManager: UNUserNotificationCenterDelegate {
             break
         }
 
-        // A plain tap. An approval goes to the approvals tab; anything with a thread goes to
-        // the thread, which is the point of carrying the conversation id in the payload.
-        if userInfo["confirmationId"] is Int {
-            pendingDeepLink = .approvals
-        } else if let conversationID = userInfo["conversationId"] as? Int {
+        // A plain tap goes to the thread — for an approval, the thread whose buttons answer
+        // it, which is the point of carrying the conversation id in the payload.
+        if let conversationID = userInfo["conversationId"] as? Int {
             pendingDeepLink = .conversation(conversationID)
+        } else if userInfo["confirmationId"] is Int {
+            pendingDeepLink = .threads
         }
     }
 }

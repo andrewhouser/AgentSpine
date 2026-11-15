@@ -204,6 +204,13 @@ export interface RunContext {
    * stays attributed to that project without the model having to know its numeric id.
    */
   projectId?: null | number;
+  /**
+   * The user set this run up in advance — a schedule (watchers included) or the heartbeat —
+   * and creating it was the approval. The broker runs its irreversible calls without asking
+   * again; the allowlist, budgets and dry run still apply. Inherited by subagents of such a
+   * run. Absent means a person may still be asked.
+   */
+  preApproved?: boolean;
 }
 
 export interface ToolContext {

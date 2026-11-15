@@ -46,11 +46,27 @@ struct ThreadView: View {
                     ForEach(ledgerTurns) { turn in
                         TurnView(turn: turn, projectID: thread?.conversation.projectID)
                             .id("turn-\(turn.id)")
+                        // The buttons go under the turn that asked, where you are reading.
+                        ForEach(turn.confirmations) { confirmation in
+                            ApprovalCard(confirmation: confirmation) { await afterDecision() }
+                                .id("confirmation-\(confirmation.id)")
+                        }
                     }
 
                     if showsLiveTurn {
-                        LiveTurnView(task: liveTask ?? "", stream: stream)
+                        LiveTurnView(task: liveTask ?? "", isDecision: liveIsDecision, stream: stream)
                             .id("live")
+                        ForEach(liveConfirmations) { confirmation in
+                            ApprovalCard(confirmation: confirmation) { await afterDecision() }
+                                .id("confirmation-\(confirmation.id)")
+                        }
+                    }
+
+                    // Questions no turn here raised — the inbox's: a meeting's work items, a
+                    // learner's proposal. At the end, where the newest thing in a thread goes.
+                    ForEach(thread?.confirmations ?? []) { confirmation in
+                        ApprovalCard(confirmation: confirmation) { await afterDecision() }
+                            .id("confirmation-\(confirmation.id)")
                     }
 
                     // Anchors the scroll so a new event keeps the newest content in view.
@@ -64,6 +80,9 @@ struct ThreadView: View {
             }
             .onChange(of: thread?.turns.count) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onChange(of: openQuestionCount) { old, new in
+                if new > old { withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
             }
         }
         .navigationTitle(thread?.conversation.displayTitle ?? "Thread")
@@ -84,12 +103,24 @@ struct ThreadView: View {
                 Task {
                     await load()
                     liveTask = nil
-                    await state.refreshApprovals()
+                    await state.refreshConversations()
                     if handsFree.phase == .busy { await speakReplyThenResume() }
                 }
             default:
                 break
             }
+        }
+        // The live turn just asked something: fetch the thread so its buttons appear now,
+        // under the turn, rather than when the turn ends.
+        .onChange(of: stream.pendingConfirmationIDs) { _, ids in
+            guard !ids.isEmpty else { return }
+            Task { await load() }
+        }
+        // A question here was asked or answered somewhere else — a helper of this turn, the
+        // lock screen, the dashboard. The list knows first; follow it.
+        .onChange(of: listedAttention) { _, _ in
+            guard !stream.isLive else { return }
+            Task { await load() }
         }
         .onDisappear {
             stream.stop()
@@ -106,6 +137,33 @@ struct ThreadView: View {
 
     /// Whether the turn in flight is being drawn from the stream.
     private var showsLiveTurn: Bool { stream.isLive || stream.transportNote != nil }
+
+    /// The live run's own row in the ledger, once a reload has fetched it.
+    private var liveLedgerTurn: Turn? {
+        guard let live = stream.runID else { return nil }
+        return thread?.turns.first { $0.id == live }
+    }
+
+    /// Open questions the live turn has raised so far.
+    private var liveConfirmations: [Confirmation] { liveLedgerTurn?.confirmations ?? [] }
+
+    /// Whether the live turn is the one an Approve/Reject resumed.
+    private var liveIsDecision: Bool { liveLedgerTurn?.isDecision ?? false }
+
+    private var openQuestionCount: Int {
+        (thread?.turns.reduce(0) { $0 + $1.confirmations.count } ?? 0) + (thread?.confirmations?.count ?? 0)
+    }
+
+    /// This thread's count of waiting questions, as the thread list last saw it.
+    private var listedAttention: Int {
+        state.conversations.first { $0.id == conversationID }?.attention ?? 0
+    }
+
+    /// After Approve or Reject: the server may have resumed this conversation with the result.
+    /// Reloading picks that turn up as running (see `load`) and streams it.
+    private func afterDecision() async {
+        await load()
+    }
 
     /// The finished turns, minus the one the live view is already drawing.
     ///
@@ -453,12 +511,16 @@ struct TurnView: View {
             }
 
             if let task = turn.task, !task.isEmpty {
-                Text(task)
-                    .font(.body)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                if turn.isDecision {
+                    DecisionNote(text: task)
+                } else {
+                    Text(task)
+                        .font(.body)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
 
             ForEach(turn.actions) { action in
@@ -615,11 +677,14 @@ struct DelegationRow: View {
 
 struct LiveTurnView: View {
     let task: String
+    var isDecision = false
     let stream: RunStream
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !task.isEmpty {
+            if !task.isEmpty, isDecision {
+                DecisionNote(text: task)
+            } else if !task.isEmpty {
                 Text(task)
                     .font(.body)
                     .padding(.horizontal, 14)
@@ -640,14 +705,6 @@ struct LiveTurnView: View {
                 )
             }
 
-            if !stream.pendingConfirmationIDs.isEmpty {
-                Label(
-                    "Waiting for your approval — see the Approvals tab.",
-                    systemImage: "checkmark.shield"
-                )
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.orange)
-            }
 
             if case .finished(let summary) = stream.phase, let summary, !summary.isEmpty {
                 MarkdownText(summary)

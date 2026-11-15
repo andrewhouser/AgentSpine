@@ -177,6 +177,13 @@ addColumn("confirmations", "resolved", "TEXT");
 addColumn("confirmations", "rung", "INTEGER");
 addColumn("confirmations", "nudged", "TEXT");
 addColumn("schedules", "spec", "TEXT");
+// Approvals live in a conversation, the way a chat assistant asks in the thread it is
+// working in. `conversation_id` is the thread whose buttons answer this question (the
+// raising run's thread, or the system inbox for a question no thread raised); `reported`
+// is set once the decision has been handed back to that thread's next turn, so a resumed
+// conversation hears about each decision exactly once.
+addColumn("confirmations", "conversation_id", "INTEGER");
+addColumn("confirmations", "reported", "INTEGER");
 
 // A conversation's thread is "its runs, in order", read on every thread load.
 db.exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs (conversation_id, id)");
@@ -204,6 +211,11 @@ export interface ConversationRow {
   tier: null | string;
   title: string | null;
   updated: string;
+  /**
+   * Decisions waiting on the user in this thread — the blue dot. Present on rows from
+   * listConversations; absent elsewhere.
+   */
+  attention?: number;
 }
 
 export const createConversation = (title: string | null = null, projectId: number | null = null): number => {
@@ -217,7 +229,8 @@ export const createConversation = (title: string | null = null, projectId: numbe
 export const listConversations = (limit = 100, includeArchived = false): ConversationRow[] =>
   db
     .prepare(
-      `SELECT * FROM conversations ${includeArchived ? "" : "WHERE archived = 0"} ORDER BY updated DESC LIMIT ?`,
+      `SELECT c.*, (SELECT COUNT(*) FROM confirmations f WHERE f.conversation_id = c.id AND f.state = 'pending') AS attention
+       FROM conversations c ${includeArchived ? "" : "WHERE c.archived = 0"} ORDER BY c.updated DESC LIMIT ?`,
     )
     .all(limit) as unknown as ConversationRow[];
 
@@ -256,6 +269,12 @@ export const touchConversation = (id: number): void => {
  * record of what it did because someone tidied up a chat list.
  */
 export const deleteConversation = (id: number): void => {
+  // A question asked in a thread is withdrawn with the thread, as closing a chat cancels
+  // what it was waiting on. Expired, not rejected: the user did not decide against it, so
+  // nothing is learned from it (see sweepConfirmations for the same distinction).
+  db.prepare(
+    "UPDATE confirmations SET state = 'expired', result = 'conversation deleted — it was never run', resolved = ?, token = NULL, reported = 1 WHERE conversation_id = ? AND state = 'pending'",
+  ).run(now(), id);
   db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
 };
 
@@ -852,10 +871,95 @@ export const memoriesSince = (sinceIso: string): any[] =>
  */
 export const queueConfirmation = (call: ToolCall, summary: string, runId: number | null = null): number => {
   const token = randomBytes(24).toString("base64url");
+  const conversationId = conversationForRun(runId) ?? inboxConversation();
   const r = db
-    .prepare("INSERT INTO confirmations (ts, run_id, tool, args, summary, token) VALUES (?,?,?,?,?,?)")
-    .run(now(), runId, call.tool, JSON.stringify(call.args ?? null), summary, token);
+    .prepare(
+      "INSERT INTO confirmations (ts, run_id, tool, args, summary, token, conversation_id) VALUES (?,?,?,?,?,?,?)",
+    )
+    .run(now(), runId, call.tool, JSON.stringify(call.args ?? null), summary, token, conversationId);
+  // The thread with a question in it rises to the top of the list, where the dot is.
+  touchConversation(conversationId);
   return Number(r.lastInsertRowid);
+};
+
+/**
+ * The thread a run belongs to, walking up from a subagent to the turn that delegated it —
+ * a helper's question is asked in its caller's conversation. Null for a run outside any
+ * live thread (the `do` CLI, a heartbeat) or no run at all.
+ */
+export const conversationForRun = (runId: number | null): null | number => {
+  let id = runId;
+  for (let hops = 0; id != null && hops < 10; hops++) {
+    const r = db.prepare("SELECT conversation_id, parent_run_id FROM runs WHERE id = ?").get(id) as
+      | undefined
+      | { conversation_id: null | number; parent_run_id: null | number };
+    if (!r) return null;
+    if (r.conversation_id != null) return getConversation(r.conversation_id) ? r.conversation_id : null;
+    id = r.parent_run_id;
+  }
+  return null;
+};
+
+export const INBOX_TITLE = "AgentSpine";
+const INBOX_KEY = "inbox:conversation";
+
+/**
+ * The system's own thread: where a question that no conversation raised is asked — a
+ * meeting's work items, a learner's proposal, a CLI run's queued action. Created on first
+ * use and again if the user deleted it, so a question always has a thread to sit in.
+ */
+export const inboxConversation = (): number => {
+  const known = Number(kvGet(INBOX_KEY)?.value ?? NaN);
+  if (Number.isInteger(known) && getConversation(known)) {
+    const c = getConversation(known)!;
+    if (c.archived) db.prepare("UPDATE conversations SET archived = 0 WHERE id = ?").run(known);
+    return known;
+  }
+  const id = createConversation(INBOX_TITLE, null);
+  kvSet(INBOX_KEY, String(id));
+  return id;
+};
+
+/** The inbox thread's id if it exists — never creates it (see inboxConversation for that). */
+export const inboxId = (): null | number => {
+  const known = Number(kvGet(INBOX_KEY)?.value ?? NaN);
+  return Number.isInteger(known) && getConversation(known) ? known : null;
+};
+
+/** Whether this thread is the system inbox (no turn of its own waits on its answers). */
+export const isInbox = (conversationId: number): boolean =>
+  Number(kvGet(INBOX_KEY)?.value ?? NaN) === conversationId;
+
+/** Every confirmation (any state) asked in one thread, oldest first. */
+export const confirmationsForConversation = (conversationId: number): ConfirmationRow[] =>
+  db
+    .prepare(`SELECT ${CONFIRMATION_COLS} FROM confirmations WHERE conversation_id = ? ORDER BY id`)
+    .all(conversationId) as unknown as ConfirmationRow[];
+
+/** Still-pending confirmations asked in one thread. */
+export const pendingConfirmationsForConversation = (conversationId: number): ConfirmationRow[] =>
+  db
+    .prepare(
+      `SELECT ${CONFIRMATION_COLS} FROM confirmations WHERE conversation_id = ? AND state = 'pending' ORDER BY id`,
+    )
+    .all(conversationId) as unknown as ConfirmationRow[];
+
+/**
+ * Decisions made in a thread that its next turn has not yet been told about, and mark them
+ * told. Only rows a run raised — an inbox question has no turn waiting on its answer.
+ */
+export const takeUnreportedDecisions = (conversationId: number): ConfirmationRow[] => {
+  const rows = db
+    .prepare(
+      `SELECT ${CONFIRMATION_COLS} FROM confirmations
+       WHERE conversation_id = ? AND run_id IS NOT NULL AND state != 'pending' AND reported IS NULL ORDER BY id`,
+    )
+    .all(conversationId) as unknown as ConfirmationRow[];
+  if (rows.length)
+    db.prepare(
+      `UPDATE confirmations SET reported = 1 WHERE id IN (${rows.map(() => "?").join(",")})`,
+    ).run(...rows.map((r) => r.id));
+  return rows;
 };
 
 export interface ConfirmationRow {
@@ -869,6 +973,8 @@ export interface ConfirmationRow {
   result: string | null;
   /** When the row left 'pending', ISO. Null while pending or on rows predating the column. */
   resolved: string | null;
+  /** The thread whose buttons answer this. Null only on rows predating the column. */
+  conversation_id?: null | number;
   /** Present only on rows read internally; never returned by listConfirmations. */
   token?: string | null;
   /** Watchdog escalation rung already climbed. Internal; null/absent means none. */
@@ -878,7 +984,7 @@ export interface ConfirmationRow {
 }
 
 /** Columns safe to hand to a UI or CLI — deliberately excludes `token`. */
-const CONFIRMATION_COLS = "id, ts, run_id, tool, args, summary, state, result, resolved";
+const CONFIRMATION_COLS = "id, ts, run_id, tool, args, summary, state, result, resolved, conversation_id";
 
 export const listConfirmations = (state?: string): ConfirmationRow[] =>
   state
@@ -1083,8 +1189,12 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
 
     // Threads whose every run has gone. Counted even on a dry run so the report is honest
     // about what a real pass would remove.
+    // A thread with a question still open is not empty: the inbox has no runs at all, and
+    // pruning it would take an unanswered approval down with it.
+    const stillAsking =
+      "NOT EXISTS (SELECT 1 FROM confirmations f WHERE f.conversation_id = c.id AND f.state = 'pending')";
     const emptySql =
-      "SELECT COUNT(*) AS n FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id)";
+      `SELECT COUNT(*) AS n FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id) AND ${stillAsking}`;
     if (opts.dryRun) {
       // Can't observe the post-delete state without deleting, so approximate: threads whose
       // only runs are in the prunable set.
@@ -1098,7 +1208,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
     } else {
       result.conversations = count(emptySql);
       db.exec(
-        "DELETE FROM conversations WHERE id IN (SELECT c.id FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id))",
+        `DELETE FROM conversations WHERE id IN (SELECT c.id FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id) AND ${stillAsking})`,
       );
     }
   }
@@ -1443,3 +1553,25 @@ export const noteDeviceFailure = (id: number, detail: string): void => {
 
 export const deleteDevice = (id: number): boolean =>
   db.prepare("DELETE FROM devices WHERE id = ?").run(id).changes > 0;
+
+/**
+ * One-time move of approvals queued before they belonged to a thread. Run at the bottom of
+ * the module so every helper above is initialised. A still-pending question goes to the
+ * thread that raised it, or the inbox; an already-decided one is marked reported, so no
+ * conversation resumes over a decision made before resuming existed.
+ */
+const backfillConfirmationThreads = (): void => {
+  try {
+    db.exec("UPDATE confirmations SET reported = 1 WHERE conversation_id IS NULL AND state != 'pending' AND reported IS NULL");
+    const orphans = db
+      .prepare("SELECT id, run_id FROM confirmations WHERE conversation_id IS NULL AND state = 'pending'")
+      .all() as { id: number; run_id: null | number }[];
+    for (const o of orphans) {
+      const cid = conversationForRun(o.run_id) ?? inboxConversation();
+      db.prepare("UPDATE confirmations SET conversation_id = ? WHERE id = ?").run(cid, o.id);
+    }
+  } catch (err) {
+    console.warn(`[store] confirmation thread backfill skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+backfillConfirmationThreads();

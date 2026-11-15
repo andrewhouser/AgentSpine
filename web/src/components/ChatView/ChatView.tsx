@@ -9,6 +9,7 @@ import { useRunStream } from "../../hooks/useRunStream.ts";
 import { useVoiceConfig } from "../../hooks/useVoiceConfig.ts";
 import { useVoiceSession } from "../../hooks/useVoiceSession.ts";
 import { api } from "../../lib/api.ts";
+import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { Composer } from "../Composer/Composer.tsx";
 import { TraceView } from "../TraceView/TraceView.tsx";
 import { Turn } from "../Turn/Turn.tsx";
@@ -16,6 +17,8 @@ import { VoiceBar } from "../VoiceBar/VoiceBar.tsx";
 import styles from "./ChatView.module.css";
 
 interface ChatViewProps {
+  /** Open questions in this thread, from the conversation list — a change means reload. */
+  attention: number;
   conversationId: number;
   onTitleMayHaveChanged: () => void;
 }
@@ -58,7 +61,11 @@ const passFor = (attachments: Attachment[]): null | VisionPass => {
   return { count: read.length, elapsedMs: 0, error: null };
 };
 
-export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProps) => {
+/** The kind of a run already in the thread — so a resumed turn streams as a decision, not a message. */
+const persistedKind = (turns: Thread["turns"], runId: number): null | string =>
+  turns.find((t) => t.id === runId)?.kind ?? null;
+
+export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged }: ChatViewProps) => {
   // AppShell keys this component on the conversation, so switching threads remounts it and
   // no state has to be reset by hand.
   const load = useCallback(() => api.thread(conversationId), [conversationId]);
@@ -133,6 +140,29 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
 
   const live = useRunStream(active, onRunComplete);
 
+  /**
+   * A question appeared or went away in this thread without this view doing it — asked by a
+   * turn's helper, answered from the phone. Reload so the buttons match. Skipped while a run
+   * streams: its own events put its cards up, and its end reloads anyway.
+   */
+  const seenAttention = useRef(attention);
+  useEffect(() => {
+    if (seenAttention.current === attention) return;
+    seenAttention.current = attention;
+    if (!active) reloadThread();
+  }, [active, attention, reloadThread]);
+
+  /**
+   * After Approve or Reject. The answer may have resumed the conversation — a new turn that
+   * carries the result back to the assistant, as a chat assistant continues once you press
+   * the button. Reloading picks that turn up as in flight (see `inFlight` above) and streams
+   * it; refreshing the list clears the dot.
+   */
+  const onDecided = useCallback(() => {
+    reloadThread();
+    onTitleMayHaveChanged();
+  }, [onTitleMayHaveChanged, reloadThread]);
+
   // Stick to the bottom as content arrives, the way a chat should.
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
@@ -181,7 +211,7 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
         <div className={styles.column} hidden={tab === "trace"}>
           {!thread && <div className={styles.loading}>Loading…</div>}
 
-          {thread && !persisted.length && !live && (
+          {thread && !persisted.length && !live && !thread.confirmations?.length && (
             <div className={styles.empty}>
               <h1 className={styles.emptyTitle}>What can I do for you?</h1>
               <p className={styles.emptyBody}>
@@ -210,8 +240,9 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
               }))}
               error={turn.status === "failed" ? turn.summary : null}
               key={turn.id}
+              kind={turn.kind ?? null}
               live={false}
-              onConfirmationResolved={reloadThread}
+              onConfirmationResolved={onDecided}
               projectId={thread?.conversation.project_id ?? null}
               runId={turn.id}
               starred={turn.starred}
@@ -237,8 +268,9 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
                 tier: d.tier,
               }))}
               error={live.error}
+              kind={persistedKind(turns, live.runId)}
               live={live.status === "queued" || live.status === "running"}
-              onConfirmationResolved={reloadThread}
+              onConfirmationResolved={onDecided}
               step={live.step}
               summary={live.summary}
               task={live.task}
@@ -249,6 +281,18 @@ export const ChatView = ({ conversationId, onTitleMayHaveChanged }: ChatViewProp
               waitingBehind={live.waitingBehind}
             />
           )}
+
+          {/* Questions no turn here raised — the inbox's: a meeting's work items, a learner's
+              proposal. They sit at the end, where the newest thing in a thread goes. */}
+          {(thread?.confirmations ?? []).map((c) => (
+            <ApprovalCard
+              confirmationId={c.id}
+              key={c.id}
+              onResolved={onDecided}
+              summary={c.summary}
+              tool={c.tool}
+            />
+          ))}
 
           <div ref={bottom} />
         </div>

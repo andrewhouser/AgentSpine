@@ -1,0 +1,54 @@
+.row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 20px 0 4px;
+}
+
+.note {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 85%;
+  overflow-wrap: anywhere;
+  padding: 8px 12px;
+}
+
+.decision {
+  font-size: 0.8438rem;
+}
+
+.yes {
+  color: var(--ok);
+  font-weight: 500;
+}
+
+.no {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.yes::before {
+  content: "✓ ";
+}
+
+.no::before {
+  content: "✗ ";
+}
+
+.detail {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.detail summary {
+  cursor: pointer;
+}
+
+.detail pre {
+  font-family: var(--font-mono);
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}

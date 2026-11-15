@@ -14,6 +14,8 @@ import Foundation
 
 struct Conversation: Codable, Identifiable, Hashable {
     let archived: Int
+    /// Decisions waiting on you in this thread — the blue dot. Absent from older servers.
+    let attention: Int?
     let created: String
     let id: Int
     let projectID: Int?
@@ -22,9 +24,11 @@ struct Conversation: Codable, Identifiable, Hashable {
     let updated: String
 
     enum CodingKeys: String, CodingKey {
-        case archived, created, id, tier, title, updated
+        case archived, attention, created, id, tier, title, updated
         case projectID = "project_id"
     }
+
+    var needsYou: Bool { (attention ?? 0) > 0 }
 
     /// What to show in a list before the auto-titler has named the thread.
     var displayTitle: String {
@@ -84,6 +88,8 @@ struct Action: Codable, Identifiable, Hashable {
 
 struct Confirmation: Codable, Identifiable, Hashable {
     let args: String
+    /// The thread whose buttons answer this.
+    let conversationID: Int?
     let id: Int
     let result: String?
     let runID: Int?
@@ -94,6 +100,7 @@ struct Confirmation: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case args, id, result, state, summary, tool, ts
+        case conversationID = "conversation_id"
         case runID = "run_id"
     }
 
@@ -128,6 +135,8 @@ struct Turn: Codable, Identifiable, Hashable {
     let confirmations: [Confirmation]
     let finished: String?
     let id: Int
+    /// "chat" for a message you typed; "approval" for the turn your Approve/Reject resumed.
+    let kind: String?
     let started: String
     let status: String
     let summary: String?
@@ -138,10 +147,15 @@ struct Turn: Codable, Identifiable, Hashable {
     let starred: Bool?
 
     var isRunning: Bool { status == "running" || status == "queued" }
+    var isDecision: Bool { kind == "approval" }
 }
 
 struct Thread: Codable {
+    /// Open questions no turn here raised — the inbox thread's. Drawn after the last turn.
+    let confirmations: [Confirmation]?
     let conversation: Conversation
+    /// The system's own thread, where questions nobody's chat raised are asked.
+    let inbox: Bool?
     let turns: [Turn]
 }
 
@@ -668,7 +682,7 @@ struct MeetingWorkItem: Codable, Identifiable, Hashable {
     }
 
     var wasQueued: Bool { verdict == "queued" }
-    /// Went straight onto a project's task list instead of Approvals.
+    /// Went straight onto a project's task list instead of being asked about in a thread.
     var wasFiled: Bool { verdict == "filed" }
 }
 

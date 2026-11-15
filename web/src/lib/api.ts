@@ -352,7 +352,8 @@ export const api = {
   startMeeting: (device: string, projectId: null | number, title?: string) =>
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
 
-  status: () => request<{ queue: { depth: number; running: boolean }; schedules: number }>("/api/status"),
+  status: () =>
+    request<{ inbox?: null | number; queue: { depth: number; running: boolean }; schedules: number }>("/api/status"),
 
   stopDictation: () => post<{ text: string }>("/api/dictate/stop"),
 

@@ -43,13 +43,13 @@ switch (cmd) {
     // copy of "re-check policy, run, record" — the same three steps as approveConfirmation,
     // drifting independently — which meant a gate added to one approval route silently did
     // not apply to the other. The expiry window was the gate that exposed it.
-    const outcome = await approveConfirmation(Number(idArg));
+    const outcome = await approveConfirmation(Number(idArg), { resume: false });
     console.log(outcome.message);
     break;
   }
   case "reject": {
     // Everything after the id is the reason, so quoting it is optional.
-    const outcome = await rejectConfirmation(Number(idArg), rest.join(" "));
+    const outcome = await rejectConfirmation(Number(idArg), rest.join(" "), { resume: false });
     console.log(outcome.message);
     if (!rest.length && outcome.ok)
       console.log('(tip: `npm run confirm reject <id> why not` records the reason so it stops proposing this.)');

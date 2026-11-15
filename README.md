@@ -64,10 +64,17 @@ works; you watch it work.
 badge is not decoration: the claim this project makes is that *code, not the model,* decides
 what happens, and this is where you see that claim exercised on every call.
 
-**Approvals happen where you are.** An irreversible action queues, and the question appears
-inline in the thread with the full proposed text — for a draft, the entire draft, not a
-summary of it, because a one-line preview makes approving a rubber stamp. Reject with a reason
-and it becomes a `preference` memory that gets recalled before similar work.
+**Approvals happen in the conversation.** An irreversible action asked for in a chat shows
+Approve/Reject buttons right under the reply, with the full proposed text — for a draft, the
+entire draft, not a summary of it, because a one-line preview makes approving a rubber stamp.
+Answering picks the conversation back up: the assistant gets the result (or your reason for
+saying no) as its next turn and carries on. Any thread with a question waiting carries a
+**blue dot** in the list. Questions no chat raised — a meeting's work items, a learner's
+proposal — are asked in the **AgentSpine** thread. A reason on a reject also becomes a
+`preference` memory recalled before similar work.
+
+**Scheduled jobs are pre-approved.** Creating a schedule (or a watcher) is the approval: its
+irreversible actions run without asking again. The allowlist, budgets and dry run still apply.
 
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the
@@ -105,8 +112,7 @@ earlier turns of the same thread — not the prior tool traces, which would exha
 model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
 `CHAT_HISTORY_MAX_CHARS`.
 
-Everything else lives one click away in the sidebar: **Approvals** (the whole queue, including
-what a 3am scheduled job asked for), **Schedules** (scheduled tasks and watchers), **Activity**
+Everything else lives one click away in the sidebar: **Schedules** (scheduled tasks and watchers), **Activity**
 (every run — chat, scheduled, watcher — with its full trace and audit log), and **Settings**
 (appearance, memory, and the current policy).
 
@@ -476,7 +482,8 @@ meeting and stays, a verbatim quote is a *copy* of it and is blanked with the tr
 ### What the transcript becomes
 
 When the final pass finishes, the meeting is extracted from: a summary, topics and decisions,
-which save automatically, and candidate work items, which **go to Approvals instead**. That
+which save automatically, and candidate work items, which **are asked about in the AgentSpine
+thread instead**. That
 split is a measurement, not caution. On a real recording, one extraction pass produced **5
 work items and all 5 were false positives**, every one stamped `confidence: high`. The quotes
 were real; each described something already *finished* — "we **came up with** guidelines", "we

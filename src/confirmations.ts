@@ -17,6 +17,7 @@ import { remember } from "./memory/rag.ts";
 import * as store from "./memory/store.ts";
 import { confirmationActions, confirmationPush, notify } from "./notify.ts";
 import type { NotifyResult } from "./notify.ts";
+import type { Tier } from "./tiers.ts";
 
 export const PREFERENCE_KIND = "preference";
 
@@ -44,7 +45,26 @@ export interface ConfirmOutcome {
   message: string;
 }
 
-export const approveConfirmation = async (id: number): Promise<ConfirmOutcome> => {
+export interface DecideOpts {
+  /**
+   * Push when the resumed turn finishes. Set when the answer came from somewhere the user
+   * is about to stop looking at — a lock-screen button, the phone app.
+   */
+  notifyOnFinish?: boolean;
+  /**
+   * Pick the conversation back up afterwards (default true). The `confirm` CLI turns it off:
+   * a one-shot terminal command should not start an agent run in its own short-lived process.
+   */
+  resume?: boolean;
+}
+
+export const approveConfirmation = async (id: number, opts: DecideOpts = {}): Promise<ConfirmOutcome> => {
+  const outcome = await approveOnly(id);
+  if (opts.resume !== false) await resumeConversation(store.getConfirmation(id)?.conversation_id, opts);
+  return outcome;
+};
+
+const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
   const row = store.getConfirmation(id);
   if (!row) return { ok: false, message: `No confirmation #${id}.` };
   if (row.state !== "pending") return { ok: false, message: `#${id} is already '${row.state}'.` };
@@ -97,7 +117,13 @@ export const approveConfirmation = async (id: number): Promise<ConfirmOutcome> =
  * cheap — the quick no — so a bare reject behaves precisely as it always did. (The
  * phone's Reject button has nowhere to type, which is the same case.)
  */
-export const rejectConfirmation = async (id: number, reason = ""): Promise<ConfirmOutcome> => {
+export const rejectConfirmation = async (id: number, reason = "", opts: DecideOpts = {}): Promise<ConfirmOutcome> => {
+  const outcome = await rejectOnly(id, reason);
+  if (opts.resume !== false) await resumeConversation(store.getConfirmation(id)?.conversation_id, opts);
+  return outcome;
+};
+
+const rejectOnly = async (id: number, reason = ""): Promise<ConfirmOutcome> => {
   const row = store.getConfirmation(id);
   if (!row) return { ok: false, message: `No confirmation #${id}.` };
   if (row.state !== "pending") return { ok: false, message: `#${id} is already '${row.state}'.` };
@@ -134,6 +160,81 @@ export const rejectConfirmation = async (id: number, reason = ""): Promise<Confi
     ok: true,
     message: why ? `#${id} rejected — noted: ${why}` : `#${id} rejected.`,
   };
+};
+
+// --- picking the conversation back up ---
+/**
+ * The decision, handed back to the thread that asked — the way a chat assistant continues
+ * once you press Approve rather than leaving the result in a log you never open.
+ *
+ * Waits until every question still open in the thread is answered, so three approvals from
+ * one turn resume it once, with all three outcomes, not three times. Resumes only when
+ * there is something to continue from: an action that ran (or failed), or a rejection that
+ * came with a reason. A bare "no" ends the matter, as a denied tool call does — the user can
+ * always just type. The inbox thread never resumes: no turn there is waiting on an answer.
+ *
+ * Never throws: the decision itself already succeeded and is what the caller reports.
+ */
+export const resumeConversation = async (
+  conversationId: null | number | undefined,
+  opts: DecideOpts = {},
+): Promise<null | number> => {
+  try {
+    if (conversationId == null || !store.getConversation(conversationId)) return null;
+    if (store.isInbox(conversationId)) return null;
+    if (store.pendingConfirmationsForConversation(conversationId).length) return null;
+    const decisions = store.takeUnreportedDecisions(conversationId);
+    const worth = decisions.some(
+      (d) => d.state === "done" || d.state === "error" || (d.state === "rejected" && /^rejected by user: /.test(d.result ?? "")),
+    );
+    if (!worth) return null;
+
+    // Deferred: the runner imports half the system, and this module is loaded by the CLI too.
+    const { startTask } = await import("./runner.ts");
+    const pinned = store.getConversation(conversationId)?.tier ?? undefined;
+    const { done, runId } = startTask(decisionMessage(decisions), {
+      conversationId,
+      kind: "approval",
+      notifyOnFinish: !!opts.notifyOnFinish,
+      tier: pinned as Tier | undefined,
+    });
+    done.catch((e) => console.error(`[approval] run ${runId} failed: ${e instanceof Error ? e.message : e}`));
+    return runId;
+  } catch (err) {
+    console.warn(`[confirmations] could not resume conversation: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+};
+
+/** First line of a summary — a draft's summary is the whole draft. */
+const headline = (summary: string): string => {
+  const first = summary.split("\n").find((l) => l.trim()) ?? summary;
+  return first.length > 160 ? `${first.slice(0, 157)}…` : first;
+};
+
+/**
+ * What the resumed turn is asked, and what the thread shows for it. Written as the user's
+ * side of the exchange, since that is what pressing the button was.
+ */
+export const decisionMessage = (rows: store.ConfirmationRow[]): string => {
+  const lines = rows.map((d) => {
+    const what = headline(d.summary);
+    const result = (d.result ?? "").trim();
+    const clip = (t: string): string => (t.length > 600 ? `${t.slice(0, 597)}…` : t);
+    switch (d.state) {
+      case "done":
+        return `✓ Approved: ${what}${result ? `\n  Result: ${clip(result)}` : ""}`;
+      case "error":
+        return `✓ Approved: ${what}\n  It failed: ${clip(result)}`;
+      case "rejected": {
+        const why = result.replace(/^rejected by user:?\s*/, "");
+        return `✗ Rejected: ${what}${why ? ` — ${clip(why)}` : ""}`;
+      }
+      default:
+        return `• Not run (${d.state}): ${what}`;
+    }
+  });
+  return `${lines.join("\n")}\n\nCarry on from here.`;
 };
 
 /**
@@ -299,7 +400,7 @@ export const sweepConfirmations = async (
           // A reminder shares the first push's collapse id, so three nudges about #12 are
           // one item on the lock screen rather than a stack you have to clear.
           push: token
-            ? confirmationPush(row.id, token)
+            ? confirmationPush(row.id, token, row.conversation_id)
             : { category: "CONFIRMATION", collapseId: `confirmation-${row.id}`, confirmationId: row.id },
           tags: rung === 2 ? ["rotating_light"] : ["warning"],
         },

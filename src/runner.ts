@@ -61,6 +61,12 @@ import type { Policy } from "./types.ts";
  */
 const isUnattended = (kind: string): boolean => kind === "schedule" || kind === "heartbeat";
 
+/**
+ * A turn a person is reading: their own message ("chat"), or the turn that picks the
+ * conversation back up after they answered its Approve/Reject buttons ("approval").
+ */
+const isConversational = (kind: string): boolean => kind === "chat" || kind === "approval";
+
 export interface RunResult {
   runId: number;
   summary: string;
@@ -78,7 +84,7 @@ export interface RunOpts {
   attachmentIds?: number[];
   /** Thread this run belongs to. Null for schedules, watchers, and the `do` CLI. */
   conversationId?: number | null;
-  kind?: string; // "do" | "chat" | "heartbeat" | "schedule"
+  kind?: string; // "do" | "chat" | "approval" | "heartbeat" | "schedule"
   /** Skip profile + memory injection and reflection (for meta runs that shouldn't learn). */
   noMemory?: boolean;
   /**
@@ -446,7 +452,10 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         budgetRunId: runId,
         // A chat turn ends on someone's screen and must end in an answer; every other kind
         // ends in the ledger and should end in an account of what happened.
-        conversational: kind === "chat",
+        conversational: isConversational(kind),
+        // A schedule or the heartbeat was approved when the user set it up; asking again at
+        // 3am would only stall it. See RunContext.preApproved.
+        preApproved: isUnattended(kind),
         context,
         history,
         // Only a thread that actually holds an image is shown look_at_image — see
@@ -466,7 +475,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
        * a recovered error is part of the conversation. Everywhere else it finishes "failed"
        * with the cause first and the agent's own account kept after it.
        */
-      const errored = kind === "chat" ? [] : store.erroredTools(runId);
+      const errored = isConversational(kind) ? [] : store.erroredTools(runId);
       if (errored.length) {
         const names = [...new Set(errored)].join(", ");
         const note = `${errored.length} tool call(s) errored (${names}). Agent's summary: ${summary}`;
@@ -505,7 +514,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
 
       // Keep the thread's running summary current. Chat only, and only for a turn that
       // finished cleanly; after the result is persisted, so a failure cannot touch it.
-      if (kind === "chat" && conversationId != null && !opts.noMemory && !errored.length) {
+      if (isConversational(kind) && conversationId != null && !opts.noMemory && !errored.length) {
         await updateThreadSummary(conversationId, runId);
       }
 

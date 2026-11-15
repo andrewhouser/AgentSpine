@@ -224,7 +224,11 @@ interface ExtractionPanelProps {
  * `high` on five consecutive wrong answers, and a number that survives being wrong every time
  * is worse than no number — a reader will spend trust on it.
  */
+const NO_STATUS = null;
+
 const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
+  // Work items with no project are asked about in the AgentSpine thread, like any approval.
+  const [status] = useResource(api.status, NO_STATUS);
   const { extraction, segments, workItems } = detail;
   const queued = workItems.filter((w) => w.verdict === "queued");
   const filed = workItems.filter((w) => w.verdict === "filed");
@@ -237,8 +241,8 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
           Extract work items
         </button>
         <span className={styles.hint}>
-          Runs locally — a summary and decisions are saved, work items go to the project's tasks (or Approvals when there is no project) for you to
-          confirm.
+          Runs locally — a summary and decisions are saved, work items go to the project's tasks (or the AgentSpine conversation when there is no
+          project) for you to confirm.
         </span>
       </div>
     ) : null;
@@ -284,7 +288,12 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
       {queued.length > 0 && (
         <>
           <h3 className={styles.extractHead}>
-            Work items awaiting your approval <a className={styles.queueLink} href="/approvals">Approvals →</a>
+            Work items awaiting your approval{" "}
+            {status?.inbox ? (
+              <a className={styles.queueLink} href={`/c/${status.inbox}`}>
+                Answer in AgentSpine →
+              </a>
+            ) : null}
           </h3>
           <ul className={styles.list}>
             {queued.map((w) => (

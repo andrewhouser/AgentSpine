@@ -3,6 +3,7 @@ import type { Attachment, LiveToolCall, VisionPass } from "../../lib/types.ts";
 import { describeActivity } from "../../lib/activity.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
+import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
 import { ReplyActions } from "../ReplyActions/ReplyActions.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
@@ -21,6 +22,8 @@ interface TurnProps {
   /** Units this turn delegated to, live or persisted. */
   delegations?: { actions?: LiveToolCall[]; agent: string; status: null | string; summary: null | string; task: null | string; tier: null | string }[];
   error: null | string;
+  /** "approval" draws the task as the user's decision rather than as a typed message. */
+  kind?: null | string;
   live: boolean;
   onConfirmationResolved: () => void;
   projectId?: null | number;
@@ -53,6 +56,7 @@ export const Turn = ({
   contextUsed = [],
   delegations = [],
   error,
+  kind = null,
   live,
   onConfirmationResolved,
   projectId = null,
@@ -68,7 +72,7 @@ export const Turn = ({
   waitingBehind,
 }: TurnProps) => (
   <article className={styles.turn}>
-    <UserMessage attachments={attachments} text={task} />
+    {kind === "approval" ? <DecisionNote text={task} /> : <UserMessage attachments={attachments} text={task} />}
 
     {/* Before the tool trace: the looking happens first, and it is what the rest of the
         turn is reasoning from. */}
@@ -96,16 +100,6 @@ export const Turn = ({
       </div>
     )}
 
-    {confirmations.map((c) => (
-      <ApprovalCard
-        confirmationId={c.id}
-        key={c.id}
-        onResolved={onConfirmationResolved}
-        summary={c.summary}
-        tool={c.tool}
-      />
-    ))}
-
     {summary && (
       <>
         <AssistantMessage text={summary} />
@@ -120,6 +114,18 @@ export const Turn = ({
       </>
     )}
     {error && <div className={styles.error}>{error}</div>}
+
+    {/* After the reply, as a chat assistant asks: it says what it wants to do, then the
+        buttons. Answering resumes the conversation with the result. */}
+    {confirmations.map((c) => (
+      <ApprovalCard
+        confirmationId={c.id}
+        key={c.id}
+        onResolved={onConfirmationResolved}
+        summary={c.summary}
+        tool={c.tool}
+      />
+    ))}
     {live && !summary && !error && <ThinkingIndicator activity={describeActivity(toolCalls)} step={step} waitingBehind={waitingBehind} />}
   </article>
 );

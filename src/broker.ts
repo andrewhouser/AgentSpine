@@ -167,12 +167,18 @@ export const executeCall = async (
     classified.reversibility === "irreversible" &&
     !!run?.conversational &&
     (policy.trust?.chatAutoTools ?? []).includes(call.tool);
+  // A schedule (or the heartbeat) was approved when the user created it: the task text
+  // says what it will do, and they chose to let it run unattended. Asking again from inside
+  // the run would stall exactly the jobs meant to need no one. Only the reversibility gate
+  // is skipped — the allowlist and budgets above, and dry run below, still hold.
+  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved;
   const mustConfirm =
     classified.reversibility === "irreversible" &&
     policy.autoExecute.irreversibleAlwaysConfirm &&
     !preApproved &&
     !userDirected &&
-    !chatTrusted;
+    !chatTrusted &&
+    !scheduled;
   const canAutoRun =
     classified.reversibility === "reversible" ? policy.autoExecute.reversible : !mustConfirm;
 
@@ -193,9 +199,13 @@ export const executeCall = async (
     const result = record(
       classified,
       "queued",
-      `QUEUED for your confirmation (#${cid}): ${classified.summary}. ` +
-        `It will not run until you approve it (npm run confirm approve ${cid}). ` +
-        `Continue with other work; do not claim this action is done.`,
+      run?.conversational
+        ? `QUEUED for the user's approval (#${cid}): ${classified.summary}. ` +
+            `Approve/Reject buttons are now showing under your reply. It has NOT run. ` +
+            `Finish anything that does not depend on it, then end your turn saying what you need approved.`
+        : `QUEUED for your confirmation (#${cid}): ${classified.summary}. ` +
+            `It will not run until you approve it (npm run confirm approve ${cid}). ` +
+            `Continue with other work; do not claim this action is done.`,
     );
 
     // A separate event from the tool_result above, because it renders as a different
@@ -219,7 +229,9 @@ export const executeCall = async (
         actions: token ? confirmationActions(cid, token) : [],
         // The same question, in the shape the iOS app can answer: Approve/Reject on the
         // lock screen without unlocking the phone or finding a laptop.
-        push: token ? confirmationPush(cid, token) : { category: "CONFIRMATION", confirmationId: cid },
+        push: token
+          ? confirmationPush(cid, token, store.getConfirmation(cid)?.conversation_id)
+          : { category: "CONFIRMATION", confirmationId: cid },
       });
     }
 
@@ -238,7 +250,9 @@ export const executeCall = async (
         ? `${output}\n[ran without confirmation: ${directed.reason}]`
         : chatTrusted
           ? `${output}\n[ran without confirmation: ${call.tool} is trusted in live chat (policy.trust)]`
-          : output,
+          : scheduled
+            ? `${output}\n[ran without confirmation: pre-approved as part of a scheduled job]`
+            : output,
     );
   } catch (err) {
     const output = `ERROR: ${err instanceof Error ? err.message : String(err)}`;

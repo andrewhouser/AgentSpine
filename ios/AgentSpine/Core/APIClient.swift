@@ -294,18 +294,17 @@ final class APIClient {
     ///
     /// Uses the dashboard token, which is right for a tap inside the app — you are already
     /// holding an authenticated session. `approve(id:approvalToken:)` below is the other case.
-    func approve(_ id: Int) async throws {
-        try await sendRaw(jsonRequest("/api/confirmations/\(id)/approve", method: "POST"))
+    ///
+    /// `notify` asks for a push when the resumed turn finishes — the same promise a message
+    /// sent from the phone makes, since you may lock it the moment you tap.
+    func approve(_ id: Int, notify: Bool = true) async throws {
+        try await sendRaw(jsonRequest("/api/confirmations/\(id)/approve", method: "POST", body: ["notify": notify]))
     }
 
-    func reject(_ id: Int, reason: String = "") async throws {
-        try await sendRaw(
-            jsonRequest(
-                "/api/confirmations/\(id)/reject",
-                method: "POST",
-                body: reason.isEmpty ? [:] : ["reason": reason]
-            )
-        )
+    func reject(_ id: Int, reason: String = "", notify: Bool = true) async throws {
+        var body: [String: Any] = ["notify": notify]
+        if !reason.isEmpty { body["reason"] = reason }
+        try await sendRaw(jsonRequest("/api/confirmations/\(id)/reject", method: "POST", body: body))
     }
 
     /// Approve or reject using the narrow token that came in the push payload.

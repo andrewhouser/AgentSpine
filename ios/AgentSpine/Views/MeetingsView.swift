@@ -523,7 +523,7 @@ struct MeetingDetailView: View {
             } header: {
                 Text("Work items")
             } footer: {
-                Text("“Queued” items are waiting in Approvals; “added to project tasks” went straight "
+                Text("“Queued” items are waiting in the AgentSpine thread; “added to project tasks” went straight "
                      + "onto the project's list. The rest are kept, with their "
                      + "reasons, so the false-positive rate stays visible.")
             }

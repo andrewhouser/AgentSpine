@@ -13,7 +13,6 @@ import { ActivityView } from "../ActivityView/ActivityView.tsx";
 import { BuildsView } from "../BuildsView/BuildsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { ClientsView } from "../ClientsView/ClientsView.tsx";
-import { ConfirmationsView } from "../ConfirmationsView/ConfirmationsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
@@ -30,7 +29,6 @@ const NO_PROJECTS: Project[] = [];
 const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
   clients: "Clients",
-  confirmations: "Approvals",
   files: "Files",
   meetings: "Meetings",
   schedules: "Schedules",
@@ -95,6 +93,19 @@ export const AppShell = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [setHidden, sidebarHidden]);
   const status = useStatus(statusKey);
+
+  // The blue dots come with the conversation list, so refetch it whenever the number of open
+  // questions anywhere changes — a scheduled job finishing or a background turn asking
+  // something is then visible within one status poll, without polling the list itself.
+  useEffect(() => {
+    refresh();
+  }, [refresh, status.pendingConfirmations]);
+
+  // And the tab title, so a waiting question is visible from another tab.
+  const waitingThreads = conversations.filter((c) => (c.attention ?? 0) > 0).length;
+  useEffect(() => {
+    document.title = waitingThreads ? `(${waitingThreads}) AgentSpine` : "AgentSpine";
+  }, [waitingThreads]);
 
   // Keep the URL and the view in step in both directions, so a conversation or project can
   // be bookmarked and the back button behaves.
@@ -211,7 +222,6 @@ export const AppShell = () => {
         {route.view === "activity" && <ActivityView />}
         {route.view === "builds" && <BuildsView />}
         {route.view === "schedules" && <SchedulesView />}
-        {route.view === "confirmations" && <ConfirmationsView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}
         {route.view === "tasks" && <TasksView projects={projects} />}
@@ -233,6 +243,7 @@ export const AppShell = () => {
         {route.view === "chat" &&
           (route.conversationId ? (
             <ChatView
+              attention={conversations.find((c) => c.id === route.conversationId)?.attention ?? 0}
               conversationId={route.conversationId}
               key={route.conversationId}
               onTitleMayHaveChanged={onTurnComplete}

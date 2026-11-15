@@ -4,13 +4,12 @@ import Observation
 /// The lists every tab reads from, loaded in one place.
 ///
 /// Small enough to be one object, and it earns that by being the thing a push can invalidate:
-/// an approval answered from the lock screen has to disappear from the approvals tab without
+/// an approval answered from the lock screen has to clear its thread's blue dot without
 /// anyone pulling to refresh, and that is far simpler with one store than with per-view state.
 @MainActor
 @Observable
 final class AppState {
     var conversations: [Conversation] = []
-    var pendingApprovals: [Confirmation] = []
     var projects: [Project] = []
     var recentRuns: [Run] = []
 
@@ -27,7 +26,9 @@ final class AppState {
 
     private let api = APIClient.shared
 
-    var queueBadge: Int { pendingApprovals.count }
+    /// Threads with a question waiting on you — the Threads tab's badge. The dot on each row
+    /// says which; this says there is something to find without opening the tab.
+    var waitingThreads: Int { conversations.filter(\.needsYou).count }
 
     /// Everything the tab bar needs, concurrently.
     ///
@@ -43,19 +44,17 @@ final class AppState {
         defer { isLoading = false }
 
         async let threads = api.conversations()
-        async let approvals = api.confirmations(state: "pending")
         async let runs = api.runs()
         // Projects are only labels here, and a server with none is normal, so a failure to
         // fetch them must not fail the refresh that the other three succeeded at.
         async let projectList = try? api.projects()
 
         do {
-            let (t, a, r) = try await (threads, approvals, runs)
+            let (t, r) = try await (threads, runs)
             projects = await projectList ?? []
             // Archived threads stay on the server and out of the way here: a phone is for the
             // thread you are in the middle of.
             conversations = t.filter { $0.archived == 0 }
-            pendingApprovals = a
             recentRuns = r
             loadError = nil
             lastLoaded = Date()
@@ -64,32 +63,26 @@ final class AppState {
         }
     }
 
-    /// Just the approvals. Cheap enough to call whenever the app comes forward, which is how
-    /// an approval answered from a notification stops showing up in the list.
-    func refreshApprovals() async {
+    /// Just the thread list — which is where the blue dots come from. Cheap enough to call
+    /// whenever the app comes forward, which is how a question answered from a notification
+    /// stops showing as waiting.
+    func refreshConversations() async {
         guard Settings.shared.isConfigured else { return }
-        if let fresh = try? await api.confirmations(state: "pending") {
-            pendingApprovals = fresh
+        if let fresh = try? await api.conversations() {
+            conversations = fresh.filter { $0.archived == 0 }
         }
     }
 
-    func answer(_ confirmation: Confirmation, approve: Bool, reason: String = "") async {
-        // Removed first, restored on failure. A tap that takes a second to come back makes
-        // you wonder whether it registered, and double-approving is the one thing this screen
-        // must not invite.
-        let previous = pendingApprovals
-        pendingApprovals.removeAll { $0.id == confirmation.id }
-        do {
-            if approve {
-                try await api.approve(confirmation.id)
-            } else {
-                try await api.reject(confirmation.id, reason: reason)
-            }
-            await refreshApprovals()
-        } catch {
-            pendingApprovals = previous
-            loadError = error.localizedDescription
+    /// Approve or reject, from the thread that asked. The server picks the conversation back
+    /// up with the result (see resumeConversation in src/confirmations.ts); the caller reloads
+    /// its thread to stream that turn.
+    func answer(_ confirmation: Confirmation, approve: Bool, reason: String = "") async throws {
+        if approve {
+            try await api.approve(confirmation.id)
+        } else {
+            try await api.reject(confirmation.id, reason: reason)
         }
+        await refreshConversations()
     }
 
     /// Start a thread and send the first message, which is what the compose button does.

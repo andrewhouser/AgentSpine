@@ -13,7 +13,6 @@ export type View =
   | "builds"
   | "chat"
   | "clients"
-  | "confirmations"
   | "files"
   | "meetings"
   | "project"
@@ -46,7 +45,6 @@ const NAV: { key: View; label: string }[] = [
   { key: "tasks", label: "Tasks" },
   { key: "files", label: "Files" },
   { key: "clients", label: "Clients" },
-  { key: "confirmations", label: "Approvals" },
   { key: "meetings", label: "Meetings" },
   { key: "schedules", label: "Schedules" },
   { key: "builds", label: "Builds" },
@@ -193,9 +191,6 @@ export const Sidebar = ({
         type="button"
       >
         <span>Menu</span>
-        {collapsed && status.pendingConfirmations > 0 && (
-          <span className={styles.badge}>{status.pendingConfirmations}</span>
-        )}
         <span className={styles.chevron}>{collapsed ? "▴" : "▾"}</span>
       </button>
       {!collapsed && (
@@ -209,9 +204,6 @@ export const Sidebar = ({
         >
           {item.label}
           {item.key === "schedules" && ` (${status.schedules})`}
-          {item.key === "confirmations" && status.pendingConfirmations > 0 && (
-            <span className={styles.badge}>{status.pendingConfirmations}</span>
-          )}
         </button>
       ))}
         </div>

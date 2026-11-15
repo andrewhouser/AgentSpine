@@ -9,10 +9,11 @@ You install it on your own phone from Xcode, where it lasts a year before it nee
 re-signing.
 
 ```
-Threads        the conversation list — rename, archive, delete — and a composer
+Threads        the conversation list — rename, archive, delete — and a composer; a blue dot
+               marks a thread with a question waiting on you
 Thread         turns live: every tool call with its verdict, your photos, markdown replies;
-               under each reply: star, save to file, and the context it was written from
-Approvals      the queue, showing the whole proposed action — not a summary
+               under each reply: star, save to file, and the context it was written from;
+               Approve/Reject buttons inline, and answering resumes the conversation
 Schedules      jobs that run on a clock: pause, edit, run now, and how the last few went
 Tasks          to-dos and follow-ups, with due times; the Mac pushes when one falls due
 Files          everything the assistant has saved for you, with a preview

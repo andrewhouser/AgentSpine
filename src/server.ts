@@ -444,7 +444,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
   try {
     // /api/status
     if (m === "GET" && seg[1] === "status" && seg.length === 2) {
-      return sendJson(res, 200, { queue: queueStatus(), schedules: store.listSchedules().length, time: new Date().toISOString() });
+      return sendJson(res, 200, {
+        // The thread where questions nobody's chat raised are asked, once one has been.
+        inbox: store.inboxId(),
+        queue: queueStatus(),
+        schedules: store.listSchedules().length,
+        time: new Date().toISOString(),
+      });
     }
 
     // /api/runs , /api/runs/:id , /api/runs/:id/stream
@@ -484,7 +490,18 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       // The whole thread, ready to render: one turn per run, each with the tool calls that
       // happened during it. This is what a browser reload rebuilds the page from.
       if (m === "GET" && seg.length === 3) {
-        const turns = store.runsForConversation(id).map((r: any) => ({
+        // Every open question in this thread, each placed under the turn that raised it (a
+        // subagent's under the turn that delegated to it). Whatever no turn claims — the
+        // inbox's questions, a CLI run's — is returned on its own and drawn at the end.
+        const runs = store.runsForConversation(id);
+        const open = store.pendingConfirmationsForConversation(id);
+        const claimed = new Set<number>();
+        const openFor = (turnId: number, childIds: number[]): store.ConfirmationRow[] => {
+          const mine = open.filter((c) => c.run_id === turnId || (c.run_id != null && childIds.includes(c.run_id)));
+          for (const c of mine) claimed.add(c.id);
+          return mine;
+        };
+        const turns = runs.map((r: any) => ({
           actions: store.listActions(r.id),
           // Images the user sent with this turn. Metadata only — the bytes come from
           // /api/attachments/:id, so a thread of twenty photographs is still one small JSON
@@ -523,15 +540,27 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           starred: !!r.starred,
           // Still-open approvals belong with the turn that raised them, so they survive a
           // reload and don't strand the user in a separate queue to answer them.
-          confirmations: store.pendingConfirmationsForRun(r.id),
+          confirmations: openFor(
+            r.id,
+            store.childRuns(r.id).map((c: any) => c.id),
+          ),
           finished: r.finished,
           id: r.id,
+          // "chat" for the user's own message; "approval" for the turn that picked the
+          // thread back up after they answered its buttons — drawn as a decision, not a
+          // message they typed.
+          kind: r.kind,
           started: r.started,
           status: r.status,
           summary: r.note,
           task: r.task,
         }));
-        return sendJson(res, 200, { conversation: store.getConversation(id), turns });
+        return sendJson(res, 200, {
+          confirmations: open.filter((c) => !claimed.has(c.id)),
+          conversation: store.getConversation(id),
+          inbox: store.isInbox(id),
+          turns,
+        });
       }
 
       if (m === "PATCH" && seg.length === 3) {
@@ -675,13 +704,28 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (seg[1] === "confirmations") {
       if (m === "GET" && seg.length === 2)
         return sendJson(res, 200, store.listConfirmations(url.searchParams.get("state") ?? undefined));
-      if (m === "POST" && seg.length === 4 && seg[3] === "approve")
-        return sendJson(res, 200, await approveConfirmation(Number(seg[2])));
+      // Answering resumes the conversation that asked (see resumeConversation). A lock-screen
+      // button (approval token) or a client that says { notify: true } is not going to watch
+      // that turn happen, so it finishes with a push.
+      if (m === "POST" && seg.length === 4 && seg[3] === "approve") {
+        const b = await readBody(req);
+        return sendJson(
+          res,
+          200,
+          await approveConfirmation(Number(seg[2]), { notifyOnFinish: authedByApproval || !!b?.notify }),
+        );
+      }
       if (m === "POST" && seg.length === 4 && seg[3] === "reject") {
         // Optional { reason } — stored as a preference so it stops proposing this.
         // The phone's Reject button sends none, which is fine.
         const b = await readBody(req);
-        return sendJson(res, 200, await rejectConfirmation(Number(seg[2]), String(b.reason ?? "")));
+        return sendJson(
+          res,
+          200,
+          await rejectConfirmation(Number(seg[2]), String(b.reason ?? ""), {
+            notifyOnFinish: authedByApproval || !!b.notify,
+          }),
+        );
       }
     }
 

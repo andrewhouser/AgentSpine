@@ -71,3 +71,24 @@
   padding: 5px 9px;
   width: 100%;
 }
+
+/* Something in this thread is waiting on you — an approval. The title goes full strength
+   and a blue dot sits at the end of the row, which is all it takes to find it in a list. */
+.waiting {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.dot {
+  background: var(--attention);
+  border-radius: 50%;
+  flex: none;
+  height: 8px;
+  margin: 0 8px 0 2px;
+  width: 8px;
+}
+
+/* On hover the row actions take the space; the dot steps aside rather than crowding them. */
+.item:hover .dot {
+  display: none;
+}

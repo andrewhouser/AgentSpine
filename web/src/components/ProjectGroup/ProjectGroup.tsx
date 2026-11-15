@@ -77,6 +77,10 @@ export const ProjectGroup = ({
           <button className={styles.name} onClick={onSelect} type="button">
             {project.name}
           </button>
+          {/* Folded shut, the project still says when a thread inside it is waiting on you. */}
+          {collapsed && conversations.some((c) => (c.attention ?? 0) > 0) && (
+            <span aria-label="A conversation here is waiting on you" className={styles.dot} role="status" />
+          )}
           <button
             aria-label="Rename project"
             className={styles.action}

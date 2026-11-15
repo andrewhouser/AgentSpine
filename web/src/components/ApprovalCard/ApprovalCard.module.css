@@ -1,6 +1,6 @@
 .card {
   background: var(--bg-elevated);
-  border: 1px solid var(--warn);
+  border: 1px solid var(--attention);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   margin: 12px 0;
@@ -15,9 +15,9 @@
 }
 
 .pill {
-  background: var(--warn-soft);
+  background: var(--attention-soft);
   border-radius: 100px;
-  color: var(--warn);
+  color: var(--attention);
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.02em;

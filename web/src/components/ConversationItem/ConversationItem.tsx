@@ -24,6 +24,7 @@ export const ConversationItem = ({
 
   // A thread is named from its first exchange, so a brand new one has no title yet.
   const label = conversation.title ?? "New conversation";
+  const waiting = (conversation.attention ?? 0) > 0;
 
   if (editing) {
     return (
@@ -46,9 +47,17 @@ export const ConversationItem = ({
 
   return (
     <div className={`${styles.item} ${active ? styles.active : ""}`}>
-      <button className={styles.label} onClick={onSelect} type="button">
+      <button className={`${styles.label} ${waiting ? styles.waiting : ""}`} onClick={onSelect} type="button">
         {label}
       </button>
+      {waiting && (
+        <span
+          aria-label={`${conversation.attention} waiting on you`}
+          className={styles.dot}
+          role="status"
+          title={`${conversation.attention} waiting on you`}
+        />
+      )}
       <button
         aria-label="Rename"
         className={styles.action}

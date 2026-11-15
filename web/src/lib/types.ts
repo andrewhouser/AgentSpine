@@ -77,6 +77,8 @@ export interface PromotionProposal {
 
 export interface Conversation {
   archived: number;
+  /** Decisions waiting on the user in this thread — drawn as the blue dot. */
+  attention?: number;
   created: string;
   id: number;
   project_id: null | number;
@@ -435,6 +437,8 @@ export interface Turn {
   contextUsed?: string[];
   finished: null | string;
   id: number;
+  /** "chat" for a message the user typed; "approval" for the turn their decision resumed. */
+  kind?: null | string;
   starred?: boolean;
   started: string;
   status: string;
@@ -444,7 +448,11 @@ export interface Turn {
 }
 
 export interface Thread {
+  /** Open questions no turn here raised (the inbox's) — drawn after the last turn. */
+  confirmations?: Confirmation[];
   conversation: Conversation;
+  /** Whether this is the system's own thread, where questions nobody's chat raised are asked. */
+  inbox?: boolean;
   turns: Turn[];
 }
 

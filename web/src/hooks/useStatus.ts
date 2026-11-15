@@ -12,6 +12,7 @@ const POLL_MS = 5000;
 
 export interface Status {
   depth: number;
+  /** Open questions across every thread. Used as a change signal for the blue dots. */
   pendingConfirmations: number;
   reachable: boolean;
   running: boolean;
@@ -28,7 +29,7 @@ export const useStatus = (refreshKey: number): Status => {
 
     const poll = async (): Promise<void> => {
       try {
-        const [s, confirmations] = await Promise.all([api.status(), api.listConfirmations()]);
+        const [s, confirmations] = await Promise.all([api.status(), api.listConfirmations("pending")]);
         if (cancelled) return;
         setStatus({
           depth: s.queue?.depth ?? 0,

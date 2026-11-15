@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// Twelve tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
+/// Eleven tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
 ///
-/// The approvals tab carries a badge because it is the only tab that represents work *blocked
-/// on you* — everything else is informational, and a badge on an informational tab is how a
-/// badge stops meaning anything.
+/// Approvals are not a tab: they are asked in the thread that wanted them, and a thread with a
+/// question waiting carries a blue dot. The Threads tab's badge counts those threads, because
+/// it is the only work here that is *blocked on you* — everything else is informational, and a
+/// badge on an informational tab is how a badge stops meaning anything.
 struct RootView: View {
     enum Tab: Hashable {
-        case threads, tasks, approvals, schedules, projects, files, clients, search, meetings, builds, activity, settings
+        case threads, tasks, schedules, projects, files, clients, search, meetings, builds, activity, settings
     }
 
     @Environment(AppState.self) private var state
@@ -25,6 +26,7 @@ struct RootView: View {
                     .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
             }
             .tabItem { Label("Threads", systemImage: "bubble.left.and.text.bubble.right") }
+            .badge(state.waitingThreads)
             .tag(Tab.threads)
 
             NavigationStack {
@@ -32,13 +34,6 @@ struct RootView: View {
             }
             .tabItem { Label("Tasks", systemImage: "checklist") }
             .tag(Tab.tasks)
-
-            NavigationStack {
-                ApprovalsView()
-            }
-            .tabItem { Label("Approvals", systemImage: "checkmark.shield") }
-            .badge(state.queueBadge)
-            .tag(Tab.approvals)
 
             NavigationStack {
                 SchedulesView()
@@ -112,16 +107,19 @@ struct RootView: View {
             // you have probably just answered something from a notification.
             guard phase == .active, settings.isConfigured else { return }
             Task {
-                await state.refreshApprovals()
+                await state.refreshConversations()
                 push.refreshAuthorization()
             }
         }
         .onChange(of: push.pendingDeepLink) { _, link in
             guard let link else { return }
             switch link {
-            case .approvals:
-                tab = .approvals
-                Task { await state.refreshApprovals() }
+            case .threads:
+                // An approval with no thread to open (an older server): the list, where the
+                // dot shows which thread is asking.
+                tab = .threads
+                threadPath = []
+                Task { await state.refreshConversations() }
             case .conversation(let id):
                 tab = .threads
                 // Replace rather than push: tapping two notifications should not build a stack

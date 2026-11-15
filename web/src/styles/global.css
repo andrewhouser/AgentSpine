@@ -48,6 +48,11 @@
   --accent: #4b5bd7;
   --accent-line: rgb(75 91 215 / 28%);
   --accent-soft: rgb(75 91 215 / 11%);
+
+  /* The "needs you" dot on a conversation. Its own blue, not the indigo accent, so it reads
+     as a signal rather than as the selected row. */
+  --attention: #1a73e8;
+  --attention-soft: rgb(26 115 232 / 10%);
   --bg: #fff;
   --bg-elevated: #fff;
   --bg-inset: #f2f4f7;
@@ -83,6 +88,8 @@
   --accent: #8493f7;
   --accent-line: rgb(132 147 247 / 32%);
   --accent-soft: rgb(132 147 247 / 15%);
+  --attention: #4c9dff;
+  --attention-soft: rgb(76 157 255 / 14%);
   --bg: #15171c;
   --bg-elevated: #1e2128;
   --bg-inset: #1a1d23;

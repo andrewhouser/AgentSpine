@@ -42,7 +42,7 @@ export const ApprovalCard = ({ confirmationId, onResolved, summary, tool }: Appr
   return (
     <div className={styles.card}>
       <div className={styles.head}>
-        <span className={styles.pill}>needs your approval</span>
+        <span className={styles.pill}>waiting on you</span>
         <code className={styles.tool}>{tool}</code>
         <span className={styles.id}>#{confirmationId}</span>
       </div>
@@ -82,7 +82,7 @@ export const ApprovalCard = ({ confirmationId, onResolved, summary, tool }: Appr
             onClick={() => void act(() => api.approveConfirmation(confirmationId))}
             type="button"
           >
-            {busy ? "Running…" : "Approve & run"}
+            {busy ? "Running…" : "Approve"}
           </button>
           <button className={styles.plain} disabled={busy} onClick={() => setRejecting(true)} type="button">
             Reject

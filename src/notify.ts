@@ -224,11 +224,13 @@ export const confirmationActions = (id: number, token: string): NotifyAction[] =
  * `collapseId` makes the watchdog's reminders replace each other instead of stacking, so a
  * question that has been waiting since 3am is one item on the lock screen rather than three.
  */
-export const confirmationPush = (id: number, token: string): PushAlert => ({
+export const confirmationPush = (id: number, token: string, conversationId?: null | number): PushAlert => ({
   approvalToken: token,
   category: "CONFIRMATION",
   collapseId: `confirmation-${id}`,
   confirmationId: id,
+  // A tap opens the conversation that asked, where the buttons are.
+  ...(conversationId != null ? { conversationId } : {}),
 });
 
 /** True when a push would actually reach a phone (vs. only a local banner). */
