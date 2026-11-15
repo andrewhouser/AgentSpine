@@ -563,6 +563,12 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         });
       }
 
+      // The user is looking at this thread: its finished replies are read (the unread dot).
+      if (m === "POST" && seg.length === 4 && seg[3] === "read") {
+        store.markConversationRead(id);
+        return sendJson(res, 200, { ok: true });
+      }
+
       if (m === "PATCH" && seg.length === 3) {
         const b = await readBody(req);
         const patch: store.ConversationFields = {};

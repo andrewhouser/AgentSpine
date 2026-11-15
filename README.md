@@ -68,8 +68,9 @@ what happens, and this is where you see that claim exercised on every call.
 Approve/Reject buttons right under the reply, with the full proposed text — for a draft, the
 entire draft, not a summary of it, because a one-line preview makes approving a rubber stamp.
 Answering picks the conversation back up: the assistant gets the result (or your reason for
-saying no) as its next turn and carries on. Any thread with a question waiting carries a
-**blue dot** in the list. Questions no chat raised — a meeting's work items, a learner's
+saying no) as its next turn and carries on. Any thread with a question waiting, or a reply
+you have not read yet, carries a **blue dot** in the list — read state is kept on the server,
+so reading on the phone clears it on the dashboard too. Questions no chat raised — a meeting's work items, a learner's
 proposal — are asked in the **AgentSpine** thread. A reason on a reject also becomes a
 `preference` memory recalled before similar work.
 

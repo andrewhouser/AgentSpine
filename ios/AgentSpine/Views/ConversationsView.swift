@@ -226,6 +226,15 @@ struct ConversationsView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("AgentSpine")
         .refreshable { await state.refresh() }
+        // Keep the dots current while the list is on screen: a reply finishing, a question
+        // being asked. Cancelled when the list goes away, so it costs nothing elsewhere.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                if Task.isCancelled { break }
+                await state.refreshConversations()
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

@@ -133,6 +133,23 @@ console.log("\nTHE MESSAGE the resumed turn is given");
   check("ends by handing back", msg.trim().endsWith("Carry on from here."), true);
 }
 
+console.log("\nUNREAD — a finished reply the user has not looked at");
+{
+  const t = store.createConversation("Unread check", null);
+  const unread = () => store.listConversations().find((c) => c.id === t).unread;
+  check("a new thread is not unread", unread(), 0);
+  const r1 = store.startRun({ conversationId: t, kind: "chat", task: "hi" });
+  check("a running turn is not unread yet", unread(), 0);
+  store.finishRun(r1, "ok", "hello");
+  check("a finished reply is unread", unread(), 1);
+  store.markConversationRead(t);
+  check("looking at the thread reads it", unread(), 0);
+  const r2 = store.startRun({ conversationId: t, kind: "chat", task: "again" });
+  store.markConversationRead(t);
+  store.finishRun(r2, "ok", "hello again");
+  check("a reply that finished after the look is unread", unread(), 1);
+}
+
 delete registry.__fake_send;
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

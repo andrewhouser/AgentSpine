@@ -10,7 +10,7 @@ re-signing.
 
 ```
 Threads        the conversation list — rename, archive, delete — and a composer; a blue dot
-               marks a thread with a question waiting on you
+               marks a thread with a question waiting on you or a reply you have not read
 Thread         turns live: every tool call with its verdict, your photos, markdown replies;
                under each reply: star, save to file, and the context it was written from;
                Approve/Reject buttons inline, and answering resumes the conversation

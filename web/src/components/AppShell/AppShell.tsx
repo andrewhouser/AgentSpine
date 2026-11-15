@@ -8,6 +8,7 @@ import { useConversations } from "../../hooks/useConversations.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { useStatus } from "../../hooks/useStatus.ts";
 import { api } from "../../lib/api.ts";
+import { isWaiting, needsYou } from "../../lib/attention.ts";
 import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
 import { BuildsView } from "../BuildsView/BuildsView.tsx";
@@ -97,12 +98,16 @@ export const AppShell = () => {
   // The blue dots come with the conversation list, so refetch it whenever the number of open
   // questions anywhere changes — a scheduled job finishing or a background turn asking
   // something is then visible within one status poll, without polling the list itself.
+  // A run starting or finishing anywhere may leave a new reply — refetch on queue changes too.
   useEffect(() => {
     refresh();
-  }, [refresh, status.pendingConfirmations]);
+  }, [refresh, status.pendingConfirmations, status.running, status.depth]);
 
-  // And the tab title, so a waiting question is visible from another tab.
-  const waitingThreads = conversations.filter((c) => (c.attention ?? 0) > 0).length;
+  // And the tab title, so a waiting question or a new reply is visible from another tab. The
+  // thread on screen counts only for a waiting question; its replies are being read.
+  const waitingThreads = conversations.filter((c) =>
+    route.view === "chat" && c.id === route.conversationId ? isWaiting(c) : needsYou(c),
+  ).length;
   useEffect(() => {
     document.title = waitingThreads ? `(${waitingThreads}) AgentSpine` : "AgentSpine";
   }, [waitingThreads]);
@@ -247,6 +252,7 @@ export const AppShell = () => {
               conversationId={route.conversationId}
               key={route.conversationId}
               onTitleMayHaveChanged={onTurnComplete}
+              unread={(conversations.find((c) => c.id === route.conversationId)?.unread ?? 0) > 0}
             />
           ) : (
             <div className={styles.blank}>

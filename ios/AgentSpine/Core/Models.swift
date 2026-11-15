@@ -21,14 +21,21 @@ struct Conversation: Codable, Identifiable, Hashable {
     let projectID: Int?
     let tier: String?
     let title: String?
+    /// 1 when a reply finished after you last looked at this thread. Absent from older servers.
+    let unread: Int?
     let updated: String
 
     enum CodingKeys: String, CodingKey {
-        case archived, attention, created, id, tier, title, updated
+        case archived, attention, created, id, tier, title, unread, updated
         case projectID = "project_id"
     }
 
-    var needsYou: Bool { (attention ?? 0) > 0 }
+    /// A question here is waiting on your answer.
+    var isWaiting: Bool { (attention ?? 0) > 0 }
+    /// A reply finished here since you last looked.
+    var isUnread: Bool { (unread ?? 0) > 0 }
+    /// The blue dot: either of the above, as in Claude — open the thread to see which.
+    var needsYou: Bool { isWaiting || isUnread }
 
     /// What to show in a list before the auto-titler has named the thread.
     var displayTitle: String {

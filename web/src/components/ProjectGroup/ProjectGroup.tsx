@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { Conversation, Project } from "../../lib/types.ts";
 
+import { needsYou } from "../../lib/attention.ts";
 import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
 import styles from "./ProjectGroup.module.css";
 
@@ -77,9 +78,9 @@ export const ProjectGroup = ({
           <button className={styles.name} onClick={onSelect} type="button">
             {project.name}
           </button>
-          {/* Folded shut, the project still says when a thread inside it is waiting on you. */}
-          {collapsed && conversations.some((c) => (c.attention ?? 0) > 0) && (
-            <span aria-label="A conversation here is waiting on you" className={styles.dot} role="status" />
+          {/* Folded shut, the project still says when a thread inside it needs you. */}
+          {collapsed && conversations.some(needsYou) && (
+            <span aria-label="A conversation here needs you" className={styles.dot} role="status" />
           )}
           <button
             aria-label="Rename project"

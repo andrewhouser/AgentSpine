@@ -194,6 +194,12 @@ final class APIClient {
         )
     }
 
+    /// You are looking at this thread: its finished replies are read. The server keeps this,
+    /// so reading on the phone clears the dot on the dashboard too.
+    func markRead(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/conversations/\(id)/read", method: "POST"))
+    }
+
     func archive(_ id: Int) async throws {
         try await sendRaw(
             jsonRequest("/api/conversations/\(id)", method: "PATCH", body: ["archived": true])

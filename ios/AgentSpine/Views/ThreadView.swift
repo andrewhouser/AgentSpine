@@ -31,6 +31,7 @@ struct ThreadView: View {
     @State private var dictation = Dictation()
     @State private var handsFree = HandsFree()
     @Environment(ReadAloud.self) private var reader
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -118,6 +119,11 @@ struct ThreadView: View {
         }
         // A question here was asked or answered somewhere else — a helper of this turn, the
         // lock screen, the dashboard. The list knows first; follow it.
+        // Back from the lock screen with this thread open: whatever finished meanwhile is now
+        // being read.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load() } }
+        }
         .onChange(of: listedAttention) { _, _ in
             guard !stream.isLive else { return }
             Task { await load() }
@@ -444,6 +450,11 @@ struct ThreadView: View {
             let fresh = try await APIClient.shared.thread(conversationID)
             thread = fresh
             loadError = nil
+            // On screen, so read — this is what clears the thread's unread dot everywhere.
+            if scenePhase == .active {
+                try? await APIClient.shared.markRead(conversationID)
+                await state.refreshConversations()
+            }
             // A turn still running when the thread loaded — because the task was started from
             // another device, or the app was killed mid-cycle — gets picked up and streamed.
             // Without this, reopening the app during a long run shows a thread that looks stuck.

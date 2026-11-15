@@ -85,6 +85,8 @@ export interface Conversation {
   /** A pinned tier for this thread, or null to size each turn automatically. */
   tier: null | string;
   title: null | string;
+  /** 1 when a reply finished after you last looked — also drawn as the blue dot. */
+  unread?: number;
   updated: string;
 }
 

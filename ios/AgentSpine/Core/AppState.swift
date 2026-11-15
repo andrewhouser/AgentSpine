@@ -26,8 +26,9 @@ final class AppState {
 
     private let api = APIClient.shared
 
-    /// Threads with a question waiting on you — the Threads tab's badge. The dot on each row
-    /// says which; this says there is something to find without opening the tab.
+    /// Threads with a question waiting on you or a reply you have not read — the Threads tab's
+    /// badge. The dot on each row says which; this says there is something to find without
+    /// opening the tab.
     var waitingThreads: Int { conversations.filter(\.needsYou).count }
 
     /// Everything the tab bar needs, concurrently.

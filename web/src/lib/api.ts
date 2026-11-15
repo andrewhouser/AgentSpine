@@ -246,6 +246,9 @@ export const api = {
 
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
 
+  /** You are looking at this thread: its finished replies are read (clears the unread dot). */
+  markConversationRead: (id: number) => post<{ ok: boolean }>(`/api/conversations/${id}/read`),
+
   meeting: (id: number, pass: "final" | "live" = "final") =>
     request<{
       chat?: ChatMessage[];

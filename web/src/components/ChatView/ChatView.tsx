@@ -21,6 +21,8 @@ interface ChatViewProps {
   attention: number;
   conversationId: number;
   onTitleMayHaveChanged: () => void;
+  /** The list says a reply here finished since it was last seen. Being on screen reads it. */
+  unread: boolean;
 }
 
 /**
@@ -65,7 +67,7 @@ const passFor = (attachments: Attachment[]): null | VisionPass => {
 const persistedKind = (turns: Thread["turns"], runId: number): null | string =>
   turns.find((t) => t.id === runId)?.kind ?? null;
 
-export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged }: ChatViewProps) => {
+export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unread }: ChatViewProps) => {
   // AppShell keys this component on the conversation, so switching threads remounts it and
   // no state has to be reset by hand.
   const load = useCallback(() => api.thread(conversationId), [conversationId]);
@@ -151,6 +153,22 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged }: C
     seenAttention.current = attention;
     if (!active) reloadThread();
   }, [active, attention, reloadThread]);
+
+  /**
+   * Reading the thread clears its unread dot — on every device, since the server keeps it.
+   * Only while the page is actually visible: a reply that lands in a background tab is still
+   * unread when you come back, and coming back is what reads it.
+   */
+  useEffect(() => {
+    if (!unread || !thread) return;
+    const read = (): void => {
+      if (document.visibilityState !== "visible") return;
+      void api.markConversationRead(conversationId).then(onTitleMayHaveChanged, () => undefined);
+    };
+    read();
+    document.addEventListener("visibilitychange", read);
+    return () => document.removeEventListener("visibilitychange", read);
+  }, [conversationId, onTitleMayHaveChanged, thread, unread]);
 
   /**
    * After Approve or Reject. The answer may have resumed the conversation — a new turn that

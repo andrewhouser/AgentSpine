@@ -184,6 +184,10 @@ addColumn("schedules", "spec", "TEXT");
 // conversation hears about each decision exactly once.
 addColumn("confirmations", "conversation_id", "INTEGER");
 addColumn("confirmations", "reported", "INTEGER");
+// The newest finished run the user has seen in this thread — the unread dot is any finished
+// run after it. Kept on the server, not per client, so reading a reply on the phone clears
+// the dot on the dashboard too.
+addColumn("conversations", "seen_run", "INTEGER");
 
 // A conversation's thread is "its runs, in order", read on every thread load.
 db.exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs (conversation_id, id)");
@@ -216,6 +220,8 @@ export interface ConversationRow {
    * listConversations; absent elsewhere.
    */
   attention?: number;
+  /** 1 when a reply finished after the user last looked at this thread. listConversations only. */
+  unread?: number;
 }
 
 export const createConversation = (title: string | null = null, projectId: number | null = null): number => {
@@ -229,7 +235,9 @@ export const createConversation = (title: string | null = null, projectId: numbe
 export const listConversations = (limit = 100, includeArchived = false): ConversationRow[] =>
   db
     .prepare(
-      `SELECT c.*, (SELECT COUNT(*) FROM confirmations f WHERE f.conversation_id = c.id AND f.state = 'pending') AS attention
+      `SELECT c.*, (SELECT COUNT(*) FROM confirmations f WHERE f.conversation_id = c.id AND f.state = 'pending') AS attention,
+         CASE WHEN COALESCE((SELECT MAX(r.id) FROM runs r WHERE r.conversation_id = c.id AND r.finished IS NOT NULL), 0)
+                   > COALESCE(c.seen_run, 0) THEN 1 ELSE 0 END AS unread
        FROM conversations c ${includeArchived ? "" : "WHERE c.archived = 0"} ORDER BY c.updated DESC LIMIT ?`,
     )
     .all(limit) as unknown as ConversationRow[];
@@ -256,6 +264,16 @@ export const updateConversation = (id: number, fields: ConversationFields): void
     now(),
     id,
   );
+};
+
+/**
+ * The user has looked at this thread: everything finished in it so far is read. A run still
+ * going is not covered — when it finishes it is a new reply, and unread until seen.
+ */
+export const markConversationRead = (id: number): void => {
+  db.prepare(
+    "UPDATE conversations SET seen_run = MAX(COALESCE(seen_run, 0), COALESCE((SELECT MAX(id) FROM runs WHERE conversation_id = ? AND finished IS NOT NULL), 0)) WHERE id = ?",
+  ).run(id, id);
 };
 
 /** Bump `updated` so the sidebar orders by recency of activity, not of rename. */
@@ -1575,3 +1593,21 @@ const backfillConfirmationThreads = (): void => {
   }
 };
 backfillConfirmationThreads();
+
+/**
+ * One time only: every reply that existed before unread tracking counts as read, so turning
+ * the feature on does not light up every old thread. A kv flag rather than "where seen_run is
+ * null", which would also catch — and wrongly mark read — threads created since.
+ */
+const backfillSeenRuns = (): void => {
+  try {
+    if (kvGet("migrate:seen_run")) return;
+    db.exec(
+      "UPDATE conversations SET seen_run = COALESCE((SELECT MAX(id) FROM runs r WHERE r.conversation_id = conversations.id), 0) WHERE seen_run IS NULL",
+    );
+    kvSet("migrate:seen_run", "1");
+  } catch (err) {
+    console.warn(`[store] seen-run backfill skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+backfillSeenRuns();
