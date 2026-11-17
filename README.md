@@ -104,7 +104,7 @@ biases style reliably and vocabulary poorly; the two knobs exist because those d
 **It can talk back, hands-free.** Turn on *Hands-free* on the chat page, say the wake word
 ("Gianna", configurable), and talk — it answers out loud and keeps listening until you stop
 for a configurable timeout. Listening reuses the Whisper models above; speaking uses a local
-Kokoro service in `services/tts/`. See [VOICE.md](VOICE.md) for setup, what was measured, and
+Kokoro service in `services/tts/`. See [VOICE.md](docs/VOICE.md) for setup, what was measured, and
 the limits — notably that a wake word matched on a transcript trades missed wakes against
 near-homophone false ones, and that the microphone is deaf while it speaks.
 
@@ -203,7 +203,7 @@ and your profile in context, which no declared-tier caller does.
 ### Setting up the fast tier on the model host
 
 > Full setup — launchd plists, which models to delete, and the measurements behind all of
-> it — is in [MODELS.md](MODELS.md).
+> it — is in [MODELS.md](docs/MODELS.md).
 
 `Qwen3.6-35B-A3B-4bit` is ~21GB and `Llama-3.2-3B-4bit` is ~2GB, so both sit
 comfortably in 32GB:
@@ -278,7 +278,7 @@ Turning it on is one server and two variables — see
 ### Setting up the vision server
 
 > Full setup, the resolution measurements, and the memory behaviour are in
-> [MODELS.md](MODELS.md#seeing--the-vision-server-on-8082).
+> [MODELS.md](docs/MODELS.md#seeing--the-vision-server-on-8082).
 
 `mlx-vlm` is a different package from `mlx-lm` with a different dependency set, so it gets
 its **own venv** — installing it must never disturb the two servers everything else depends
@@ -326,7 +326,7 @@ making it the default.
 > its default mode it spends 255 completion tokens saying "OK" and returns no `content` at
 > all when `max_tokens` is small. `chat()` in `src/llm.ts` sends
 > `chat_template_kwargs.enable_thinking: false` to every local endpoint; anything else that
-> talks to :8080 must send it too. See [MODELS.md](MODELS.md). Two consequences worth acting on:
+> talks to :8080 must send it too. See [MODELS.md](docs/MODELS.md). Two consequences worth acting on:
 
 - **`Qwen2.5-Coder-14B-8bit` has no role.** 5.6 tok/s — about six times slower than the
   30B — and less capable. A dense 14B at 8-bit is ~15GB of weights and is
@@ -882,6 +882,9 @@ ios/                 the iPhone app — SwiftUI, no dependencies, installed from
   AgentSpine/      Core (API client, SSE, keychain), Views, Push
   Supporting/      Info.plist, entitlements, and the two values that are yours
 _archive/            the previous vanilla-JS dashboard, kept for reference
+docs/                design records: SPEC, LEARNING (+ROLLOUT), STUDY, MODELS, VOICE,
+                     IMAGE_GENERATION, WATCHERS, and the PLAN-*.md build plans
+goals.md, profile.example.md   runtime files read from the repo root — they stay here
 ```
 
 ## Active memory
@@ -1095,7 +1098,7 @@ npm run watcher template              # the pattern, for writing your own
 ```
 
 An unchanged run costs one tool call and two model turns, and pushes nothing. See
-[WATCHERS.md](WATCHERS.md) for the template and the three ways watchers go wrong.
+[WATCHERS.md](docs/WATCHERS.md) for the template and the three ways watchers go wrong.
 
 ## Reaching you, and approving from your phone
 
@@ -1514,7 +1517,7 @@ subagent builder "add a --json flag to the exporter in ~/Developer/mycrate and m
 
 It is pinned to `deep` deliberately. Agentic coding is the hardest thing you can ask of a
 model — long context held precisely across dozens of steps, exact diffs, no drift — and the
-`standard` tier is a ~3B-active MoE on a host MODELS.md already calls full. Local-first is
+`standard` tier is a ~3B-active MoE on a host docs/MODELS.md already calls full. Local-first is
 untouched where it matters: `resolveTier` pins `sensitivity: "private"` away from `deep` **in
 code**, so mail, calendar and `profile.md` stay local regardless, and a project overlay can
 only narrow — a project holding client code can pin itself local and accept a smaller builder.
@@ -1596,12 +1599,12 @@ This was a hole until Phase 4 rather than a decision, and it is worth stating pl
 was fixed on 2026-11-09, having shipped with `write_file` in `d97e766`. `policy.json` is a
 `.json` file inside `~/Developer`, so the extension allowlist and `writableDirs` both said
 yes, the write classified reversible, and it **auto-executed with no approval** — directly
-against the invariant LEARNING.md states and `tools/schedule.ts` repeats, that *a run able
+against the invariant docs/LEARNING.md states and `tools/schedule.ts` repeats, that *a run able
 to widen its own permissions would make deny-by-default a suggestion*. `profile.md` was the
 same shape and arguably worse: it is injected as a **system** message on every run, so a
 line written there outranks everything the model is told elsewhere.
 
-Refused rather than queued, because LEARNING.md invariant 1 says the write happens from a
+Refused rather than queued, because docs/LEARNING.md invariant 1 says the write happens from a
 human click and never from a tool call — and a confirmation card holding a 200-line JSON
 diff is exactly the thing that gets waved through. All four are editable in the dashboard.
 
@@ -1816,7 +1819,7 @@ npm run auth           # one-time Google read-only OAuth
 npm run browser:check  # verify Chrome link
 npm run tick | loop    # legacy single-goal heartbeat against goals.md
 npm run start          # prints config, then one legacy tick
-npm test               # weather alert threshold tests (no framework, no deps)
+npm test               # every suite in test/ (plain node scripts, no framework, no network)
 ```
 
 The scheduler inside `npm run dashboard` supersedes the heartbeat commands; they still work.

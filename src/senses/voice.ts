@@ -58,7 +58,7 @@ export const voiceStatus = async (): Promise<VoiceStatus> => {
   else if (!wakeModelReady()) listenReason = `Whisper model ${VOICE_WAKE_MODEL} is not in ${WHISPER_MODEL_DIR}`;
 
   let speakReason = "";
-  if (!TTS_BASE_URL) speakReason = "TTS_URL is not set — see VOICE.md";
+  if (!TTS_BASE_URL) speakReason = "TTS_URL is not set — see docs/VOICE.md";
   else {
     // Ask the service rather than assume: a configured URL with no model files behind it is
     // the common failure, and finding out on the first spoken reply is the worst time.
@@ -159,7 +159,7 @@ export const planSpeech = (text: string): string[] => chunkForSpeech(speakable(t
  * browser can say "nothing to read" instead of sitting in a speaking state with no sound.
  */
 export const speak = async (text: string, voice?: string): Promise<Buffer> => {
-  if (!TTS_BASE_URL) throw new Error("TTS_URL is not set — see VOICE.md");
+  if (!TTS_BASE_URL) throw new Error("TTS_URL is not set — see docs/VOICE.md");
   const input = speakable(text, VOICE_MAX_CHARS);
   if (!input) throw new Error("nothing to read aloud");
 

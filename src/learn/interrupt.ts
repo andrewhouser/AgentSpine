@@ -1,5 +1,5 @@
 /**
- * The interruption budget (LEARNING.md Phase 4.5).
+ * The interruption budget (docs/LEARNING.md Phase 4.5).
  *
  * An agent that anticipates is only bearable if it is quiet, and quiet cannot be a thing you
  * ask the model to be. Three layers, of which two live elsewhere and one lives here:

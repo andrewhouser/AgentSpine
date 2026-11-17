@@ -1,5 +1,5 @@
 /**
- * Self-editing task text (LEARNING.md Phase 5) — the one with teeth.
+ * Self-editing task text (docs/LEARNING.md Phase 5) — the one with teeth.
  *
  * Every other phase produces either a number or a proposal about a discrete thing. This one
  * edits the prompt an unattended future run will be handed — the single place where something

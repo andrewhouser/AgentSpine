@@ -11,12 +11,12 @@
   Use bootout/bootstrap, NOT stop/start: KeepAlive is on, so `launchctl stop` is
   immediately undone by a respawn.
 
-  CHECK BEFORE LOADING (see VOICE.md for the one-time setup that creates all of these):
+  CHECK BEFORE LOADING (see docs/VOICE.md for the one-time setup that creates all of these):
 
     1. WorkingDirectory must be this directory's absolute path on THIS machine. uvicorn
        resolves `server:app` relative to cwd.
     2. The uvicorn path must match the venv built on this machine.
-    3. espeak-ng must be installed (`brew install espeak-ng`) — see VOICE.md for why the copy
+    3. espeak-ng must be installed (`brew install espeak-ng`) — see docs/VOICE.md for why the copy
        bundled with the Python package cannot be used.
     4. The two model files must exist in TTS_MODEL_DIR. A missing file does not crash the
        service — /health reports it and requests get a 503 — so a bad install looks like a

@@ -1,7 +1,7 @@
 /**
  * Study: topics, flash cards, and a log of everything you produced.
  *
- * The premise (see STUDY.md) is that you learn by producing — recalling, explaining,
+ * The premise (see docs/STUDY.md) is that you learn by producing — recalling, explaining,
  * attempting — and not by reading. So the central table is `study_attempts`: one row per
  * thing you were asked or made, with a score and the gap it exposed. Everything else reads
  * from it: the diagnostician mines it for recurring mistakes, the card engine mints cards

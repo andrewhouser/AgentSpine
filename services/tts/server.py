@@ -173,7 +173,7 @@ async def speech(req: SpeechRequest):
         return JSONResponse({"error": "only response_format=wav is supported"}, status_code=400)
     if missing := _missing():
         return JSONResponse(
-            {"error": f"speech service is missing: {', '.join(missing)} — see VOICE.md"},
+            {"error": f"speech service is missing: {', '.join(missing)} — see docs/VOICE.md"},
             status_code=503,
         )
     text = req.input.strip()[:MAX_CHARS]

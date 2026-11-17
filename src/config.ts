@@ -74,12 +74,12 @@ export const VISION_MAX_TOKENS = Number(env.VISION_MAX_TOKENS ?? "700");
 export const VISION_MAX_EDGE = Number(env.VISION_MAX_EDGE ?? "1024");
 
 // The image tier: an OpenAI-images endpoint (POST /v1/images/generations) in front of the
-// local MFLUX service — see IMAGE_GENERATION.md and services/mflux/. It is NOT a chat tier
+// local MFLUX service — see docs/IMAGE_GENERATION.md and services/mflux/. It is NOT a chat tier
 // and never enters the router; the generate_image tool points clientFor() at it directly.
 // Empty = the tool is a no-op that reports it's unconfigured, exactly the way FAST_BASE_URL
 // degrades to standard when unset. There is deliberately no IMAGE_MODEL: the service hosts
 // one pipeline and reports it via /v1/models, so hardcoding an id in the client would be
-// the very mistake MODELS.md documents (a stale hardcoded id served the wrong model for
+// the very mistake docs/MODELS.md documents (a stale hardcoded id served the wrong model for
 // 26 days). The tool reads the id from the endpoint rather than carrying one.
 export const IMAGE_BASE_URL = env.IMAGE_URL ?? "";
 // Size each task and send it to the cheapest tier that can close it. The sizing is
@@ -234,7 +234,7 @@ export const NOTE_MEMORY_MAX = Number(env.NOTE_MEMORY_MAX ?? "300");
 // eating the whole context window on every single step.
 export const PROFILE_MAX_CHARS = Number(env.PROFILE_MAX_CHARS ?? "4000");
 
-// --- Learning from the ledger (LEARNING.md Phase 1) ---
+// --- Learning from the ledger (docs/LEARNING.md Phase 1) ---
 // All inference-free: SQL over the audit log and a regex table. None of it calls a model.
 
 // How many known-denied shapes to list in standing context before every run, so the model
@@ -295,7 +295,7 @@ export const CONVERSATION_MEMORY_MAX = Number(env.CONVERSATION_MEMORY_MAX ?? "20
 export const LESSON_SAMPLE_RATE = Number(env.LESSON_SAMPLE_RATE ?? "0.1");
 export const LESSON_MEMORY_MAX = Number(env.LESSON_MEMORY_MAX ?? "200");
 
-// --- Anticipation (LEARNING.md Phase 4) ---
+// --- Anticipation (docs/LEARNING.md Phase 4) ---
 // A chat-task shape that recurs at least this many times becomes a PROPOSED schedule or
 // watcher — pre-written task text landing in the confirmation queue, never installed
 // silently. The scheduler and watchers already exist; this only decides what to point them
@@ -320,7 +320,7 @@ export const JUDGE_INTERRUPTIONS_PROACTIVE = (env.JUDGE_INTERRUPTIONS_PROACTIVE 
 // old goals.md behaviour is the default until you opt in.
 export const HEARTBEAT_HORIZON = (env.HEARTBEAT_HORIZON ?? "false") === "true";
 
-// --- Self-editing task text (LEARNING.md Phase 5) ---
+// --- Self-editing task text (docs/LEARNING.md Phase 5) ---
 // A watcher is budgeted for about this many tool calls per run (fetch, state_get, maybe
 // state_set/notify). A watcher whose recent runs consistently cost MORE than this has task
 // text too loose, and becomes a candidate for a proposed rewrite.

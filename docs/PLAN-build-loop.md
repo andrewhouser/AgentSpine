@@ -117,7 +117,7 @@ which proves syntax and nothing else. The server and web halves are tested.
 Nothing in it. Worth knowing:
 
 - `.xcresult` parsing (Phase 5) is still the right answer for Xcode and still unverifiable here.
-- The `router.ts` vision fallback noted above is still wrong.
+- ~~The `router.ts` vision fallback noted above is still wrong.~~ Fixed: `fallbacksFor` gives `vision` no fallbacks (`test/router-vision.test.mjs`).
 - `run_command` has no way to pass an argument to a declared command — a test-name filter
   would need a declared pattern in policy, per Phase 1's own note. Nothing has needed it yet.
 

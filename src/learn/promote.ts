@@ -1,5 +1,5 @@
 /**
- * Learn from approvals (LEARNING.md Phase 2).
+ * Learn from approvals (docs/LEARNING.md Phase 2).
  *
  * Rejections teach (Phase 1.3); approvals taught nothing, which is backwards — a shape
  * approved twenty times with zero rejections is the strongest safety signal in the system,
@@ -13,7 +13,7 @@
  * them; it never writes `policy.json`. The dashboard renders a proposal with its exact diff,
  * and the server applies it on a click (`applyProposal`, called only from an authenticated
  * mutating route). **No tool in the registry can reach any of this** — that is invariant 1
- * from LEARNING.md, and this is the feature most likely to erode it if built as "a tool that
+ * from docs/LEARNING.md, and this is the feature most likely to erode it if built as "a tool that
  * suggests policy," so it is built as a report the agent cannot see.
  *
  * ## The proposal is falsifiable before you accept it

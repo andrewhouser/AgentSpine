@@ -125,7 +125,7 @@ export const api = {
    * The only call in this client that widens what the assistant may do without asking, and
    * the server side of it (`applyProposal`) is the only function anywhere that writes an
    * `autoApprove` entry. Deliberately not reachable from any tool the model can invoke —
-   * see LEARNING.md invariant 1 — which is why it lives here and not in the agent's API.
+   * see docs/LEARNING.md invariant 1 — which is why it lives here and not in the agent's API.
    * Idempotent: re-applying a rule that already exists answers `ok` and changes nothing.
    */
   applyProposal: (tool: string, target: string) =>

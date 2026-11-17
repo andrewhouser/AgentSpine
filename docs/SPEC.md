@@ -1,6 +1,6 @@
 # AgentSpine — Anticipatory Assistant: Build Spec
 
-Status: **§1–§6 and §11–§14 built.** §5 took the draft-not-send path by explicit decision on
+Status: **§1–§6 and §11–§18 built** (§7–§10 are sequencing, conventions, commands and the data model, not features). §5 took the draft-not-send path by explicit decision on
 2026-07-25; the Google scopes remain read-only and are not to be widened without a new one. This spec turns AgentSpine from a capable *reactive*
 tool-runner into an assistant that **understands you, notices when your world changes, and
 can reach you and act while you're away** — without abandoning its security-first, local-first
@@ -310,7 +310,7 @@ and revocable.
 > - Weather is gated even though the endpoint is keyless and read-only: the exposure isn't
 >   the response, it's that a daily lookup of your home town tells a third party where you
 >   live. That's a decision for the user, not a default.
-> - **Reminders reader: not built.** It can't be verified without macOS, and SPEC's own
+> - **Reminders reader: not built here** (later added: `mac_control list_reminders` via the EventKit helper, 82b2f51). It can't be verified without macOS, and SPEC's own
 >   alternative — `read_file` on a markdown todo file — already covers the same ground with
 >   no new AppleScript surface.
 > - No morning-brief infrastructure was invented; a brief is just a schedule, and a
@@ -500,7 +500,7 @@ npm run do "<task>"    # one-off cycle
 npm run watcher        # list | add <starter> | remove <id> | state | template
 npm run listen         # meeting capture CLI (§15): record | file <path> | …
 npm run digest         # [hours] [--push] — computed account of recent activity
-npm test               # weather alert threshold tests (no framework)
+npm test               # every suite in test/ (plain node scripts, no framework)
 npm run confirm        # approve/reject queued actions (CLI)
 npm run auth           # one-time Google read-only OAuth
 npm run browser:check  # verify Chrome link
@@ -768,7 +768,7 @@ npm run tick | loop    # legacy single-goal heartbeat
 
 ---
 
-## 15. Meetings — listen, transcribe, extract  🟡 **PHASES 1–2 BUILT, 2026-07-30**
+## 15. Meetings — listen, transcribe, extract  ✅ **ALL FOUR PHASES BUILT, 2026-07-30**
 
 > **Goal.** Sit a Mac in the room where a meeting is happening, transcribe it locally, show
 > the words live, pull work items out afterwards, and answer questions about it a few seconds

@@ -1,5 +1,5 @@
 /**
- * The denial learner (LEARNING.md Phase 1.1) — the cheapest win in the system.
+ * The denial learner (docs/LEARNING.md Phase 1.1) — the cheapest win in the system.
  *
  * `SELECT tool, target, COUNT(*) FROM actions WHERE decision='denied' GROUP BY tool, target`
  * is the highest-value untouched query in the database. Each row is the model attempting

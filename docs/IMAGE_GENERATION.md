@@ -3,7 +3,7 @@
 Everything below is for **`.85`, the 16 GB Mini that runs AgentSpine**. Nothing here goes on
 the model host.
 
-The service itself is already written and measured: [`services/mflux/server.py`](services/mflux/server.py).
+The service itself is already written and measured: [`services/mflux/server.py`](../services/mflux/server.py).
 It was built and benchmarked on the 32 GB model host on 2026-09-12, and the numbers in this
 document are measured on that hardware, not estimated. What remains is deploying it on `.85`
 and wiring AgentSpine to it.
@@ -143,7 +143,7 @@ Compare the peak against the table above; if it is materially higher on `.85`, l
 
 ### 5. launchd
 
-A ready plist ships at [`services/mflux/com.local.mflux.plist`](services/mflux/com.local.mflux.plist).
+A ready plist ships at [`services/mflux/com.local.mflux.plist`](../services/mflux/com.local.mflux.plist).
 Check the three items called out in its header comment — `WorkingDirectory`, the uvicorn
 path, and `MFLUX_MAX_SIDE` — then:
 

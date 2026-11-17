@@ -205,10 +205,10 @@ export const isManifest = (target: string): boolean => {
  * These were reachable until Phase 4, and that was a hole rather than a decision:
  * `policy.json` is a `.json` file inside `~/Developer`, so the extension allowlist and
  * `writableDirs` both said yes, and the write classified reversible and auto-executed. It
- * contradicted the invariant stated in LEARNING.md and repeated in tools/schedule.ts —
+ * contradicted the invariant stated in docs/LEARNING.md and repeated in tools/schedule.ts —
  * *"a run that could widen its own permissions would make deny-by-default a suggestion"*.
  *
- * Refused, not queued. LEARNING.md invariant 1 says the write happens "in the server, from a
+ * Refused, not queued. docs/LEARNING.md invariant 1 says the write happens "in the server, from a
  * human click, and never from a tool call", and a confirmation card holding a 200-line JSON
  * diff is precisely the thing that gets waved through. Each of these is editable in the
  * dashboard, which is where a change to them belongs:

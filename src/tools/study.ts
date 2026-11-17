@@ -1,7 +1,7 @@
 /**
  * The study tools: ten learning roles and a topic ledger, for the chat agent to call.
  *
- * The idea they share (STUDY.md): people learn by PRODUCING — recalling, explaining,
+ * The idea they share (docs/STUDY.md): people learn by PRODUCING — recalling, explaining,
  * attempting — and not by reading. So every tool here either makes you produce something and
  * records how it went, or turns what you got wrong into something to produce again later.
  * `study_explain` is the passive one, and it is deliberately wired to leave behind a card

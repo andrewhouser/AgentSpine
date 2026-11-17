@@ -1,7 +1,7 @@
 /**
  * Turning a build log into something a small model can act on.
  *
- * This file exists because of the lesson WATCHERS.md already draws from `weather_alerts`:
+ * This file exists because of the lesson docs/WATCHERS.md already draws from `weather_alerts`:
  * *the tool does the arithmetic, the model does the prose, and neither is asked to do the
  * other's job.* A `run_command` that hands back 4,000 lines of `cargo` output has asked the
  * model to do the arithmetic — find the first error in a wall of text, on a 3B-active local

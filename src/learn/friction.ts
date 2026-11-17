@@ -1,5 +1,5 @@
 /**
- * Tool-friction memory (LEARNING.md Phase 1.2).
+ * Tool-friction memory (docs/LEARNING.md Phase 1.2).
  *
  * Small models fail the same way repeatedly. When a call comes back `decision='error'`, we
  * store what went wrong and put the correction back where it will be read: not in a memory

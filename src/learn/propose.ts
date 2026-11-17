@@ -1,5 +1,5 @@
 /**
- * Anticipation: propose standing jobs from recurring intent (LEARNING.md Phase 4.1 & 4.2).
+ * Anticipation: propose standing jobs from recurring intent (docs/LEARNING.md Phase 4.1 & 4.2).
  *
  * The scheduler and watchers ARE the initiative mechanism; nothing here needs a new
  * actuator. What was missing is anything that decides what to point them at. This mines the

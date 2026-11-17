@@ -6,7 +6,7 @@ import { api } from "../../lib/api.ts";
 import styles from "./PolicyProposals.module.css";
 
 /**
- * Auto-approval proposals, rendered where LEARNING.md Phase 2 always said they belonged:
+ * Auto-approval proposals, rendered where docs/LEARNING.md Phase 2 always said they belonged:
  * inside Settings → Policy, directly above the file they would change.
  *
  * Four things are deliberate.

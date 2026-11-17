@@ -168,7 +168,7 @@ check("an ordinary move stays reversible", moveFile.classify({ from: path.join(a
 
 console.log("\nAgentSpine's own control files are not writable at all\n");
 
-// These were reachable before Phase 4, which contradicted LEARNING.md invariant 1 — the
+// These were reachable before Phase 4, which contradicted docs/LEARNING.md invariant 1 — the
 // model never widens its own permissions. policy.json is a .json file inside ~/Developer, so
 // the extension allowlist and writableDirs both said yes and the write auto-executed.
 const BASE = path.dirname(import.meta.dirname);

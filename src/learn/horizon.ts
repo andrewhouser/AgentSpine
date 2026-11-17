@@ -1,5 +1,5 @@
 /**
- * Look forward, not only for change (LEARNING.md Phase 4.3 & 4.6).
+ * Look forward, not only for change (docs/LEARNING.md Phase 4.3 & 4.6).
  *
  * A watcher compares the present against the past. Anticipation is usually just *earlier*:
  * read the calendar a couple of hours ahead, notice what is about to happen, and prepare the
@@ -11,7 +11,7 @@
  * normal run through the normal broker, so every tool it then calls is gated exactly as
  * always. The horizon job is the endpoint of Phase 4.6: the heartbeat stops reading a static
  * `goals.md` and instead runs the watcher shape against your own near future, acting only on
- * a difference and staying silent otherwise — the same three-line contract `WATCHERS.md`
+ * a difference and staying silent otherwise — the same three-line contract `docs/WATCHERS.md`
  * argues for.
  */
 import { HORIZON_HOURS } from "../config.ts";

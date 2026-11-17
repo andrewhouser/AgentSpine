@@ -34,7 +34,7 @@ browser starts from (`VOICE_WAKE_WORD`, `VOICE_WAKE_ALIASES`, `VOICE_WAKE_SOUNDS
 
 Listening reuses the Whisper models dictation and meetings already use (`DICTATION_MODEL`, plus
 the fast `base.en` for wake-word spotting — `VOICE_WAKE_MODEL`). **Speaking** needs the local
-Kokoro service in [services/tts/](services/tts/), one time:
+Kokoro service in [services/tts/](../services/tts/), one time:
 
 ```bash
 # 1. The phonemizer. NOT optional on macOS — see "Why espeak-ng from Homebrew" below.

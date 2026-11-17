@@ -52,7 +52,7 @@ export interface Confirmation {
 }
 
 /**
- * An auto-approval proposal (LEARNING.md Phase 2): one `(tool, target)` shape the ledger
+ * An auto-approval proposal (docs/LEARNING.md Phase 2): one `(tool, target)` shape the ledger
  * says has been approved repeatedly and never once rejected, offered as the narrowest policy
  * rule that would stop it queueing.
  *

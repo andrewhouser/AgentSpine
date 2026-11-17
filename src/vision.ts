@@ -122,7 +122,7 @@ export const look = async (rows: AttachmentRow[], question: string): Promise<Loo
   if (!visionConfigured()) {
     throw new NoVisionError(
       "No vision endpoint is configured, so images cannot be read. Set VISION_LLM_URL in .env " +
-        "to an mlx_vlm.server address (see MODELS.md).",
+        "to an mlx_vlm.server address (see docs/MODELS.md).",
     );
   }
 

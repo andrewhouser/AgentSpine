@@ -137,7 +137,7 @@ export interface Policy {
    * else — so it is not gated for danger. It is gated because the prompt is model-authored
    * and the effect is a file written to disk, and because the render runs a local model
    * that must stay on the app host (an image render on the model host pages the language
-   * models out; see IMAGE_GENERATION.md). Whether that capability exists at all is a
+   * models out; see docs/IMAGE_GENERATION.md). Whether that capability exists at all is a
    * decision to make here, not a default.
    */
   images?: { enabled: boolean };

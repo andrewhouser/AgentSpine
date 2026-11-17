@@ -1,5 +1,5 @@
 /**
- * Sampled self-critique (LEARNING.md Phase 3.2).
+ * Sampled self-critique (docs/LEARNING.md Phase 3.2).
  *
  * `judge()` already exists, already prefers cloud, already treats its context as untrusted,
  * and already returns a bare yes/no plus a reason — exactly the small surface this wants. On

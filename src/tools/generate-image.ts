@@ -1,5 +1,5 @@
 /**
- * Image generation via the local MFLUX service (see IMAGE_GENERATION.md, services/mflux/).
+ * Image generation via the local MFLUX service (see docs/IMAGE_GENERATION.md, services/mflux/).
  *
  * The service speaks OpenAI's image spec on purpose, so the client is the same
  * `clientFor(url).images.generate()` every chat tier uses — no new transport. It runs on
@@ -16,7 +16,7 @@
  *      back as text. That path is stable, which is why the image survives a page reload.
  *
  *   2. It does not hardcode a model id. The service hosts one pipeline and advertises it via
- *      /v1/models; a hardcoded id in a client is exactly the mistake MODELS.md documents (a
+ *      /v1/models; a hardcoded id in a client is exactly the mistake docs/MODELS.md documents (a
  *      stale id served the wrong model for 26 days). `images.generate` requires SOME model
  *      field, so the id is discovered from the endpoint at call time, not baked in.
  *
@@ -61,7 +61,7 @@ const clampSize = (raw?: string): string => {
   return `${w}x${h}`;
 };
 
-/** Discover the served model id from the endpoint instead of hardcoding one (MODELS.md). */
+/** Discover the served model id from the endpoint instead of hardcoding one (docs/MODELS.md). */
 const discoverModel = async (client: ReturnType<typeof clientFor>): Promise<string> => {
   try {
     const list = await client.models.list();
@@ -112,7 +112,7 @@ export const generateImage: Tool = {
         allowed: false,
         reason:
           "IMAGE_URL is not set in .env, so there is no image service to call. Point it at " +
-          "the local MFLUX service (e.g. http://127.0.0.1:8082/v1) — see IMAGE_GENERATION.md.",
+          "the local MFLUX service (e.g. http://127.0.0.1:8082/v1) — see docs/IMAGE_GENERATION.md.",
       };
     }
     return { allowed: true, reason: "policy.images.enabled is true and IMAGE_URL is set" };
