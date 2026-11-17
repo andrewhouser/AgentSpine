@@ -36,6 +36,7 @@ import { meetingList, meetingTag } from "./meetings.ts";
 import { scaffoldIosApp } from "./scaffold-ios.ts";
 import { generateImage } from "./generate-image.ts";
 import { studyTools } from "./study.ts";
+import { recipeTools } from "./recipes.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -89,6 +90,7 @@ export const tools: Tool[] = [
   timeReportTool,
   generateImage,
   ...studyTools,
+  ...recipeTools,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

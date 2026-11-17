@@ -41,6 +41,7 @@ import { CONVERSATION_KIND } from "./memory/summarize.ts";
 import { threadSummaryContext, updateThreadSummary } from "./memory/thread.ts";
 import { deniedContext } from "./learn/denials.ts";
 import { RECIPE_KIND } from "./reflect.ts";
+import { recipeContext } from "./recipes/store.ts";
 import { LESSON_KIND, critiqueRun } from "./learn/critique.ts";
 import { queueStandingIntent } from "./learn/propose.ts";
 import { reflect } from "./reflect.ts";
@@ -152,6 +153,18 @@ const buildContext = async (task: string, used: string[] = []): Promise<string[]
     } catch (err) {
       console.warn(`[memory] recall skipped: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  // Named recipes: ones the user approved and named (src/recipes). A recipe the message asks
+  // for by name goes in whole. The rest get a one-line index so the model knows to call
+  // recipe_use. The match is code, not similarity, so a named recipe is here because it was
+  // asked for. Adds nothing when none are saved.
+  try {
+    const named = recipeContext(task);
+    context.push(...named.blocks);
+    used.push(...named.used);
+  } catch (err) {
+    console.warn(`[recipes] named recipe context skipped: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Recipes (Phase 3.1) and lessons (Phase 3.2), recalled by task similarity and injected

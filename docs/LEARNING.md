@@ -287,6 +287,16 @@ have to reason about.
 > aren't working and should be deleted rather than tuned. Deterministic parts verified in
 > `test/learn-recipe.test.mjs` (eligibility gate, kind-scoped recall, the sampling gate, the
 > sensitive-tool detection); the model-dependent extraction/critique are exercised live.
+>
+> **3.3 Named recipes (added 2026-11-17).** The explicit counterpart to 3.1: the user says
+> "save this as a recipe called X", `recipe_save` queues the whole recipe for approval, and
+> "run X" injects it in full. It lives in its own table (`src/recipes/`) because it differs
+> from a learned recipe on every axis that matters: a person approves it, it is matched by name
+> in code rather than recalled by similarity, and nothing prunes it. Invariant 1 holds:
+> `recipe_save` refuses any run that isn't a live chat, so the pre-approval scheduled runs got
+> in 698f112 can't turn it into an unattended write of standing instructions. Judge it the same
+> way, with per-recipe `uses` (Settings → Recipes) beside steps-per-repeat-task. A recipe nobody
+> runs should be deleted. `test/recipes.test.mjs`.
 
 *Original plan, kept for reference:*
 

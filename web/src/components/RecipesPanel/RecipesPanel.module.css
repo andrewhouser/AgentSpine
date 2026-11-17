@@ -1,0 +1,119 @@
+/* Matches the Settings section chrome (SettingsView.module.css) and the Schedules card. */
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 26px 0 8px;
+  padding-top: 18px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 0 0 12px;
+}
+
+.note code {
+  background: var(--bg-inset);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 5px;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  padding: 12px 0;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  padding: 13px 15px;
+}
+
+.top {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.name {
+  font-family: var(--font-mono);
+  font-size: 0.8438rem;
+  font-weight: 600;
+}
+
+.when {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  min-width: 0;
+}
+
+.steps {
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 8px 0 6px;
+  padding-left: 22px;
+}
+
+.meta {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.7188rem;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.7813rem;
+  margin-bottom: 4px;
+}
+
+.actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.button {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 0.7813rem;
+  padding: 4px 11px;
+}
+
+.button:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.button:disabled {
+  opacity: 0.55;
+}
+
+.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.edit {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-sizing: border-box;
+  color: inherit;
+  display: block;
+  font: inherit;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  width: 100%;
+}

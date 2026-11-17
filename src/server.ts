@@ -83,6 +83,7 @@ import { parseWhen } from "./tasks/when.ts";
 import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
+import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? "8787");
 // Default binds localhost only. Set DASHBOARD_HOST=0.0.0.0 to reach it from other machines
@@ -821,6 +822,27 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (m === "DELETE" && seg[1] === "memories" && seg.length === 3) {
       const removed = deleteMemory(Number(seg[2]));
       return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+    }
+
+    // /api/recipes — named recipes (src/recipes). List, edit and delete, from the dashboard
+    // only. There's no POST: a recipe is created by recipe_save in a chat, where its whole
+    // text goes through the approval card. Editing one here is a person at the keyboard,
+    // which is the same trust.
+    if (seg[1] === "recipes") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listRecipes());
+      if (m === "PATCH" && seg.length === 3) {
+        const b = await readBody(req);
+        try {
+          return sendJson(res, 200, updateRecipe(Number(seg[2]), { name: b.name, steps: b.steps, when: b.when }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return sendJson(res, msg.startsWith("no recipe") ? 404 : 400, { error: msg });
+        }
+      }
+      if (m === "DELETE" && seg.length === 3) {
+        const removed = deleteRecipe(Number(seg[2]));
+        return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+      }
     }
 
     // /api/policy

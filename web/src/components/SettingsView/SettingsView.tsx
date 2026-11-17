@@ -17,6 +17,7 @@ import {
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PolicyProposals } from "../PolicyProposals/PolicyProposals.tsx";
+import { RecipesPanel } from "../RecipesPanel/RecipesPanel.tsx";
 import styles from "./SettingsView.module.css";
 
 const THEMES: { label: string; value: ThemeChoice }[] = [
@@ -320,6 +321,8 @@ export const SettingsView = () => {
           </div>
         ))}
       </section>
+
+      <RecipesPanel />
 
       <section>
         <h2 className={styles.subhead}>Policy</h2>

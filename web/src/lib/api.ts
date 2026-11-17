@@ -29,6 +29,7 @@ import type {
   Project,
   ProjectSource,
   PromotionProposal,
+  Recipe,
   Run,
   SavedFile,
   Schedule,
@@ -156,8 +157,9 @@ export const api = {
   /** Delete a meeting's kept recording now. */
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
-
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
+
+  deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
 
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
@@ -233,9 +235,10 @@ export const api = {
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
 
   listProjects: () => request<Project[]>("/api/projects"),
-
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
+
+  listRecipes: () => request<Recipe[]>("/api/recipes"),
 
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
@@ -374,6 +377,10 @@ export const api = {
    * Change any of a schedule's name, task, schedule spec or enabled flag. Editing in place
    * keeps `last_run`, which delete-and-recreate would lose.
    */
+  /** Edit a named recipe. A 400 carries a message saying what to fix (too few steps, a name clash). */
+  updateRecipe: (id: number, fields: { name?: string; steps?: string[]; when?: string }) =>
+    patch<Recipe>(`/api/recipes/${id}`, fields),
+
   updateSchedule: (id: number, fields: { enabled?: boolean; name?: string; schedule?: string; task?: string }) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
 

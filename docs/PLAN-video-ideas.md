@@ -50,7 +50,7 @@ Nothing was deleted: every moved file is referenced from code, config or the REA
 
 Ranked by value per effort.
 
-### A1. Named recipes you save yourself ("turn this session into a skill")  *(M)*
+### A1. Named recipes you save yourself ("turn this session into a skill")  *(M)*  ✅ built 2026-11-17 (web; iOS not yet)
 The video's best habit: after a long back-and-forth, say "turn this into a skill". AgentSpine
 only learns recipes **implicitly**, from clean runs, chosen by similarity. That gives you no way to
 say "remember *how we just did that*, call it `pi-brief`, and do it again when I ask".

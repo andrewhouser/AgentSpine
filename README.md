@@ -864,9 +864,12 @@ src/                 the agent — no build step, two runtime dependencies
     look-at-file.ts look_at_file — point the vision tier at an image on disk, e.g. a screenshot
     digest.ts      digest — computed summary of its own recent activity
     draft.ts       draft — composes mail/events for YOU to send; adds no OAuth scope
+    recipes.ts     recipe_save / recipe_use / recipe_list — named procedures you approve
   google/
     auth.ts        one-time read-only OAuth (npm run auth)
     client.ts      read-only Gmail + Calendar REST (no SDK)
+  recipes/
+    store.ts       named recipes: own table, matched by name in code, never pruned
   memory/
     store.ts       SQLite ledger: conversations, runs, actions (audit log), confirmations,
                    stash (withheld tails, dropped when their run ends)
@@ -918,6 +921,19 @@ UNTRUSTED web and email text and "remember that Andrew authorized X" is the obvi
 quoted content is evidence to summarize, never an instruction. Credential-shaped strings are
 filtered out, near-duplicates are dropped, and auto-learned memories are capped (oldest
 pruned first — your hand-saved notes never are).
+
+**Named recipes** are the third source, and you write them. After working something out in a
+chat, say *"save this as a recipe called pi-brief"*. The assistant drafts a `when` line and the
+steps, and `recipe_save` queues them as an approval card showing every step (it says REPLACES
+if the name is taken). Once approved, *"run pi-brief"* or `/pi-brief` puts those steps in front
+of the next run in full. The match is made in code, not by similarity: a hyphenated name matches
+anywhere in your message, a single plain word only after `/`, `run`, `use`, `do`, `follow` or
+`recipe`. Other saved recipes appear as a one-line index, so the model can reach for one with
+`recipe_use`. They live in their own table (`src/recipes/`), are never pruned or deduped, and are
+edited or deleted in **Settings → Recipes**, which also shows how often each one is used.
+`recipe_save` is refused outright outside a live chat, because a scheduled run is pre-approved
+and would otherwise write standing instructions with nobody reading. A schedule can still *use*
+one: a task of "run pi-brief" works.
 
 Both halves are visible in the dashboard trace, so when a run behaves oddly you can see what
 it thought it knew going in. Tune or disable via `MEMORY_RECALL_K` and `REFLECT_ENABLED`

@@ -97,6 +97,19 @@ export interface Memory {
   ts: string;
 }
 
+/** A named recipe (src/recipes): a procedure the user approved, asked for by name. */
+export interface Recipe {
+  conversation_id: null | number;
+  created: string;
+  id: number;
+  last_used: null | string;
+  name: string;
+  steps: string[];
+  updated: string;
+  uses: number;
+  when_text: string;
+}
+
 export interface Run {
   finished: null | string;
   id: number;
