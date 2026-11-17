@@ -65,6 +65,8 @@ export interface NotifyOpts {
    * none of the existing call sites had to change to gain push.
    */
   push?: PushAlert;
+  /** ntfy only: the page a tap on the notification opens (an absolute URL). */
+  click?: string;
 }
 
 export interface NotifyResult {
@@ -111,6 +113,7 @@ const ntfyPublish = async (
         message: body,
         ...(opts.priority ? { priority: opts.priority } : {}),
         ...(opts.tags?.length ? { tags: opts.tags } : {}),
+        ...(opts.click ? { click: opts.click } : {}),
         ...(opts.actions?.length
           ? {
               actions: opts.actions.map((a) => ({

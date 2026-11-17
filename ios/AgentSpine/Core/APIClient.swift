@@ -463,6 +463,29 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/tasks/\(id)", method: "DELETE"))
     }
 
+    // MARK: - Study
+
+    func studyOverview() async throws -> StudyOverview {
+        try await send(request("/api/study"), as: StudyOverview.self)
+    }
+
+    /// Cards due now, question only. `topicID` narrows to one topic.
+    func studyDue(topicID: Int? = nil) async throws -> [StudyDueCard] {
+        var query: [String: String] = [:]
+        if let topicID { query["topic"] = String(topicID) }
+        return try await send(request("/api/study/due", query: query), as: [StudyDueCard].self)
+    }
+
+    /// Grade a recall and reschedule the card, as `study_cards review` does in chat. An empty
+    /// answer counts as forgotten. A 503 means the model gave no usable grade; the card is
+    /// untouched, so sending the same answer again is safe.
+    func reviewStudyCard(_ id: Int, answer: String) async throws -> StudyReview {
+        try await send(
+            jsonRequest("/api/study/cards/\(id)/review", method: "POST", body: ["answer": answer]),
+            as: StudyReview.self
+        )
+    }
+
     func clients() async throws -> [Client] {
         try await send(request("/api/clients"), as: [Client].self)
     }

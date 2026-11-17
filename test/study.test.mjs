@@ -172,11 +172,49 @@ check("a topic linked to a project is pinned to the local model", prompts.at(-1)
 console.log("\ndaily card nudge\n");
 const t0 = new Date();
 const sent = [];
-const fake = async (title, body) => void sent.push({ body, title });
+const fake = async (title, body, opts) => void sent.push({ body, opts, title });
 check("one nudge when cards are due", await sweepDueCards(20, t0, fake), true);
 check("then none inside the throttle window", await sweepDueCards(20, new Date(t0.getTime() + 3_600_000), fake), false);
 check("exactly one push went out", sent.length, 1);
 yes("it names the topics and the count", /\d+ study cards? due/.test(sent[0].title) && sent[0].body.includes("Okta"));
+check("a tap opens the Study screen on iOS", sent[0].opts.push.screen, "study");
+check("repeat nudges replace each other on the lock screen", sent[0].opts.push.collapseId, "study-due");
+console.log("\nthe Study screen (src/study/review.ts)\n");
+{
+  const { dueForScreen, reviewWithRecall, studyOverview } = await import("../src/study/review.ts");
+  const screenTopic = store.ensureTopic("Screen topic");
+  const cid = store.addCard(screenTopic.id, "What does PKCE protect?", "The authorization code, from interception.");
+  const due = dueForScreen(screenTopic.id);
+  check("a due card is listed for the screen", due.map((c) => c.id), [cid]);
+  check("the screen gets the question and never the answer", Object.keys(due[0]).includes("back"), false);
+  check("each card carries its topic name", due[0].topicName, "Screen topic");
+  grade = { ...grade, score: 0.9 };
+  const good = await reviewWithRecall(cid, "the auth code");
+  check("a good recall is graded by the model", good.score, 0.9);
+  check("the answer is revealed only after the recall", good.back, "The authorization code, from interception.");
+  check("and it is scheduled a day out", good.interval, 1);
+  check("it is no longer due", dueForScreen(screenTopic.id).length, 0);
+  const cid2 = store.addCard(screenTopic.id, "Name the three PKCE values", "verifier, challenge, method");
+  const before = prompts.length;
+  const blank = await reviewWithRecall(cid2, "  ");
+  check("a blank recall is forgotten without asking the model", [blank.score, prompts.length - before], [0, 0]);
+  check("a forgotten card comes back in this sitting", blank.interval, 0);
+  const attempts = store.recentMisses(screenTopic.id).map((m) => m.role);
+  check("the miss is in the ledger for the diagnostician", attempts.includes("recall"), true);
+  const t = studyOverview().topics.find((x) => x.name === "Screen topic");
+  check("the overview counts cards and due", [t.cards, t.due], [2, 0]);
+  check("the overview counts recalls as produced", t.produced, 2);
+  let missing = "";
+  try {
+    await reviewWithRecall(999999, "x");
+  } catch (err) {
+    missing = err.message;
+  }
+  check("an unknown card is reported, not graded", missing.startsWith("no such card"), true);
+  const okta = studyOverview().topics.find((x) => x.name === "Okta");
+  check("the overview carries the curriculum in order", okta.map.map((m) => m.name), ["Tokens", "PKCE"]);
+}
+
 console.log("\nstatus\n");
 yes("get shows produced work", (await call("study_topic", { action: "get", topic: "Okta" })).includes("things produced"));
 check("delete removes cards and history", (await call("study_topic", { action: "delete", topic: "Fresh" })).startsWith("Deleted"), true);

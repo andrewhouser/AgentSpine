@@ -22,6 +22,7 @@ import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
 import { SearchView } from "../SearchView/SearchView.tsx";
 import { SettingsView } from "../SettingsView/SettingsView.tsx";
 import { Sidebar } from "../Sidebar/Sidebar.tsx";
+import { StudyView } from "../StudyView/StudyView.tsx";
 import { TasksView } from "../TasksView/TasksView.tsx";
 import styles from "./AppShell.module.css";
 
@@ -35,6 +36,7 @@ const VIEW_TITLES: Record<string, string> = {
   schedules: "Schedules",
   search: "Search",
   settings: "Settings",
+  study: "Study",
   tasks: "Tasks",
 };
 
@@ -230,6 +232,7 @@ export const AppShell = () => {
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}
         {route.view === "tasks" && <TasksView projects={projects} />}
+        {route.view === "study" && <StudyView />}
         {route.view === "files" && <FilesView />}
         {route.view === "clients" && <ClientsView />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}

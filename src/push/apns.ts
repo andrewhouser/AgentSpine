@@ -260,6 +260,8 @@ export interface PushAlert {
   confirmationId?: number;
   conversationId?: number;
   runId?: number;
+  /** A screen to open on tap when there is no conversation to open, e.g. "study". */
+  screen?: string;
   /**
    * The scoped, single-use approval token, so Approve/Reject can be answered from the lock
    * screen. Same security posture as the ntfy buttons in notify.ts: this travels through
@@ -303,6 +305,7 @@ export const buildPayload = (title: string, body: string, alert: PushAlert): str
   if (alert.confirmationId !== undefined) custom.confirmationId = alert.confirmationId;
   if (alert.conversationId !== undefined) custom.conversationId = alert.conversationId;
   if (alert.runId !== undefined) custom.runId = alert.runId;
+  if (alert.screen) custom.screen = alert.screen;
   if (alert.approvalToken) custom.approvalToken = alert.approvalToken;
 
   const build = (text: string): string =>

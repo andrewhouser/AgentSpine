@@ -34,6 +34,9 @@ import type {
   SavedFile,
   Schedule,
   SearchHit,
+  StudyDueCard,
+  StudyOverview,
+  StudyReview,
   Task,
   Thread,
   TimeSummary,
@@ -239,10 +242,10 @@ export const api = {
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
 
   listRecipes: () => request<Recipe[]>("/api/recipes"),
-
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
-
   listSchedules: () => request<Schedule[]>("/api/schedules"),
+
+  listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
 
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
@@ -302,6 +305,13 @@ export const api = {
   reprocessMeeting: (id: number, speakers?: number) =>
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
+  /**
+   * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
+   * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
+   * untouched and retrying is safe.
+   */
+  reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
+
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
@@ -354,7 +364,6 @@ export const api = {
   starRun: (runId: number, starred: boolean) => post<{ ok: boolean }>(`/api/runs/${runId}/star`, { starred }),
 
   startDictation: () => post<{ device: string }>("/api/dictate/start"),
-
   startMeeting: (device: string, projectId: null | number, title?: string) =>
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
 
@@ -364,6 +373,9 @@ export const api = {
   stopDictation: () => post<{ text: string }>("/api/dictate/stop"),
 
   stopMeeting: () => post<{ meetingId: number }>("/api/meetings/stop"),
+
+  /** Cards due now, question only. `topic` narrows to one topic. */
+  studyOverview: () => request<StudyOverview>("/api/study"),
 
   thread: (id: number) => request<Thread>(`/api/conversations/${id}`),
 

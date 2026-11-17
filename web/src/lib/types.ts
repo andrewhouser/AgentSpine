@@ -97,6 +97,46 @@ export interface Memory {
   ts: string;
 }
 
+/** A study card as the Study screen sees it before a recall: the question only. */
+export interface StudyDueCard {
+  front: string;
+  id: number;
+  lapses: number;
+  reps: number;
+  topicId: number;
+  topicName: string;
+}
+
+/** What grading a recall returns. The answer arrives only here, after you have produced yours. */
+export interface StudyReview {
+  back: string;
+  cardId: number;
+  due: string;
+  feedback: string;
+  /** Days to the next review; 0 means it comes back in this sitting. */
+  interval: number;
+  remaining: number;
+  score: number;
+}
+
+export interface StudyTopic {
+  cards: number;
+  consumed: number;
+  due: number;
+  goal: null | string;
+  id: number;
+  level: null | number;
+  map: { dependsOn: string[]; name: string; summary: string }[];
+  name: string;
+  produced: number;
+  projectId: null | number;
+}
+
+export interface StudyOverview {
+  due: number;
+  topics: StudyTopic[];
+}
+
 /** A named recipe (src/recipes): a procedure the user approved, asked for by name. */
 export interface Recipe {
   conversation_id: null | number;

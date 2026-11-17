@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Eleven tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
+/// Twelve tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
 ///
 /// Approvals are not a tab: they are asked in the thread that wanted them, and a thread with a
 /// question waiting carries a blue dot. The Threads tab's badge counts those threads, because
@@ -8,7 +8,7 @@ import SwiftUI
 /// badge on an informational tab is how a badge stops meaning anything.
 struct RootView: View {
     enum Tab: Hashable {
-        case threads, tasks, schedules, projects, files, clients, search, meetings, builds, activity, settings
+        case threads, tasks, study, schedules, projects, files, clients, search, meetings, builds, activity, settings
     }
 
     @Environment(AppState.self) private var state
@@ -34,6 +34,12 @@ struct RootView: View {
             }
             .tabItem { Label("Tasks", systemImage: "checklist") }
             .tag(Tab.tasks)
+
+            NavigationStack {
+                StudyView()
+            }
+            .tabItem { Label("Study", systemImage: "brain.head.profile") }
+            .tag(Tab.study)
 
             NavigationStack {
                 SchedulesView()
@@ -120,6 +126,9 @@ struct RootView: View {
                 tab = .threads
                 threadPath = []
                 Task { await state.refreshConversations() }
+            case .study:
+                // The daily "N cards due" push.
+                tab = .study
             case .conversation(let id):
                 tab = .threads
                 // Replace rather than push: tapping two notifications should not build a stack

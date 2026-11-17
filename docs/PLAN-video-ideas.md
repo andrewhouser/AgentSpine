@@ -62,7 +62,7 @@ say "remember *how we just did that*, call it `pi-brief`, and do it again when I
 - Keep the Phase 0 measure (steps per repeated task) so named recipes get judged like the
   automatic ones.
 
-### A2. Study screen: web, then iOS  *(M–L)*
+### A2. Study screen: web, then iOS  *(M–L)*  ✅ built 2026-11-17 (web + iOS)
 STUDY.md lists "a dedicated web or iOS screen" as not built. Chat is clumsy for the one loop you'll
 repeat most: reviewing due cards. This is also the video's "practice app" idea, built once.
 - Card review: question, then you answer (typed or spoken), then it grades and reschedules. Uses

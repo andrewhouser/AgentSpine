@@ -23,7 +23,6 @@ import {
   diagnose,
   explain,
   gradeAnswer,
-  gradeRecall,
   grounding,
   interviewDistill,
   interviewQuestions,
@@ -35,6 +34,7 @@ import {
   StudyModelError,
 } from "../study/roles.ts";
 import type { Modality } from "../study/roles.ts";
+import { reviewWithRecall } from "../study/review.ts";
 import type { TopicRow } from "../study/store.ts";
 import {
   addAttempt,
@@ -47,13 +47,11 @@ import {
   dueCards,
   ensureTopic,
   findTopic,
-  getCard,
   lastAttempt,
   listCards,
   listTopics,
   openAttempt,
   recentMisses,
-  reviewCard,
   sessionAttempts,
   setAttemptMeta,
   topicJson,
@@ -547,18 +545,11 @@ export const studyCards: Tool = {
       return `${total} due. Card #${due[0].id}: ${due[0].front}\nAsk the user to answer from memory, then study_cards review with card_id ${due[0].id} and their answer.`;
     }
     if (action === "review") {
-      const card = getCard(Number(a?.card_id ?? a?.id));
-      if (!card) throw new Error("no such card; study_cards due shows the next one");
-      const t = findTopic(card.topic_id)!;
-      const answer = String(a?.answer ?? "").trim();
-      const gaveUp = !answer || answer === "?";
-      const g = gaveUp ? { feedback: "Marked forgotten.", score: 0 } : await gradeRecall(t, card.front, card.back, answer);
-      const after = reviewCard(card.id, g.score)!;
-      addAttempt({ answer, answered: true, gap: g.score < MISS ? card.front.slice(0, 150) : null, prompt: card.front, role: "recall", score: g.score, topicId: card.topic_id, verdict: g.score >= MISS ? "recalled" : "forgot" });
-      const days = after.interval;
+      // Shared with the Study screen (src/study/review.ts) so both grade and ledger alike.
+      const r = await reviewWithRecall(Number(a?.card_id ?? a?.id), a?.answer);
+      const days = r.interval;
       const when = days > 0 ? `in ${days} day${days === 1 ? "" : "s"}` : "again shortly";
-      const remaining = countDue(undefined);
-      return `${pct(g.score)}. ${g.feedback}\nAnswer: ${card.back}\nNext review ${when}. ${remaining} card${remaining === 1 ? "" : "s"} still due.`;
+      return `${pct(r.score)}. ${r.feedback}\nAnswer: ${r.back}\nNext review ${when}. ${r.remaining} card${r.remaining === 1 ? "" : "s"} still due.`;
     }
     if (action === "add") {
       const t = topicOf(a, ctx);

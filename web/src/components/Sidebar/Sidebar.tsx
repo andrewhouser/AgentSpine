@@ -19,6 +19,7 @@ export type View =
   | "schedules"
   | "search"
   | "settings"
+  | "study"
   | "tasks";
 
 interface SidebarProps {
@@ -43,6 +44,7 @@ interface SidebarProps {
 const NAV: { key: View; label: string }[] = [
   { key: "search", label: "Search" },
   { key: "tasks", label: "Tasks" },
+  { key: "study", label: "Study" },
   { key: "files", label: "Files" },
   { key: "clients", label: "Clients" },
   { key: "meetings", label: "Meetings" },

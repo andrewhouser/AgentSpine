@@ -143,6 +143,28 @@ fs.writeFileSync(
   }),
 );
 
+// --- /api/study, /api/study/due and a review, from src/study/review.ts ---
+// The grade comes from a scripted asker; the shapes are the real ones. Two topics: one with a
+// project, a goal, a level and a curriculum, and one with none of those, because the nulls
+// are what an optional in Swift gets wrong.
+const study = await import("../src/study/store.ts");
+const { __setAsker } = await import("../src/study/roles.ts");
+const { dueForScreen, reviewWithRecall, studyOverview } = await import("../src/study/review.ts");
+__setAsker(async () => ({ feedback: "close enough", score: 0.8 }));
+const okta = study.ensureTopic("OAuth and Okta");
+study.updateTopic(okta.id, {
+  goal: "answer identity questions at PI planning",
+  level: 3,
+  map: [{ dependsOn: [], name: "Tokens", stumbling: ["scopes"], summary: "what a token is" }],
+  projectId: 7,
+});
+study.ensureTopic("Bare topic");
+const c1 = study.addCard(okta.id, "What does PKCE protect?", "The authorization code.");
+study.addCard(okta.id, "Name the PKCE values", "verifier, challenge, method");
+fs.writeFileSync(path.join(root, "study-due.json"), JSON.stringify(dueForScreen()));
+fs.writeFileSync(path.join(root, "study-review.json"), JSON.stringify(await reviewWithRecall(c1, "the auth code")));
+fs.writeFileSync(path.join(root, "study-overview.json"), JSON.stringify(studyOverview()));
+
 // --- the models, taken from the app rather than restated ---
 const modelsPath = path.join(REPO, "ios", "AgentSpine", "Core", "Models.swift");
 const models = fs.readFileSync(modelsPath, "utf8");
@@ -161,6 +183,14 @@ const liveFrom = models.indexOf("struct MeetingLiveStatus:");
 const liveTo = liveFrom < 0 ? -1 : models.indexOf("\n}\n", liveFrom);
 if (liveFrom < 0 || liveTo < 0) throw new Error(`could not find struct MeetingLiveStatus in ${modelsPath}`);
 const liveSection = models.slice(liveFrom, liveTo + 3);
+
+const studyFrom = models.indexOf("// MARK: - Study");
+const studyTo = studyFrom < 0 ? -1 : models.indexOf("\n// MARK:", studyFrom + 1);
+if (studyFrom < 0 || studyTo < 0) throw new Error(`could not find the Study section in ${modelsPath}`);
+const studySection = models.slice(studyFrom, studyTo);
+for (const needle of ["struct StudyOverview", "struct StudyTopic", "struct StudyDueCard", "struct StudyReview"]) {
+  if (!studySection.includes(needle)) throw new Error(`the Study section is missing ${needle} — markers moved?`);
+}
 
 const main = [
   "",
@@ -211,12 +241,33 @@ const main = [
   '    print("  FAIL  live status threw: \\(error)")',
   "    failed += 1",
   "}",
+  "do {",
+  "    let ov = try dec.decode(StudyOverview.self, from: load(CommandLine.arguments[4]))",
+  '    check("the study overview decodes", ov.topics.count == 2, "\\(ov.topics.count)")',
+  '    let t = ov.topics.first(where: { $0.name == "OAuth and Okta" })!',
+  '    check("projectId maps onto projectID", t.projectID == 7, "\\(t.projectID ?? -1)")',
+  '    check("a level and a goal come through", t.level == 3 && t.goal != nil)',
+  '    check("the curriculum decodes in order", t.map.first?.name == "Tokens")',
+  '    let bare = ov.topics.first(where: { $0.name == "Bare topic" })!',
+  '    check("a topic with no goal/level/project decodes nils", bare.goal == nil && bare.level == nil && bare.projectID == nil)',
+  '    check("an empty curriculum is an empty list", bare.map.isEmpty)',
+  "    let due = try dec.decode([StudyDueCard].self, from: load(CommandLine.arguments[5]))",
+  '    check("due cards decode", due.count == 2, "\\(due.count)")',
+  '    check("topicId maps onto topicID", due[0].topicID == t.id, "\\(due[0].topicID)")',
+  "    let r = try dec.decode(StudyReview.self, from: load(CommandLine.arguments[6]))",
+  '    check("a review decodes", r.score == 0.8, "\\(r.score)")',
+  '    check("cardId maps onto cardID", r.cardID == due[0].id, "\\(r.cardID)")',
+  '    check("interval arrives as a number of days", r.interval == 1, "\\(r.interval)")',
+  "} catch {",
+  '    print("  FAIL  study threw: \\(error)")',
+  "    failed += 1",
+  "}",
   'print("RESULT \\(passed) \\(failed)")',
   "exit(failed == 0 ? 0 : 1)",
 ].join("\n");
 
 const swiftFile = path.join(root, "decode.swift");
-fs.writeFileSync(swiftFile, "import Foundation\n\n" + section + "\n" + liveSection + main);
+fs.writeFileSync(swiftFile, "import Foundation\n\n" + section + "\n" + liveSection + "\n" + studySection + main);
 
 // --- compile and run ---
 const binary = path.join(root, "decode");
@@ -235,7 +286,14 @@ try {
 let output = "";
 let code = 0;
 try {
-  output = execFileSync(binary, [path.join(root, "builds.json"), path.join(root, "diff.json"), path.join(root, "live.json")], {
+  output = execFileSync(binary, [
+    path.join(root, "builds.json"),
+    path.join(root, "diff.json"),
+    path.join(root, "live.json"),
+    path.join(root, "study-overview.json"),
+    path.join(root, "study-due.json"),
+    path.join(root, "study-review.json"),
+  ], {
     encoding: "utf8",
   });
 } catch (err) {
@@ -243,7 +301,7 @@ try {
   code = 1;
 }
 
-console.log("\nthe app's own Build/BuildCommand/BuildDiff and MeetingLiveStatus, decoding real server output\n");
+console.log("\nthe app's own Build/BuildCommand/BuildDiff, MeetingLiveStatus and Study models, decoding real server output\n");
 console.log(output.split("\n").filter((l) => !l.startsWith("RESULT")).join("\n").trimEnd());
 
 const tally = /RESULT (\d+) (\d+)/.exec(output);

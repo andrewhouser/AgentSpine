@@ -116,9 +116,10 @@ earlier turns of the same thread — not the prior tool traces, which would exha
 model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
 `CHAT_HISTORY_MAX_CHARS`.
 
-Everything else lives one click away in the sidebar: **Schedules** (scheduled tasks and watchers), **Activity**
-(every run — chat, scheduled, watcher — with its full trace and audit log), and **Settings**
-(appearance, memory, and the current policy).
+Everything else lives one click away in the sidebar: **Schedules** (scheduled tasks and watchers), **Study**
+(review due flash cards, recall first and then the answer, plus each topic's level and curriculum; see
+`docs/STUDY.md`), **Activity** (every run — chat, scheduled, watcher — with its full trace and audit log), and
+**Settings** (appearance, memory, recipes, and the current policy).
 
 **Appearance is per-browser, not per-server.** Settings → Appearance has a theme (System,
 Light, Dark) and a text-size slider from 85% to 140%. These live in `localStorage` rather than

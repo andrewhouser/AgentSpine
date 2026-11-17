@@ -46,10 +46,30 @@ indexed documents, for example the Milliman CX knowledge. A topic linked to a pr
 to the local model**: project documents are work material and a study aid is not a reason to send
 them to the cloud. Topics with no project may use the cloud tier like any other call.
 
+## The Study screen (web and iPhone)
+
+Card review is the one loop you repeat daily, and as a chat it took a round trip per card. So it
+has its own screen: **Study** in the web sidebar and a Study tab in the iPhone app. It shows the
+question, you type (or dictate) your recall, and only then does it show the grade and the answer.
+That order is the point: a self-rated "I knew that" is the feeling rereading gives you. Both
+screens and `study_cards review` in chat call the same `reviewWithRecall` (`src/study/review.ts`),
+so grading, scheduling and the ledger are identical wherever you answer. "I don't know" counts as
+forgotten without a model call. If the model gives no usable grade, the card is left untouched
+and you can simply press Check again.
+
+Below the review sits each topic: its goal, examiner level, cards due, read-versus-produced count,
+the mapmaker's curriculum, and which chat tool to reach for next. Everything with a back and forth
+(interview, map, quiz, explain-back, sparring) stays in chat.
+
+API: `GET /api/study`, `GET /api/study/due?topic=` (the question only; the answer is never sent
+before a recall), `POST /api/study/cards/:id/review {answer}`.
+
 ## Reminders
 
 Once a day at most, while any card is due, `sweepDueCards` sends one notification ("N study cards
-due"). It runs from the dashboard server beside the task sweep.
+due"). It runs from the dashboard server beside the task sweep. A tap opens the Study screen: on
+the iPhone through the push's `screen: "study"`, and in ntfy through a click URL when
+`DASHBOARD_PUBLIC_URL` is set.
 
 ## Data
 
@@ -60,7 +80,7 @@ cards and history and is the one study action that asks for confirmation.
 
 ## Not built yet
 
-A dedicated web or iOS screen (it is chat-only today), scheduling a study session on the
-heartbeat, and generating practice apps. Say if you want any of them.
+Scheduling a study session on the heartbeat, and generating practice apps. The Study screen
+covers most of what the practice apps were for. Say if you want either.
 
 Tests: `node test/study.test.mjs` (scripted model; no network).

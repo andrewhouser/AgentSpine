@@ -84,6 +84,7 @@ import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
+import { dueForScreen, reviewWithRecall, studyOverview } from "./study/review.ts";
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? "8787");
 // Default binds localhost only. Set DASHBOARD_HOST=0.0.0.0 to reach it from other machines
@@ -822,6 +823,28 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (m === "DELETE" && seg[1] === "memories" && seg.length === 3) {
       const removed = deleteMemory(Number(seg[2]));
       return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+    }
+
+    // /api/study — the Study screen (src/study/review.ts). Topics with their due counts and
+    // curriculum, the due cards (question only: the answer is never sent before a recall),
+    // and a review that grades the typed recall exactly as `study_cards review` does in chat.
+    if (seg[1] === "study") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, studyOverview());
+      if (m === "GET" && seg.length === 3 && seg[2] === "due") {
+        const topic = url.searchParams.get("topic");
+        const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? 50) || 50));
+        return sendJson(res, 200, dueForScreen(topic ? Number(topic) : undefined, limit));
+      }
+      if (m === "POST" && seg.length === 5 && seg[2] === "cards" && seg[4] === "review") {
+        const b = await readBody(req);
+        try {
+          return sendJson(res, 200, await reviewWithRecall(Number(seg[3]), b.answer));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // A model that gave no usable grade is transient. The card is untouched, so retrying is safe.
+          return sendJson(res, msg.startsWith("no such card") ? 404 : 503, { error: msg });
+        }
+      }
     }
 
     // /api/recipes — named recipes (src/recipes). List, edit and delete, from the dashboard

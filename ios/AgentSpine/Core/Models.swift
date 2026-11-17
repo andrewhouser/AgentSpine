@@ -582,6 +582,79 @@ struct ProposalResult: Codable {
     let ok: Bool
 }
 
+// MARK: - Study
+//
+// `GET /api/study`, `GET /api/study/due` and `POST /api/study/cards/:id/review`, produced by
+// src/study/review.ts. test/ios-models.test.mjs decodes real server output against this
+// section, so keep it plain Foundation data.
+
+/// One module of the mapmaker's curriculum, in order.
+struct StudyMapModule: Codable, Hashable {
+    let dependsOn: [String]
+    let name: String
+    let summary: String
+}
+
+struct StudyTopic: Codable, Identifiable, Hashable {
+    let cards: Int
+    /// Explanations read, last 14 days.
+    let consumed: Int
+    let due: Int
+    let goal: String?
+    let id: Int
+    /// The examiner's level, 0–5, or nil before the first quiz.
+    let level: Int?
+    let map: [StudyMapModule]
+    let name: String
+    /// Things produced (answered, explained back, checked, sparred, recalled), last 14 days.
+    let produced: Int
+    /// Set when the topic is linked to a project, which pins its grading to the local model.
+    let projectID: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case cards, consumed, due, goal, id, level, map, name, produced
+        case projectID = "projectId"
+    }
+}
+
+struct StudyOverview: Codable {
+    let due: Int
+    let topics: [StudyTopic]
+}
+
+/// A due card before a recall: the question only. The server never sends the answer here.
+struct StudyDueCard: Codable, Identifiable, Hashable {
+    let front: String
+    let id: Int
+    let lapses: Int
+    let reps: Int
+    let topicID: Int
+    let topicName: String
+
+    enum CodingKeys: String, CodingKey {
+        case front, id, lapses, reps, topicName
+        case topicID = "topicId"
+    }
+}
+
+/// The graded recall. The answer arrives only here, after you've given yours.
+struct StudyReview: Codable, Hashable {
+    let back: String
+    let cardID: Int
+    let due: String
+    let feedback: String
+    /// Days to the next review; 0 means it comes back in this sitting. A Double because the
+    /// column is REAL. A whole number today, but `elapsedMs` showed what assuming Int costs.
+    let interval: Double
+    let remaining: Int
+    let score: Double
+
+    enum CodingKeys: String, CodingKey {
+        case back, due, feedback, interval, remaining, score
+        case cardID = "cardId"
+    }
+}
+
 
 // MARK: - Meetings
 

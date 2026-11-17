@@ -8,6 +8,8 @@ enum DeepLink: Equatable {
     case conversation(Int)
     /// The thread list — where the blue dots are.
     case threads
+    /// The Study screen, from the daily "N study cards due" push.
+    case study
 }
 
 /// Notification permission, the device token, the Approve/Reject buttons, and what a tap does.
@@ -253,6 +255,8 @@ extension PushManager: UNUserNotificationCenterDelegate {
             pendingDeepLink = .conversation(conversationID)
         } else if userInfo["confirmationId"] is Int {
             pendingDeepLink = .threads
+        } else if userInfo["screen"] as? String == "study" {
+            pendingDeepLink = .study
         }
     }
 }
