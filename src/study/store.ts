@@ -150,8 +150,12 @@ export interface CardRow {
   topic_id: number;
 }
 const clip = (s: string, n: number) => s.trim().slice(0, n);
-/** Add a card. A card with the same front already on the topic is not duplicated. */
-export const addCard = (topicId: number, front: string, back: string, source = "manual"): null | number => {
+/**
+ * Add a card. A card with the same front already on the topic is not duplicated. `dueAt` holds
+ * a card back until later. The redo card is due tomorrow, because redoing a task minutes after
+ * being shown how is still copying.
+ */
+export const addCard = (topicId: number, front: string, back: string, source = "manual", dueAt?: Date): null | number => {
   const f = clip(front, 500);
   const b = clip(back, 1500);
   if (!f || !b) return null;
@@ -163,7 +167,7 @@ export const addCard = (topicId: number, front: string, back: string, source = "
   return Number(
     rawDb
       .prepare("INSERT INTO study_cards (topic_id, front, back, source, due, created) VALUES (?,?,?,?,?,?)")
-      .run(topicId, f, b, source, ts, ts).lastInsertRowid,
+      .run(topicId, f, b, source, dueAt ? dueAt.toISOString() : ts, ts).lastInsertRowid,
   );
 };
 export const getCard = (id: number): CardRow | undefined =>

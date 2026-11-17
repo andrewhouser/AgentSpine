@@ -172,6 +172,45 @@ export const explain = async (topic: TopicRow, concept: string, audience: string
   );
   return { explanation: str(r?.explanation, 1800), keyPoints: strs(r?.keyPoints, 5, 240) };
 };
+// --- resources at your level ---
+export interface Resource {
+  kind: string;
+  title: string;
+  url: string;
+  why: string;
+}
+/**
+ * Choose the few explanations worth reading at this learner's level, from search results only.
+ * The prompt asks for URLs from the results, but `findResources` enforces it in code: a model
+ * that invents a plausible link to a "great tutorial" is the failure this whole tool exists to
+ * avoid, and the instruction alone doesn't stop it.
+ */
+export const pickResources = async (
+  topic: TopicRow,
+  subject: string,
+  known: string[],
+  gaps: string[],
+  results: string,
+): Promise<Resource[]> => {
+  const r = await ask(
+    `You pick learning resources for one learner. From the search results ONLY, choose the 3 to 5 ` +
+      `explanations, tutorials or talks that best fit their level: not too basic for what they already ` +
+      `know, not so advanced that they skip what they don't. Prefer one clear explanation of a gap over ` +
+      `a broad survey. Copy each URL exactly as it appears in the results. Never invent or alter a URL. ` +
+      `For each: "title", "url", "why" (one sentence on why it fits THIS learner), "kind" (article, ` +
+      `tutorial, video, docs, course). Return {"resources": [...]} (an empty list if nothing fits).`,
+    `${topicLine(topic)}\nSubject: ${subject}\n` +
+      `${known.length ? `Already knows: ${known.join("; ")}\n` : ""}` +
+      `${gaps.length ? `Doesn't know yet: ${gaps.join("; ")}\n` : ""}\n${results}`,
+    topic,
+  );
+  return (Array.isArray(r?.resources) ? r.resources : []).slice(0, 8).map((x: any) => ({
+    kind: str(x?.kind, 30),
+    title: str(x?.title, 160),
+    url: str(x?.url, 500),
+    why: str(x?.why, 300),
+  }));
+};
 // --- examiner / Socratic ---
 export interface Question {
   expects: string[];

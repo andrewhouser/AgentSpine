@@ -19,7 +19,7 @@ All are called by the chat agent; you just talk to it ("quiz me on Okta", "I'm l
 |---|---|---|
 | Interviewer | `study_interview` | Asks what your real goal, deadline, level and test format are, then saves a profile. Flags vague answers. |
 | Mapmaker | `study_map` | Builds an ordered curriculum with dependencies and the usual sticking points. |
-| Explainer | `study_explain` | Explains one concept at child / beginner / teenager / expert level, files a card, demands an explain-back. |
+| Explainer | `study_explain` | Explains one concept at child / beginner / teenager / expert level, files a card, demands an explain-back. Given the `task` you were stuck in, it also files a **redo card due tomorrow**: the whole task again, from scratch, no help. |
 | Examiner | `study_quiz` + `study_answer` | One question at a time, harder after each right answer. Stops when you guess or miss twice running, and sets your level. |
 | Socratic questioner | `study_quiz` mode `socratic` | Why / what-if questions that build on your last answer. Never gives the answer; shows your gaps at the end. |
 | Checker | `study_check` | Grades your *process* on something you made. Does not rewrite it. |
@@ -27,6 +27,7 @@ All are called by the chat agent; you just talk to it ("quiz me on Okta", "I'm l
 | Diagnostician | `study_diagnose` | Reads your recent misses and names the shared root misunderstanding, with cards that test it. Needs 3+ misses. |
 | Sparring partner | `study_spar` | Role-played practice with a persona, difficulty and a per-answer time limit enforced from the clock. |
 | Clerk | `study_cards` `from_notes` | Messy notes to a clean outline or flash cards. Adds nothing you did not write. |
+| (finder) | `study_resources` | 3–5 explanations pitched at your level, chosen with what the interviewer recorded you know and don't. Every link must appear in the web search results or code drops it. Never searches with project documents. |
 | (ledger) | `study_topic` | List / inspect / set goal and level / link to a project / delete. |
 | (memory) | `study_cards` | Spaced repetition: `due` shows the question only, `review` grades your recall and reschedules. |
 
@@ -37,6 +38,14 @@ number in it: the difficulty ramp, when a session ends, the spar time limit, wha
 (under 70%), what is due, and the card schedule (`src/study/schedule.ts`, SM-2 with 1 and 3 day
 first intervals and a 10-minute retry after a lapse). The hidden key points a question is graded
 against are stored but never returned to you.
+
+## Redo without help
+
+Being walked through the step you were stuck on feels like having learned the task. The only
+test is doing the whole thing again, cold. So when `study_explain` gets the `task` you were
+attempting, it files a `redo` card due **tomorrow** (redoing it a minute later is copying). The
+card asks for the full task from the start, names the step you were stuck on, and is graded
+against the explanation's key points, like any recall, on the Study screen or in chat.
 
 ## Using it with a project
 

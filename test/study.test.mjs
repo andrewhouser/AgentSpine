@@ -26,6 +26,7 @@ const call = (name, args) => registry[name].run(args, { policy: {}, run: { conve
 let grade = { score: 0.9, guessing: false, gap: "", verdict: "correct", feedback: "ok" };
 let sparScore = 0.9;
 let diagnoseEmpty = false;
+let resourcePick = { resources: [] };
 const prompts = [];
 __setAsker(async (system, user, opts) => {
   prompts.push({ system, user, opts });
@@ -37,6 +38,7 @@ __setAsker(async (system, user, opts) => {
   if (system.startsWith("You are a Socratic")) return { question: `why question ${prompts.length}`, expects: ["SECRET reasoning"] };
   if (system.startsWith("You grade ONE answer")) return grade;
   if (system.startsWith("Grade how well")) return { score: grade.score, feedback: "recall graded" };
+  if (system.startsWith("You pick learning resources")) return resourcePick;
   if (system.startsWith("You are a checker")) return { sound: false, issues: ["step 2 is unjustified", "step 4 divides by zero"], shorter: "factor first" };
   if (system.startsWith("You are a listener")) return { modalities: { verbal: { score: 0.8, missed: ["expiry"], wrong: [] }, written: { score: 0.4, missed: ["scopes"], wrong: ["says token is a password"] } }, contradictions: ["spoken version includes expiry, written does not"] };
   if (system.startsWith("You are a diagnostician")) return diagnoseEmpty ? { causes: [], cards: [] } : { causes: [{ pattern: "confuses authn and authz", evidence: "3 misses", underlying: "who vs what may touch", fix: "restate each question as who or may-do" }], cards: [{ front: "Authn vs authz?", back: "who you are vs what you may do" }] };
@@ -179,6 +181,60 @@ check("exactly one push went out", sent.length, 1);
 yes("it names the topics and the count", /\d+ study cards? due/.test(sent[0].title) && sent[0].body.includes("Okta"));
 check("a tap opens the Study screen on iOS", sent[0].opts.push.screen, "study");
 check("repeat nudges replace each other on the lock screen", sent[0].opts.push.collapseId, "study-due");
+console.log("\nredo without help (A4)\n");
+{
+  const before = store.listCards(okta.id, 1000).length;
+  out = await call("study_explain", { topic: "Okta", concept: "the token exchange", stuck: "which request carries the verifier", task: "wire up PKCE login in the SPA" });
+  const redo = store.listCards(okta.id, 1000).find((c) => c.source === "redo");
+  yes("a stuck task files a redo card", !!redo && store.listCards(okta.id, 1000).length === before + 2);
+  yes("the card asks for the whole task, from scratch", redo.front.startsWith("Redo from the start, without help: wire up PKCE login"));
+  yes("and names the step that was stuck", redo.front.includes("which request carries the verifier"));
+  yes("graded against what a full redo covers", redo.back.includes("it proves identity"));
+  const hours = (Date.parse(redo.due) - Date.now()) / 3_600_000;
+  yes("it is due tomorrow, not now", hours > 23 && hours < 25);
+  yes("so it isn't in today's review", !store.dueCards(okta.id, 1000).some((c) => c.id === redo.id));
+  yes("the reply says so", out.includes("redo card") && out.includes("tomorrow"));
+  const plain = store.listCards(okta.id, 1000).length;
+  await call("study_explain", { topic: "Okta", concept: "refresh tokens" });
+  check("no task, no redo card (just the recall card)", store.listCards(okta.id, 1000).length, plain + 1);
+}
+
+console.log("\nresources at your level (A5)\n");
+{
+  const { __setSearcher, queriesFor, urlsIn } = await import("../src/study/resources.ts");
+  const searched = [];
+  __setSearcher(async (q) => {
+    searched.push(q);
+    return "[UNTRUSTED CONTENT from web search]\n1. PKCE, simply\n   https://example.test/pkce-simply.\n   A gentle walk-through\n2. OAuth for experts\n   https://example.test/oauth-deep\n   RFC-level detail";
+  });
+  resourcePick = {
+    resources: [
+      { kind: "article", title: "PKCE, simply", url: "https://example.test/pkce-simply", why: "starts from what a code is" },
+      { kind: "video", title: "Made up", url: "https://invented.test/great-tutorial", why: "sounds right" },
+      { kind: "article", title: "PKCE, simply (again)", url: "https://example.test/pkce-simply", why: "dup" },
+    ],
+  };
+  const web = { policy: { web: { searchEnabled: true } }, run: { conversational: true, goal: "", projectId: null } };
+  const r = registry.study_resources;
+  check("refused when web search is off", r.checkPolicy({ web: { searchEnabled: false } }).allowed, false);
+  check("allowed when it is on", r.checkPolicy(web.policy).allowed, true);
+  out = await r.run({ topic: "Okta", subject: "PKCE", dont_know: "refresh token rotation" }, web);
+  yes("returns the real link with why it fits", out.includes("https://example.test/pkce-simply") && out.includes("starts from what a code is"));
+  check("an invented link is dropped in code", out.includes("invented.test"), false);
+  yes("and the reply says one was dropped", out.includes("1 suggested link was not in the search results"));
+  check("a duplicate is listed once", out.split("pkce-simply").length - 1, 1);
+  yes("it nudges to produce after reading", out.includes("explain it back"));
+  yes("queries carry the subject and the level", searched[0].startsWith("PKCE explained") && /tutorial/.test(searched[0]));
+  check("and a second query for the stated gap", searched[1], "refresh token rotation Okta explained clearly");
+  check("a gap equal to the subject is not searched twice", queriesFor({ level: 2, name: "Okta" }, "PKCE", ["PKCE"]).length, 1);
+  check("trailing punctuation is not part of a URL", urlsIn("see https://a.test/x. and https://b.test/y,").has("https://a.test/x"), true);
+  check("a level-4 topic searches at advanced", queriesFor({ level: 4, name: "Stats" }, "Bayes", [])[0], "Bayes explained advanced tutorial");
+  __setSearcher(async () => "no results");
+  out = await r.run({ topic: "Okta", subject: "PKCE" }, web);
+  yes("no links in the results means nothing is recommended", out.startsWith("Nothing usable came back"));
+  __setSearcher(null);
+}
+
 console.log("\nthe Study screen (src/study/review.ts)\n");
 {
   const { dueForScreen, reviewWithRecall, studyOverview } = await import("../src/study/review.ts");

@@ -34,6 +34,7 @@ import {
   StudyModelError,
 } from "../study/roles.ts";
 import type { Modality } from "../study/roles.ts";
+import { findResources } from "../study/resources.ts";
 import { reviewWithRecall } from "../study/review.ts";
 import type { TopicRow } from "../study/store.ts";
 import {
@@ -215,8 +216,9 @@ export const studyExplain: Tool = {
     "EXPLAINER. Explain one concept at a chosen level (child, beginner, teenager, expert), or just the part the " +
     "user is stuck on. This is the passive tool: it also files a flash card for the concept and returns a " +
     "'say it back' instruction. After showing the explanation, make the user explain it back unaided " +
-    "(study_listen) or redo the original task without help before you move on.",
-  argsSchema: '{ "topic": string, "concept": string, "level"?: "child" | "beginner" | "teenager" | "expert", "stuck"?: string }',
+    "(study_listen) or redo the original task without help before you move on. When the user was stuck partway " +
+    "through a task, pass that task as \"task\": a redo-from-scratch card is filed for tomorrow.",
+  argsSchema: '{ "topic": string, "concept": string, "level"?: "child" | "beginner" | "teenager" | "expert", "stuck"?: string, "task"?: string }',
   classify: classify("Study explanation"),
   checkPolicy: allow,
   run: guard(async (a, ctx) => {
@@ -228,11 +230,28 @@ export const studyExplain: Tool = {
     if (!e.explanation) throw new StudyModelError("no explanation came back; try again");
     addAttempt({ answered: true, meta: { concept, level }, prompt: concept, role: "explain", topicId: t.id });
     const cardId = e.keyPoints.length ? addCard(t.id, `Explain from memory: ${concept}`, e.keyPoints.join("; "), "explain") : null;
+    // Redo without help. Being walked through the step you were stuck on feels like having
+    // learned the task, and the only test is doing the whole task again, from the start, cold.
+    // So a task you were stuck in leaves a card due TOMORROW asking for exactly that, graded
+    // against what a full redo has to cover. Due tomorrow because redoing it now is copying.
+    const task = String(a?.task ?? "").trim().slice(0, 300);
+    const redoId = task
+      ? addCard(
+          t.id,
+          `Redo from the start, without help: ${task}. Write out every step, including the part you were stuck on${
+            a?.stuck ? ` (${String(a.stuck).trim().slice(0, 120)})` : ""
+          }.`,
+          `A full redo covers: ${e.keyPoints.length ? e.keyPoints.join("; ") : concept}. The step that was stuck: ${concept}.`,
+          "redo",
+          new Date(Date.now() + 86_400_000),
+        )
+      : null;
     return (
       `${e.explanation}\n\n` +
       (e.keyPoints.length ? `You should be able to say, unaided:\n${lines(e.keyPoints)}\n\n` : "") +
       `NOW: close this and explain "${concept}" back in your own words (study_listen), or redo the original task without help. ` +
-      `Reading it is not learning it.${cardId ? ` A recall card (#${cardId}) was filed for later.` : ""}`
+      `Reading it is not learning it.${cardId ? ` A recall card (#${cardId}) was filed for later.` : ""}` +
+      (redoId ? ` A redo card (#${redoId}) is due tomorrow: the whole task again, from scratch, no help.` : "")
     );
   }),
 };
@@ -574,6 +593,42 @@ export const studyCards: Tool = {
     throw new Error('action must be "due", "review", "add", "from_notes" or "list"');
   }),
 };
+// ---------------------------------------------------------------- resources at your level
+const studyResources: Tool = {
+  name: "study_resources",
+  description:
+    "Find 3 to 5 explanations, tutorials or talks pitched at the user's level for a topic, using what the " +
+    "interviewer recorded they know and don't, plus anything said now. Every link is one a web search " +
+    "actually returned; invented links are dropped in code. Optional \"subject\" narrows it (e.g. \"PKCE\"), " +
+    "and \"know\" / \"dont_know\" add to the profile for this search. Reading is consumption, so follow up " +
+    "with an explain-back or a quiz.",
+  argsSchema: '{ "topic": string, "subject"?: string, "know"?: string, "dont_know"?: string }',
+  classify: classify("Find study resources"),
+  // Gated like web_search, which it calls: no search allowed, no resources.
+  checkPolicy: (p) =>
+    p?.web?.searchEnabled
+      ? { allowed: true, reason: "web search for study resources" }
+      : { allowed: false, reason: "web search is disabled in policy.json, so there is nothing to search with" },
+  run: guard(async (a, ctx) => {
+    const t = topicOf(a, ctx);
+    const f = await findResources(t, {
+      dontKnow: String(a?.dont_know ?? a?.dontKnow ?? "").trim() || undefined,
+      know: String(a?.know ?? "").trim() || undefined,
+      subject: String(a?.subject ?? "").trim() || undefined,
+    });
+    if (!f.resources.length)
+      return `Nothing usable came back for ${f.queries.map((q) => `"${q}"`).join(" / ")}. Try a narrower "subject".`;
+    const list = f.resources
+      .map((r, i) => `${i + 1}. ${r.title}${r.kind ? ` (${r.kind})` : ""}\n   ${r.url}\n   ${r.why}`)
+      .join("\n");
+    return (
+      `${list}\n\n` +
+      (f.invented ? `(${f.invented} suggested link${f.invented === 1 ? " was" : "s were"} not in the search results and ${f.invented === 1 ? "was" : "were"} dropped.)\n` : "") +
+      "Pick ONE, read it, then explain it back (study_listen) or ask to be quizzed. A good explanation only counts once you can reproduce it."
+    );
+  }),
+};
+
 export const studyTools: Tool[] = [
   studyTopic,
   studyInterview,
@@ -586,4 +641,5 @@ export const studyTools: Tool[] = [
   studyDiagnose,
   studySpar,
   studyCards,
+  studyResources,
 ];

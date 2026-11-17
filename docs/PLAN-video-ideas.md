@@ -84,17 +84,22 @@ IntelliScript.
   these go into a review list first, not straight into the deck. Extraction over-produces
   (SPEC §15).
 
-### A4. Redo without help  *(S)*
+### A4. Redo without help  *(S)*  ✅ built 2026-11-17
 The video's main point about the explainer: once it has explained something, you have to redo the
 task from a blank page. `study_explain` already asks for an explain-back. Add a follow-up card due
 the next day: "do X from scratch, no help", graded by `study_check`. That's one card kind plus a
 line in the tool.
 
-### A5. Resources at your level  *(S)*
+### A5. Resources at your level  *(S)*  ✅ built 2026-11-17
 `study_resources`: takes the topic's goal and assessed level plus what you know and don't, and
 returns 3–5 explanations or tutorials, each with a reason it fits. Uses `web_search`, then
 `web_read` to check each link. Cloud is fine for topics with no project. Project-linked topics stay
 local and may simply return nothing.
+*As built:* links are checked in code against the search results rather than fetched with
+`web_read`. An invented URL is the real failure, and this catches it with no extra page loads or
+browser-allowlist questions. Project-linked topics still search, but only with the topic name,
+the subject and the gaps you stated, never document text, and the choosing runs on the local
+model.
 
 ### A6. Overview page: the read-only "AIOS map"  *(M)*
 The video's one useful dashboard is plain and read-only. Its job is to show what's installed so
