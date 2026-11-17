@@ -22,6 +22,7 @@ import type {
   LiveStatus,
   Meeting,
   MeetingExtraction,
+  MeetingQuestion,
   MeetingSegment,
   MeetingSpeaker,
   MeetingWorkItem,
@@ -115,6 +116,9 @@ const patch = <T>(path: string, body: unknown): Promise<T> =>
   request<T>(path, { body: JSON.stringify(body), method: "PATCH" });
 
 export const api = {
+  /** Turn a meeting question into a study card, with your edits if you made any. */
+  acceptMeetingQuestion: (id: number, edits: { answer?: string; question?: string }) =>
+    post<{ cardId: null | number; topic: string }>(`/api/study/questions/${id}/accept`, edits),
   addProjectSource: (projectId: number, path: string) =>
     post<{ result: IngestResult; source: ProjectSource }>(
       `/api/projects/${projectId}/sources`,
@@ -163,7 +167,6 @@ export const api = {
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
 
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
-
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
@@ -182,6 +185,8 @@ export const api = {
     }),
 
   dictationStatus: () => request<DictationStatus>("/api/dictate"),
+
+  dismissMeetingQuestion: (id: number) => post<{ ok: boolean }>(`/api/study/questions/${id}/dismiss`),
 
   /** Re-run extraction. Returns as soon as it has started; the event stream reports the end. */
   extractMeeting: (id: number) => post<{ meetingId: number; started: boolean }>(`/api/meetings/${id}/extract`),
@@ -260,6 +265,7 @@ export const api = {
       chat?: ChatMessage[];
       extraction: MeetingExtraction | null;
       meeting: Meeting;
+      questions?: MeetingQuestion[];
       segments: MeetingSegment[];
       speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
@@ -271,6 +277,13 @@ export const api = {
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
+
+  /**
+   * Look (again) for questions put to you in a meeting. A 409 carries the reason it can't
+   * (no project, nobody named "me"), worth showing as is.
+   */
+  meetingQuestions: (id: number) =>
+    post<{ pairs: number; questions: MeetingQuestion[]; saved: number }>(`/api/meetings/${id}/questions`),
 
   /** Every meeting tag in use, with counts. */
   meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),

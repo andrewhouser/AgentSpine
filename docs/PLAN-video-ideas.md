@@ -71,7 +71,7 @@ repeat most: reviewing due cards. This is also the video's "practice app" idea, 
   `study_topic get`) and progress along the mapmaker curriculum.
 - iOS: make the daily "N cards due" push open this screen, not a chat.
 
-### A3. Study material from your own meetings  *(M)*  *(the idea only AgentSpine can do)*
+### A3. Study material from your own meetings  *(M)*  *(the idea only AgentSpine can do)*  ✅ built 2026-11-17 (web)
 You get asked backend, Okta and infra questions in meetings and want to answer them with
 confidence. The meeting pipeline already transcribes those meetings and files them into Milliman
 IntelliScript.

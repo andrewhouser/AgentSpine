@@ -1,0 +1,152 @@
+.panel {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 0.7813rem;
+  margin: 6px 0;
+}
+
+.hint code {
+  background: var(--bg-inset);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0 4px;
+}
+
+.problem {
+  color: var(--warn);
+  font-size: 0.7813rem;
+  margin: 6px 0;
+}
+
+.done {
+  color: var(--text-faint);
+  font-size: 0.7813rem;
+  margin: 8px 0 0;
+}
+
+.done a {
+  color: var(--accent);
+}
+
+.candidate {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+  padding: 10px 12px;
+}
+
+.asked {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.stamp {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.7188rem;
+  margin-right: 8px;
+}
+
+.reply {
+  color: var(--text-dim);
+  font-size: 0.7813rem;
+  margin: 6px 0;
+}
+
+.reply summary {
+  cursor: pointer;
+}
+
+.reply p {
+  margin: 4px 0 0;
+}
+
+.label {
+  color: var(--text-dim);
+  display: block;
+  font-size: 0.7188rem;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.warn {
+  color: var(--warn);
+  font-weight: 400;
+}
+
+.input {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+  color: var(--text);
+  display: block;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  margin-top: 3px;
+  padding: 6px 9px;
+  width: 100%;
+}
+
+.sources {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  margin-top: 4px;
+}
+
+.actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.button,
+.primary {
+  border-radius: var(--radius-sm);
+  font-size: 0.7813rem;
+  padding: 4px 11px;
+}
+
+.button {
+  background: none;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+}
+
+.button:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--on-accent);
+}
+
+.button:disabled,
+.primary:disabled {
+  opacity: 0.55;
+}

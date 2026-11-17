@@ -97,6 +97,29 @@ export interface Memory {
   ts: string;
 }
 
+/**
+ * A question someone put to you in a meeting, as a study candidate (src/study/meeting-questions.ts).
+ * `quote` and `reply` are verbatim from the transcript. `question` and `answer` are the drafted
+ * card, the answer taken from the project's documents only. `covered` false means they didn't
+ * answer it.
+ */
+export interface MeetingQuestion {
+  answer: string;
+  asker: null | string;
+  card_id: null | number;
+  covered: boolean;
+  created: string;
+  id: number;
+  meeting_id: number;
+  project_id: number;
+  question: string;
+  quote: string;
+  reply: null | string;
+  sources: string[];
+  start_ms: number;
+  status: "accepted" | "dismissed" | "pending";
+}
+
 /** A study card as the Study screen sees it before a recall: the question only. */
 export interface StudyDueCard {
   front: string;

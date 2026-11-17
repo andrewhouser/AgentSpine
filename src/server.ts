@@ -84,6 +84,7 @@ import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
+import { acceptQuestion, dismissQuestion, findMeetingQuestions, listQuestions } from "./study/meeting-questions.ts";
 import { dueForScreen, reviewWithRecall, studyOverview } from "./study/review.ts";
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? "8787");
@@ -835,6 +836,24 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? 50) || 50));
         return sendJson(res, 200, dueForScreen(topic ? Number(topic) : undefined, limit));
       }
+      // Meeting question candidates: accept (with optional edits) into a card, or dismiss.
+      if (m === "POST" && seg.length === 5 && seg[2] === "questions" && (seg[4] === "accept" || seg[4] === "dismiss")) {
+        const qid = Number(seg[3]);
+        if (seg[4] === "dismiss") {
+          const ok = dismissQuestion(qid);
+          return sendJson(res, ok ? 200 : 404, { ok });
+        }
+        const b = await readBody(req);
+        try {
+          return sendJson(res, 200, acceptQuestion(qid, {
+            answer: typeof b.answer === "string" ? b.answer : undefined,
+            question: typeof b.question === "string" ? b.question : undefined,
+          }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return sendJson(res, msg.startsWith("no question") ? 404 : 400, { error: msg });
+        }
+      }
       if (m === "POST" && seg.length === 5 && seg[2] === "cards" && seg[4] === "review") {
         const b = await readBody(req);
         try {
@@ -1090,6 +1109,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           segments: meetingStore.segments(id, pass),
           speakers: meetingStore.speakers(id),
           workItems: meetingStore.workItems(id),
+          // Questions you were asked, as study candidates awaiting review (src/study/meeting-questions.ts).
+          questions: listQuestions(id),
         });
       }
 
@@ -1161,6 +1182,20 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const n = Number(b?.speakers ?? 0);
         const r = await meetings.reprocessMeeting(id, { speakers: Number.isInteger(n) && n > 0 && n <= 20 ? n : 0 });
         return r.ok ? sendJson(res, 200, { started: true }) : sendJson(res, 409, { error: r.reason });
+      }
+
+      // POST /api/meetings/:id/questions — look (again) for questions put to you. Synchronous:
+      // a few local calls, and the answer is the list the page shows. A gap (no project,
+      // nobody named "me") comes back as 409 with the reason, which the page shows as is.
+      if (m === "POST" && seg.length === 4 && seg[3] === "questions") {
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        try {
+          const r = await findMeetingQuestions(id);
+          if (r.reason) return sendJson(res, 409, { error: r.reason });
+          return sendJson(res, 200, { ...r, questions: listQuestions(id) });
+        } catch (err) {
+          return sendJson(res, 503, { error: err instanceof Error ? err.message : String(err) });
+        }
       }
 
       // DELETE /api/meetings/:id/audio — delete the kept recording now.

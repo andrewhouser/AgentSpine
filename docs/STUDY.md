@@ -47,6 +47,28 @@ attempting, it files a `redo` card due **tomorrow** (redoing it a minute later i
 card asks for the full task from the start, names the step you were stuck on, and is graded
 against the explanation's key points, like any recall, on the Study screen or in chat.
 
+## Questions you were asked in meetings
+
+After a meeting's extraction runs, if the meeting is filed under a project, AgentSpine looks for
+the questions people put to **you** (`src/study/meeting-questions.ts`):
+
+1. **Code finds them, by speaker.** "You" is the speaker you named `me` on the meeting page (or a
+   name in `MEETING_SELF_NAMES`). A question is a turn by someone else containing one, answered by
+   your next turn. The model never decides a question was put to you.
+2. **The local model keeps the substantive ones** (no logistics, small talk or "can you hear me")
+   and words each as a standalone card.
+3. **The answer key comes from the project's documents, never the room.** Meeting transcripts are
+   indexed into the same project, so recall leaves out `meeting` chunks. Otherwise the answer
+   would be whatever you said on the spot. A source the model cites but wasn't shown is dropped.
+   If the documents don't cover a question, the draft says so and is marked.
+4. **Nothing becomes a card on its own.** Candidates wait under "Questions you were asked" on the
+   meeting page, showing the quote, what you said, and the draft. Edit, then **Add to Study**, or
+   **Dismiss**. Accepted cards go under a study topic named after the project and linked to it, so
+   they're graded locally. A re-run (after naming yourself, say) never offers back a question
+   you've already decided.
+
+Every model call here is `sensitivity: "private"`, like all meeting work.
+
 ## Using it with a project
 
 Link a topic to a project (`study_topic set` with `project: "this"`, or create it from inside a

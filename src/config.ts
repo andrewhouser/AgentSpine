@@ -677,6 +677,14 @@ export const MEETING_EXTRACT_WINDOW_WORDS = Number(env.MEETING_EXTRACT_WINDOW_WO
  */
 export const MEETING_EXTRACT_MAX_ITEMS = Number(env.MEETING_EXTRACT_MAX_ITEMS ?? "40");
 
+// Which speaker in a meeting is YOU, for the questions-you-were-asked study pass
+// (src/study/meeting-questions.ts). Matched case-insensitively against the names you give
+// speakers on the meeting page. "me" always counts, so naming yourself "me" is enough; add your
+// own name here if that's what you label yourself with.
+export const MEETING_SELF_NAMES = ["me", ...(env.MEETING_SELF_NAMES ?? "").split(",")]
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
 // --- Live context cards (the meeting sidecar) ---
 /**
  * Whether a live meeting gets context cards. Retrieval only — this lane never generates.

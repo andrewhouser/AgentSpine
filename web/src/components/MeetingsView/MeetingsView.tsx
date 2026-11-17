@@ -33,6 +33,7 @@ import type {
   Meeting,
   MeetingEvent,
   MeetingExtraction,
+  MeetingQuestion,
   MeetingSegment,
   MeetingSpeaker,
   MeetingWorkItem,
@@ -44,6 +45,7 @@ import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog.tsx";
 import { ChatThread, MeetingChat } from "../MeetingChat/MeetingChat.tsx";
+import { MeetingQuestions } from "../MeetingQuestions/MeetingQuestions.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import { TagDialog } from "../TagDialog/TagDialog.tsx";
@@ -73,12 +75,13 @@ const REJECTION: Record<string, string> = {
 interface MeetingDetail {
   chat: ChatMessage[];
   extraction: MeetingExtraction | null;
+  questions: MeetingQuestion[];
   segments: MeetingSegment[];
   speakers: MeetingSpeaker[];
   workItems: MeetingWorkItem[];
 }
 
-const NO_DETAIL: MeetingDetail = { chat: [], extraction: null, segments: [], speakers: [], workItems: [] };
+const NO_DETAIL: MeetingDetail = { chat: [], extraction: null, questions: [], segments: [], speakers: [], workItems: [] };
 
 interface Turn {
   segments: MeetingSegment[];
@@ -385,8 +388,8 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   const [openedAt] = useState(() => Date.now());
 
   const load = useCallback(async (id: number): Promise<void> => {
-    const { chat, extraction, segments, speakers, workItems } = await api.meeting(id);
-    setDetail({ chat: chat ?? [], extraction, segments, speakers: speakers ?? [], workItems });
+    const { chat, extraction, questions, segments, speakers, workItems } = await api.meeting(id);
+    setDetail({ chat: chat ?? [], extraction, questions: questions ?? [], segments, speakers: speakers ?? [], workItems });
   }, []);
 
   // Extraction finishes minutes after the meeting does, so it arrives on the stream rather
@@ -796,6 +799,12 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
           {open === m.id && (
             <>
               <ExtractionPanel busy={busy} detail={detail} onExtract={() => void extract(m.id)} />
+              <MeetingQuestions
+                meetingId={m.id}
+                onChange={() => void load(m.id)}
+                projectId={m.project_id}
+                questions={detail.questions}
+              />
               {detail.chat.length > 0 && (
                 <div className={styles.savedChat}>
                   <h4 className={styles.cardHead}>Asked during the meeting</h4>

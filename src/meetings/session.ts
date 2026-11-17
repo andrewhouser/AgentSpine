@@ -53,6 +53,7 @@ import type { CoachAnswer } from "./coach.ts";
 import { keepAudio, loadAudio } from "./audio.ts";
 import { cardsFor } from "./context.ts";
 import type { ContextCards } from "./context.ts";
+import { findMeetingQuestions } from "../study/meeting-questions.ts";
 import { extractMeeting } from "./extract.ts";
 import * as store from "./store.ts";
 import { finalTranscript } from "./transcript.ts";
@@ -448,6 +449,21 @@ export const runExtraction = async (meetingId: number): Promise<void> => {
   } catch (err) {
     // extractMeeting records its own failures; this is the belt to that braces.
     emit({ kind: "extraction", meetingId, note: `extraction failed: ${(err as Error).message}` });
+  }
+  // Then the questions you were asked, as study candidates for review (src/study). Only for a
+  // meeting filed under a project, since the answers come from its documents. It says why when
+  // it can't run (nobody named "me" yet), and the meeting page can run it again after you do.
+  if (store.getMeeting(meetingId)?.project_id != null) {
+    try {
+      const q = await findMeetingQuestions(meetingId);
+      emit({
+        kind: "extraction",
+        meetingId,
+        note: q.reason ? `study questions skipped: ${q.reason}` : `${q.saved} question${q.saved === 1 ? "" : "s"} you were asked, for review`,
+      });
+    } catch (err) {
+      emit({ kind: "extraction", meetingId, note: `study questions failed: ${(err as Error).message}` });
+    }
   }
 };
 
