@@ -171,7 +171,9 @@ export const executeCall = async (
   // says what it will do, and they chose to let it run unattended. Asking again from inside
   // the run would stall exactly the jobs meant to need no one. Only the reversibility gate
   // is skipped — the allowlist and budgets above, and dry run below, still hold.
-  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved;
+  // Except for tools that write the standing work itself (Tool.confirmWhenUnattended): a
+  // scheduled run may do its job without asking, but not schedule more jobs.
+  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved && !tool.confirmWhenUnattended;
   const mustConfirm =
     classified.reversibility === "irreversible" &&
     policy.autoExecute.irreversibleAlwaysConfirm &&

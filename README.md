@@ -76,6 +76,9 @@ proposal — are asked in the **AgentSpine** thread. A reason on a reject also b
 
 **Scheduled jobs are pre-approved.** Creating a schedule (or a watcher) is the approval: its
 irreversible actions run without asking again. The allowlist, budgets and dry run still apply.
+One exception: a job can't change the standing work itself. `schedule_create`, `_update` and
+`_delete` still queue from a scheduled run, and `recipe_save` is refused there, so a job that
+reads a hostile page can't schedule itself more jobs or write itself new instructions.
 
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the

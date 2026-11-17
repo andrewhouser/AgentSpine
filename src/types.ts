@@ -251,6 +251,15 @@ export interface Tool {
    * is also listed in `policy.userDirected.actions` — see Policy.userDirected.
    */
   directed?(args: any, run: RunContext): null | { action: string; reason: string };
+  /**
+   * Irreversible calls to this tool still queue when the run is `preApproved` (a schedule,
+   * watcher or heartbeat). Pre-approval exists so scheduled jobs don't stall on questions about
+   * the work they were set up to do. It must not let an unattended run write the instructions
+   * that future unattended runs follow, since a job that reads a hostile page could otherwise
+   * schedule itself more jobs. Set it on tools that edit AgentSpine's own standing work, the
+   * schedule writes. It doesn't loosen anything: without it, a call is treated as before.
+   */
+  confirmWhenUnattended?: boolean;
   run(args: any, ctx: ToolContext): Promise<string>;
 }
 

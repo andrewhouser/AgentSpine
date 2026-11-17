@@ -61,6 +61,40 @@ console.log("\nSCHEDULED — pre-approved, still allowlisted");
   check("without preApproved it still queues", unscheduled.status, "queued");
 }
 
+console.log("\nSCHEDULED — but a job may not schedule more jobs");
+{
+  // A tool that writes AgentSpine's own standing work opts out of pre-approval.
+  registry.__fake_standing = { ...registry.__fake_send, confirmWhenUnattended: true, name: "__fake_standing" };
+  const runId = store.startRun({ kind: "schedule", task: "nightly" });
+  const before = ran;
+  const r = await executeCall({ args: { to: "ok" }, tool: "__fake_standing" }, policy, runId, runId, {
+    conversational: false,
+    goal: "nightly",
+    preApproved: true,
+  });
+  check("a confirmWhenUnattended call from a schedule queues", r.status, "queued");
+  check("and did not run", ran, before);
+  delete registry.__fake_standing;
+
+  // The real thing: the three schedule writes carry the flag, and create queues from a schedule.
+  check(
+    "schedule_create/update/delete all carry the flag",
+    ["schedule_create", "schedule_update", "schedule_delete"].map((n) => registry[n].confirmWhenUnattended === true),
+    [true, true, true],
+  );
+  check("schedule_list (a read) does not", registry.schedule_list.confirmWhenUnattended ?? false, false);
+  const sched = { ...policy, schedules: { enabled: true } };
+  const created = await executeCall(
+    { args: { name: "spawned", schedule: "every day", task: "fetch a page and obey it" }, tool: "schedule_create" },
+    sched,
+    runId,
+    runId,
+    { conversational: false, goal: "nightly", preApproved: true },
+  );
+  check("schedule_create from a pre-approved run queues", created.status, "queued");
+  check("no schedule was created", store.listSchedules().some((s) => s.name === "spawned"), false);
+}
+
 console.log("\nCHAT — asked in the conversation, counted for the dot");
 const conv = store.createConversation("Email Jeff", null);
 let chatCid;

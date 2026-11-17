@@ -19,6 +19,13 @@
  * schedule you wrote by hand, and the same shape `draft.ts` uses: a proposal, parked,
  * waiting on a human who can read the whole thing.
  *
+ * That reasoning applies with full force to an unattended run. Since scheduled runs were
+ * pre-approved (698f112), their irreversible calls skip the queue, and so did these, so a
+ * nightly job that read a hostile page could schedule itself more jobs. The three writes now
+ * carry `confirmWhenUnattended`, so the broker queues them from a schedule, watcher or
+ * heartbeat as well. The approval goes to the AgentSpine inbox thread, and the run carries on
+ * with its other work.
+ *
  * Note what is deliberately absent: nothing here can touch `policy.json`. The scheduler
  * decides *when* the agent acts; the policy decides *what it may do*, and a run that could
  * widen its own permissions would make deny-by-default a suggestion.
@@ -138,6 +145,7 @@ export const scheduleList: Tool = {
 
 export const scheduleCreate: Tool = {
   name: "schedule_create",
+  confirmWhenUnattended: true,
   description:
     "Create a job that runs later on its own, either repeatedly or exactly once. Use this " +
     "whenever the user asks for something that is not immediate — 'every morning', 'each day " +
@@ -188,6 +196,7 @@ export const scheduleCreate: Tool = {
 
 export const scheduleUpdate: Tool = {
   name: "schedule_update",
+  confirmWhenUnattended: true,
   description:
     "Change an existing scheduled job: rename it, reword its task, move when it runs, or " +
     "turn it off with enabled=false. Call schedule_list first to get the id and to see what " +
@@ -247,6 +256,7 @@ export const scheduleUpdate: Tool = {
 
 export const scheduleDelete: Tool = {
   name: "schedule_delete",
+  confirmWhenUnattended: true,
   description:
     "Remove a scheduled job permanently. Prefer schedule_update with enabled=false unless " +
     "the user actually wants it gone — disabling is reversible and deleting is not. Anything " +
