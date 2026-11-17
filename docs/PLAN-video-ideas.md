@@ -101,7 +101,7 @@ browser-allowlist questions. Project-linked topics still search, but only with t
 the subject and the gaps you stated, never document text, and the choosing runs on the local
 model.
 
-### A6. Overview page: the read-only "AIOS map"  *(M)*
+### A6. Overview page: the read-only "AIOS map"  *(M)*  ✅ built 2026-11-17
 The video's one useful dashboard is plain and read-only. Its job is to show what's installed so
 you can **prune** it. Right now AgentSpine spreads this across Settings, Schedules, Projects and
 the broker policy.
@@ -112,7 +112,7 @@ the broker policy.
   connectors that error, memories never recalled. Each links to where you'd delete it.
 - Heed the video's warning: no live agent view, no animation. It's a list, not a cockpit.
 
-### A7. "Get to know me" profile interview  *(S)*
+### A7. "Get to know me" profile interview  *(S)*  ✅ built 2026-11-17
 Adapt the `study_interview` pattern to the profile: look at what `profile.md` and memory lack
 (location, role, working hours, people you work with), then ask about the gaps one at a time.
 Answers save as memories, and you see the list before anything is written.

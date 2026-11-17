@@ -16,6 +16,7 @@ import { ChatView } from "../ChatView/ChatView.tsx";
 import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
+import { OverviewView } from "../OverviewView/OverviewView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
@@ -33,6 +34,7 @@ const VIEW_TITLES: Record<string, string> = {
   clients: "Clients",
   files: "Files",
   meetings: "Meetings",
+  overview: "Overview",
   schedules: "Schedules",
   search: "Search",
   settings: "Settings",
@@ -233,6 +235,7 @@ export const AppShell = () => {
         {route.view === "settings" && <SettingsView />}
         {route.view === "tasks" && <TasksView projects={projects} />}
         {route.view === "study" && <StudyView />}
+        {route.view === "overview" && <OverviewView />}
         {route.view === "files" && <FilesView />}
         {route.view === "clients" && <ClientsView />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}

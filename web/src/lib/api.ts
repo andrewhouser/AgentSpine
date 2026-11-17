@@ -27,6 +27,7 @@ import type {
   MeetingSpeaker,
   MeetingWorkItem,
   Memory,
+  Overview,
   Project,
   ProjectSource,
   PromotionProposal,
@@ -259,7 +260,6 @@ export const api = {
 
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
   markConversationRead: (id: number) => post<{ ok: boolean }>(`/api/conversations/${id}/read`),
-
   meeting: (id: number, pass: "final" | "live" = "final") =>
     request<{
       chat?: ChatMessage[];
@@ -287,6 +287,9 @@ export const api = {
 
   /** Every meeting tag in use, with counts. */
   meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),
+
+  /** Everything installed, read-only, with the prune list. */
+  overview: () => request<Overview>("/api/overview"),
 
   /**
    * What to say aloud for a reply: cleaned of markup and cut into pieces to synthesise in turn,

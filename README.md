@@ -119,7 +119,13 @@ model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and
 Everything else lives one click away in the sidebar: **Schedules** (scheduled tasks and watchers), **Study**
 (review due flash cards, recall first and then the answer, plus each topic's level and curriculum; see
 `docs/STUDY.md`), **Activity** (every run — chat, scheduled, watcher — with its full trace and audit log), and
-**Settings** (appearance, memory, recipes, and the current policy).
+**Settings** (appearance, memory, recipes, and the current policy), and **Overview**: everything set
+up on one read-only page (connections, memory by kind, schedules with their recent runs, recipes,
+projects, study, the policy in brief, and tool use over 30 days), topped by a **Worth a look** list
+of what's stale or broken. That's the schedule that keeps failing, the tool erroring all week, the
+recipe nobody runs, the source that didn't index, the memory kind at its cap, and dry run left on.
+Each flag links to the page where you'd fix or delete it. The rules and their thresholds are
+constants in `src/overview.ts`.
 
 **Appearance is per-browser, not per-server.** Settings → Appearance has a theme (System,
 Light, Dark) and a text-size slider from 85% to 140%. These live in `localStorage` rather than
@@ -938,6 +944,13 @@ edited or deleted in **Settings → Recipes**, which also shows how often each o
 `recipe_save` is refused outright outside a live chat, because a scheduled run is pre-approved
 and would otherwise write standing instructions with nobody reading. A schedule can still *use*
 one: a task of "run pi-brief" works.
+
+**"Get to know me"** fills gaps on purpose instead of waiting for reflection to stumble on them.
+`profile_gaps` checks a fixed list (name, location and timezone, role, hours, people, current focus,
+how you like answers, your setup) against `profile.md` and memory, and asks about what's missing,
+one question at a time. `profile_save` keeps your answers as `profile` memories, through an
+approval card that shows every fact, and only from a live chat. It never writes `profile.md`.
+It tells you which answers deserve a line there, and you add them yourself.
 
 Both halves are visible in the dashboard trace, so when a run behaves oddly you can see what
 it thought it knew going in. Tune or disable via `MEMORY_RECALL_K` and `REFLECT_ENABLED`

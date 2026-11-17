@@ -97,6 +97,39 @@ export interface Memory {
   ts: string;
 }
 
+/** GET /api/overview: everything installed, read-only, with the prune list (src/overview.ts). */
+export interface Overview {
+  connectors: { configured: boolean; detail: string; name: string }[];
+  flags: { href: string; severity: "info" | "warn"; text: string }[];
+  generated: string;
+  memory: { cap: null | number; count: number; kind: string }[];
+  policy: {
+    autoApprove: { target: string; tool: string }[];
+    chatAutoTools: string[];
+    dryRun: boolean;
+    irreversibleAlwaysConfirm: boolean;
+    readableDirs: string[];
+    schedulesEnabled: boolean;
+    userDirected: string[];
+    webSearch: boolean;
+    writableDirs: string[];
+  };
+  projects: { badSources: string[]; chunks: number; id: number; name: string; sources: number }[];
+  recipes: { created: string; last_used: null | string; name: string; uses: number }[];
+  schedules: {
+    created: string;
+    enabled: boolean;
+    id: number;
+    last_run: null | string;
+    name: string;
+    next_run: null | string;
+    recent: string[];
+    spec: null | string;
+  }[];
+  study: { cards: number; due: number; lastActivity: null | string; name: string; projectId: null | number }[];
+  tools: { errors7d: number; name: string; uses30d: number }[];
+}
+
 /**
  * A question someone put to you in a meeting, as a study candidate (src/study/meeting-questions.ts).
  * `quote` and `reply` are verbatim from the transcript. `question` and `answer` are the drafted

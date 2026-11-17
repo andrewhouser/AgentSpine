@@ -84,6 +84,7 @@ import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
+import { overview } from "./overview.ts";
 import { acceptQuestion, dismissQuestion, findMeetingQuestions, listQuestions } from "./study/meeting-questions.ts";
 import { dueForScreen, reviewWithRecall, studyOverview } from "./study/review.ts";
 
@@ -825,6 +826,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       const removed = deleteMemory(Number(seg[2]));
       return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
     }
+
+    // /api/overview — everything installed, read-only, with the prune list (src/overview.ts).
+    if (m === "GET" && seg[1] === "overview" && seg.length === 2) return sendJson(res, 200, overview());
 
     // /api/study — the Study screen (src/study/review.ts). Topics with their due counts and
     // curriculum, the due cards (question only: the answer is never sent before a recall),
