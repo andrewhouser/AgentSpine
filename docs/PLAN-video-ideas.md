@@ -152,7 +152,12 @@ from a real session once one happens (use `skill-creator`):
 - `ios-check`: build, run in the simulator, run the wire-model contract test.
 Add a skill only after you've done the job by hand at least twice.
 
-### B3. Make personal skills and agents follow you with a private plugin  *[both machines, once]*
+### B3. Make personal skills and agents follow you with a private plugin  *[both machines, once]*  ✅ built 2026-11-17
+*As built:* private repo `andrewhouser/claude-plugins` (local copy `~/Developer/claude-plugins`),
+marketplace `andrewhouser`, plugin `dispatch` (the dispatch skill and the five agents). The Macs
+here have no standalone `claude` CLI (the desktop app embeds it), so it's installed declaratively:
+`extraKnownMarketplaces` plus `enabledPlugins` in `~/.claude/settings.json`. Done on the MacBook.
+The Mini needs the same two keys, and the repo's README has them.
 `~/.claude/skills/dispatch` and `~/.claude/agents/{chief,hauler,inspector,runner,tracker}.md` sit on
 this Mac only. Move them into a private GitHub repo set up as a plugin marketplace. Then run
 `claude plugin marketplace add <repo>` and install it on **each** Mac. After that, updating them
