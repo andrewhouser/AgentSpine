@@ -9,6 +9,7 @@
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { MEETING_AUDIO_DIR, MEETING_KEEP_AUDIO_HOURS } from "../config.ts";
@@ -64,6 +65,55 @@ export const loadAudio = async (meetingId: number): Promise<Buffer | null> => {
   if (!fs.existsSync(file)) return null;
   return ffmpeg(["-i", file, "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"]);
 };
+
+/**
+ * Run `fn` with the bytes in an owner-only temp file, then delete it.
+ *
+ * A file, not a pipe, because an .m4a usually keeps its index (the `moov` atom) at the END, and
+ * reading it means seeking. Piped, ffmpeg can't seek: it decodes a fraction of the recording, or
+ * none, and doesn't fail. A 12-second test file came out under 5 seconds that way.
+ */
+const withTempFile = async <T>(bytes: Buffer, fn: (file: string) => Promise<T>): Promise<T> => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spine-import-"));
+  const file = path.join(dir, "recording");
+  try {
+    fs.writeFileSync(file, bytes, { mode: 0o600 });
+    return await fn(file);
+  } finally {
+    fs.rmSync(dir, { force: true, recursive: true });
+  }
+};
+
+/**
+ * Any recording ffmpeg can read (a Voice Memos .m4a, a .mp3, a .wav) as the 16 kHz mono PCM the
+ * pipeline runs on. Throws with ffmpeg's own words when it can't read it, which is the useful
+ * message ("Invalid data found when processing input").
+ */
+export const decodeRecording = (bytes: Buffer): Promise<Buffer> =>
+  withTempFile(bytes, (file) => ffmpeg(["-i", file, "-vn", "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"]));
+
+/**
+ * When a recording was made, from its own metadata (Voice Memos writes `creation_time`), or
+ * null. Best effort: a missing ffprobe or a file without the tag just means the caller's date,
+ * or now.
+ */
+export const recordedAt = (bytes: Buffer): Promise<null | string> =>
+  withTempFile(
+    bytes,
+    (file) =>
+      new Promise((resolve) => {
+        const proc = spawn("ffprobe", ["-v", "error", "-show_entries", "format_tags=creation_time", "-of", "default=nw=1:nk=1", file], {
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        let out = "";
+        proc.stdout!.on("data", (d: Buffer) => (out += d.toString()));
+        proc.on("error", () => resolve(null));
+        proc.on("close", () => {
+          const t = Date.parse(out.trim());
+          resolve(Number.isNaN(t) ? null : new Date(t).toISOString());
+        });
+      }),
+  );
 
 /** Delete one meeting's kept audio now. True if there was anything to delete. */
 export const deleteAudio = (meetingId: number): boolean => {

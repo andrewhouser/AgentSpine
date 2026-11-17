@@ -1,0 +1,67 @@
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 12px 0 4px;
+  padding: 10px 14px;
+}
+
+.summary {
+  cursor: pointer;
+  font-size: 0.8438rem;
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 0.7813rem;
+  margin: 8px 0;
+}
+
+.problem {
+  color: var(--warn);
+  font-size: 0.7813rem;
+  margin: 8px 0 0;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.file {
+  font-size: 0.8125rem;
+  max-width: 100%;
+}
+
+.text,
+.select {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 5px 8px;
+}
+
+.text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--on-accent);
+  font-size: 0.8125rem;
+  padding: 5px 14px;
+}
+
+.button:disabled {
+  opacity: 0.55;
+}

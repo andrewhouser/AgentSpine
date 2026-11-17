@@ -169,6 +169,11 @@ export const startMeeting = (device: string, projectId: null | number, title?: s
       .run(projectId, title ?? null, device, now()).lastInsertRowid,
   );
 
+/** An imported recording's real start and end, so it sorts with the day it happened, not the upload. */
+export const setTimes = (id: number, started: string, ended: string): void => {
+  rawDb.prepare("UPDATE meetings SET started = ?, ended = ? WHERE id = ?").run(started, ended, id);
+};
+
 /** Tags are case-insensitive labels: trimmed, lowercased, inner whitespace collapsed to "-". */
 export const normalizeTag = (raw: string): string =>
   raw.trim().toLowerCase().replace(/^#/, "").replace(/\s+/g, "-").slice(0, 40);

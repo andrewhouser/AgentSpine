@@ -783,6 +783,9 @@ export const DICTATION_PROMPT =
  * to stop a request body growing without limit, not to be reached in normal use.
  */
 export const DICTATION_MAX_BYTES = Number(env.DICTATION_MAX_BYTES ?? String(16 * 1024 * 1024));
+// The largest recording POST /api/meetings/import accepts. Voice Memos' default AAC is about
+// 0.5 MB a minute, so 400 MB covers a long day; a lossless recording runs out sooner.
+export const MEETING_IMPORT_MAX_BYTES = Number(env.MEETING_IMPORT_MAX_BYTES ?? String(400 * 1024 * 1024));
 
 // --- Voice (hands-free: wake word in, spoken reply out) ---
 /**

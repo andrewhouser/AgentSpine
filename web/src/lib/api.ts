@@ -147,13 +147,13 @@ export const api = {
     }),
   askMeetingChat: (id: number, question: string) =>
     post<ChatMessage>(`/api/meetings/${id}/chat`, { question }),
-
   /**
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
    */
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
+
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
   createProject: (name: string, instructions = "") =>
@@ -166,10 +166,9 @@ export const api = {
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
-
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
-  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
+  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
   /**
@@ -196,6 +195,22 @@ export const api = {
     request<{ path: string; text: string; truncated: boolean }>(`/api/files/content?path=${encodeURIComponent(path)}`),
 
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
+
+  /**
+   * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
+   * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
+   */
+  importMeeting: (file: Blob, opts: { name: string; projectId: null | number; started?: string; title?: string }) => {
+    const params = new URLSearchParams({ name: opts.name });
+    if (opts.projectId) params.set("project", String(opts.projectId));
+    if (opts.started) params.set("started", opts.started);
+    if (opts.title) params.set("title", opts.title);
+    return request<{ meetingId: number; started: boolean }>(`/api/meetings/import?${params}`, {
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      method: "POST",
+    });
+  },
 
   listAgents: () => request<Agent[]>("/api/agents"),
 

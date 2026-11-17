@@ -44,6 +44,7 @@ import { useMeetingStream } from "../../hooks/useMeetingStream.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog.tsx";
+import { ImportRecording } from "../ImportRecording/ImportRecording.tsx";
 import { ChatThread, MeetingChat } from "../MeetingChat/MeetingChat.tsx";
 import { MeetingQuestions } from "../MeetingQuestions/MeetingQuestions.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
@@ -606,7 +607,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
         />
       )}
       <PageHeader
-        subtitle="Captured on this machine, transcribed locally. Audio is never saved — only the words."
+        subtitle="Captured on this machine, or imported from a recording, and transcribed locally. Audio isn't kept unless you turn that on; the words are."
         title="Meetings"
       />
 
@@ -705,6 +706,15 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
           </div>
         )}
       </div>
+
+      <ImportRecording
+        onImported={(id) => {
+          reloadMeetings();
+          setOpen(id);
+          void load(id);
+        }}
+        projects={projects}
+      />
 
       <h2 className={styles.subhead}>Recorded</h2>
       {meetings.length === 0 && <div className={styles.empty}>Nothing recorded yet.</div>}

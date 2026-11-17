@@ -8,6 +8,7 @@
  *   npm run listen status       is anything recording; where the models are
  *   npm run listen record 20    capture 20 seconds and print the live transcript
  *   npm run listen prune        drop transcripts past TRANSCRIPT_RETENTION_DAYS
+ *   npm run listen import <f>   transcribe a recording made elsewhere (e.g. Voice Memos)
  *
  * `record` exists mainly to surface macOS's own microphone prompt at a moment you chose,
  * rather than the first time you try to capture a real meeting.
@@ -131,7 +132,42 @@ if (command === "devices") {
   console.log(`${meetingStore.segments(id).length} sentences; speakers: ${meetingStore.speakers(id).map((s) => s.name).join(", ") || "none"}`);
   console.log("Extraction was not re-run (it would queue the same work items again) — re-run it from the dashboard if you want it redone.");
   process.exit(0);
+} else if (command === "import") {
+  // npm run listen -- import <file> [--project <id>] [--title "..."] [--speakers <n>]
+  // (the "--" matters: without it npm takes --title and --project as its own settings)
+  // A recording made elsewhere (Voice Memos, say). Runs the whole pipeline here and waits for it.
+  // The dashboard's Meetings page does the same from a browser, phone included.
+  const flags = process.argv.slice(4);
+  const flag = (name: string): string | undefined => {
+    const i = flags.indexOf(`--${name}`);
+    return i >= 0 ? flags[i + 1] : undefined;
+  };
+  if (!arg || !fs.existsSync(arg)) {
+    console.error('usage: npm run listen -- import <file> [--project <id>] [--title "..."] [--speakers <n>]');
+    process.exit(1);
+  }
+  const { importRecording } = await import("./meetings/session.ts");
+  const project = Number(flag("project") ?? 0);
+  const speakers = Number(flag("speakers") ?? 0);
+  try {
+    const { done, meetingId } = await importRecording(fs.readFileSync(arg), {
+      name: path.basename(arg),
+      projectId: project > 0 ? project : null,
+      speakers: speakers > 0 ? speakers : undefined,
+      started: fs.statSync(arg).mtime.toISOString(),
+      title: flag("title"),
+    });
+    console.log(`meeting ${meetingId}: transcribing (this takes a few minutes per half hour)...`);
+    await done;
+    const after = meetingStore.getMeeting(meetingId);
+    console.log(`${after?.status}: ${after?.note ?? ""}`);
+    console.log(`${meetingStore.segments(meetingId).length} sentences; speakers: ${meetingStore.speakers(meetingId).map((s) => s.name).join(", ") || "none"}`);
+    process.exit(after?.status === "done" ? 0 : 1);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
 } else {
-  console.error(`unknown command: ${command}\nTry: devices | status | record <seconds> | prune | reprocess <id> [speakers]`);
+  console.error(`unknown command: ${command}\nTry: devices | status | record <seconds> | prune | reprocess <id> [speakers] | import <file>`);
   process.exit(1);
 }

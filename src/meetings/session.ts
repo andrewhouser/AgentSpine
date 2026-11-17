@@ -50,7 +50,7 @@ import { checkAudioPolicy, Listener, writeWav } from "../senses/listen.ts";
 import type { Policy } from "../types.ts";
 import { chat, coach } from "./coach.ts";
 import type { CoachAnswer } from "./coach.ts";
-import { keepAudio, loadAudio } from "./audio.ts";
+import { decodeRecording, keepAudio, loadAudio, recordedAt } from "./audio.ts";
 import { cardsFor } from "./context.ts";
 import type { ContextCards } from "./context.ts";
 import { findMeetingQuestions } from "../study/meeting-questions.ts";
@@ -337,6 +337,81 @@ export const reprocessMeeting = async (
     }
   })();
   return { ok: true };
+};
+
+// --- importing a recording made elsewhere ---
+
+/** 16 kHz mono s16le: bytes per second of decoded audio. */
+const PCM_BYTES_PER_SECOND = 32_000;
+
+export interface ImportOpts {
+  /** The original file name, kept as the meeting's device label ("import: Standup.m4a"). */
+  name: string;
+  projectId?: null | number;
+  /** Pins the number of speakers for detection, as the re-run dialog does. */
+  speakers?: number;
+  /** When it was recorded (ISO). The file's own metadata wins; this is the fallback, then now. */
+  started?: string;
+  title?: string;
+}
+
+/** Tests swap the transcription pass with this (no Whisper in a test run). */
+type Pass = (meetingId: number, pcm: Buffer, opts: { liveWords: number; speakers?: number }) => Promise<void>;
+let importPass: Pass = (meetingId, pcm, opts) => buildFinalTranscript(meetingId, pcm, opts);
+export const __setImportPass = (fn: null | Pass): void => {
+  importPass = fn ?? ((meetingId, pcm, opts) => buildFinalTranscript(meetingId, pcm, opts));
+};
+
+/** One import at a time: two Whisper runs at once would fight over the one GPU and both crawl. */
+let importQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * A recording made somewhere else (Voice Memos on the phone, say, when you were offsite or the
+ * Mini couldn't hear the room) becomes a meeting like any other: decoded, transcribed with the
+ * accurate model and speaker detection, filed under its project, then extracted (work items,
+ * and the questions you were asked).
+ *
+ * Returns as soon as the file has been decoded and the meeting row exists. The transcription runs
+ * behind a queue and reports through the same status events a live meeting does. `done`
+ * settles when it has finished, for the CLI, which has to wait before it exits.
+ *
+ * There's no live pass for an import, so the coverage check that guards speaker detection
+ * against swallowing speech has nothing to compare against. If a transcript looks thin, re-run
+ * it with a pinned speaker count (kept audio permitting) or compare with the original file.
+ */
+export const importRecording = async (bytes: Buffer, opts: ImportOpts): Promise<{ done: Promise<void>; meetingId: number }> => {
+  if (active) throw new Error("a meeting is recording right now; import after it ends");
+  let pcm: Buffer;
+  try {
+    pcm = await decodeRecording(bytes);
+  } catch (err) {
+    // ffmpeg's last line, minus its temp-file path: enough to tell a corrupt file from a missing ffmpeg.
+    const why = ((err as Error).message.split("\n").filter(Boolean).pop() ?? "").replace(/\/\S+/g, "").trim();
+    throw new Error(`couldn't read that as audio${why ? ` (${why})` : ""}`);
+  }
+  const seconds = pcm.length / PCM_BYTES_PER_SECOND;
+  if (seconds < 5) throw new Error("that recording has no usable audio (under 5 seconds)");
+
+  const started = (await recordedAt(bytes)) ?? (opts.started && !Number.isNaN(Date.parse(opts.started)) ? new Date(opts.started).toISOString() : null) ?? new Date().toISOString();
+  const name = path.basename(opts.name || "recording").slice(0, 120);
+  const meetingId = store.startMeeting(`import: ${name}`, opts.projectId ?? null, (opts.title ?? "").trim() || name.replace(/\.[a-z0-9]+$/i, ""));
+  store.setTimes(meetingId, started, new Date(Date.parse(started) + seconds * 1000).toISOString());
+  store.setStatus(meetingId, "transcribing", "imported; waiting to transcribe");
+  emit({ kind: "status", meetingId, note: `imported ${Math.round(seconds / 60)} min; queued for transcription`, status: "transcribing" });
+
+  const done = (importQueue = importQueue.then(async () => {
+    try {
+      emit({ kind: "status", meetingId, note: "transcribing the imported recording", status: "transcribing" });
+      await keepAudio(meetingId, pcm);
+      await importPass(meetingId, pcm, { liveWords: 0, speakers: opts.speakers });
+      if (MEETING_EXTRACT_ENABLED) await runExtraction(meetingId);
+    } catch (err) {
+      const note = `import failed: ${(err as Error).message}`;
+      store.setStatus(meetingId, "failed", note);
+      emit({ kind: "status", meetingId, note, status: "failed" });
+    }
+  })).then(() => undefined);
+  return { done, meetingId };
 };
 
 /**

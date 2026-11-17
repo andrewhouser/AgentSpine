@@ -427,6 +427,8 @@ npm run listen devices      # what ffmpeg sees, and which are allowlisted
 npm run listen status       # models, retention, what recorded recently
 npm run listen record 20    # capture 20s and print the transcript — also surfaces
                             # macOS's own mic prompt at a moment you chose
+npm run listen -- import <file> [--project id] [--title "..."]
+                            # transcribe a recording made elsewhere (see below)
 ```
 
 **Two Whisper models, because one cannot do both jobs.** Measured on an M3 Pro:
@@ -489,6 +491,29 @@ while the meeting rows outlive them — after the words are gone you can still s
 meeting happened and what was extracted from it, which is the index you want without the
 content you don't. Extractions follow the same rule with one wrinkle: a summary *describes* a
 meeting and stays, a verbatim quote is a *copy* of it and is blanked with the transcript.
+
+### Importing a recording made elsewhere
+
+When the Mini can't hear the room (you're offsite, or the connection is spotty), record on the
+phone instead and import it later. On the **Meetings** page, open **Import a recording**, pick the
+file, optionally give a title and project, and press **Import**. Safari on the iPhone works: in
+Voice Memos, *Share → Save to Files*, then choose it from the Meetings page. Any format ffmpeg reads
+works (`.m4a`, `.mp3`, `.wav`, `.caf`). From a shell on the Mini:
+
+```
+npm run listen -- import ~/Downloads/Standup.m4a --project 3 --title "Standup"
+```
+
+(The `--` matters: without it npm takes `--title` and `--project` as its own settings.)
+
+An import goes through the same pipeline as a live meeting's final pass: the accurate Whisper
+model, speaker detection, filing under the project, then extraction and the questions you were
+asked. It's dated from the recording's own metadata (Voice Memos writes `creation_time`), so it
+sorts with the day it happened. Imports are transcribed one at a time, and never while a live
+meeting is recording, because both want the one GPU. The upload limit is
+`MEETING_IMPORT_MAX_BYTES` (default 400 MB, roughly 13 hours of Voice Memos' default AAC). An
+import has no live pass, so the coverage check that guards speaker detection has nothing to
+compare against: if a transcript looks thin, compare it with the original.
 
 ### What the transcript becomes
 

@@ -52,6 +52,7 @@ import {
   CONFIRM_SWEEP_MS,
   DICTATION_ENABLED,
   DICTATION_MAX_BYTES,
+  MEETING_IMPORT_MAX_BYTES,
   IMAGES_DIR,
   MEETING_COACH_ENABLED,
   NOTE_MEMORY_MAX,
@@ -1037,6 +1038,37 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
       // /api/meetings/live — is anything recording right now
       if (m === "GET" && seg.length === 3 && seg[2] === "live") return sendJson(res, 200, meetings.liveStatus());
+
+      /**
+       * POST /api/meetings/import?name=&title=&project=&started=&speakers= — a recording made
+       * elsewhere (Voice Memos on the phone), as the raw request body. Any format ffmpeg reads.
+       * Answers 202 once it's decoded and the meeting exists. Transcription is queued, and its
+       * progress arrives on the meeting stream like a live meeting's final pass.
+       */
+      if (m === "POST" && seg.length === 3 && seg[2] === "import") {
+        let bytes: Buffer;
+        try {
+          bytes = await readBinary(req, MEETING_IMPORT_MAX_BYTES);
+        } catch (err) {
+          return sendJson(res, err instanceof TooLargeError ? 413 : 400, { error: (err as Error).message });
+        }
+        if (!bytes.length) return sendJson(res, 400, { error: "send the recording as the request body" });
+        const project = Number(url.searchParams.get("project"));
+        const speakers = Number(url.searchParams.get("speakers"));
+        try {
+          const { meetingId } = await meetings.importRecording(bytes, {
+            name: url.searchParams.get("name") ?? "recording",
+            projectId: Number.isInteger(project) && project > 0 ? project : null,
+            speakers: Number.isInteger(speakers) && speakers > 0 && speakers <= 20 ? speakers : undefined,
+            started: url.searchParams.get("started") ?? undefined,
+            title: url.searchParams.get("title") ?? undefined,
+          });
+          return sendJson(res, 202, { meetingId, started: true });
+        } catch (err) {
+          const msg = (err as Error).message;
+          return sendJson(res, msg.startsWith("a meeting is recording") ? 409 : 400, { error: msg });
+        }
+      }
 
       /**
        * GET /api/meetings/:id/context — the context cards for a meeting, computed now.
