@@ -1,6 +1,7 @@
 # The native Mac app, and a UI refresh across every client
 
-Written 2026-11-18. Planned, not started. Nothing here has been built.
+Written 2026-11-18, updated the same day after `main` gained Heads-up (phases 0 to 5) and
+`PLAN-heads-up-next.md`. Approved to start. Nothing here has been built yet.
 
 The goal: a SwiftUI app for macOS 15+ that feels native on the MacBook Pro and the Mac Mini,
 and a visual refresh that the iPhone app and the web client get too. Both are clients of the one
@@ -59,11 +60,34 @@ are a reference, not a spec: exact colors, type and spacing get settled in phase
   transcript column plus a coach column with context cards and the possible action items.
 - **Light theme.** Not drawn yet. Phase 2 defines both from one token set.
 
+## Interaction with the Heads-up work
+
+`PLAN-heads-up-next.md` is the spec for what remains of Heads-up. It touches the same files
+and screens this plan restyles, so the order matters.
+
+| Heads-up item | Effect on this plan |
+|---|---|
+| A1 build the iOS app, A2 `npm run check` on Node 24 | Gate for phase 1. The refactor starts from a tree known to compile. |
+| B, E, F (server: outcomes, retention, digest) | No overlap. Server only. Can proceed in parallel. |
+| B (Settings line per kind: "offered 14, you acted on 3") and D (lead-time overrides in Settings) | New Settings UI on web and iOS. Build them with today's components if they land first; phase 2 and phase 7 restyle them. Do not block either plan on the other. |
+| G Live Activity | Needs a second Xcode target (widget extension). Do it **after phase 1**, so the project file is edited once in a known state, and note that it is iPhone only (no Mac equivalent). |
+| H2 web sidebar badge | Small change in `Sidebar`; phase 7 restyles the same component. Take it before phase 7 and keep the styling untouched. |
+| Per-item answer token and the `HEADSUP` notification categories | The Mac app needs the same narrow-token answer call and categories. They live in the shared package, so the Mac gets them from phase 1. |
+
+Other effects now recorded:
+- The mock screens need a Heads-up screen (offers, result cards, "Dates it noticed", the three
+  answers). It is drawn in phase 2 before the Heads-up screen is built on either platform.
+- The default iPhone tab bar is Threads, Heads-up, then two more, and the customization screen
+  lists thirteen tabs. The saved order has to cope with tabs added by later app versions.
+- Heads-up's "Yes is the consent" rule and quiet hours are server decisions. The apps only show
+  and answer; they never decide.
+
 ## What exists today
 
 `ios/AgentSpine` is about 8,600 lines of SwiftUI. `Core/` has `APIClient`, `Models`,
 `AppState`, `RunStream` (SSE), `Keychain`, `Settings`, `Dictation`, `ReadAloud`, `HandsFree`.
-`Views/` has one file per tab, twelve tabs in `RootView`. The Xcode project uses a
+`Views/` has one file per tab, thirteen tabs in `RootView` (Heads-up arrived on `main` as the second tab, so it is one of the
+four iOS shows without opening More). The Xcode project uses a
 file-system-synchronized group, so new files are picked up without editing the `.pbxproj`.
 
 UIKit is used in only six files: `SettingsView`, `AttachmentImage`, `HandsFree`, `Settings`,
@@ -105,6 +129,18 @@ Move the platform-neutral half of `Core/` into a local Swift package that both a
 `APIClient`, `Models`, `RunStream`, `Keychain`, and the non-UI parts of `AppState` and
 `Settings`. Keep `PushManager`, `HandsFree` and similar platform code in the app targets, or
 behind a small protocol if the shared code needs them.
+
+Baseline first. The iOS Swift for Heads-up (phases 4 and 5) has never been compiled, and
+`PLAN-heads-up-next.md` A1 asks the user to build it. Phase 1 must start from a tree that
+builds, or a compile error cannot be told apart from a mistake in the extraction. So: the user
+builds `main` once (A1) before building phase 1's result. Phase 1 itself is kept to file moves
+and access-control changes, so any new error is easy to place.
+
+The contract test moves with the code. `test/ios-models.test.mjs` extracts the structs from
+`ios/AgentSpine/Core/Models.swift` by markers and compiles them with `swiftc`. When `Models.swift`
+moves into the package, the test's path and markers change in the same commit, and it must still
+decode real server output (including the Heads-up models) against Foundation alone. This sandbox
+has no `swiftc`, so the user runs it with `npm run check` on the Mac.
 
 Done when: the iPhone app builds and behaves identically, now importing the package.
 Nothing visible changes. This is the step that proves the shared approach, so do not start
@@ -163,7 +199,8 @@ inline on the Mac, against your real server.
 
 ### Phase 4: remaining sections and menu bar
 
-- Port the other tabs as sidebar sections: Tasks, Study, Schedules, Projects, Files,
+- Port the other tabs as sidebar sections: Heads-up (with its preferences screen and the
+  three notification answers), Tasks, Study, Schedules, Projects, Files,
   Clients, Search, Meetings, Builds, Activity, Memory, Proposals, Agents.
 - On the Mac, Builds diffs and Activity traces get the most from the larger window, so
   give those real two-pane layouts rather than stretching the phone layout.
