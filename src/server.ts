@@ -82,6 +82,8 @@ import { readImage } from "./headsup/research/cards.ts";
 import { RESEARCH_KINDS, researchHeadsup, startResearch } from "./headsup/research/run.ts";
 import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
 import { sweepWatches } from "./headsup/watch/loop.ts";
+import { updatePrefs } from "./headsup/prefs.ts";
+import { prefsForClient } from "./headsup/prefs-view.ts";
 import { enableWatch } from "./headsup/watch/enable.ts";
 import { sweepDueCards } from "./study/sweep.ts";
 import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
@@ -1434,6 +1436,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         );
       // Dates you told it about, and dates it noticed in chat and is waiting for you to confirm.
       if (m === "GET" && seg.length === 3 && seg[2] === "dates") return sendJson(res, 200, headsupDates.datesForClient());
+      // Preferences: which kinds, the daily cap, quiet hours. Plus read-only facts about what cannot run yet.
+      if (seg.length === 3 && seg[2] === "prefs") {
+        if (m === "GET") return sendJson(res, 200, prefsForClient());
+        if (m === "POST") {
+          const r = updatePrefs(await readBody(req));
+          return r.ok ? sendJson(res, 200, prefsForClient()) : sendJson(res, 400, { error: r.error });
+        }
+      }
       if (m === "DELETE" && seg.length === 4 && seg[2] === "dates")
         return headsupDates.deleteDate(Number(seg[3]))
           ? sendJson(res, 200, { ok: true })

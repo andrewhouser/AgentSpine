@@ -33,6 +33,7 @@ struct RootView: View {
                 HeadsupView()
             }
             .tabItem { Label("Heads-up", systemImage: "sparkles") }
+            .badge(state.headsupWaiting)
             .tag(Tab.headsup)
 
             NavigationStack {

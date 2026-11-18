@@ -19,7 +19,8 @@ import { fetchScanEvents, googleEnabled } from "./index.ts";
 import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
-import { inQuietHours, MORNING_HOUR, MORNING_MINUTE, RETRY_AFTER_ERROR_MINUTES } from "./rules.ts";
+import { getPrefs, isQuietNow } from "./prefs.ts";
+import { MORNING_HOUR, MORNING_MINUTE, RETRY_AFTER_ERROR_MINUTES } from "./rules.ts";
 import { scanEvents } from "./scan.ts";
 import type { ScanEvent } from "./scan.ts";
 import { kvGet, kvSet } from "../memory/store.ts";
@@ -125,7 +126,7 @@ export const runMorningHeadsup = async (
   });
 
   if (!HEADSUP_ENABLED) return result("disabled");
-  if (inQuietHours(now)) return result("quiet");
+  if (isQuietNow(now)) return result("quiet");
   if (!opts.force) {
     const minutes = now.getHours() * 60 + now.getMinutes();
     if (minutes < MORNING_HOUR * 60 + MORNING_MINUTE) return result("early");
@@ -146,10 +147,14 @@ export const runMorningHeadsup = async (
 
   ledger.expirePast(now);
   const events = [...fetched.events, ...dropCoveredByCalendar(deps.remembered(now), fetched.events)];
+  const prefs = getPrefs();
   const plan = planOffers(
-    scanEvents(events, now),
+    // A kind you turned off is never offered. Watches already running are not affected.
+    scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
     { get: ledger.getByKey, muted: ledger.isMuted },
     now,
+    prefs.dailyCap,
+    [prefs.quietStartHour, prefs.quietEndHour],
   );
 
   // Record before sending. If the send fails, the offer is still on the list in the app, which

@@ -140,9 +140,14 @@ export const findAmount = (e: Pick<Classifiable, "description" | "title">): stri
 
 // --- quiet hours --------------------------------------------------------------------------
 
-export const inQuietHours = (now: Date): boolean => {
+/**
+ * Whether `now` is in quiet hours. The window may wrap midnight (21 to 7) or sit inside a day
+ * (1 to 6). Equal hours mean no quiet hours at all, which is a choice you are allowed to make.
+ */
+export const inQuietHours = (now: Date, start: number = QUIET_START_HOUR, end: number = QUIET_END_HOUR): boolean => {
+  if (start === end) return false;
   const h = now.getHours();
-  return h >= QUIET_START_HOUR || h < QUIET_END_HOUR;
+  return start > end ? h >= start || h < end : h >= start && h < end;
 };
 
 /**

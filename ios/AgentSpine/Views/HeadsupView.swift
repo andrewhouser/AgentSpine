@@ -9,6 +9,7 @@ import UIKit
 /// the browser; its photo comes from the AgentSpine server, not the retailer, so this phone never
 /// contacts a shop just because you looked at an idea.
 struct HeadsupView: View {
+    @Environment(AppState.self) private var state
     @State private var items: [Headsup] = []
     @State private var dates = HeadsupDates(proposals: [], remembered: [])
     @State private var loaded = false
@@ -136,6 +137,8 @@ struct HeadsupView: View {
             items = try await APIClient.shared.headsups()
             // A failure to load the dates alone must not hide the list above it.
             if let latest = try? await APIClient.shared.headsupDates() { dates = latest }
+            // Keep the tab's badge in step with what this screen just showed, without a second request.
+            state.headsupWaiting = items.filter { $0.state == "offered" }.count + dates.proposals.count
             loadError = nil
         } catch {
             loadError = error.localizedDescription

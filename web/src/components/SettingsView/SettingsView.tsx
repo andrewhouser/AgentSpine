@@ -15,6 +15,7 @@ import {
   SCALE_STEP,
 } from "../../lib/preferences.ts";
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
+import { HeadsupPrefsPanel } from "../HeadsupPrefsPanel/HeadsupPrefsPanel.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PolicyProposals } from "../PolicyProposals/PolicyProposals.tsx";
 import { RecipesPanel } from "../RecipesPanel/RecipesPanel.tsx";
@@ -321,6 +322,8 @@ export const SettingsView = () => {
           </div>
         ))}
       </section>
+
+      <HeadsupPrefsPanel />
 
       <RecipesPanel />
 

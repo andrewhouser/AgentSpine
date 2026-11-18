@@ -31,6 +31,21 @@ final class AppState {
     /// opening the tab.
     var waitingThreads: Int { conversations.filter(\.needsYou).count }
 
+    /// Heads-ups waiting on an answer, plus dates it noticed and wants you to confirm: the
+    /// Heads-up tab's badge. Same rule as the Threads badge: it counts only what is BLOCKED on
+    /// you. A snoozed item is waiting on the clock, and a tracked flight is informational, and a
+    /// badge on either is how a badge stops meaning anything.
+    var headsupWaiting = 0
+
+    /// Refresh the Heads-up badge. Failures leave the old number alone rather than blanking it:
+    /// a tailnet blip is not the same as "nothing is waiting".
+    func refreshHeadsups() async {
+        guard Settings.shared.isConfigured else { return }
+        guard let items = try? await api.headsups() else { return }
+        let proposals = (try? await api.headsupDates())?.proposals.count ?? 0
+        headsupWaiting = items.filter { $0.state == "offered" }.count + proposals
+    }
+
     /// Everything the tab bar needs, concurrently.
     ///
     /// `async let` rather than three awaits: over a tailnet each round-trip is tens of
@@ -59,6 +74,7 @@ final class AppState {
             recentRuns = r
             loadError = nil
             lastLoaded = Date()
+            await refreshHeadsups()
         } catch {
             loadError = error.localizedDescription
         }
@@ -72,6 +88,9 @@ final class AppState {
         if let fresh = try? await api.conversations() {
             conversations = fresh.filter { $0.archived == 0 }
         }
+        // Coming back to the app is exactly when you have probably answered something from a
+        // notification, so the Heads-up badge is refreshed alongside the thread dots.
+        await refreshHeadsups()
     }
 
     /// Approve or reject, from the thread that asked. The server picks the conversation back

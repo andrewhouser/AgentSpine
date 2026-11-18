@@ -622,3 +622,66 @@ To turn it on: set `AERODATABOX_RAPIDAPI_KEY` (flights) and/or `TOMTOM_API_KEY` 
 
 Not done: other flight providers (the interface makes it one file), arrival-side alerts such as baggage
 claim, and a Live Activity (see the follow-ups).
+
+### Follow-ups after Phase 5
+
+| Item | Status | Where |
+|---|---|---|
+| Badge on the iOS Heads-up tab | Built | `AppState.headsupWaiting`, `RootView` |
+| Heads-up line in the 7:30 morning brief | Built | `src/tools/headsup.ts`, `src/briefing.ts` |
+| Heads-up preferences in Settings | Built | `src/headsup/prefs.ts`, web `HeadsupPrefsPanel`, iOS `HeadsupPrefsView` |
+| Live Activity for a flight | **Not built. See the assessment below.** | |
+
+**The badge** counts only what is blocked on you, the same rule as the Threads badge: an offered
+heads-up, plus a date it noticed in chat and wants confirmed. A snoozed item is waiting on the clock and
+a tracked flight is informational, and a badge on either is how a badge stops meaning anything. It
+refreshes on launch, when the app returns to the foreground (which is when you have probably answered
+something from a notification) and whenever the Heads-up screen loads.
+
+**The brief** gets its line from a read-only tool, `headsup_status`, not from the model working it out:
+the model is handed "2 heads-ups are waiting. Nearest: Garrett's Birthday (in 10 days)..." and asked for
+one clause. The brief is a schedule row in your database, so changing the default text cannot reach an
+install that already seeded it. `upgradeMorningBrief` therefore moves a brief onto the new text ONLY if it
+still says exactly the old shipped default (`BRIEF_TASK_V1`, checked byte-for-byte against the released
+version). A brief you reworded or renamed is left exactly as it is: it is yours, and you can add the line
+on the Schedules page. A mutation test confirms that overwriting an edited brief fails the suite.
+
+**Preferences** are stored in the database and clamped on every read, so corrupt storage means defaults
+and a bad value can never make the loop misbehave. They cover which kinds are offered (turning one off
+does not stop a watch you already started), the daily cap (1 to 10), and quiet hours (any window, and the
+same hour twice means none). A bad patch is refused with a sentence and applies NOTHING, so half a change
+can never land. They are read by the planner, the morning job and the watch loop, and each has a test
+that changes the setting and watches the behaviour change. The 30 minute floor is displayed but is not a
+setting on purpose: it exists to stop a mistake becoming a polling storm, and a control that lowers it
+defeats it. The screens also say, in words, why flight or drive watching cannot run yet.
+
+#### Live Activity: assessment
+
+Not built, and not because it is large. Two things stop it being done safely from here.
+
+1. **It needs a second Xcode target, and the project has one.** A Live Activity is drawn by a Widget
+   Extension: its own bundle id, its own `Info.plist` with an `NSExtension` of `com.apple.widgetkit-extension`,
+   a build phase that embeds it in the app, a dependency from the app to it, signing settings, and
+   `NSSupportsLiveActivities` on the app. The `ActivityAttributes` type has to be compiled into BOTH
+   targets. Doing that by hand-editing `project.pbxproj` without Xcode is exactly the kind of change that
+   leaves a project that will not open, and an unopenable project is a far worse outcome than a missing
+   feature. The project uses a synchronized folder, which makes adding files easy and adding targets no easier.
+2. **Updating it from the server is a separate APNs path that cannot be tested here.** Updates are pushes
+   of type `liveactivity` to a topic of `<bundle id>.push-type.liveactivity`, addressed to a per-activity
+   token the app reports after it starts the activity, with a `content-state` payload. The existing
+   `src/push/apns.ts` sends alert pushes to a device token with the plain bundle id as topic. Reusing its
+   JWT and HTTP/2 plumbing for a new push type is straightforward to write and impossible to verify against
+   Apple from this container, so it would be the third unverified integration in this feature.
+
+What it would take, in order, for whoever has Xcode: (a) add a Widget Extension target named
+`AgentSpineLiveActivity` and tick "Include Live Activity"; (b) move the generated `ActivityAttributes` file into
+both targets; (c) set `NSSupportsLiveActivities` to YES on the app; (d) in the app, start the activity when
+a flight watch becomes active and POST its push token to a new `/api/headsups/:id/live-activity`; (e) on the
+server, store that token on the watch and send an `update` push from `loop.ts` where it already sends a
+notification, and an `end` push when the flight lands or is cancelled. The content state is already
+computed: it is the `FlightStatus` the loop holds (phase, delay, gate, terminal, estimated times).
+
+Two real limits to know before choosing it: without push-to-start (iOS 17.2 and later, with its own token) an
+activity can only be started while the app is in the foreground, so tracking a flight by tapping Yes on the
+lock screen would not start one; and a Live Activity ends after about eight hours unless updated, which fits a
+flight watch window but not a long-haul.

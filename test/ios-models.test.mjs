@@ -213,6 +213,12 @@ hDates.addDate({ day: 4, month: 3, occasion: "birthday", who: "Garrett" }, hNow)
 hDates.proposeDatesFromChat("Mia's birthday is June 9");
 fs.writeFileSync(path.join(root, "headsup-dates.json"), JSON.stringify(hDates.datesForClient()));
 
+// Preferences: one changed from the default, so the app has to decode a real mixture.
+const { updatePrefs: hUpdatePrefs } = await import("../src/headsup/prefs.ts");
+const { prefsForClient: hPrefsForClient } = await import("../src/headsup/prefs-view.ts");
+hUpdatePrefs({ dailyCap: 2, kinds: { bill: false }, quietStartHour: 22 });
+fs.writeFileSync(path.join(root, "headsup-prefs.json"), JSON.stringify(hPrefsForClient()));
+
 // What "Check now" reports: a quiet day, and a calendar that could not be read.
 const runDeps = (fetchEvents) => ({ fetchEvents, googleEnabled: () => true, remembered: () => [], send: async () => {} });
 const runNothing = await runMorningHeadsup(hNow, { force: true }, runDeps(async () => ({ errors: [], events: [] })));
@@ -250,7 +256,7 @@ const hFrom = models.indexOf("// MARK: - Heads-up");
 const hTo = hFrom < 0 ? -1 : models.indexOf("\n// MARK:", hFrom + 1);
 if (hFrom < 0 || hTo < 0) throw new Error(`could not find the Heads-up section in ${modelsPath}`);
 const headsupSection = models.slice(hFrom, hTo);
-for (const needle of ["struct HeadsupCard", "struct HeadsupWatch", "struct Headsup:", "struct HeadsupProposal", "struct RememberedDate", "struct HeadsupDates", "struct HeadsupRunResult", "struct HeadsupResearchResult"]) {
+for (const needle of ["struct HeadsupPrefs", "struct HeadsupUnavailable", "struct HeadsupCard", "struct HeadsupWatch", "struct Headsup:", "struct HeadsupProposal", "struct RememberedDate", "struct HeadsupDates", "struct HeadsupRunResult", "struct HeadsupResearchResult"]) {
   if (!headsupSection.includes(needle)) throw new Error(`the Heads-up section is missing ${needle} — markers moved?`);
 }
 
@@ -376,6 +382,13 @@ const main = [
   '    check("research results decode", rs.count == 2, "\\(rs.count)")',
   '    check("a finished run has no error and reports its query", rs[0].status == "done" && rs[0].error == nil && rs[0].query != nil)',
   '    check("a failed run has an error and no query", rs[1].status == "error" && rs[1].error == "provider down" && rs[1].query == nil)',
+  "",
+  "    let pf = try dec.decode(HeadsupPrefs.self, from: load(CommandLine.arguments[11]))",
+  '    check("preferences decode", pf.dailyCap == 2, "\\(pf.dailyCap)")',
+  '    check("kinds is a map of booleans", pf.kinds["bill"] == false && pf.kinds["birthday"] == true && pf.kinds.count == 6, "\\(pf.kinds)")',
+  '    check("quiet hours are whole hours", pf.quietStartHour == 22 && pf.quietEndHour == 7, "\\(pf.quietStartHour)-\\(pf.quietEndHour)")',
+  '    check("the floor is carried, read-only", pf.floorMinutes == 30, "\\(pf.floorMinutes)")',
+  '    check("unavailable carries reasons as strings", (pf.unavailable.flights ?? "").contains("AERODATABOX_RAPIDAPI_KEY") && (pf.unavailable.drive ?? "").contains("TOMTOM_API_KEY"), "\\(pf.unavailable)")',
   "} catch {",
   '    print("  FAIL  heads-up threw: \\(error)")',
   "    failed += 1",
@@ -415,6 +428,7 @@ try {
     path.join(root, "headsup-dates.json"),
     path.join(root, "headsup-run.json"),
     path.join(root, "headsup-research.json"),
+    path.join(root, "headsup-prefs.json"),
   ], {
     encoding: "utf8",
   });

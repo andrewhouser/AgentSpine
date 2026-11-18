@@ -73,6 +73,7 @@ export const planOffers = (
   deps: PlanDeps,
   now: Date,
   cap: number = DAILY_CAP,
+  quiet?: [number, number],
 ): Plan => {
   const due: Offer[] = [];
   for (const c of candidates) {
@@ -86,6 +87,6 @@ export const planOffers = (
       KIND_PRIORITY[a.candidate.kind] - KIND_PRIORITY[b.candidate.kind] ||
       a.candidate.subject.localeCompare(b.candidate.subject),
   );
-  if (inQuietHours(now)) return { deferred: due.length, offers: [] };
+  if (inQuietHours(now, quiet?.[0], quiet?.[1])) return { deferred: due.length, offers: [] };
   return { deferred: Math.max(0, due.length - cap), offers: due.slice(0, cap) };
 };

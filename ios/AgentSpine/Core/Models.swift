@@ -757,6 +757,26 @@ struct HeadsupDates: Codable {
     let remembered: [RememberedDate]
 }
 
+/// Why a kind of watch cannot run yet, in words: a missing key, a policy switch that is off.
+/// Nil means it can run.
+struct HeadsupUnavailable: Codable, Hashable {
+    let flights: String?
+    let drive: String?
+}
+
+/// What it may bring up, how many per morning, and when it must stay quiet. The 30 minute floor on
+/// watches is carried so it can be shown; it is not something the app can change.
+struct HeadsupPrefs: Codable, Hashable {
+    let dailyCap: Int
+    let floorMinutes: Int
+    /// A kind set to false is never offered. Keys are "birthday", "anniversary", "bill",
+    /// "appointment", "flight" and "recurring".
+    let kinds: [String: Bool]
+    let quietStartHour: Int
+    let quietEndHour: Int
+    let unavailable: HeadsupUnavailable
+}
+
 /// What "Check now" reports.
 struct HeadsupRunResult: Codable {
     let status: String

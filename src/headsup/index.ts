@@ -13,6 +13,7 @@ import type { CalendarScope } from "./calendars.ts";
 import { dropCoveredByCalendar, rememberedEvents } from "./dates.ts";
 import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
+import { getPrefs } from "./prefs.ts";
 import type { Plan } from "./plan.ts";
 import { LOOKAHEAD_DAYS } from "./rules.ts";
 import { scanEvents } from "./scan.ts";
@@ -68,6 +69,13 @@ export const gatherEvents = async (now: Date, scope?: CalendarScope): Promise<{ 
 /** Scan the calendars and say what would be offered now. Reads the ledger; writes nothing. */
 export const planMorning = async (now: Date = new Date()): Promise<Plan & { errors: string[] }> => {
   const { errors, events } = await gatherEvents(now);
-  const plan = planOffers(scanEvents(events, now), { get: ledger.getByKey, muted: ledger.isMuted }, now);
+  const prefs = getPrefs();
+  const plan = planOffers(
+    scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
+    { get: ledger.getByKey, muted: ledger.isMuted },
+    now,
+    prefs.dailyCap,
+    [prefs.quietStartHour, prefs.quietEndHour],
+  );
   return { ...plan, errors };
 };

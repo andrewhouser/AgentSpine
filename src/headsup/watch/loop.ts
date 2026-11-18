@@ -41,9 +41,9 @@ import {
   FIRST_LOOK_NOTIFY_DELAY_MINUTES,
   FLIGHT_WATCH_AFTER_HOURS,
   FLIGHT_WATCH_BEFORE_HOURS,
-  inQuietHours,
   LEAVE_NOTICE_MINUTES,
 } from "../rules.ts";
+import { isQuietNow } from "../prefs.ts";
 import { dayKey, hasRoom, markNoticeGiven, monthKey, noticeGiven, spend } from "./budget.ts";
 import { aeroDataBox, describeFlightChange, flightFingerprint, summarizeFlight } from "./flight.ts";
 import type { FlightSource, FlightStatus } from "./flight.ts";
@@ -186,7 +186,7 @@ const pollFlight = async (w: WatchRow, deps: WatchDeps, now: Date): Promise<Watc
 
   const hoursUntil = (Date.parse(status.estimatedDeparture || spec.departAt) - now.getTime()) / HOUR;
   const urgent = status.phase === "cancelled" || status.phase === "diverted" || status.delayMinutes >= 60;
-  if (inQuietHours(now) && !breaksQuietHours({ cancelled: status.phase === "cancelled", delayMinutes: status.delayMinutes, hoursUntil })) {
+  if (isQuietNow(now) && !breaksQuietHours({ cancelled: status.phase === "cancelled", delayMinutes: status.delayMinutes, hoursUntil })) {
     // Held back, and NOT recorded as told: it is sent when quiet hours end, if it still matters.
     updateWatch(w.id, { note: `${summary} (held until quiet hours end)` });
     return "quiet";
@@ -270,7 +270,7 @@ const pollDrive = async (w: WatchRow, deps: WatchDeps, now: Date): Promise<Watch
     return state.noticed ? "unchanged" : "seeded";
   }
   // A drive is never an emergency: quiet hours hold every drive notice back, unrecorded.
-  if (inQuietHours(now)) {
+  if (isQuietNow(now)) {
     updateWatch(w.id, { note: `${summary} (held until quiet hours end)` });
     return "quiet";
   }

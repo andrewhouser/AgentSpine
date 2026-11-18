@@ -20,6 +20,7 @@ import type {
   DictationStatus,
   Headsup,
   HeadsupDates,
+  HeadsupPrefs,
   HeadsupRun,
   IngestResult,
   LiveStatus,
@@ -208,6 +209,8 @@ export const api = {
 
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
+  headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
+
   listAgents: () => request<Agent[]>("/api/agents"),
 
   /** Runs that built or tested something, newest first. */
@@ -245,7 +248,6 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
-
   listFiles: () => request<SavedFile[]>("/api/files"),
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
@@ -335,7 +337,6 @@ export const api = {
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
   researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
-
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
@@ -344,8 +345,8 @@ export const api = {
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
 
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
-  runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 
+  runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
@@ -361,6 +362,8 @@ export const api = {
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
+
+  setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
 
   /** File a finished meeting under a project — this is what indexes its transcript. */
   setMeetingProject: (id: number, projectId: null | number) =>

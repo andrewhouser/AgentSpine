@@ -371,6 +371,16 @@ final class APIClient {
         try await send(jsonRequest("/api/headsups/run", method: "POST"), as: HeadsupRunResult.self, using: longSession)
     }
 
+    func headsupPrefs() async throws -> HeadsupPrefs {
+        try await send(request("/api/headsups/prefs"), as: HeadsupPrefs.self)
+    }
+
+    /// Change some preferences. The server refuses a bad value with a sentence saying what is wrong,
+    /// and applies none of the patch, so the reply is always a state somebody chose.
+    func setHeadsupPrefs(_ patch: [String: Any]) async throws -> HeadsupPrefs {
+        try await send(jsonRequest("/api/headsups/prefs", method: "POST", body: patch), as: HeadsupPrefs.self)
+    }
+
     func headsupDates() async throws -> HeadsupDates {
         try await send(request("/api/headsups/dates"), as: HeadsupDates.self)
     }

@@ -480,6 +480,17 @@ export interface HeadsupCard {
   url: string;
 }
 
+/** Heads-up preferences, plus read-only facts about what cannot run yet. */
+export interface HeadsupPrefs {
+  dailyCap: number;
+  /** The watch loop never polls one watch more often than this. Shown, not changeable. */
+  floorMinutes: number;
+  kinds: Record<string, boolean>;
+  quietEndHour: number;
+  quietStartHour: number;
+  unavailable: { drive: null | string; flights: null | string };
+}
+
 /** The standing watch behind a Yes on a flight or a drive. */
 export interface HeadsupWatch {
   active: boolean;

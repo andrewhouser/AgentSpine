@@ -190,6 +190,14 @@ the `HEADSUP_RESEARCH` category (Yes, look it up / Not now / Don't suggest this)
 it / Not now / Don't suggest this). When it is about several there are no buttons and a tap opens
 the tab, because "Not now" on a list would snooze things nobody read.
 
+A third category, `HEADSUP_WATCH` ("Yes, track it"), is for a flight, or an appointment with a place when
+a routing key is set. Which of the three a push uses is decided by the server (`yesAction`), so the buttons
+and the Heads-up screen cannot disagree.
+
+The **Heads-up tab shows a badge** for items blocked on you: offered heads-ups plus any date it noticed in
+chat and wants confirmed. Snoozed and tracked items do not count. Settings → Heads-up has the kinds you want,
+the daily cap and quiet hours, and says in words why flight or drive watching cannot run yet.
+
 These buttons do not ask for Face ID: the worst a wrong tap does is snooze a reminder or start a
 search, and a lock-screen button you have to unlock to use is not worth having. The credential in
 the payload is a **per-item answer token**, single use and good for no other route or item, for the
