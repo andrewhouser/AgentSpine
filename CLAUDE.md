@@ -13,7 +13,7 @@ records live in `docs/`. Read the relevant one before changing an area:
 | Voice / TTS, image generation, watchers | `docs/VOICE.md`, `docs/IMAGE_GENERATION.md`, `docs/WATCHERS.md` |
 | Build loop (`run_command`, `git_write`, builder) | `docs/PLAN-build-loop.md` |
 | Open plan | `docs/PLAN-video-ideas.md` |
-| Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (phases 0-4 built: scanner, ledger, morning push, web page, remembered dates, gift and restaurant research, iOS tab and lock-screen buttons, flight and drive watches, brief line, preferences; the iOS Swift is uncompiled, the two provider integrations are unverified against live keys, and there is no Live Activity) |
+| Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (what is built: phases 0-5 plus tab badge, brief line and preferences; the iOS Swift is uncompiled and the flight and routing integrations are unverified against live keys) and `docs/SPEC-heads-up-next.md` (what is left, in order) |
 
 ## Machines
 
