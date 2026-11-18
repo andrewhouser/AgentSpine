@@ -19,6 +19,12 @@ in your life and offers to help, without being asked.
 | Categories for the first pass | Birthdays and anniversaries, trips and flights, appointments, **bills**, **recurring events**. |
 | Bills marked paid | Any calendar event with `PAID` in it is ignored. |
 | Acting on an offer | Read-only research runs on a "yes". Anything irreversible (buy, book, email) still goes to the confirmation queue. |
+| Paid marker | The word `PAID` in the event title (decided 2026-11-18). Description is also checked, harmlessly. |
+| Quiet hours | No pushes 9 pm to 7 am, except a cancellation or a large delay on something within a few hours. At most three offered items per morning. |
+| Flight status API | No preference from the user, so the choice is mine: start with one provider behind a small interface (`FlightStatusSource`), so swapping is a one-file change. Verify free-tier limits before committing to one. |
+| Travel time API | A routing API is acceptable. Default plan is the Google Routes API, behind the same `policy.json` gate as `weather`, with the same interface-first approach. |
+| Retailer fallback | If Amazon product pages are blocked, use any retailer whose page we can read, and fall back to a **Google Shopping search link** built from the anonymized query. The link carries no price or image. |
+| Dates heard in chat | The assistant offers to remember them (see "Remembering dates you mention"). |
 
 ## What already exists
 
@@ -177,6 +183,13 @@ structured **card**, not prose, so the apps can render it.
   works" as something to test early, not assume. The card format does not depend on Amazon, so
   results from any retailer work, and an Amazon affiliate or Product Advertising API key could be
   added later without changing the design.
+- **Fallback ladder, in order:** (1) a product page we can read gives a full card with price,
+  image and link; (2) a page we cannot read gives a link-only item, with the title and snippet
+  from the search result; (3) if a whole search yields nothing readable, one Google Shopping
+  search link (`https://www.google.com/search?tbm=shop&q=<anonymized query>`) is offered. The
+  apps mark rung 2 and 3 items as "no price available" instead of hiding the gap. Google
+  Shopping has no public search API for shoppers (its Content API is for merchants), so it is a
+  link we generate, never a source we scrape.
 - **Images** are fetched and cached by the server (size limited, type checked), and the apps load
   them from the server. This keeps the phone from contacting third-party retailers directly and
   keeps broken or hostile image URLs away from the clients.
@@ -198,6 +211,26 @@ structured **card**, not prose, so the apps can render it.
   so it uses `confirmWhenUnattended` or a direct in-app user action, never the scan itself.
 - **Policy.** New tools default to denied in `policy.json` until you enable them, like the
   rest of the broker. The ledger tools themselves are reversible and local.
+
+### 7b. Remembering dates you mention
+
+When you say "Garrett's birthday is March 4" or "our anniversary is June 12" in chat, the
+assistant offers to remember it. This reuses the existing proposal flow rather than writing
+anything itself:
+
+- Detection is a cheap code pass over your own chat messages for date and occasion patterns
+  (birthday, anniversary, "due on", "renews on"), with the model confirming and extracting
+  `{ who, occasion, date, recurring }`.
+- The result is a **proposal in the confirmation queue**, never a direct write, for the same
+  reason as meeting extraction: extracted items are mostly false positives. Approving saves a
+  memory of a dedicated kind (for example `date`) that the scanner reads next to the calendar.
+- It never writes `profile.md` (LEARNING invariant 1). The reply can say which ones deserve
+  a line there, as `profile_save` does.
+- An event already on your calendar is not proposed again. The scanner checks the ledger
+  and the calendar first.
+- Only **your own** messages count. Dates in pasted emails, web pages or tool output are
+  untrusted content and are ignored here.
+- These memories are private, so they never reach the cloud tier, including for embeddings.
 
 ### 8. Learning from your answers
 
@@ -242,6 +275,10 @@ design changes.
 - Seeded schedule, one combined notification, `/api/headsups` endpoints, and Yes / Not now / Never.
 - Web list. No research yet: "Yes" just records the answer.
 
+**Phase 2b: remembered dates**
+- Chat date detector, proposal into the confirmation queue, `date` memory kind read by the
+  scanner. Tests: only user messages count, duplicates of calendar events are skipped.
+
 **Phase 3: research recipes and cards**
 - Restaurant and gift recipes, the anonymizing query builder, the product extractor, the image
   cache, and the anonymization test. Cards appear in the web client.
@@ -281,18 +318,14 @@ Plain node scripts like the rest of `test/`, no network. Fixtures for calendar r
 
 ## Open questions
 
-1. **Flight status source.** Which API, and what is the rate and cost limit? (AeroDataBox,
-   FlightAware AeroAPI, AviationStack, or something you already have a key for.)
-2. **Travel time source.** Traffic needs a routing API (Google Routes, Apple MapKit server API,
-   or similar). It sends your origin and destination to a third party, so it needs the same
-   "your call" gate that `weather` has in `policy.json`. Which one, and is that acceptable?
-3. **Amazon access.** If scraping is blocked in practice, are you willing to set up an
-   affiliate or Product Advertising API key, or is "any retailer with a link and a price" fine?
-4. **How is PAID spelled in your calendar?** The plan assumes the word appears in the event
-   title or description in any case. If you use a color, a calendar, or a different marker, the
-   filter should key off that instead.
-5. **Quiet hours and daily cap.** What defaults feel right? Suggested start: no pushes from
-   9 pm to 7 am except cancellations, and at most three offered items per morning.
-6. **People and dates beyond the calendar.** Should the scanner also offer to *remember* a date
-   it hears in chat ("Garrett's birthday is March 4") by proposing a memory, which fits the
-   existing proposal flow?
+Answered on 2026-11-18 and folded into the decisions table above: PAID spelling, quiet hours
+and daily cap, routing API, retailer fallback, remembering chat dates. Still open, and not
+blocking Phases 0 to 3:
+
+1. **Flight status provider.** No preference given. Before Phase 5, compare free-tier limits
+   and coverage for two or three providers and pick one. The interface is provider-neutral.
+2. **Routing provider details.** Google Routes API needs a key and billing enabled. Confirm
+   you are happy to create one, and that your home and common destinations may be sent to it
+   (gated in `policy.json`, off until you turn it on).
+3. **Which calendars count.** All calendars you can read, or only some? The scanner should
+   skip noisy ones (holidays, sports schedules) by default and let you choose.
