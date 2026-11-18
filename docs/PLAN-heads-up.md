@@ -22,7 +22,7 @@ in your life and offers to help, without being asked.
 | Paid marker | The word `PAID` in the event title (decided 2026-11-18). Description is also checked, harmlessly. |
 | Quiet hours | No pushes 9 pm to 7 am, except a cancellation or a large delay on something within a few hours. At most three offered items per morning. |
 | Flight status API | No preference from the user, so the choice is mine: start with one provider behind a small interface (`FlightStatusSource`), so swapping is a one-file change. Verify free-tier limits before committing to one. |
-| Travel time API | A routing API is acceptable. Default plan is the Google Routes API, behind the same `policy.json` gate as `weather`, with the same interface-first approach. |
+| Travel time API | A **free** provider is preferred. Default plan: **TomTom Routing API** free tier (reported as 2,500 requests/day, with live traffic), behind a `TravelTimeSource` interface and the same `policy.json` gate as `weather`. Verify the current limit on TomTom's pricing page before Phase 5. Fallback if that falls through: HERE's free tier, or OpenRouteService (free, but static road speeds, no live traffic). Google Routes is not the default: its traffic-aware requests are in a paid tier. |
 | Retailer fallback | If Amazon product pages are blocked, use any retailer whose page we can read, and fall back to a **Google Shopping search link** built from the anonymized query. The link carries no price or image. |
 | Dates heard in chat | The assistant offers to remember them (see "Remembering dates you mention"). |
 
@@ -324,8 +324,11 @@ blocking Phases 0 to 3:
 
 1. **Flight status provider.** No preference given. Before Phase 5, compare free-tier limits
    and coverage for two or three providers and pick one. The interface is provider-neutral.
-2. **Routing provider details.** Google Routes API needs a key and billing enabled. Confirm
-   you are happy to create one, and that your home and common destinations may be sent to it
-   (gated in `policy.json`, off until you turn it on).
-3. **Which calendars count.** All calendars you can read, or only some? The scanner should
-   skip noisy ones (holidays, sports schedules) by default and let you choose.
+2. **Routing key.** TomTom needs a free developer account and API key. Your home and common
+   destinations are sent to it, so it is gated in `policy.json` and off until you turn it on.
+
+Decided 2026-11-18: the scanner reads **all calendars you can read except holidays and sports**.
+Detection is by Google's calendar id (holiday calendars end in
+`#holiday@group.v.calendar.google.com`) and by name for sports (team, league and schedule
+calendars), with an exclusion list in config so you can add or remove calendars. The contact
+birthdays calendar is always included.
