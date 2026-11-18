@@ -78,6 +78,8 @@ import { sweepDueTasks } from "./tasks/sweep.ts";
 import * as headsupDates from "./headsup/dates.ts";
 import * as headsupLedger from "./headsup/ledger.ts";
 import { planMorning } from "./headsup/index.ts";
+import { readImage } from "./headsup/research/cards.ts";
+import { RESEARCH_KINDS, researchHeadsup, startResearch } from "./headsup/research/run.ts";
 import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
 import { sweepDueCards } from "./study/sweep.ts";
 import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
@@ -1470,7 +1472,31 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         if (a !== "yes" && a !== "later" && a !== "never")
           return sendJson(res, 400, { error: 'answer must be "yes", "later" or "never"' });
         const row = headsupLedger.answer(Number(seg[2]), a, new Date());
+        // Yes on a birthday or an anniversary is also "go and look": research runs in the background
+        // and the result appears on the page. Anything else has nothing to look up.
+        if (row && a === "yes" && RESEARCH_KINDS.has(row.kind)) startResearch(row.id);
         return row ? sendJson(res, 200, headsupLedger.toView(row)) : sendJson(res, 404, { error: "no such heads-up" });
+      }
+      // Run the research again (it failed, or the prices are stale). Waits for it, so the page can show the result.
+      if (m === "POST" && seg.length === 4 && seg[3] === "research") {
+        const row = headsupLedger.getById(Number(seg[2]));
+        if (!row) return sendJson(res, 404, { error: "no such heads-up" });
+        if (!RESEARCH_KINDS.has(row.kind)) return sendJson(res, 400, { error: "nothing to research for this kind" });
+        return sendJson(res, 200, await researchHeadsup(row.id));
+      }
+      // A cached product photo. Only ever bytes we sniffed as JPEG/PNG/GIF/WebP, served inert.
+      if (m === "GET" && seg.length === 4 && seg[2] === "images") {
+        const img = readImage(Number(seg[3]));
+        if (!img) return sendJson(res, 404, { error: "no such image" });
+        res.writeHead(200, {
+          "Cache-Control": "private, max-age=86400",
+          "Content-Length": img.bytes.length,
+          "Content-Security-Policy": "default-src 'none'",
+          "Content-Type": img.mime,
+          "X-Content-Type-Options": "nosniff",
+        });
+        res.end(img.bytes);
+        return;
       }
     }
 

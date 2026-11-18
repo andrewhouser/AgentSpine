@@ -79,6 +79,12 @@ const voiceListenPath = (mode: "turn" | "wake", wake: string, aliases: string[],
 const post = <T>(path: string, body?: unknown): Promise<T> =>
   request<T>(path, { body: body === undefined ? undefined : JSON.stringify(body), method: "POST" });
 
+/** A same-origin path that an <img> can load: it cannot send our token header, so the token rides along as a query parameter. */
+export const authedPath = (path: string): string => {
+  const token = getToken();
+  return token ? `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : path;
+};
+
 /** The URL an EventSource opens to follow a run. See the note about `?token=` above. */
 export const runStreamUrl = (runId: number, after: number): string => {
   const params = new URLSearchParams({ after: String(after) });
@@ -328,6 +334,8 @@ export const api = {
   reprocessMeeting: (id: number, speakers?: number) =>
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
+  researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
+
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
@@ -336,7 +344,6 @@ export const api = {
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
 
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
-
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),

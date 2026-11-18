@@ -1,6 +1,6 @@
 # Plan: Heads-up (proactive suggestions)
 
-Written 2026-11-18. Status: **Phases 0, 1, 2 and 2b built** (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 3 onward is proposed. Prompted by Duet noticing a flight and
+Written 2026-11-18. Status: **Phases 0, 1, 2, 2b and 3 built** (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 4 onward is proposed. Prompted by Duet noticing a flight and
 offering to track it. The goal here is the general version: AgentSpine notices things coming up
 in your life and offers to help, without being asked.
 
@@ -279,7 +279,7 @@ design changes.
 - Chat date detector, proposal into the confirmation queue, `date` memory kind read by the
   scanner. Tests: only user messages count, duplicates of calendar events are skipped.
 
-**Phase 3: research recipes and cards**
+**Phase 3: research recipes and cards. Built (server and web; iOS is Phase 4).**
 - Restaurant and gift recipes, the anonymizing query builder, the product extractor, the image
   cache, and the anonymization test. Cards appear in the web client.
 
@@ -436,3 +436,70 @@ Decisions made while building:
 - **Numeric dates are month/day** (US). One that cannot be (25/12) is read as day/month.
 - **The memory is a convenience.** Approval also writes "Garrett's birthday is March 4." as a `date`
   memory so "when is Garrett's birthday?" recalls it. If that write fails the date is still saved.
+
+### Phase 3 (research and cards)
+
+| File | Role |
+|---|---|
+| `src/headsup/research/net.ts` | `safeGet`: fetches a public URL and refuses anything private (SSRF guard). |
+| `src/headsup/research/product.ts` | Reads a product card (title, price, image) from a page's JSON-LD and Open Graph tags. Pure. |
+| `src/headsup/research/query.ts` | Builds the queries that leave the machine, and refuses any containing a name. |
+| `src/headsup/research/recipient.ts` | Summarises what you know about the person, with the local model only, and re-validates the result in code. |
+| `src/headsup/research/cards.ts` | Card store, the image cache (sniffed by bytes, never SVG). |
+| `src/headsup/research/run.ts` | `researchHeadsup`: the orchestrator. Everything injected, so it runs offline in tests. |
+| `src/tools/web-search.ts` | New `searchHits()`: structured results from the same providers. `web_search` itself is unchanged. |
+| `src/server.ts` | "Yes" starts research for birthdays and anniversaries; `POST /api/headsups/:id/research` retries; `GET /api/headsups/images/:id` serves cached photos. |
+| `web/.../HeadsupView` | Result cards with photo, price, host and link; the "Yes" button names what it will do; polling while it looks. |
+| `test/headsup-net`, `-product`, `-research` | 69, 93 and 63 checks. |
+
+What "Yes" does now: a birthday looks for gift ideas, an anniversary looks for restaurants. Bills,
+appointments, flights and recurring events have nothing to look up, so their button stays "Got it".
+
+Decisions made while building:
+
+- **The model sees only your own memories, never the web.** The one model call summarises what you
+  remember about the person into a closed relationship, a few interest phrases, an optional budget
+  and cuisines, on the local model only (`sensitivity: "private"`). Page text is read by code and is
+  never shown to a model, so a hostile page has nothing to talk to.
+- **The query has no field for a name, and three layers anyway.** The fixed shape has none; free-text
+  interests that mention a known name are dropped; and `assertAnonymous` throws before any search if a
+  finished query still contains one. Names protected are the people in remembered dates, in every
+  birthday and anniversary heads-up (calendar contacts included), and any capitalised word found in
+  the memories used. That last rule is cautious: it also drops places and brands from interests. Cuisines,
+  weekdays and months are exempt, because "Thai" is not a person and the restaurant search needs it.
+  Bills and appointments are not protected, so "electric guitar" survives a bill called "Electric".
+- **Relationships are collapsed to seven words** (partner, parent, child, sibling, relative, friend,
+  colleague). "My brother Garrett" identifies someone even without the name; "a sibling" does not.
+- **The page shows exactly what was searched**, as "Searched for: ...". You can see what left the machine.
+- **SSRF is guarded at connect time.** Product pages and image links are attacker-controlled strings,
+  and this machine sits next to the model host and the dashboard. Addresses are checked inside the
+  socket's own DNS lookup (so a rebinding name is refused), IP literals up front, and every redirect hop.
+  No dependency: `node:http(s)` lets us own the lookup, `fetch` does not. Bodies are capped while
+  streaming, including after decompression.
+- **Images are kept by the server, and judged by their bytes.** JPEG, PNG, GIF or WebP only, never SVG,
+  whatever `Content-Type` claimed. Served with `nosniff` and a locked-down CSP. The apps load them from
+  here, so a phone never contacts a retailer (which would tell it your address and that you are shopping).
+  Not resized: there is no image library in the dependencies, and a 1.5 MB cap keeps it bounded.
+- **The card links to the page that was fetched**, never to a canonical URL or `url` field the page
+  declares, since a hostile page could point those anywhere.
+- **Fallback ladder:** a readable page gives a full card; an unreadable one gives a link-only card from
+  the search result's own title and snippet; nothing at all gives one Google Shopping (gifts) or Google
+  Maps (restaurants) search link built from the same anonymous query. Cards without a price say
+  "no price available" instead of hiding the gap.
+- **Restaurants need `DEFAULT_LOCATION`.** Without one the web results would not be local, so no web
+  search is made and the card is a Maps link, which knows where you are when you open it. With one, the
+  city goes to the search provider, the same consent as `weather`.
+- **Research needs `policy.web.searchEnabled`.** With it off, you get the fallback link and a note.
+- **A heads-up you said Yes to stays on the page** (birthdays and anniversaries only), so the results are
+  there to read. This fixed a Phase 2 gap found by running the real server: "open" used to drop an item
+  the moment it was accepted.
+- **A push says when it is ready** ("3 gift ideas ready"), only when there are real ideas, not a bare link.
+
+Not done, deliberately:
+
+- **No headless-browser fallback for blocked retailers.** Amazon and some others serve bots a block
+  page, which the ladder handles by degrading. A browser fallback would read more pages but is slower,
+  heavier and a larger attack surface. Worth revisiting only if the link-only cards turn out to be common.
+- **No availability or booking for restaurants** (OpenTable, Resy), and no buying. Both would be new
+  integrations; buying is irreversible-tier and queued.
+- **Prices are "seen on" a date, never a promise.** Use "Look again" to refresh.

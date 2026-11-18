@@ -10,6 +10,8 @@
  * a separate row per mention.
  */
 import { rawDb } from "../memory/store.ts";
+import { cardsFor, toCardView } from "./research/cards.ts";
+import type { CardView } from "./research/cards.ts";
 import type { Candidate } from "./scan.ts";
 import { subjectKey } from "./scan.ts";
 import { SNOOZE_HOURS } from "./rules.ts";
@@ -174,22 +176,47 @@ export const expirePast = (now: Date): number => {
   return Number(r.changes);
 };
 
+/** Add fields to a row's payload without disturbing the rest. */
+export const mergePayload = (id: number, patch: Record<string, unknown>, now: Date = new Date()): void => {
+  const row = getById(id);
+  if (!row) return;
+  let cur: Record<string, unknown> = {};
+  try {
+    cur = row.payload_json ? JSON.parse(row.payload_json) : {};
+  } catch {
+    /* start again from the patch */
+  }
+  rawDb.prepare("UPDATE headsups SET payload_json = ?, updated = ? WHERE id = ?").run(JSON.stringify({ ...cur, ...patch }), now.toISOString(), id);
+};
+
+/** Research finished: record it and move the headsup to `researched`. */
+export const markResearched = (id: number, patch: Record<string, unknown>, now: Date = new Date()): void => {
+  mergePayload(id, { researchError: null, researchedAt: now.toISOString(), ...patch }, now);
+  rawDb.prepare("UPDATE headsups SET state = 'researched', updated = ? WHERE id = ? AND state IN ('accepted','researched')").run(now.toISOString(), id);
+};
+
 /** What a client sees of a row: no internal stage bookkeeping, payload fields lifted out. */
 export interface HeadsupView {
   amount: null | string;
   answer: null | string;
+  /** Research results, if any. Only filled in by `listForClient`. */
+  cards: CardView[];
   dueAt: string;
   firstOfferedAt: null | string;
   id: number;
   kind: string;
   location: null | string;
+  /** The exact search that left the machine, so you can see what was asked. */
+  query: null | string;
+  researchError: null | string;
+  researchNote: null | string;
   snoozeUntil: null | string;
   state: HeadsupState;
   subject: string;
 }
 
 export const toView = (r: HeadsupRow): HeadsupView => {
-  let payload: { amount?: string; location?: string } = {};
+  let payload: { amount?: string; location?: string; note?: string; query?: string; researchError?: string } = {};
   try {
     payload = r.payload_json ? JSON.parse(r.payload_json) : {};
   } catch {
@@ -198,22 +225,36 @@ export const toView = (r: HeadsupRow): HeadsupView => {
   return {
     amount: payload.amount ?? null,
     answer: r.answer,
+    cards: [],
     dueAt: r.due_at,
     firstOfferedAt: r.first_offered_at,
     id: r.id,
     kind: r.kind,
     location: payload.location || null,
+    query: payload.query ?? null,
+    researchError: payload.researchError ?? null,
+    researchNote: payload.note || null,
     snoozeUntil: r.snooze_until,
     state: r.state,
     subject: r.subject,
   };
 };
 
-/** Open items (offered or snoozed) soonest first, or the most recent of everything. */
+/**
+ * Open items soonest first, or the most recent of everything. "Open" is what still needs you or
+ * has something to show: offered and snoozed items, plus accepted or researched birthdays and
+ * anniversaries, whose research results are the whole point of having said yes. Answering "got
+ * it" to a bill finishes it, so those leave the list.
+ */
 export const listForClient = (which: "all" | "open", limit = 100): HeadsupView[] => {
   const rows =
     which === "open"
-      ? listByState(["offered", "snoozed"], limit)
+      ? (rawDb
+          .prepare(
+            "SELECT * FROM headsups WHERE state IN ('offered','snoozed') " +
+              "OR (state IN ('accepted','researched') AND kind IN ('birthday','anniversary')) ORDER BY due_at LIMIT ?",
+          )
+          .all(limit) as unknown as HeadsupRow[])
       : (rawDb.prepare("SELECT * FROM headsups ORDER BY updated DESC LIMIT ?").all(limit) as unknown as HeadsupRow[]);
-  return rows.map(toView);
+  return rows.map((r) => ({ ...toView(r), cards: cardsFor(r.id).map(toCardView) }));
 };

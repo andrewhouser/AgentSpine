@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type { Headsup, HeadsupDates } from "../../lib/types.ts";
+import type { Headsup, HeadsupCard, HeadsupDates } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
-import { api } from "../../lib/api.ts";
+import { api, authedPath } from "../../lib/api.ts";
 import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
+import results from "./HeadsupView.module.css";
 
 const NONE: Headsup[] = [];
 const NO_DATES: HeadsupDates = { proposals: [], remembered: [] };
@@ -39,6 +40,25 @@ const whenText = (iso: string): string => {
   return days > 1 ? `in ${days} days, ${day}` : day;
 };
 
+/** What "Yes" will do, so the button says it instead of promising nothing. */
+const YES_LABEL: Record<string, string> = { anniversary: "Yes, find restaurants", birthday: "Yes, find gift ideas" };
+
+/** Kinds that research on "yes". Mirrors RESEARCH_KINDS on the server. */
+const RESEARCHES = new Set(["anniversary", "birthday"]);
+
+const seenOn = (iso: string): string => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" });
+
+const Card = ({ c }: { c: HeadsupCard }) => (
+  <a className={results.item} href={c.url} rel="noopener noreferrer nofollow" target="_blank">
+    {c.imageUrl ? <img alt="" className={results.photo} loading="lazy" src={authedPath(c.imageUrl)} /> : <div className={results.noPhoto}>no photo</div>}
+    <div className={results.itemTitle}>{c.title}</div>
+    {c.kind === "gift" && <div className={results.price}>{c.priceText ?? "no price available"}</div>}
+    <div className={results.small}>{c.host}</div>
+    {c.note && <div className={results.small}>{c.note}</div>}
+    {c.priceText && <div className={results.small}>seen {seenOn(c.fetchedAt)}</div>}
+  </a>
+);
+
 const stateNote = (h: Headsup): string => {
   if (h.state === "snoozed" && h.snoozeUntil) return `snoozed until ${new Date(h.snoozeUntil).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`;
   return h.state === "offered" ? "" : h.state;
@@ -60,6 +80,25 @@ export const HeadsupView = () => {
     await api.answerHeadsup(h.id, a);
     refresh();
   };
+
+  const research = async (h: Headsup): Promise<void> => {
+    await api.researchHeadsup(h.id);
+    refresh();
+  };
+
+  // Research runs in the background after "yes". Poll while any is still looking, then stop.
+  const looking = items.some((h) => RESEARCHES.has(h.kind) && h.state === "accepted" && h.cards.length === 0 && !h.researchError);
+  useEffect(() => {
+    if (!looking) return;
+    // Capped at two minutes: an item accepted before research existed never gets cards, and must
+    // not keep the page polling for as long as it is open.
+    let ticks = 0;
+    const t = setInterval(() => {
+      if (++ticks > 30) return clearInterval(t);
+      refresh();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [looking, refresh]);
 
   const decide = async (confirmationId: number, yes: boolean): Promise<void> => {
     await (yes ? api.approveConfirmation(confirmationId) : api.rejectConfirmation(confirmationId, ""));
@@ -140,7 +179,7 @@ export const HeadsupView = () => {
             {open && (
               <>
                 <button className={`${styles.button} ${styles.primary}`} onClick={() => void answer(h, "yes")} type="button">
-                  Got it
+                  {YES_LABEL[h.kind] ?? "Got it"}
                 </button>
                 <button className={styles.button} onClick={() => void answer(h, "later")} type="button">
                   Remind me tomorrow
@@ -149,6 +188,30 @@ export const HeadsupView = () => {
                   Don&apos;t suggest this
                 </button>
               </>
+            )}
+            {RESEARCHES.has(h.kind) && (h.state === "accepted" || h.state === "researched") && (
+              <div className={results.results}>
+                {h.cards.length > 0 ? (
+                  <>
+                    <div className={results.grid}>
+                      {h.cards.map((c) => (
+                        <Card c={c} key={c.id} />
+                      ))}
+                    </div>
+                    {h.query && <div className={results.status}>Searched for: “{h.query}”. No names are ever sent.</div>}
+                    {h.researchNote && <div className={results.status}>{h.researchNote}.</div>}
+                  </>
+                ) : h.researchError ? (
+                  <div className={results.status}>Couldn&apos;t finish looking: {h.researchError}</div>
+                ) : (
+                  <div className={results.status}>Looking…</div>
+                )}
+                <div className={results.actions}>
+                  <button className={styles.button} onClick={() => void research(h)} type="button">
+                    {h.cards.length > 0 ? "Look again" : "Try again"}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         );

@@ -13,7 +13,7 @@ records live in `docs/`. Read the relevant one before changing an area:
 | Voice / TTS, image generation, watchers | `docs/VOICE.md`, `docs/IMAGE_GENERATION.md`, `docs/WATCHERS.md` |
 | Build loop (`run_command`, `git_write`, builder) | `docs/PLAN-build-loop.md` |
 | Open plan | `docs/PLAN-video-ideas.md` |
-| Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (phases 0-2b built: scanner, rules, ledger, morning push, web page, remembered dates; iOS and research not yet) |
+| Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (phases 0-3 built: scanner, rules, ledger, morning push, web page, remembered dates, gift and restaurant research; iOS and the time-sensitive loop not yet) |
 
 ## Machines
 

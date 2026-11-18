@@ -466,15 +466,33 @@ export interface Task {
   waiting_on: null | string;
 }
 
+/** One research result: a product or restaurant, or a plain link when nothing could be read. */
+export interface HeadsupCard {
+  amount: null | number;
+  fetchedAt: string;
+  host: string;
+  id: number;
+  imageUrl: null | string;
+  kind: "gift" | "link" | "restaurant";
+  note: null | string;
+  priceText: null | string;
+  title: string;
+  url: string;
+}
+
 /** A proactive suggestion: something coming up that the assistant noticed. */
 export interface Headsup {
   amount: null | string;
   answer: null | string;
+  cards: HeadsupCard[];
   dueAt: string;
   firstOfferedAt: null | string;
   id: number;
   kind: string;
   location: null | string;
+  query: null | string;
+  researchError: null | string;
+  researchNote: null | string;
   snoozeUntil: null | string;
   state: "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
   subject: string;

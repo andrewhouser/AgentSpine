@@ -132,7 +132,13 @@ const view = ledger.listForClient("open").find((v) => v.subject === "Gas bill $6
 check("kind and subject", [view.kind, view.subject], ["bill", "Gas bill $62.10"]);
 check("the amount and place are lifted out of the payload", [view.amount, view.location], ["$62.10", "Online"]);
 check("internal stage and dedupe key are not exposed", Object.keys(view).some((k) => /stage|dedupe|fingerprint|payload/i.test(k)), false);
-check("open lists only offered and snoozed", ledger.listForClient("open").every((v) => ["offered", "snoozed"].includes(v.state)), true);
+check("open lists offered and snoozed, plus accepted or researched birthdays", ledger.listForClient("open").every((v) => ["offered", "snoozed"].includes(v.state) || (["accepted", "researched"].includes(v.state) && ["birthday", "anniversary"].includes(v.kind))), true);
+const acc = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "bill:accepted-x:z", fingerprint: "", kind: "bill", location: "", sourceId: "x", startsAt: dateStr(5), subject: "Accepted bill", timeSensitive: false }, 0, day(0));
+ledger.answer(acc.id, "yes", day(0));
+check("an accepted bill is finished and leaves the open list", ledger.listForClient("open").some((v) => v.subject === "Accepted bill"), false);
+const accB = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "birthday:accepted-y:z", fingerprint: "", kind: "birthday", location: "", sourceId: "y", startsAt: dateStr(5), subject: "Accepted Birthday", timeSensitive: false }, 0, day(0));
+ledger.answer(accB.id, "yes", day(0));
+check("an accepted birthday stays, so its research can be seen", ledger.listForClient("open").some((v) => v.subject === "Accepted Birthday"), true);
 check("all includes finished ones too", ledger.listForClient("all").length > ledger.listForClient("open").length, true);
 check("a row with a corrupt payload still renders", ledger.toView({ ...ledger.getByKey(`bill:v1:${dateStr(4)}`), payload_json: "{nope" }).amount, null);
 
