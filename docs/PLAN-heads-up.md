@@ -1,6 +1,6 @@
 # Plan: Heads-up (proactive suggestions)
 
-Written 2026-11-18. Status: **Phases 0, 1 and 2 built** (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 2b onward is proposed. Prompted by Duet noticing a flight and
+Written 2026-11-18. Status: **Phases 0, 1, 2 and 2b built** (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 3 onward is proposed. Prompted by Duet noticing a flight and
 offering to track it. The goal here is the general version: AgentSpine notices things coming up
 in your life and offers to help, without being asked.
 
@@ -275,7 +275,7 @@ design changes.
 - Seeded schedule, one combined notification, `/api/headsups` endpoints, and Yes / Not now / Never.
 - Web list. No research yet: "Yes" just records the answer.
 
-**Phase 2b: remembered dates**
+**Phase 2b: remembered dates. Built.**
 - Chat date detector, proposal into the confirmation queue, `date` memory kind read by the
   scanner. Tests: only user messages count, duplicates of calendar events are skipped.
 
@@ -394,3 +394,45 @@ Decisions made while building:
   topic it is readable by anyone who knows the topic name, so use a private topic.
 
 Not done yet from Phase 2: folding the count into the 7:30 morning brief.
+
+### Phase 2b (remembered dates)
+
+| File | Role |
+|---|---|
+| `src/headsup/detect.ts` | Finds "Garrett's birthday is March 4" in a chat message. Pure, strict, no model. |
+| `src/headsup/dates.ts` | The `headsup_dates` table, proposing, saving on approval, feeding the scanner, calendar de-duplication. |
+| `src/tools/date-remember.ts` | The `date_remember` tool: irreversible-tier and `confirmWhenUnattended`, so it always queues. |
+| `src/runner.ts` | One line: a `chat` run hands the user's message to the detector. |
+| `src/server.ts` | `GET /api/headsups/dates`, `DELETE /api/headsups/dates/:id`. Approval reuses `/api/confirmations`. |
+| `test/headsup-dates.test.mjs` | 93 checks, mostly negative cases, plus chat -> approval -> offer end to end. |
+
+Decisions made while building:
+
+- **Regex, not a model.** The plan said "the model confirming and extracting". A clause either states
+  a person, an occasion and a date or it does not, and code recognises that reliably, privately and
+  for free on every chat turn. The cost is that loosely-worded dates are missed ("Garrett turns 40 on
+  the fourth"); the assistant can still save those through the `date_remember` tool when you say so.
+  Every hit is a proposal you approve, so a miss costs a sentence and a false hit costs one question.
+- **What is deliberately not detected:** "my birthday" (your own is not a heads-up), questions and
+  conditionals, impossible dates (Feb 30), non-people ("it's birthday"), and any message over 400
+  characters, which is probably a paste of somebody else's words. A lowercase name is not a name:
+  only a capitalised word, or "my"/"our" plus a relation, counts.
+- **Proposals go to the inbox, not the chat thread.** Approving from a thread resumes it with a model
+  turn ("Approved: remember a date"), which is a model call and a message for a one-line fact. The
+  inbox does not resume. They show on the Heads-up page under "Dates it noticed", in the normal
+  approvals list, and in the existing unanswered-approval reminder push.
+- **A date asked about is never asked about again**, in any state. Declining Mia's birthday does not
+  bring it back next week when you mention it again. The search is the latest 100 confirmations.
+- **Calendar overlap is resolved at scan time, not proposal time.** Checking the calendar when you
+  type would put a Google call on every chat turn. Instead a remembered date is dropped when a
+  calendar event of the same kind, on the same day, shares a name with it (or when it has no name,
+  as with "Your Anniversary"). So you can remember a date that is also on the calendar and still hear
+  about it once.
+- **Remembered dates work with Google off.** They need no network and no account, so the morning
+  job runs for them even when `policy.json` has Google reads disabled. The `disabled` status now
+  means only `HEADSUP_ENABLED=false`.
+- **"my" becomes "your".** The assistant is the one speaking: "Your Wife's Birthday: in 10 days".
+- **Feb 29 falls back to Feb 28** in a common year, so a leap-day birthday is not skipped three years in four.
+- **Numeric dates are month/day** (US). One that cannot be (25/12) is read as day/month.
+- **The memory is a convenience.** Approval also writes "Garrett's birthday is March 4." as a `date`
+  memory so "when is Garrett's birthday?" recalls it. If that write fails the date is still saved.

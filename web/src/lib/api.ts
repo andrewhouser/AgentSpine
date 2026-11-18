@@ -19,6 +19,7 @@ import type {
   Conversation,
   DictationStatus,
   Headsup,
+  HeadsupDates,
   HeadsupRun,
   IngestResult,
   LiveStatus,
@@ -166,14 +167,16 @@ export const api = {
     post<Schedule>("/api/schedules", { name, schedule, task }),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
   deleteConversation: (id: number) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: "DELETE" }),
+  deleteHeadsupDate: (id: number) => request<{ ok: boolean }>(`/api/headsups/dates/${id}`, { method: "DELETE" }),
   /** Delete a meeting's kept recording now. */
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
-  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
+  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
+
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -238,7 +241,7 @@ export const api = {
     }),
 
   listFiles: () => request<SavedFile[]>("/api/files"),
-
+  listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
 
   listMeetings: (limit = 50, tags: string[] = []) =>

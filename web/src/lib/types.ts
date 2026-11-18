@@ -480,6 +480,19 @@ export interface Headsup {
   subject: string;
 }
 
+/** A date you told it about, or one it noticed in chat and is waiting for you to confirm. */
+export interface HeadsupDates {
+  proposals: {
+    confirmationId: number;
+    day: null | number;
+    month: null | number;
+    occasion: string;
+    summary: string;
+    who: string;
+  }[];
+  remembered: { day: number; id: number; month: number; occasion: string; title: string; who: string }[];
+}
+
 export interface HeadsupRun {
   deferred: number;
   errors: string[];

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { Headsup } from "../../lib/types.ts";
+import type { Headsup, HeadsupDates } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -8,6 +8,7 @@ import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 
 const NONE: Headsup[] = [];
+const NO_DATES: HeadsupDates = { proposals: [], remembered: [] };
 
 const KIND_LABEL: Record<string, string> = {
   anniversary: "Anniversary",
@@ -51,12 +52,23 @@ const stateNote = (h: Headsup): string => {
 export const HeadsupView = () => {
   const [showAll, setShowAll] = useState(false);
   const [items, refresh] = useResource(() => api.listHeadsups(showAll ? "all" : "open"), NONE);
+  const [dates, refreshDates] = useResource(() => api.listHeadsupDates(), NO_DATES);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const answer = async (h: Headsup, a: "later" | "never" | "yes"): Promise<void> => {
     await api.answerHeadsup(h.id, a);
     refresh();
+  };
+
+  const decide = async (confirmationId: number, yes: boolean): Promise<void> => {
+    await (yes ? api.approveConfirmation(confirmationId) : api.rejectConfirmation(confirmationId, ""));
+    refreshDates();
+  };
+
+  const forget = async (id: number): Promise<void> => {
+    await api.deleteHeadsupDate(id);
+    refreshDates();
   };
 
   const checkNow = async (): Promise<void> => {
@@ -141,6 +153,42 @@ export const HeadsupView = () => {
           </div>
         );
       })}
+
+      {dates.proposals.length > 0 && (
+        <>
+          <PageHeader subtitle="You mentioned these in chat. Nothing is remembered until you say so." title="Dates it noticed" />
+          {dates.proposals.map((p) => (
+            <div className={styles.card} key={p.confirmationId}>
+              <div className={styles.body}>
+                <div className={styles.title}>{p.summary.split("\n")[0].replace("REMEMBER A DATE: ", "")}</div>
+                <div className={styles.meta}>{p.summary.split("\n")[1] ?? ""}</div>
+              </div>
+              <button className={`${styles.button} ${styles.primary}`} onClick={() => void decide(p.confirmationId, true)} type="button">
+                Remember it
+              </button>
+              <button className={styles.button} onClick={() => void decide(p.confirmationId, false)} type="button">
+                Not a date
+              </button>
+            </div>
+          ))}
+        </>
+      )}
+
+      {dates.remembered.length > 0 && (
+        <>
+          <PageHeader subtitle="Dates you told it. Anything already on your calendar isn't repeated." title="Dates it remembers" />
+          {dates.remembered.map((d) => (
+            <div className={styles.card} key={d.id}>
+              <div className={styles.body}>
+                <div className={styles.title}>{d.title}</div>
+              </div>
+              <button className={styles.button} onClick={() => void forget(d.id)} type="button">
+                Forget
+              </button>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 };

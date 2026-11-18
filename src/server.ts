@@ -75,6 +75,7 @@ import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
 import { addTask, deleteTask, getTask, listTasks, updateTask } from "./tasks/store.ts";
 import { sweepDueTasks } from "./tasks/sweep.ts";
+import * as headsupDates from "./headsup/dates.ts";
 import * as headsupLedger from "./headsup/ledger.ts";
 import { planMorning } from "./headsup/index.ts";
 import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
@@ -1419,6 +1420,29 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           200,
           headsupLedger.listForClient(url.searchParams.get("state") === "all" ? "all" : "open"),
         );
+      // Dates you told it about, and dates it noticed in chat and is waiting for you to confirm.
+      if (m === "GET" && seg.length === 3 && seg[2] === "dates") {
+        const proposals = store
+          .listConfirmations("pending")
+          .filter((c) => c.tool === headsupDates.DATE_TOOL)
+          .map((c) => {
+            let a: any = {};
+            try {
+              a = JSON.parse(c.args ?? "{}");
+            } catch {
+              /* an unreadable proposal is shown blank rather than hidden: it still needs an answer */
+            }
+            return { confirmationId: c.id, day: a.day ?? null, month: a.month ?? null, occasion: a.occasion ?? "", summary: c.summary, who: a.who ?? "" };
+          });
+        return sendJson(res, 200, {
+          proposals,
+          remembered: headsupDates.listDates().map((d) => ({ ...d, title: headsupDates.describeDate(d) })),
+        });
+      }
+      if (m === "DELETE" && seg.length === 4 && seg[2] === "dates")
+        return headsupDates.deleteDate(Number(seg[3]))
+          ? sendJson(res, 200, { ok: true })
+          : sendJson(res, 404, { error: "no such remembered date" });
       // What a run would offer right now. Reads the calendars, writes nothing.
       if (m === "GET" && seg.length === 3 && seg[2] === "preview") {
         const plan = await planMorning().catch((err) => ({

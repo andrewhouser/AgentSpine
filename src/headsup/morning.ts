@@ -11,10 +11,11 @@
  * Same shape as the study-card sweep: a stamp in kv so a restart does not repeat the day, and
  * `send` and `fetchEvents` as seams so tests never touch Google or push a real notification.
  */
-import { DASHBOARD_PUBLIC_URL, HEADSUP_ENABLED, loadPolicy } from "../config.ts";
+import { DASHBOARD_PUBLIC_URL, HEADSUP_ENABLED } from "../config.ts";
 import { notify } from "../notify.ts";
 import type { NotifyOpts } from "../notify.ts";
-import { fetchScanEvents } from "./index.ts";
+import { dropCoveredByCalendar, rememberedEvents } from "./dates.ts";
+import { fetchScanEvents, googleEnabled } from "./index.ts";
 import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
@@ -49,18 +50,15 @@ export interface MorningResult {
 export interface MorningDeps {
   fetchEvents: (now: Date) => Promise<{ errors: string[]; events: ScanEvent[] }>;
   googleEnabled: () => boolean;
+  /** Dates you told it about, as events. Needs no network, so it works with Google off. */
+  remembered: (now: Date) => ScanEvent[];
   send: (title: string, body: string, opts?: NotifyOpts) => Promise<unknown>;
 }
 
 const realDeps: MorningDeps = {
   fetchEvents: (now) => fetchScanEvents(now),
-  googleEnabled: () => {
-    try {
-      return !!loadPolicy().google?.enabled;
-    } catch {
-      return false;
-    }
-  },
+  googleEnabled,
+  remembered: (now) => rememberedEvents(now),
   send: notify,
 };
 
@@ -105,7 +103,7 @@ export const runMorningHeadsup = async (
     ...extra,
   });
 
-  if (!HEADSUP_ENABLED || !deps.googleEnabled()) return result("disabled");
+  if (!HEADSUP_ENABLED) return result("disabled");
   if (inQuietHours(now)) return result("quiet");
   if (!opts.force) {
     const minutes = now.getHours() * 60 + now.getMinutes();
@@ -116,17 +114,19 @@ export const runMorningHeadsup = async (
       return result("backoff");
   }
 
-  let fetched;
+  // With Google off there is no calendar to read, but remembered dates still work.
+  let fetched: { errors: string[]; events: ScanEvent[] } = { errors: [], events: [] };
   try {
-    fetched = await deps.fetchEvents(now);
+    if (deps.googleEnabled()) fetched = await deps.fetchEvents(now);
   } catch (err) {
     kvSet(LAST_ERROR, now.toISOString());
     return result("error", { errors: [err instanceof Error ? err.message : String(err)] });
   }
 
   ledger.expirePast(now);
+  const events = [...fetched.events, ...dropCoveredByCalendar(deps.remembered(now), fetched.events)];
   const plan = planOffers(
-    scanEvents(fetched.events, now),
+    scanEvents(events, now),
     { get: ledger.getByKey, muted: ledger.isMuted },
     now,
   );

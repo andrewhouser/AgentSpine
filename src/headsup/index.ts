@@ -5,15 +5,18 @@
  * wiring, which is why it has no test of its own: there is nothing in it to get wrong that
  * the pieces' tests would not catch, and a test would need a live Google account.
  */
+import { loadPolicy } from "../config.ts";
 import { eventsBetween, listCalendars } from "../google/client.ts";
 import type { CalendarEvent } from "../google/client.ts";
 import { isExcludedCalendar } from "./calendars.ts";
 import type { CalendarScope } from "./calendars.ts";
+import { dropCoveredByCalendar, rememberedEvents } from "./dates.ts";
 import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
 import type { Plan } from "./plan.ts";
 import { LOOKAHEAD_DAYS } from "./rules.ts";
 import { scanEvents } from "./scan.ts";
+import type { ScanEvent } from "./scan.ts";
 
 /**
  * Read events from every in-scope calendar over the look-ahead window. One calendar failing
@@ -42,9 +45,29 @@ export const fetchScanEvents = async (
   return { errors, events };
 };
 
+/** Whether policy.json allows Google reads. A missing or unreadable policy means no. */
+export const googleEnabled = (): boolean => {
+  try {
+    return !!loadPolicy().google?.enabled;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Calendar events (when Google reads are enabled) plus the dates you told it about, minus any
+ * the calendar already covers. With Google off, remembered dates still work: they need no
+ * network and no account.
+ */
+export const gatherEvents = async (now: Date, scope?: CalendarScope): Promise<{ errors: string[]; events: ScanEvent[] }> => {
+  const calendar = googleEnabled() ? await fetchScanEvents(now, scope) : { errors: [], events: [] as CalendarEvent[] };
+  const remembered = dropCoveredByCalendar(rememberedEvents(now), calendar.events);
+  return { errors: calendar.errors, events: [...calendar.events, ...remembered] };
+};
+
 /** Scan the calendars and say what would be offered now. Reads the ledger; writes nothing. */
 export const planMorning = async (now: Date = new Date()): Promise<Plan & { errors: string[] }> => {
-  const { errors, events } = await fetchScanEvents(now);
+  const { errors, events } = await gatherEvents(now);
   const plan = planOffers(scanEvents(events, now), { get: ledger.getByKey, muted: ledger.isMuted }, now);
   return { ...plan, errors };
 };

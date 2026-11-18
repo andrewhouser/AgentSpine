@@ -37,9 +37,11 @@ let fetchCalls = 0;
 let sent = [];
 let sendFails = false;
 let enabled = true;
+let remembered = [];
 const deps = {
   fetchEvents: async () => { fetchCalls++; if (fetchError) throw new Error(fetchError); return { errors: [], events }; },
   googleEnabled: () => enabled,
+  remembered: () => remembered,
   send: async (title, body, opts) => { if (sendFails) throw new Error("push down"); sent.push({ body, opts, title }); },
 };
 const run = (when, opts) => runMorningHeadsup(when, opts, deps);
@@ -61,8 +63,14 @@ check("one line per item", two.body, "A: tomorrow\nB: today");
 check("overflow is mentioned, not dropped silently", composeNotification([offer("bill", "B", 0)], 4).body, "B: today\n+4 more tomorrow");
 
 console.log("\ngates\n");
-check("google disabled in policy: does nothing, reads nothing", (enabled = false, (await run(at(0))).status), "disabled");
-check("... and never touched the calendar", fetchCalls, 0);
+check("Google off and nothing remembered: nothing to say", (enabled = false, (await run(at(-5))).status), "nothing");
+check("... and it never touched the calendar", fetchCalls, 0);
+check("... or sent anything", sent.length, 0);
+remembered = [ev("date:1", "Mia's Birthday", 4, { eventType: "birthday" })];
+check("Google off, a remembered date still works", (await run(at(-5, 9, 0), { force: true })).status, "sent");
+check("... and the calendar was still not read", fetchCalls, 0);
+sent = [];
+remembered = [];
 enabled = true;
 check("before 7:15: early", (await run(at(0, 7, 14))).status, "early");
 check("at 7:15 it may run", (await run(at(0, 7, 15), { force: false })).status, "sent");
@@ -76,7 +84,7 @@ check("... titled for two items", sent[0].title, "Heads-up: 2 things coming up")
 check("... soonest first", sent[0].body, "Rent $1,800 due: in 5 days\nGarrett's Birthday: in 10 days");
 check("... collapses with itself on the phone", sent[0].opts.push.collapseId, "headsup-morning");
 check("... opens the heads-up screen on tap", sent[0].opts.push.screen, "headsup");
-check("both are on the list", ledger.listForClient("open").map((v) => v.subject).sort(), ["Garrett's Birthday", "Rent $1,800 due"]);
+check("both are on the list (plus Mia, offered days earlier and still open)", ledger.listForClient("open").map((v) => v.subject).sort(), ["Garrett's Birthday", "Mia's Birthday", "Rent $1,800 due"]);
 check("a restart the same day does not repeat it", (await run(at(0, 9, 0))).status, "already");
 check("... and sent nothing more", sent.length, 1);
 
