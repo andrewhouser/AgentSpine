@@ -72,7 +72,7 @@ and screens this plan restyles, so the order matters.
 | B (Settings line per kind: "offered 14, you acted on 3") and D (lead-time overrides in Settings) | New Settings UI on web and iOS. Build them with today's components if they land first; phase 2 and phase 7 restyle them. Do not block either plan on the other. |
 | G Live Activity | Needs a second Xcode target (widget extension). Do it **after phase 1**, so the project file is edited once in a known state, and note that it is iPhone only (no Mac equivalent). |
 | H2 web sidebar badge | Small change in `Sidebar`; phase 7 restyles the same component. Take it before phase 7 and keep the styling untouched. |
-| Per-item answer token and the `HEADSUP` notification categories | The Mac app needs the same narrow-token answer call and categories. They live in the shared package, so the Mac gets them from phase 1. |
+| Per-item answer token and the `HEADSUP` notification categories | The Mac app needs the same narrow-token answer call and categories. The call lives in the shared `APIClient`, so the Mac gets it from phase 1. |
 
 Other effects now recorded:
 - The mock screens need a Heads-up screen (offers, result cards, "Dates it noticed", the three
@@ -123,35 +123,59 @@ erasable TypeScript, no new runtime dependencies, tests as plain node scripts.
 
 Each is useful alone. Order is deliberate: the riskiest structural step goes first.
 
-### Phase 1: extract `AgentSpineKit`
+### Phase 1: share the platform-neutral code with the Mac target
 
-Move the platform-neutral half of `Core/` into a local Swift package that both apps import:
-`APIClient`, `Models`, `RunStream`, `Keychain`, and the non-UI parts of `AppState` and
-`Settings`. Keep `PushManager`, `HandsFree` and similar platform code in the app targets, or
-behind a small protocol if the shared code needs them.
+**Changed from the first draft** (2026-11-18, agreed with the user). The plan was a local Swift
+package. That needs `public` on about 2,000 lines of types, properties and initializers, with no
+compiler in this sandbox to catch a miss. Instead the files are **compiled into both targets**,
+which needs no access-control changes. A package can still be cut later, with a compiler to
+check it.
+
+What is shared, all in `ios/AgentSpine/Core/` and not moved:
+`Models.swift`, `APIClient.swift`, `RunStream.swift`, `AppState.swift`, `Settings.swift`,
+`Keychain.swift`. An audit found them already free of UIKit apart from two spots, fixed in this
+phase:
+- `Settings.swift` named the device "iPhone" when UIKit is missing. It now names a Mac by its
+  computer name.
+- `Keychain.swift` would have used macOS's legacy login keychain, which ignores the accessibility
+  class and can prompt after a rebuild. On macOS it now sets `kSecUseDataProtectionKeychain`.
+  iOS behavior is unchanged. The service name stays `net.agentspine.ios` on both, so the
+  token already saved on the phone is not orphaned.
+
+Stays per-platform: `PushManager` (APNs registration differs on macOS), `HandsFree` (uses
+`UIApplication`), and all views. `Dictation` and `ReadAloud` use AVFoundation; check them when
+the Mac needs them in phase 5, since `AVAudioSession` does not exist on macOS.
+
+Nothing is moved, so `test/ios-models.test.mjs` keeps working as it is. It still extracts the
+structs from `Core/Models.swift` and compiles them against Foundation alone, which is exactly
+the property the Mac target needs too. Keep `Models.swift` free of UIKit and SwiftUI.
 
 Baseline first. The iOS Swift for Heads-up (phases 4 and 5) has never been compiled, and
-`PLAN-heads-up-next.md` A1 asks the user to build it. Phase 1 must start from a tree that
-builds, or a compile error cannot be told apart from a mistake in the extraction. So: the user
-builds `main` once (A1) before building phase 1's result. Phase 1 itself is kept to file moves
-and access-control changes, so any new error is easy to place.
+`PLAN-heads-up-next.md` A1 asks the user to build it. Do that before anything else here, so a
+compile error from Heads-up cannot be mistaken for one from this phase.
 
-The contract test moves with the code. `test/ios-models.test.mjs` extracts the structs from
-`ios/AgentSpine/Core/Models.swift` by markers and compiles them with `swiftc`. When `Models.swift`
-moves into the package, the test's path and markers change in the same commit, and it must still
-decode real server output (including the Heads-up models) against Foundation alone. This sandbox
-has no `swiftc`, so the user runs it with `npm run check` on the Mac.
+**Xcode steps for the user** (Xcode writes the project file, so there is no hand-edited
+`.pbxproj`; about 10 minutes):
+1. Build and run the iPhone app on `main` plus these two small edits. Confirm it behaves as before.
+2. File, New, Target, macOS, App, named `AgentSpine Mac`, SwiftUI, deployment target macOS 15.
+   Delete the generated `ContentView.swift` and the `@main` app file it makes, or keep the app
+   file and remove its placeholder view; phase 3 replaces it.
+3. Select each of the six files above in the project navigator, open the File Inspector, and tick
+   `AgentSpine Mac` under Target Membership. The iPhone target stays ticked.
+4. Add `https://` handling by giving the Mac target the same `ts.net` App Transport Security
+   exception the iPhone has in `Supporting/Info.plist`, and set a development signing team.
+5. Build the Mac target. Expect it to fail on anything iOS-only I missed; paste the first errors
+   and I fix them in one pass.
 
-Done when: the iPhone app builds and behaves identically, now importing the package.
-Nothing visible changes. This is the step that proves the shared approach, so do not start
-phase 2 until it is green on a device.
+Done when: the iPhone app is unchanged and green, and the Mac target compiles the six shared
+files and launches an empty window. The Mac app's first real screen is phase 3.
 
-Risks: access control (`internal` types that now cross a module boundary need `public`),
-and `@Observable` state that mixes data and UIKit calls. Expect a mechanical but wide diff.
+Risks: a file that looked neutral but uses an iOS-only API (this is what step 5 finds), and
+`@Observable` state that quietly assumes iPhone behavior, such as `scenePhase` handling.
 
 ### Phase 2: design system
 
-Do the refresh once, in the package, before building more screens on top of the old look.
+Do the refresh once, in the shared code, before building more screens on top of the old look.
 
 - Replace the ad hoc styling in `Chrome.swift` with a small token set: spacing scale,
   type scale, semantic colors (light and dark), corner radii, and the verdict and status
@@ -299,7 +323,7 @@ Separate from this plan. A read-only mirror of threads, tasks, files and recent 
 the server is unreachable. Writes are not queued. Approvals in particular must never be
 replayed later, because a stale approval is a security problem, so an offline iPhone shows
 the question and tells you it can only be answered once reconnected. Build it on top of
-`AgentSpineKit` after phase 1, and it can then be offered to the Mac app too.
+the shared files after phase 1, and it can then be offered to the Mac app too.
 
 ## Decisions from the questions
 

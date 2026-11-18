@@ -69,6 +69,12 @@ import UIKit
 enum UIDeviceName {
     @MainActor static var current: String { UIDevice.current.name }
 }
+#elseif os(macOS)
+/// The Mac app shares this file. Without this branch it would register as "iPhone", which is
+/// worse than useless in a device list that exists to tell your machines apart.
+enum UIDeviceName {
+    static var current: String { Host.current().localizedName ?? ProcessInfo.processInfo.hostName }
+}
 #else
 enum UIDeviceName {
     static var current: String { "iPhone" }
