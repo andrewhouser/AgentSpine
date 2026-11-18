@@ -446,6 +446,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       return sendJson(res, 401, { error: "invalid, already-used, or expired approval token" });
   }
 
+  // The same idea for a heads-up: a push can carry a token that answers THAT ONE item, once.
+  const isHeadsupAnswer = m === "POST" && seg[1] === "headsups" && seg.length === 4 && seg[3] === "answer";
+  if (isHeadsupAnswer && approvalToken) {
+    if (!rateOk(ip, "approval")) return sendJson(res, 429, { error: "rate limited" });
+    authedByApproval = headsupLedger.checkAnswerToken(Number(seg[2]), approvalToken);
+    if (!authedByApproval) return sendJson(res, 401, { error: "invalid, already-used, or expired answer token" });
+  }
+
   if (TOKEN && !authedByApproval) {
     const provided = (req.headers["x-dashboard-token"] as string | undefined) ?? url.searchParams.get("token");
     if (provided !== TOKEN) return sendJson(res, 401, { error: "unauthorized: missing or invalid dashboard token" });
@@ -1423,24 +1431,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           headsupLedger.listForClient(url.searchParams.get("state") === "all" ? "all" : "open"),
         );
       // Dates you told it about, and dates it noticed in chat and is waiting for you to confirm.
-      if (m === "GET" && seg.length === 3 && seg[2] === "dates") {
-        const proposals = store
-          .listConfirmations("pending")
-          .filter((c) => c.tool === headsupDates.DATE_TOOL)
-          .map((c) => {
-            let a: any = {};
-            try {
-              a = JSON.parse(c.args ?? "{}");
-            } catch {
-              /* an unreadable proposal is shown blank rather than hidden: it still needs an answer */
-            }
-            return { confirmationId: c.id, day: a.day ?? null, month: a.month ?? null, occasion: a.occasion ?? "", summary: c.summary, who: a.who ?? "" };
-          });
-        return sendJson(res, 200, {
-          proposals,
-          remembered: headsupDates.listDates().map((d) => ({ ...d, title: headsupDates.describeDate(d) })),
-        });
-      }
+      if (m === "GET" && seg.length === 3 && seg[2] === "dates") return sendJson(res, 200, headsupDates.datesForClient());
       if (m === "DELETE" && seg.length === 4 && seg[2] === "dates")
         return headsupDates.deleteDate(Number(seg[3]))
           ? sendJson(res, 200, { ok: true })

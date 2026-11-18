@@ -116,5 +116,15 @@ check(
   true,
 );
 
+console.log("\nHEADS-UP — answered from the lock screen with its own narrow token");
+const hu = parse("Heads-up: 1 thing coming up", "Garrett's Birthday: in 10 days", { category: "HEADSUP_RESEARCH", headsupId: 7, headsupToken: "tok" });
+check("the category names the buttons the app registered", hu.aps.category, "HEADSUP_RESEARCH");
+check("the headsup id travels", hu.headsupId, 7);
+check("the narrow token travels", hu.headsupToken, "tok");
+check("it is NOT the dashboard or approval token", [hu.approvalToken, hu.confirmationId], [undefined, undefined]);
+check("no headsup fields when not a headsup", [parse("t", "b").headsupId, parse("t", "b").headsupToken], [undefined, undefined]);
+check("a headsup payload is still within the byte cap", Buffer.byteLength(buildPayload("t", "x".repeat(6000), { category: "HEADSUP", headsupId: 7, headsupToken: "tok".repeat(10) })) <= 4000, true);
+check("... and the token survives the trim", JSON.parse(buildPayload("t", "x".repeat(6000), { category: "HEADSUP", headsupId: 7, headsupToken: "tok" })).headsupToken, "tok");
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -197,3 +197,30 @@ export const dropCoveredByCalendar = (remembered: ScanEvent[], calendar: ScanEve
     );
   });
 };
+
+// --- what clients see ------------------------------------------------------------------------
+
+export interface DatesForClient {
+  proposals: { confirmationId: number; day: null | number; month: null | number; occasion: string; summary: string; who: string }[];
+  remembered: (DateRow & { title: string })[];
+}
+
+/**
+ * Dates you told it about, and dates it noticed in chat and is waiting for you to confirm. One
+ * function for the web route and for the iOS contract test, so the shape is stated once.
+ */
+export const datesForClient = (): DatesForClient => ({
+  proposals: store
+    .listConfirmations("pending")
+    .filter((c) => c.tool === DATE_TOOL)
+    .map((c) => {
+      let a: any = {};
+      try {
+        a = JSON.parse(c.args ?? "{}");
+      } catch {
+        /* an unreadable proposal is shown blank rather than hidden: it still needs an answer */
+      }
+      return { confirmationId: c.id, day: a.day ?? null, month: a.month ?? null, occasion: a.occasion ?? "", summary: c.summary, who: a.who ?? "" };
+    }),
+  remembered: listDates().map((d) => ({ ...d, title: describeDate(d) })),
+});

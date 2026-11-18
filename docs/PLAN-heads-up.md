@@ -1,6 +1,6 @@
 # Plan: Heads-up (proactive suggestions)
 
-Written 2026-11-18. Status: **Phases 0, 1, 2, 2b and 3 built** (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 4 onward is proposed. Prompted by Duet noticing a flight and
+Written 2026-11-18. Status: **Phases 0, 1, 2, 2b, 3 and 4 built** (Phase 4's Swift is written but has never been compiled: see "Phase 4" below) (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 5 onward is proposed. Prompted by Duet noticing a flight and
 offering to track it. The goal here is the general version: AgentSpine notices things coming up
 in your life and offers to help, without being asked.
 
@@ -283,7 +283,7 @@ design changes.
 - Restaurant and gift recipes, the anonymizing query builder, the product extractor, the image
   cache, and the anonymization test. Cards appear in the web client.
 
-**Phase 4: iOS**
+**Phase 4: iOS. Built, uncompiled.**
 - `HEADSUP` category and actions, the Heads-up screen, card rendering, deep links.
 
 **Phase 5: time-sensitive loop**
@@ -503,3 +503,50 @@ Not done, deliberately:
 - **No availability or booking for restaurants** (OpenTable, Resy), and no buying. Both would be new
   integrations; buying is irreversible-tier and queued.
 - **Prices are "seen on" a date, never a promise.** Use "Look again" to refresh.
+
+### Phase 4 (iOS)
+
+| File | Role |
+|---|---|
+| `ios/AgentSpine/Views/HeadsupView.swift` | The Heads-up tab: items, three answers, result cards with photos, dates it noticed and remembers, "Check now". |
+| `ios/AgentSpine/Core/Models.swift` | `Headsup`, `HeadsupCard`, `HeadsupProposal`, `RememberedDate`, `HeadsupDates` and two result types. Foundation-only wire models. |
+| `ios/AgentSpine/Core/APIClient.swift` | The calls, `respondToHeadsup` (narrow token, no dashboard token), and an optional session on `send`. |
+| `ios/AgentSpine/Push/PushManager.swift` | The `HEADSUP` and `HEADSUP_RESEARCH` categories, the three actions, and a deep link. |
+| `ios/AgentSpine/Views/RootView.swift` | The tab (second, so it is one of the four iOS shows without opening "More") and the deep link. |
+| `src/headsup/ledger.ts`, `src/server.ts`, `src/push/apns.ts` | A per-item answer token, its check on `POST /api/headsups/:id/answer`, and `headsupId` / `headsupToken` in the payload. |
+| `test/ios-models.test.mjs` | Now also decodes real Heads-up server output through the app's own models. Skips without `swiftc`. |
+
+**Read this first: the Swift has never been compiled.** It was written in a Linux container with no
+Xcode and no `swiftc`, by matching the existing screens and models closely. Brace and parenthesis
+balance was checked mechanically and the wire fixtures were run through the real server code, but
+neither is a compiler. Expect to build it once in Xcode and possibly fix a small thing. The wire
+models are the part most likely to be right, because `npm test` on a Mac with `swiftc` compiles them
+against Foundation alone and decodes real server output (`test/ios-models.test.mjs`).
+
+Decisions made while building:
+
+- **Buttons only on a push about exactly one item.** The morning summary is one push for several
+  items, and a button has to mean one thing: "Not now" on a list of three would silently snooze items
+  nobody read. A summary of several has no buttons, and a tap opens the tab. A single item gets them.
+- **Two categories, because iOS fixes a button's label in the app.** `HEADSUP_RESEARCH` says "Yes, look
+  it up" (a birthday or anniversary, where Yes goes and finds ideas); `HEADSUP` says "Got it" (a bill,
+  an appointment). Each also has "Not now" and a destructive "Don't suggest this".
+- **No Face ID on these buttons**, unlike Approve. The worst a wrong tap does is snooze a reminder or
+  start a search. Approve is gated because it can send mail or delete a file.
+- **A per-item answer token**, not the approval token and not the dashboard token. It answers that one
+  heads-up once (yes, later or never) and is burned on any answer or when the item leaves offered or
+  snoozed. A new offer replaces it. Constant-time comparison. It cannot reach another item, another
+  route (a list, a run, anything else) or the dashboard. Checked against the real server: eight cases,
+  including "A's token on B", "narrow token on the list", and "used twice".
+- **If the token path fails** (already answered in the app, say) the dashboard token is tried, and if
+  that fails the app opens on the Heads-up tab, where the real state is.
+- **Photos are fetched with the token in a header, never in a URL**, through `APIClient`, and kept in
+  memory only. The web client puts `?token=` in `<img src>` because it has no choice; the app does.
+- **The wire models are pure data.** The date handling lives in an extension in the view file, not in
+  `Models.swift`, because the contract test compiles the models against Foundation alone and
+  `SpineDate` is not in the section it extracts. A bare "2026-11-28" is built from its parts in the
+  current calendar rather than parsed as UTC, for the same day-early bug as on the server.
+- **The tab is second**, so it is one of the four tabs iOS shows without opening "More".
+
+Not done: a badge on the tab for open items, a Live Activity for a flight in its watch window, and
+the Settings entry for heads-up preferences. All are reasonable follow-ups; none blocks the rest.

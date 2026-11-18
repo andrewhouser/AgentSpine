@@ -177,6 +177,25 @@ one confirmation, single use, no other route. The reasoning is written out above
 `confirmationActions` in [`src/notify.ts`](../src/notify.ts). Worst case for a leaked
 approval token is that someone answers one question you were about to be asked anyway.
 
+### Heads-up: the morning push and its buttons
+
+The **Heads-up** tab lists what the assistant noticed coming up (birthdays, anniversaries, bills,
+appointments) and is where you answer. On a birthday or anniversary, **Yes** also goes and finds
+gift ideas or restaurants, and the results appear under the item as cards: photo, price, store and
+a link that opens the real page. Photos come from the AgentSpine server, not the retailer, so the
+phone never contacts a shop because you looked at an idea.
+
+The morning summary is one push. When it is about exactly **one** item it carries buttons, under
+the `HEADSUP_RESEARCH` category (Yes, look it up / Not now / Don't suggest this) or `HEADSUP` (Got
+it / Not now / Don't suggest this). When it is about several there are no buttons and a tap opens
+the tab, because "Not now" on a list would snooze things nobody read.
+
+These buttons do not ask for Face ID: the worst a wrong tap does is snooze a reminder or start a
+search, and a lock-screen button you have to unlock to use is not worth having. The credential in
+the payload is a **per-item answer token**, single use and good for no other route or item, for the
+same reason as the approval token above. See `answerButtons` in
+[`src/headsup/morning.ts`](../src/headsup/morning.ts).
+
 ---
 
 ## When it doesn't buzz

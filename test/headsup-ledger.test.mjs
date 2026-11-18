@@ -15,6 +15,7 @@ process.env.SPINE_DB_PATH = dbPath;
 
 const { mapCalendarEvent } = await import("../src/google/client.ts");
 const ledger = await import("../src/headsup/ledger.ts");
+const store = await import("../src/memory/store.ts");
 const { planOffers } = await import("../src/headsup/plan.ts");
 const { scanEvents } = await import("../src/headsup/scan.ts");
 
@@ -141,6 +142,36 @@ ledger.answer(accB.id, "yes", day(0));
 check("an accepted birthday stays, so its research can be seen", ledger.listForClient("open").some((v) => v.subject === "Accepted Birthday"), true);
 check("all includes finished ones too", ledger.listForClient("all").length > ledger.listForClient("open").length, true);
 check("a row with a corrupt payload still renders", ledger.toView({ ...ledger.getByKey(`bill:v1:${dateStr(4)}`), payload_json: "{nope" }).amount, null);
+
+console.log("\nlock-screen answer tokens\n");
+const tk = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "bill:tok:z", fingerprint: "", kind: "bill", location: "", sourceId: "t", startsAt: dateStr(5), subject: "Token bill", timeSensitive: false }, 0, day(0));
+check("no token until one is issued", ledger.checkAnswerToken(tk.id, "anything"), false);
+const t1 = ledger.issueAnswerToken(tk.id);
+check("issuing gives a long random token", typeof t1 === "string" && t1.length >= 30, true);
+check("the right token passes", ledger.checkAnswerToken(tk.id, t1), true);
+check("a wrong token fails", ledger.checkAnswerToken(tk.id, `${t1}x`), false);
+check("an empty token fails", ledger.checkAnswerToken(tk.id, ""), false);
+check("a token for a different headsup fails", ledger.checkAnswerToken(row.id, t1), false);
+check("it is never part of what a client sees", JSON.stringify(ledger.toView(ledger.getById(tk.id))).includes(t1), false);
+const t2 = ledger.issueAnswerToken(tk.id);
+check("issuing again replaces it: the old one is dead", [ledger.checkAnswerToken(tk.id, t1), ledger.checkAnswerToken(tk.id, t2)], [false, true]);
+check("a missing headsup issues nothing", ledger.issueAnswerToken(99999), null);
+ledger.answer(tk.id, "yes", day(0));
+check("answering burns it: single use", ledger.checkAnswerToken(tk.id, t2), false);
+const tk2 = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "bill:tok2:z", fingerprint: "", kind: "bill", location: "", sourceId: "t2", startsAt: dateStr(5), subject: "Token bill two", timeSensitive: false }, 0, day(0));
+const t3 = ledger.issueAnswerToken(tk2.id);
+ledger.answer(tk2.id, "later", day(0));
+check("snoozing burns it too", ledger.checkAnswerToken(tk2.id, t3), false);
+const tk3 = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "bill:tok3:z", fingerprint: "", kind: "bill", location: "", sourceId: "t3", startsAt: dateStr(5), subject: "Token bill three", timeSensitive: false }, 0, day(0));
+const t4 = ledger.issueAnswerToken(tk3.id);
+ledger.answer(tk3.id, "never", day(0));
+check("'never' burns it too", ledger.checkAnswerToken(tk3.id, t4), false);
+check("a token on an already-accepted item is refused even if it somehow survived", (() => {
+  const r = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "bill:tok4:z", fingerprint: "", kind: "bill", location: "", sourceId: "t4", startsAt: dateStr(5), subject: "Token bill four", timeSensitive: false }, 0, day(0));
+  const t = ledger.issueAnswerToken(r.id);
+  store.rawDb.prepare("UPDATE headsups SET state = 'accepted' WHERE id = ?").run(r.id);
+  return ledger.checkAnswerToken(r.id, t);
+})(), false);
 
 fs.rmSync(dbPath, { force: true });
 console.log(`\n${passed} passed, ${failed} failed\n`);

@@ -95,8 +95,12 @@ final class APIClient {
         return req
     }
 
-    private func send<T: Decodable>(_ req: URLRequest, as type: T.Type) async throws -> T {
-        let data = try await sendRaw(req)
+    private func send<T: Decodable>(
+        _ req: URLRequest,
+        as type: T.Type,
+        using session: URLSession? = nil
+    ) async throws -> T {
+        let data = try await sendRaw(req, using: session)
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
@@ -337,6 +341,66 @@ final class APIClient {
         req.setValue(approvalToken, forHTTPHeaderField: "X-Approval-Token")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = Data("{}".utf8)
+        try await sendRaw(req)
+    }
+
+    // MARK: - Heads-up
+
+    /// What needs you, or has results to show. "all" adds the finished ones.
+    func headsups(all: Bool = false) async throws -> [Headsup] {
+        try await send(request("/api/headsups", query: ["state": all ? "all" : "open"]), as: [Headsup].self)
+    }
+
+    /// "yes", "later" or "never". On a birthday or anniversary, "yes" also starts the research,
+    /// which finishes in the background: poll `headsups()` to see the cards arrive.
+    func answerHeadsup(_ id: Int, answer: String) async throws {
+        try await sendRaw(jsonRequest("/api/headsups/\(id)/answer", method: "POST", body: ["answer": answer]))
+    }
+
+    /// Run the research again. Waits for it, so it uses the long session.
+    func researchHeadsup(_ id: Int) async throws -> HeadsupResearchResult {
+        try await send(
+            jsonRequest("/api/headsups/\(id)/research", method: "POST"),
+            as: HeadsupResearchResult.self,
+            using: longSession
+        )
+    }
+
+    /// "Check now": scan and send today's heads-up immediately, instead of waiting for the morning.
+    func runHeadsups() async throws -> HeadsupRunResult {
+        try await send(jsonRequest("/api/headsups/run", method: "POST"), as: HeadsupRunResult.self, using: longSession)
+    }
+
+    func headsupDates() async throws -> HeadsupDates {
+        try await send(request("/api/headsups/dates"), as: HeadsupDates.self)
+    }
+
+    func deleteHeadsupDate(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/headsups/dates/\(id)", method: "DELETE"))
+    }
+
+    /// A cached product photo. `path` is the server-relative path from the card ("/api/headsups/images/4"),
+    /// fetched with the token in a header like every other call, never as `?token=`.
+    func headsupImageData(path: String) async throws -> Data {
+        guard path.hasPrefix("/api/headsups/images/") else { throw APIError.badURL }
+        return try await sendRaw(request(path))
+    }
+
+    /// Answer from a notification's own narrow token. Like `respondToConfirmation`: no dashboard
+    /// token, so it works before `Settings` has loaded, and a payload read off Apple's servers
+    /// buys one answer to one item you were about to be asked about anyway.
+    func respondToHeadsup(id: Int, answer: String, token: String, baseURL: URL) async throws {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw APIError.badURL
+        }
+        components.path = "/api/headsups/\(id)/answer"
+        guard let url = components.url else { throw APIError.badURL }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue(token, forHTTPHeaderField: "X-Approval-Token")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["answer": answer])
         try await sendRaw(req)
     }
 

@@ -97,6 +97,8 @@ for (let d = 2; d <= 7; d++) await t(d);
 // Rent is 5 days out on day 0, so it earns a reminder the day before and another the day of.
 check("a week on: two reminders for the rent, nothing else", sent.length, 3);
 check("... the day before", sent[1].body, "Rent $1,800 due: tomorrow");
+check("a single-item push carries lock-screen buttons", [sent[1].opts.push.category, typeof sent[1].opts.push.headsupId, typeof sent[1].opts.push.headsupToken], ["HEADSUP", "number", "string"]);
+check("the two-item first push does not", [sent[0].opts.push.category, sent[0].opts.push.headsupToken], [undefined, undefined]);
 check("... the day of", sent[2].body, "Rent $1,800 due: today");
 
 console.log("\nfailures\n");
@@ -118,6 +120,19 @@ check("... and the offer is still recorded", ledger.getByKey(`birthday:z1:${date
 sendFails = false;
 check("... so running again does not offer it as new", (await run(at(25, 9, 0), { force: true })).status, "nothing");
 check("... it comes back as the reminder two days out, not a repeat", (await run(at(26))).status, "sent");
+
+console.log("\nlock-screen buttons\n");
+const { answerButtons } = await import("../src/headsup/morning.ts");
+const rowFor = (kind, subject, key) => ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: key, fingerprint: "", kind, location: "", sourceId: key, startsAt: dateStr(5), subject, timeSensitive: false }, 0, at(0));
+const bd = rowFor("birthday", "Button Birthday", "birthday:btn:z");
+const bl = rowFor("bill", "Button bill", "bill:btn:z");
+const one = answerButtons([bd]);
+check("one birthday: the research buttons", one.category, "HEADSUP_RESEARCH");
+check("... carrying its id", one.headsupId, bd.id);
+check("... and a token that works", ledger.checkAnswerToken(bd.id, one.headsupToken), true);
+check("one bill: the plain buttons", answerButtons([bl]).category, "HEADSUP");
+check("two items: NO buttons (a button must mean one thing)", answerButtons([bd, bl]), {});
+check("no items: nothing", answerButtons([]), {});
 
 fs.rmSync(dbPath, { force: true });
 console.log(`\n${passed} passed, ${failed} failed\n`);

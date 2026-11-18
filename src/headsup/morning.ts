@@ -20,6 +20,7 @@ import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
 import { inQuietHours, MORNING_HOUR, MORNING_MINUTE, RETRY_AFTER_ERROR_MINUTES } from "./rules.ts";
+import { RESEARCH_KINDS } from "./research/run.ts";
 import { scanEvents } from "./scan.ts";
 import type { ScanEvent } from "./scan.ts";
 import { kvGet, kvSet } from "../memory/store.ts";
@@ -73,6 +74,24 @@ export const describeOffer = (o: Offer): string => {
   if (c.kind === "recurring") return `${c.subject}: new on your calendar, ${whenText(c.daysUntil)}`;
   const amount = c.amount && !c.subject.includes(c.amount) ? ` (${c.amount})` : "";
   return `${c.subject}${amount}: ${whenText(c.daysUntil)}`;
+};
+
+/**
+ * Lock-screen buttons, only when the push is about exactly ONE item. A button has to mean one
+ * thing, and "Not now" on a list of three would silently snooze items you never looked at.
+ * With several items the tap opens the Heads-up screen, where each is answered on its own.
+ * The category picks the button labels the app registered: a birthday or anniversary says
+ * "Yes" and goes looking, anything else says "Got it".
+ */
+export const answerButtons = (rows: ledger.HeadsupRow[]): { category?: string; headsupId?: number; headsupToken?: string } => {
+  if (rows.length !== 1) return {};
+  const token = ledger.issueAnswerToken(rows[0].id);
+  if (!token) return {};
+  return {
+    category: RESEARCH_KINDS.has(rows[0].kind) ? "HEADSUP_RESEARCH" : "HEADSUP",
+    headsupId: rows[0].id,
+    headsupToken: token,
+  };
 };
 
 /** The notification for a set of offers. `deferred` is how many more are waiting for tomorrow. */
@@ -133,7 +152,7 @@ export const runMorningHeadsup = async (
 
   // Record before sending. If the send fails, the offer is still on the list in the app, which
   // is the better failure than offering it again tomorrow as though it were new.
-  for (const o of plan.offers) ledger.markOffered(o.candidate, o.stage, now);
+  const rows = plan.offers.map((o) => ledger.markOffered(o.candidate, o.stage, now));
   kvSet(LAST_RUN, dayStamp(now));
   if (!opts.force) kvSet(LAST_ERROR, "");
 
@@ -145,7 +164,7 @@ export const runMorningHeadsup = async (
     await deps.send(title, body, {
       ...(DASHBOARD_PUBLIC_URL ? { click: `${DASHBOARD_PUBLIC_URL}/headsup` } : {}),
       priority: 3,
-      push: { collapseId: "headsup-morning", priority: 3, screen: "headsup" },
+      push: { collapseId: "headsup-morning", priority: 3, screen: "headsup", ...answerButtons(rows) },
       tags: ["bell"],
     });
   } catch (err) {

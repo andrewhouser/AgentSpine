@@ -10,6 +10,8 @@ enum DeepLink: Equatable {
     case threads
     /// The Study screen, from the daily "N study cards due" push.
     case study
+    /// The Heads-up screen, from the morning summary or a "gift ideas ready" push.
+    case headsup
 }
 
 /// Notification permission, the device token, the Approve/Reject buttons, and what a tap does.
@@ -28,11 +30,18 @@ final class PushManager: NSObject {
     enum Category {
         static let confirmation = "CONFIRMATION"
         static let run = "RUN"
+        /// A heads-up about one thing that has nothing to look up (a bill, an appointment).
+        static let headsup = "HEADSUP"
+        /// A heads-up about a birthday or anniversary, where "Yes" goes and finds ideas.
+        static let headsupResearch = "HEADSUP_RESEARCH"
     }
 
     private enum ActionID {
         static let approve = "APPROVE"
         static let reject = "REJECT"
+        static let headsupYes = "HEADSUP_YES"
+        static let headsupLater = "HEADSUP_LATER"
+        static let headsupNever = "HEADSUP_NEVER"
     }
 
     /// Set when a notification wants a screen opened. The root view watches this and clears it.
@@ -104,7 +113,40 @@ final class PushManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([confirmation, run])
+
+        // Heads-up buttons. Two categories because iOS fixes a button's label in the app, and
+        // "Yes" means something different on a birthday (go and find gift ideas) than on a bill
+        // (got it). A push carries these only when it is about exactly ONE item; a summary of
+        // several has no buttons, because "Not now" on a list would snooze items nobody read.
+        // None of these needs Face ID: the worst a wrong tap does is snooze a reminder or ask
+        // for a search, and a lock-screen button you must unlock to use is not worth having.
+        let later = UNNotificationAction(identifier: ActionID.headsupLater, title: "Not now", options: [])
+        let never = UNNotificationAction(
+            identifier: ActionID.headsupNever,
+            title: "Don't suggest this",
+            options: [.destructive]
+        )
+        let headsupResearch = UNNotificationCategory(
+            identifier: Category.headsupResearch,
+            actions: [
+                UNNotificationAction(identifier: ActionID.headsupYes, title: "Yes, look it up", options: []),
+                later,
+                never,
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
+        let headsup = UNNotificationCategory(
+            identifier: Category.headsup,
+            actions: [
+                UNNotificationAction(identifier: ActionID.headsupYes, title: "Got it", options: []),
+                later,
+                never,
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([confirmation, run, headsup, headsupResearch])
         refreshAuthorization()
     }
 
@@ -172,6 +214,36 @@ final class PushManager: NSObject {
     }
 
     // MARK: - Answering from the notification
+
+    /// Answer a heads-up from its notification: "yes", "later" or "never".
+    ///
+    /// Same shape as `respond(to:approve:)` below, and the same reasoning: the narrow token in the
+    /// payload answers this one item once, and works whatever state the app is in. If it fails (it
+    /// was already answered in the app, say) the dashboard token is tried, and if that fails too
+    /// the app opens on the Heads-up screen, where the real state is.
+    private func respondToHeadsup(_ userInfo: [AnyHashable: Any], answer: String) async {
+        guard let id = userInfo["headsupId"] as? Int,
+              let base = Settings.shared.baseURL
+        else {
+            pendingDeepLink = .headsup
+            return
+        }
+
+        if let token = userInfo["headsupToken"] as? String, !token.isEmpty {
+            do {
+                try await APIClient.shared.respondToHeadsup(id: id, answer: answer, token: token, baseURL: base)
+                return
+            } catch {
+                // Fall through to the dashboard-token path.
+            }
+        }
+
+        do {
+            try await APIClient.shared.answerHeadsup(id, answer: answer)
+        } catch {
+            pendingDeepLink = .headsup
+        }
+    }
 
     /// Approve or reject straight from the lock screen.
     ///
@@ -245,6 +317,15 @@ extension PushManager: UNUserNotificationCenterDelegate {
         case ActionID.reject:
             await respond(to: userInfo, approve: false)
             return
+        case ActionID.headsupYes:
+            await respondToHeadsup(userInfo, answer: "yes")
+            return
+        case ActionID.headsupLater:
+            await respondToHeadsup(userInfo, answer: "later")
+            return
+        case ActionID.headsupNever:
+            await respondToHeadsup(userInfo, answer: "never")
+            return
         default:
             break
         }
@@ -257,6 +338,8 @@ extension PushManager: UNUserNotificationCenterDelegate {
             pendingDeepLink = .threads
         } else if userInfo["screen"] as? String == "study" {
             pendingDeepLink = .study
+        } else if userInfo["screen"] as? String == "headsup" {
+            pendingDeepLink = .headsup
         }
     }
 }

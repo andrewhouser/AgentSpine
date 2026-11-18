@@ -9,6 +9,7 @@
  * only ever moves forward, which is what makes "first mention, then a reminder" work without
  * a separate row per mention.
  */
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { rawDb } from "../memory/store.ts";
 import { cardsFor, toCardView } from "./research/cards.ts";
 import type { CardView } from "./research/cards.ts";
@@ -43,6 +44,11 @@ rawDb.exec(`
   );
 `);
 
+// Added in Phase 4. A table made by an earlier version has no such column, and CREATE TABLE IF NOT
+// EXISTS will not add one, so the column is checked for and added here.
+if (!(rawDb.prepare("PRAGMA table_info(headsups)").all() as { name: string }[]).some((c) => c.name === "answer_token"))
+  rawDb.exec("ALTER TABLE headsups ADD COLUMN answer_token TEXT");
+
 /** new/offered/accepted/researched/dismissed/snoozed/done/expired, per the plan. */
 export type HeadsupState = "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
 
@@ -51,6 +57,8 @@ export type HeadsupAnswer = "later" | "never" | "yes";
 
 export interface HeadsupRow {
   answer: null | string;
+  /** Narrow credential carried in a push so ONE answer can be given from the lock screen. Never sent to clients. */
+  answer_token: null | string;
   created: string;
   dedupe_key: string;
   due_at: string;
@@ -125,6 +133,28 @@ export const markOffered = (c: Candidate, stage: number, now: Date): HeadsupRow 
   return getByKey(c.dedupeKey)!;
 };
 
+/**
+ * A fresh single-purpose token for answering this one heads-up from a push notification. It
+ * travels through Apple's servers, so it is deliberately narrow: it can answer this item once
+ * (yes, later or never) and nothing else, and it dies when the item is answered. The security
+ * reasoning is the same as for confirmation approval tokens (see src/notify.ts).
+ */
+export const issueAnswerToken = (id: number): null | string => {
+  if (!getById(id)) return null;
+  const token = randomBytes(24).toString("base64url");
+  rawDb.prepare("UPDATE headsups SET answer_token = ? WHERE id = ?").run(token, id);
+  return token;
+};
+
+/** Constant-time check, so the token cannot be recovered a byte at a time from response timing. */
+export const checkAnswerToken = (id: number, provided: string): boolean => {
+  const row = rawDb.prepare("SELECT answer_token, state FROM headsups WHERE id = ?").get(id) as undefined | { answer_token: null | string; state: string };
+  if (!row || !row.answer_token || !provided || !["offered", "snoozed"].includes(row.state)) return false;
+  const a = Buffer.from(row.answer_token);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
 /** Normalised identity of a subject for muting: "Electric $140" and "Electric $152" match. */
 export const muteKey = (subject: string): string => subjectKey(subject);
 
@@ -147,12 +177,12 @@ export const answer = (id: number, a: HeadsupAnswer, now: Date): HeadsupRow | un
   if (!row) return undefined;
   const t = iso(now);
   if (a === "yes") {
-    rawDb.prepare("UPDATE headsups SET state='accepted', answer='yes', snooze_until=NULL, updated=? WHERE id=?").run(t, id);
+    rawDb.prepare("UPDATE headsups SET state='accepted', answer='yes', snooze_until=NULL, answer_token=NULL, updated=? WHERE id=?").run(t, id);
   } else if (a === "later") {
     const until = iso(new Date(now.getTime() + SNOOZE_HOURS * 3_600_000));
-    rawDb.prepare("UPDATE headsups SET state='snoozed', answer='later', snooze_until=?, updated=? WHERE id=?").run(until, t, id);
+    rawDb.prepare("UPDATE headsups SET state='snoozed', answer='later', snooze_until=?, answer_token=NULL, updated=? WHERE id=?").run(until, t, id);
   } else {
-    rawDb.prepare("UPDATE headsups SET state='dismissed', answer='never', snooze_until=NULL, updated=? WHERE id=?").run(t, id);
+    rawDb.prepare("UPDATE headsups SET state='dismissed', answer='never', snooze_until=NULL, answer_token=NULL, updated=? WHERE id=?").run(t, id);
     mute(row.kind, row.subject, now);
   }
   return getById(id);
