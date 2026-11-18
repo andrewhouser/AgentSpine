@@ -38,6 +38,8 @@ import { generateImage } from "./generate-image.ts";
 import { studyTools } from "./study.ts";
 import { recipeTools } from "./recipes.ts";
 import { profileTools } from "./profile.ts";
+import { dateRemember } from "./date-remember.ts";
+import { headsupStatus } from "./headsup.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -93,6 +95,8 @@ export const tools: Tool[] = [
   ...studyTools,
   ...recipeTools,
   ...profileTools,
+  dateRemember,
+  headsupStatus,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

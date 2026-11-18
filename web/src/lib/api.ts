@@ -18,6 +18,10 @@ import type {
   Confirmation,
   Conversation,
   DictationStatus,
+  Headsup,
+  HeadsupDates,
+  HeadsupPrefs,
+  HeadsupRun,
   IngestResult,
   LiveStatus,
   Meeting,
@@ -76,6 +80,12 @@ const voiceListenPath = (mode: "turn" | "wake", wake: string, aliases: string[],
 const post = <T>(path: string, body?: unknown): Promise<T> =>
   request<T>(path, { body: body === undefined ? undefined : JSON.stringify(body), method: "POST" });
 
+/** A same-origin path that an <img> can load: it cannot send our token header, so the token rides along as a query parameter. */
+export const authedPath = (path: string): string => {
+  const token = getToken();
+  return token ? `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : path;
+};
+
 /** The URL an EventSource opens to follow a run. See the note about `?token=` above. */
 export const runStreamUrl = (runId: number, after: number): string => {
   const params = new URLSearchParams({ after: String(after) });
@@ -128,6 +138,8 @@ export const api = {
   // --- tasks, files, clients, search (the personal-assistant surface) ---
   addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; projectId?: number; title: string; waitingOn?: string }) =>
     post<Task>("/api/tasks", fields),
+  answerHeadsup: (id: number, answer: "later" | "never" | "yes") =>
+    post<Headsup>(`/api/headsups/${id}/answer`, { answer }),
   /**
    * Accept one auto-approval proposal.
    *
@@ -147,7 +159,6 @@ export const api = {
     }),
   askMeetingChat: (id: number, question: string) =>
     post<ChatMessage>(`/api/meetings/${id}/chat`, { question }),
-
   /**
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
@@ -155,6 +166,7 @@ export const api = {
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
+
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
@@ -162,14 +174,14 @@ export const api = {
     post<Schedule>("/api/schedules", { name, schedule, task }),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
   deleteConversation: (id: number) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: "DELETE" }),
+  deleteHeadsupDate: (id: number) => request<{ ok: boolean }>(`/api/headsups/dates/${id}`, { method: "DELETE" }),
   /** Delete a meeting's kept recording now. */
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
-
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
-  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
+  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
   /**
@@ -196,6 +208,8 @@ export const api = {
     request<{ path: string; text: string; truncated: boolean }>(`/api/files/content?path=${encodeURIComponent(path)}`),
 
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
+
+  headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
 
   listAgents: () => request<Agent[]>("/api/agents"),
 
@@ -234,8 +248,9 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
-
   listFiles: () => request<SavedFile[]>("/api/files"),
+  listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
+  listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
 
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
@@ -244,13 +259,13 @@ export const api = {
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
 
   listProjects: () => request<Project[]>("/api/projects"),
+
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
-
   listRecipes: () => request<Recipe[]>("/api/recipes"),
+
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
   listSchedules: () => request<Schedule[]>("/api/schedules"),
-
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
 
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
@@ -260,6 +275,7 @@ export const api = {
 
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
   markConversationRead: (id: number) => post<{ ok: boolean }>(`/api/conversations/${id}/read`),
+
   meeting: (id: number, pass: "final" | "live" = "final") =>
     request<{
       chat?: ChatMessage[];
@@ -270,7 +286,6 @@ export const api = {
       speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
-
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
 
@@ -321,6 +336,7 @@ export const api = {
   reprocessMeeting: (id: number, speakers?: number) =>
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
+  researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
@@ -330,6 +346,7 @@ export const api = {
 
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
+  runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
@@ -345,6 +362,8 @@ export const api = {
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
+
+  setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
 
   /** File a finished meeting under a project — this is what indexes its transcript. */
   setMeetingProject: (id: number, projectId: null | number) =>

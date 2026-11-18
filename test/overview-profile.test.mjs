@@ -9,6 +9,9 @@ import path from "node:path";
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentspine-ov-"));
 process.env.SPINE_DB_PATH = path.join(root, "t.db");
 process.env.EMBEDDINGS_URL = "";
+// Pinned to a file that does not exist. Without this the suite reads the real profile.md in the
+// repo root, so "with nothing known" was only true on a machine that had never written one.
+process.env.PROFILE_PATH = path.join(root, "profile.md");
 process.env.POLICY_PATH = path.join(root, "policy.json");
 fs.writeFileSync(
   process.env.POLICY_PATH,

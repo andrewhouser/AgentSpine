@@ -365,6 +365,43 @@ export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";
 export const DEFAULT_LOCATION = env.DEFAULT_LOCATION ?? "";
 
 /**
+ * Heads-up calendar scope (docs/PLAN-heads-up.md). The scanner reads every calendar the account
+ * can read except holidays and sports, which are noise for "what's coming up in my life".
+ * Both lists are comma-separated and match a calendar's id or its exact name, case-insensitively.
+ * HEADSUP_INCLUDE_CALENDARS wins over every exclusion, including the built-in ones.
+ */
+const csv = (v: string | undefined): string[] =>
+  (v ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+export const HEADSUP_EXCLUDE_CALENDARS = csv(env.HEADSUP_EXCLUDE_CALENDARS);
+export const HEADSUP_INCLUDE_CALENDARS = csv(env.HEADSUP_INCLUDE_CALENDARS);
+
+/**
+ * The morning heads-up (src/headsup/morning.ts). On by default because it is inert until
+ * policy.json enables Google reads; set HEADSUP_ENABLED=false to turn the whole feature off.
+ */
+export const HEADSUP_ENABLED = (env.HEADSUP_ENABLED ?? "true") !== "false";
+
+/**
+ * Heads-up watches: a flight's status, and how long a drive will take. Each needs a key AND a
+ * policy.json switch (`headsup.flights`, `headsup.travel`), because each sends something about you
+ * to a third party. Neither provider's free tier is something to rely on blindly, so every call is
+ * counted against a budget kept here, in code: when it is used up, watching pauses and says so
+ * rather than being rate-limited mid-flight.
+ *
+ * The flight provider is AeroDataBox through RapidAPI (the key is the RapidAPI key). The routing
+ * provider is TomTom. Both sit behind small interfaces (src/headsup/watch), so swapping one is a
+ * one-file change.
+ */
+export const HEADSUP_FLIGHT_KEY = env.AERODATABOX_RAPIDAPI_KEY ?? "";
+export const HEADSUP_FLIGHT_CALLS_PER_MONTH = Number(env.HEADSUP_FLIGHT_CALLS_PER_MONTH ?? 400);
+export const HEADSUP_TOMTOM_KEY = env.TOMTOM_API_KEY ?? "";
+export const HEADSUP_TRAVEL_CALLS_PER_DAY = Number(env.HEADSUP_TRAVEL_CALLS_PER_DAY ?? 1000);
+/** Where drives start. Sent to the routing provider, which is why `headsup.travel` gates it. */
+export const HEADSUP_HOME = (env.HEADSUP_HOME ?? "").trim();
+/** Minutes of slack to leave between arriving and the event starting. */
+export const HEADSUP_LEAVE_BUFFER_MINUTES = Number(env.HEADSUP_LEAVE_BUFFER_MINUTES ?? 10);
+
+/**
  * Thresholds for `weather_alerts`. Defaults are aligned with NWS advisory levels rather
  * than picked to feel about right, so an alert corresponds to something the weather service
  * would also consider notable.

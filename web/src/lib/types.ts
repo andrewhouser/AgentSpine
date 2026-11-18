@@ -466,6 +466,82 @@ export interface Task {
   waiting_on: null | string;
 }
 
+/** One research result: a product or restaurant, or a plain link when nothing could be read. */
+export interface HeadsupCard {
+  amount: null | number;
+  fetchedAt: string;
+  host: string;
+  id: number;
+  imageUrl: null | string;
+  kind: "gift" | "link" | "restaurant";
+  note: null | string;
+  priceText: null | string;
+  title: string;
+  url: string;
+}
+
+/** Heads-up preferences, plus read-only facts about what cannot run yet. */
+export interface HeadsupPrefs {
+  dailyCap: number;
+  /** The watch loop never polls one watch more often than this. Shown, not changeable. */
+  floorMinutes: number;
+  kinds: Record<string, boolean>;
+  quietEndHour: number;
+  quietStartHour: number;
+  unavailable: { drive: null | string; flights: null | string };
+}
+
+/** The standing watch behind a Yes on a flight or a drive. */
+export interface HeadsupWatch {
+  active: boolean;
+  kind: "drive" | "flight";
+  lastPolled: null | string;
+  /** The latest plain-words state, or what is blocking it. */
+  note: null | string;
+}
+
+/** A proactive suggestion: something coming up that the assistant noticed. */
+export interface Headsup {
+  amount: null | string;
+  answer: null | string;
+  cards: HeadsupCard[];
+  dueAt: string;
+  firstOfferedAt: null | string;
+  id: number;
+  kind: string;
+  location: null | string;
+  query: null | string;
+  researchError: null | string;
+  researchNote: null | string;
+  snoozeUntil: null | string;
+  state: "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
+  subject: string;
+  watch: HeadsupWatch | null;
+  /** What Yes does: find ideas, watch a flight or a drive, or just acknowledge. */
+  yesAction: "ack" | "research" | "watch";
+  yesLabel: string;
+}
+
+/** A date you told it about, or one it noticed in chat and is waiting for you to confirm. */
+export interface HeadsupDates {
+  proposals: {
+    confirmationId: number;
+    day: null | number;
+    month: null | number;
+    occasion: string;
+    summary: string;
+    who: string;
+  }[];
+  remembered: { day: number; id: number; month: number; occasion: string; title: string; who: string }[];
+}
+
+export interface HeadsupRun {
+  deferred: number;
+  errors: string[];
+  offered: number;
+  status: string;
+}
+
 export interface Client {
   email: null | string;
   id: number;

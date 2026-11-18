@@ -83,8 +83,15 @@ const checkPolicy = (policy: Policy, _args: Args): PolicyDecision =>
 /** DuckDuckGo's own date filter: d / w / m / y. */
 const DDG_WINDOW: Record<Recency, string> = { day: "d", month: "m", week: "w", year: "y" };
 
-/** Provider 1: scrape DuckDuckGo's HTML results with the headless browser. */
-const browserSearch = async (query: string, recency: null | Recency): Promise<string | null> => {
+/** One search result as the structured callers (Heads-up research) want it. */
+export interface SearchHit {
+  snippet: string;
+  title: string;
+  url: string;
+}
+
+/** DuckDuckGo's HTML results as rows, via the headless browser. Empty when there are none. */
+const browserRows = async (query: string, recency: null | Recency): Promise<SearchHit[]> => {
   const { page, close } = await openScratchPage();
   try {
     const df = recency ? `&df=${DDG_WINDOW[recency]}` : "";
@@ -92,7 +99,7 @@ const browserSearch = async (query: string, recency: null | Recency): Promise<st
       waitUntil: "domcontentloaded",
       timeout: 20_000,
     });
-    const results = await page.evaluate(() => {
+    return await page.evaluate(() => {
       const rows: { title: string; url: string; snippet: string }[] = [];
       document.querySelectorAll(".result").forEach((el) => {
         const a = el.querySelector("a.result__a") as HTMLAnchorElement | null;
@@ -101,11 +108,16 @@ const browserSearch = async (query: string, recency: null | Recency): Promise<st
       });
       return rows.slice(0, 5);
     });
-    if (!results.length) return null;
-    return results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n");
   } finally {
     await close();
   }
+};
+
+/** Provider 1: scrape DuckDuckGo's HTML results with the headless browser. */
+const browserSearch = async (query: string, recency: null | Recency): Promise<string | null> => {
+  const results = await browserRows(query, recency);
+  if (!results.length) return null;
+  return results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n");
 };
 
 /**
@@ -136,8 +148,8 @@ const formatTavily = (data: any): null | string => {
   return `${data?.answer ? `Answer: ${data.answer}\n\n` : ""}${lines}` || null;
 };
 
-/** Provider 2: the Tavily API. */
-const tavilySearch = async (query: string, recency: null | Recency): Promise<string | null> => {
+/** The raw Tavily response, or null with no key. */
+const tavilyData = async (query: string, recency: null | Recency): Promise<any | null> => {
   if (!TAVILY_API_KEY) return null;
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -146,7 +158,13 @@ const tavilySearch = async (query: string, recency: null | Recency): Promise<str
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`Tavily HTTP ${res.status}`);
-  return formatTavily(await res.json());
+  return res.json();
+};
+
+/** Provider 2: the Tavily API. */
+const tavilySearch = async (query: string, recency: null | Recency): Promise<string | null> => {
+  const data = await tavilyData(query, recency);
+  return data ? formatTavily(data) : null;
 };
 
 const PROVIDERS: Record<string, (q: string, recency: null | Recency) => Promise<string | null>> = {
@@ -184,6 +202,32 @@ const run = async (args: Args): Promise<string> => {
   }
   return `web_search found nothing. Tried: ${attempts.join("; ") || "(no providers configured)"}. ` +
     `Set TAVILY_API_KEY or check WEB_SEARCH_ORDER.`;
+};
+
+/**
+ * Search and return structured hits, from the same providers in the same order as `web_search`.
+ * For code that needs URLs, not prose (Heads-up research). The caller owns the policy check
+ * (`policy.web.searchEnabled`) and must treat every field as untrusted web content. Never throws:
+ * a provider that fails is skipped, and no results is an empty array.
+ */
+export const searchHits = async (query: string, max = 8): Promise<SearchHit[]> => {
+  const q = String(query ?? "").slice(0, 400);
+  if (!q) return [];
+  for (const name of WEB_SEARCH_ORDER) {
+    try {
+      const hits: SearchHit[] =
+        name === "tavily"
+          ? ((await tavilyData(q, null))?.results ?? []).map((r: any) => ({ snippet: String(r.content ?? ""), title: String(r.title ?? ""), url: String(r.url ?? "") }))
+          : name === "browser"
+            ? await browserRows(q, null)
+            : [];
+      const usable = hits.filter((h) => /^https?:\/\//i.test(h.url));
+      if (usable.length) return usable.slice(0, max);
+    } catch {
+      /* try the next provider */
+    }
+  }
+  return [];
 };
 
 export const webSearch: Tool = {

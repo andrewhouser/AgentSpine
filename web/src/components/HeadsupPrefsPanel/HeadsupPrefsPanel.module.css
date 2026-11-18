@@ -1,0 +1,64 @@
+/* Matches the Settings section chrome (SettingsView.module.css) and RecipesPanel. */
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 26px 0 8px;
+  padding-top: 18px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 0 0 12px;
+}
+
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 14px;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.label {
+  font-size: 0.8125rem;
+  min-width: 9rem;
+}
+
+.input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 6px 9px;
+}
+
+.fixed {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  margin: 4px 0;
+}
+
+.warn {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 4px 0;
+}
+
+.error {
+  color: var(--danger, #c0392b);
+  font-size: 0.8125rem;
+  margin-top: 6px;
+}

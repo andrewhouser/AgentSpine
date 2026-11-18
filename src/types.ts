@@ -72,6 +72,15 @@ export interface Policy {
    * a capability that didn't exist when it was written.
    */
   weather?: { enabled: boolean };
+  /**
+   * Heads-up's time-sensitive watches (docs/PLAN-heads-up.md, Phase 5). Both default to denied.
+   *
+   * `flights` lets it look up a flight's status with a third-party API, which learns the flight
+   * number and date. `travel` lets it ask a routing API how long a drive will take, which learns
+   * your home address and where you are going. Those are privacy decisions, so they are yours to
+   * make here rather than defaults, the same as `weather`.
+   */
+  headsup?: { flights?: boolean; travel?: boolean };
   git?: { repoDirs: string[] };
   /**
    * The build loop (docs/PLAN-build-loop.md). Absent = denied, like every other optional
