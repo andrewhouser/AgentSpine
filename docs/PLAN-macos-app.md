@@ -18,6 +18,9 @@ phases ordered so each is useful alone.
 | Framework | SwiftUI, as native as possible. No web shell. |
 | Minimum OS | macOS 15. iOS stays at 17 for now. |
 | UI refresh | Done in the shared layer so the iPhone gets it too. |
+| Visual identity | A strong one of its own: "the spine". See "Design direction" below. |
+| Main entry point (Mac) | The main window, Claude-like: sidebar of threads, a conversation, a composer. The menu bar item is secondary. |
+| iPhone tab structure | Restructured. The user chooses which tabs sit in the bar and which fold under More, in Settings, by drag and drop. |
 | Offline | Out of scope here. A read-only cache belongs in the iPhone app, as a follow-up (see the end). |
 | Meeting audio | Captured on the Mac, streamed to the server. Transcription and extraction stay on the server. |
 
@@ -34,6 +37,26 @@ phases ordered so each is useful alone.
 5. **Meeting audio is private by default.** Capture only starts on an explicit user action,
    shows a persistent recording indicator, and the existing `sensitivity: "private"` and
    project-linked local-only rules apply unchanged on the server.
+
+## Design direction: the spine
+
+Approved by the user on 2026-11-18, from mock screens (a Design canvas, not code). The mocks
+are a reference, not a spec: exact colors, type and spacing get settled in phase 2.
+
+- **The motif.** Every agent turn hangs on a thin vertical line. Each tool call is a node on
+  it, colored by the broker's verdict (executed, denied, queued, dry run, error). A hollow
+  amber node is a question waiting on the user, and carries Approve and Reject inline. The
+  same line appears in the Mac thread, the iPhone thread and the active-tab marker.
+- **Ground and accent.** Deep blue-slate surfaces with a cool blue accent and bone-colored
+  text. Verdict colors are separate from the accent. Deliberately not cream, serif and
+  terracotta, so it does not read as a copy of Claude or ChatGPT.
+- **Type.** A characterful grotesque for titles, a clean sans for reading, a mono face for
+  tool names and numbers. Final faces are chosen in phase 2; SwiftUI needs them bundled, so
+  check licensing and size then.
+- **Mac layout.** Sidebar (new thread, search, sections, recent threads, connection status),
+  a centered conversation column, a composer with attach, dictate and tier. Meetings get a
+  transcript column plus a coach column with context cards and the possible action items.
+- **Light theme.** Not drawn yet. Phase 2 defines both from one token set.
 
 ## What exists today
 
@@ -96,6 +119,14 @@ Do the refresh once, in the package, before building more screens on top of the 
 - Replace the ad hoc styling in `Chrome.swift` with a small token set: spacing scale,
   type scale, semantic colors (light and dark), corner radii, and the verdict and status
   colors currently hard-coded in `VerdictBadge`.
+- iPhone tab bar customization: a Settings screen where the user reorders and chooses what
+  is in the bar. Reordering is **drag and drop**: a SwiftUI `List` in edit mode with
+  `.onMove`, with a live preview of the bar above it. The first slot is Threads and fixed;
+  the next few slots are the bar and the rest fold under More. The mock uses up and down
+  buttons only because a static mock cannot drag. VoiceOver needs the move actions
+  (`accessibilityAction`) as well, since drag is not operable there. Persist the order in
+  `UserDefaults` through `Settings`, and handle new tabs added by later app versions (append
+  them under More) and tabs removed (drop them).
 - Shared components that both platforms use: thread bubble and tool-call row, approval
   card, status badge, empty state, error notice, markdown text.
 - Platform adaptation lives in the components, not the screens: pointer hover and
@@ -201,10 +232,14 @@ replayed later, because a stale approval is a security problem, so an offline iP
 the question and tells you it can only be answered once reconnected. Build it on top of
 `AgentSpineKit` after phase 1, and it can then be offered to the Mac app too.
 
-## Questions to settle before phase 2
+## Decisions from the questions
 
-1. Look and feel: more system-native (standard materials, minimal custom color) or a
-   stronger identity of its own? Phase 2 will show options either way.
-2. Should the iPhone's twelve-tab structure change as part of the refresh? On the phone it
-   folds eight of them into "More".
-3. Do you want the menu bar item to be the primary entry point, or the main window?
+1. Look and feel: a strong identity of its own (the spine).
+2. iPhone tabs: restructure, with the order and the bar contents set by the user, by drag
+   and drop.
+3. Mac entry point: the main window. The menu bar item stays a secondary surface for
+   approvals and quick capture.
+
+## Approval gate
+
+Nothing in this plan is implemented. Phase 1 starts only when the user says so.
