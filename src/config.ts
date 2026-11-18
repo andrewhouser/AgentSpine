@@ -365,6 +365,17 @@ export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";
 export const DEFAULT_LOCATION = env.DEFAULT_LOCATION ?? "";
 
 /**
+ * Heads-up calendar scope (docs/PLAN-heads-up.md). The scanner reads every calendar the account
+ * can read except holidays and sports, which are noise for "what's coming up in my life".
+ * Both lists are comma-separated and match a calendar's id or its exact name, case-insensitively.
+ * HEADSUP_INCLUDE_CALENDARS wins over every exclusion, including the built-in ones.
+ */
+const csv = (v: string | undefined): string[] =>
+  (v ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+export const HEADSUP_EXCLUDE_CALENDARS = csv(env.HEADSUP_EXCLUDE_CALENDARS);
+export const HEADSUP_INCLUDE_CALENDARS = csv(env.HEADSUP_INCLUDE_CALENDARS);
+
+/**
  * Thresholds for `weather_alerts`. Defaults are aligned with NWS advisory levels rather
  * than picked to feel about right, so an alert corresponds to something the weather service
  * would also consider notable.

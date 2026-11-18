@@ -76,6 +76,107 @@ export const upcomingEvents = async (hours = 48, max = 20): Promise<CalEvent[]> 
   }));
 };
 
+/** A calendar the account can read, as `calendarList` reports it. */
+export interface CalendarInfo {
+  id: string;
+  name: string;
+  primary: boolean;
+}
+
+/**
+ * One event with everything the heads-up scanner needs and `CalEvent` leaves out: a stable
+ * id (for dedupe), the description (where "PAID" sometimes lives), whether it is all-day,
+ * the series it belongs to, and which calendar it came from.
+ */
+export interface CalendarEvent {
+  allDay: boolean;
+  attendees: number;
+  calendarId: string;
+  calendarName: string;
+  /** Free text from the event. UNTRUSTED: anyone who can invite you can write it. */
+  description: string;
+  end: string;
+  /** Google's event type ("default", "birthday", "outOfOffice", ...). Empty if absent. */
+  eventType: string;
+  id: string;
+  location: string;
+  /** Set on every instance of a recurring event; identifies the series. */
+  recurringEventId: string;
+  start: string;
+  /** "confirmed", "tentative" or "cancelled". */
+  status: string;
+  title: string;
+}
+
+/**
+ * Raw Google event -> `CalendarEvent`. Pure, and exported so it can be tested against saved
+ * payloads: the failures that matter here (a date-only start read as a timestamp, a missing
+ * summary) are silent ones.
+ */
+export const mapCalendarEvent = (e: any, cal: CalendarInfo): CalendarEvent => ({
+  allDay: !e.start?.dateTime && !!e.start?.date,
+  attendees: (e.attendees ?? []).length,
+  calendarId: cal.id,
+  calendarName: cal.name,
+  description: String(e.description ?? ""),
+  end: e.end?.dateTime ?? e.end?.date ?? "",
+  eventType: String(e.eventType ?? ""),
+  id: String(e.id ?? ""),
+  location: String(e.location ?? ""),
+  recurringEventId: String(e.recurringEventId ?? ""),
+  start: e.start?.dateTime ?? e.start?.date ?? "",
+  status: String(e.status ?? "confirmed"),
+  title: String(e.summary ?? "(no title)"),
+});
+
+/** Every calendar the account can read, including subscribed ones such as contact birthdays. */
+export const listCalendars = async (): Promise<CalendarInfo[]> => {
+  const out: CalendarInfo[] = [];
+  let pageToken = "";
+  // A handful of pages is far more calendars than anyone has; the cap is a runaway guard.
+  for (let page = 0; page < 5; page++) {
+    const params = new URLSearchParams({ minAccessRole: "reader", maxResults: "250" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const data = await apiGet(`https://www.googleapis.com/calendar/v3/users/me/calendarList?${params}`);
+    for (const c of data.items ?? [])
+      out.push({
+        id: String(c.id),
+        // `summaryOverride` is the name the user gave it; `summary` is the owner's.
+        name: String(c.summaryOverride ?? c.summary ?? c.id),
+        primary: !!c.primary,
+      });
+    pageToken = data.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  return out;
+};
+
+/**
+ * Events on one calendar between `from` and `to`, recurring series expanded to instances.
+ * Read-only. Pages up to 4 x 250 events, which is well past any real calendar's month.
+ */
+export const eventsBetween = async (cal: CalendarInfo, from: Date, to: Date): Promise<CalendarEvent[]> => {
+  const out: CalendarEvent[] = [];
+  let pageToken = "";
+  for (let page = 0; page < 4; page++) {
+    const params = new URLSearchParams({
+      maxResults: "250",
+      orderBy: "startTime",
+      singleEvents: "true",
+      timeMax: to.toISOString(),
+      timeMin: from.toISOString(),
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const data = await apiGet(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${params}`,
+    );
+    for (const e of data.items ?? []) out.push(mapCalendarEvent(e, cal));
+    pageToken = data.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  return out;
+};
+
 export interface MailHeader {
   from: string;
   subject: string;

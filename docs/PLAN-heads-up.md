@@ -1,6 +1,6 @@
 # Plan: Heads-up (proactive suggestions)
 
-Written 2026-11-18. Status: **proposed, nothing built.** Prompted by Duet noticing a flight and
+Written 2026-11-18. Status: **Phases 0 and 1 built** (calendar reader, scanner, rules, ledger, planner; nothing is wired to a schedule or a notification yet, so nothing user-visible changes). Phases 2 onward are proposed. Prompted by Duet noticing a flight and
 offering to track it. The goal here is the general version: AgentSpine notices things coming up
 in your life and offers to help, without being asked.
 
@@ -259,14 +259,14 @@ anything itself:
 Each phase leaves the app working and `npm run check` green, and updates this doc when the
 design changes.
 
-**Phase 0: groundwork (small, no behavior change)**
+**Phase 0: groundwork (small, no behavior change). Built.**
 - Extend `upcomingEvents` to a richer `CalEvent` (id, description, all-day, end, recurrence,
   calendar) over a configurable window. Keep the current callers working.
 - Read the contact birthdays calendar. Confirm scope coverage.
-- Check how the scheduler runs code-only jobs (`digest.ts`, `prune.ts` and `reflect.ts` look like
+- Still to check, before Phase 5: how the scheduler runs code-only jobs (`digest.ts`, `prune.ts` and `reflect.ts` look like
   precedents) so the fast loop does not need a model turn to find out nothing is happening.
 
-**Phase 1: scanner, rules and ledger (server only, fully testable offline)**
+**Phase 1: scanner, rules and ledger (server only, fully testable offline). Built.**
 - `src/headsup/` with the classifier, the PAID filter, the lead-time table, the ledger and dedupe.
 - Tests with fixture calendars: PAID is ignored, a recurring series is one subject, a birthday is
   offered once, a snooze is honored, quiet hours and the daily cap hold.
@@ -332,3 +332,29 @@ Detection is by Google's calendar id (holiday calendars end in
 `#holiday@group.v.calendar.google.com`) and by name for sports (team, league and schedule
 calendars), with an exclusion list in config so you can add or remove calendars. The contact
 birthdays calendar is always included.
+
+## What is built so far
+
+| File | Role |
+|---|---|
+| `src/google/client.ts` | `listCalendars`, `eventsBetween`, `mapCalendarEvent` and the richer `CalendarEvent`. `upcomingEvents` is unchanged, so `calendar_upcoming` behaves as before. |
+| `src/headsup/calendars.ts` | Which calendars are read: all except holidays and sports, with `HEADSUP_INCLUDE_CALENDARS` / `HEADSUP_EXCLUDE_CALENDARS`. |
+| `src/headsup/rules.ts` | Every constant: lead times, daily cap, quiet hours, snooze, the 30 minute floor. Classification and the PAID filter. |
+| `src/headsup/scan.ts` | Events to candidates. Pure. A recurring series collapses to one candidate. |
+| `src/headsup/ledger.ts` | The `headsups` and `headsup_mutes` tables, offers, answers (yes, later, never), expiry. |
+| `src/headsup/plan.ts` | What to offer now: lead-time stages, snooze, mutes, cap, quiet hours. Pure, ledger injected. |
+| `src/headsup/index.ts` | Wiring only: fetch every in-scope calendar (one failing does not lose the rest), scan, plan. |
+| `test/headsup-scan.test.mjs`, `test/headsup-ledger.test.mjs` | 140 checks, including multi-morning scenarios. |
+
+Decisions made while building, so they are not rediscovered later:
+
+- **Date-only events are never parsed as timestamps.** `new Date("2026-11-20")` is UTC midnight and
+  lands a day early west of Greenwich. All-day dates stay strings, and day counts compare dates,
+  so a DST change cannot shift a lead time.
+- **Stages only move forward.** A first scan that happens late (one day before a birthday) offers the
+  *latest* crossed stage, not a stale "ten days out" mention, and records it so the earlier one is
+  never offered afterwards.
+- **A recurring series fingerprint is time of day plus place, never the date.** The date advances every
+  week by design, so including it would flag every instance as "changed".
+- **A mute ignores amounts and digits**, so muting "Water bill $40" also mutes next month's "$52.10".
+- **Expiry compares calendar dates, not instants**, so an all-day event is still open at 3pm that day.
