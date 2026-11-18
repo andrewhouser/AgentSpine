@@ -175,6 +175,34 @@ Risks: a file that looked neutral but uses an iOS-only API (this is what step 5 
 
 ### Phase 2: design system
 
+**Status (2026-11-18).** Started. Done and tested without a Mac:
+- `design/tokens.json` is the single source: both themes, derived tints, fonts, radii, spacing,
+  type sizes and the verdict mapping. Light and dark come from the approved mocks, and light is
+  new (cool paper ground, deeper blue accent).
+- `design/generate.mjs` (no dependencies, `npm run design`) writes
+  `web/src/styles/tokens.generated.css` and `ios/AgentSpine/Design/Tokens.generated.swift`.
+  Both are committed. `ios/AgentSpine/Design/DesignColor.swift` is the small hand-written helper
+  that makes a light and dark colour on UIKit and AppKit.
+- `test/design-tokens.test.mjs` is in `npm test`. It fails on a stale generated file, a theme
+  missing a name, any text or status colour under WCAG AA (4.5:1) on any surface, and any custom
+  property `global.css` defines today that the generated file lacks. Both failure modes were
+  checked by breaking a token on purpose.
+- The Heads-up screen is drawn for Mac and iPhone on the design canvas, with the due dates hung
+  on the spine (hollow amber waiting, solid blue researched, green tracking).
+
+Not done yet, and why:
+- **The Swift is uncompiled.** `Tokens.generated.swift` and `DesignColor.swift` have never met a
+  compiler. For the Mac target, tick membership on both in Xcode as with the six shared files.
+- **Shared SwiftUI components and the component gallery** (spine row, verdict badge, approval
+  card, status chip, empty and error states). These replace the styling in `Chrome.swift`. They
+  wait until phase 1 builds on a device, so the first compile errors are not a pile of unknowns.
+- **Fonts.** The stacks name Bricolage Grotesque, Instrument Sans and JetBrains Mono, which are
+  open-licensed. They must be **bundled in the app and self-hosted on the web**, not loaded from
+  a font CDN, because the web client runs on a private tailnet and the project is local-first.
+  Until they are bundled every stack falls back to the system font, so nothing breaks.
+- **Tab bar customization screen** (drag and drop), and applying the tokens to existing iPhone
+  screens.
+
 Do the refresh once, in the shared code, before building more screens on top of the old look.
 
 - Replace the ad hoc styling in `Chrome.swift` with a small token set: spacing scale,
