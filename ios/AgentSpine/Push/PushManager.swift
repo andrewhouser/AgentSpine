@@ -34,6 +34,8 @@ final class PushManager: NSObject {
         static let headsup = "HEADSUP"
         /// A heads-up about a birthday or anniversary, where "Yes" goes and finds ideas.
         static let headsupResearch = "HEADSUP_RESEARCH"
+        /// A heads-up about a flight or a drive, where "Yes" starts watching it.
+        static let headsupWatch = "HEADSUP_WATCH"
     }
 
     private enum ActionID {
@@ -136,6 +138,16 @@ final class PushManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
+        let headsupWatch = UNNotificationCategory(
+            identifier: Category.headsupWatch,
+            actions: [
+                UNNotificationAction(identifier: ActionID.headsupYes, title: "Yes, track it", options: []),
+                later,
+                never,
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
         let headsup = UNNotificationCategory(
             identifier: Category.headsup,
             actions: [
@@ -146,7 +158,7 @@ final class PushManager: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([confirmation, run, headsup, headsupResearch])
+        UNUserNotificationCenter.current().setNotificationCategories([confirmation, run, headsup, headsupResearch, headsupWatch])
         refreshAuthorization()
     }
 

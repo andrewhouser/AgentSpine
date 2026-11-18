@@ -131,6 +131,8 @@ check("one birthday: the research buttons", one.category, "HEADSUP_RESEARCH");
 check("... carrying its id", one.headsupId, bd.id);
 check("... and a token that works", ledger.checkAnswerToken(bd.id, one.headsupToken), true);
 check("one bill: the plain buttons", answerButtons([bl]).category, "HEADSUP");
+const fl = ledger.markOffered({ amount: undefined, daysUntil: 5, dedupeKey: "flight:btn:z", fingerprint: "", flightNumber: "UA 482", kind: "flight", location: "", sourceId: "f", startsAt: dateStr(5), subject: "Flight UA 482", timeSensitive: true }, 0, at(0));
+check("one flight with a number: the track buttons", answerButtons([fl]).category, "HEADSUP_WATCH");
 check("two items: NO buttons (a button must mean one thing)", answerButtons([bd, bl]), {});
 check("no items: nothing", answerButtons([]), {});
 

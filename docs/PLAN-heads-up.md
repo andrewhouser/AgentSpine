@@ -1,6 +1,6 @@
 # Plan: Heads-up (proactive suggestions)
 
-Written 2026-11-18. Status: **Phases 0, 1, 2, 2b, 3 and 4 built** (Phase 4's Swift is written but has never been compiled: see "Phase 4" below) (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 5 onward is proposed. Prompted by Duet noticing a flight and
+Written 2026-11-18. Status: **Phases 0, 1, 2, 2b, 3, 4 and 5 built** (Phase 4's Swift is written but has never been compiled: see "Phase 4" below) (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 6 onward is proposed. Prompted by Duet noticing a flight and
 offering to track it. The goal here is the general version: AgentSpine notices things coming up
 in your life and offers to help, without being asked.
 
@@ -286,7 +286,7 @@ design changes.
 **Phase 4: iOS. Built, uncompiled.**
 - `HEADSUP` category and actions, the Heads-up screen, card rendering, deep links.
 
-**Phase 5: time-sensitive loop**
+**Phase 5: time-sensitive loop. Built; provider calls unverified against live keys.**
 - Pick and integrate the flight and travel-time sources. Watch windows, bucketed fingerprints,
   30 minute floor, self-expiring items, confirmation-queued tracking.
 
@@ -550,3 +550,75 @@ Decisions made while building:
 
 Not done: a badge on the tab for open items, a Live Activity for a flight in its watch window, and
 the Settings entry for heads-up preferences. All are reasonable follow-ups; none blocks the rest.
+
+### Phase 5 (flights and drives)
+
+| File | Role |
+|---|---|
+| `src/headsup/watch/flight.ts` | Flight number parsing, the `FlightSource` interface, AeroDataBox, bucketed fingerprints, what-changed wording. |
+| `src/headsup/watch/travel.ts` | The `TravelSource` interface, TomTom, a geocode cache, drive fingerprints, leave-by arithmetic. |
+| `src/headsup/watch/budget.ts` | Call budgets in code: monthly for flights, daily for drives. |
+| `src/headsup/watch/store.ts` | The `headsup_watches` table. A watch exists only because someone pressed Yes. |
+| `src/headsup/watch/loop.ts` | `runWatchLoop`: windows, the 30 minute floor, budgets, quiet hours, notify-only-on-difference. |
+| `src/headsup/watch/enable.ts` | Yes on a flight or a located appointment starts a watch, even before the provider is set up. |
+| `src/headsup/actions.ts` | What Yes does and what the button says. One answer for the server, web, iOS and lock-screen categories. |
+| `test/headsup-providers`, `test/headsup-watch` | 95 and 149 checks. The loop is also run under three other timezones. |
+
+**Read this first: the two provider integrations have never touched a live API.** Both parsers are
+written from each provider's published schema and are deliberately tolerant (every field optional, an
+unknown status is "unknown", an empty answer is null). The first real run is the real test; if a field
+comes back differently, `parseAeroDataBox` and `parseGeocode`/`parseRoute` are the only places to look.
+Neither provider's free plan could be confirmed from current sources: published figures disagree, and
+TomTom's own page says the v1 Calculate Route API is not part of its free evaluation, while other pages
+list a freemium plan. Check both dashboards before relying on either.
+
+What it does: pressing **Yes, track this flight** on a flight heads-up starts a watch. From six hours
+before departure it checks the flight at most every 30 minutes, and notifies on a delay (in 15 minute
+steps), a gate or terminal change, a cancellation, a diversion, and landing. Pressing **Yes, watch
+traffic** on a timed appointment with a location does the same for the drive: a "leave by" notice about an
+hour before you need to go, then a notice if the drive time moves a step, and "time to leave" once.
+
+Decisions made while building:
+
+- **Yes is the consent, and no scan creates a watch.** A watch is standing work, which CLAUDE.md says a
+  scheduled run must not create. It is created only by a person pressing Yes in the app or on the lock
+  screen. A heads-up on a flight is offered by the scan; tracking it is never started by the scan.
+- **Outside its window a watch makes no call at all.** A flight is live from six hours before departure
+  until twelve hours after (or until it lands or is cancelled); a drive from three hours before the event.
+  A flight next week costs nothing until the day. An all-day flight has no departure time, so it is
+  watched through the whole day.
+- **The 30 minute floor is per watch and is not configurable.** The timer ticks every five minutes and
+  each watch decides for itself. `last_polled` is stamped BEFORE the request, so a failing provider is
+  not hammered either: an error and a success both respect the floor.
+- **Call budgets live in code**: 400 flight lookups a month and 1000 routing calls a day by default, both
+  overridable in `.env`. When one runs out, watching pauses, says so once, and resumes next period. This
+  matters because the free plans are small and their terms are unclear; a surprise cutoff mid-flight is
+  worse than a notice. A geocoded address is cached for good, so it costs one call, once.
+- **Comparison is against what you were last TOLD, not what the feed last said.** A delay that wobbles
+  from 47 to 52 minutes is the same bucket and silent; the next real change is described relative to
+  the 45 you were told. A change held back by quiet hours is not recorded as told, so it is sent when
+  quiet hours end.
+- **Bad news on the first look is not silent.** A first look normally records quietly, but a flight
+  already cancelled, diverted or 30+ minutes late when you start tracking it is said at once.
+- **Quiet hours** hold back everything except a cancellation, or a delay of an hour or more on a flight
+  leaving within six hours. A drive notice is never an emergency before it is time to go, so every drive
+  notice is held. A change that arrives after leave-by has passed is urgent (priority 4).
+- **API keys cannot leak into errors.** TomTom requires the key in the URL, so no error message is ever
+  built from a URL or a runtime error that might contain one: failures are described in words ("the
+  routing provider rejected the key"). The flight key travels in a header. Both are tested.
+- **A watch is created even when the provider is not set up.** Saying Yes and being told "it failed"
+  teaches nothing; being told "needs AERODATABOX_RAPIDAPI_KEY in .env, tracking starts once it is" does,
+  and the watch then starts on its own when you add the key. Each provider also needs its switch in
+  `policy.json` (`"headsup": { "flights": true, "travel": true }`), denied by default, because each sends
+  something about you to a third party (a flight number; your home address and destination).
+- **Watched items stay on the open list.** Pressing Yes must not make a live flight status disappear.
+- **The server says what Yes does** (`yesAction`, `yesLabel`, `watch` on every heads-up), so the web page,
+  the iOS tab and the three lock-screen categories (`HEADSUP`, `HEADSUP_RESEARCH`, `HEADSUP_WATCH`) cannot
+  disagree. An appointment offers to watch traffic only when a routing key and `HEADSUP_HOME` are set,
+  so someone without them is not offered a button that cannot work.
+
+To turn it on: set `AERODATABOX_RAPIDAPI_KEY` (flights) and/or `TOMTOM_API_KEY` plus `HEADSUP_HOME`
+(drives) in `.env`, add the switches to `policy.json`, restart, and press Yes on a flight.
+
+Not done: other flight providers (the interface makes it one file), arrival-side alerts such as baggage
+claim, and a Live Activity (see the follow-ups).

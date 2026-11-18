@@ -682,6 +682,17 @@ struct HeadsupCard: Codable, Identifiable, Hashable {
     }
 }
 
+/// The standing watch behind a Yes on a flight or a drive: tracking delays and gate changes, or
+/// watching traffic toward an appointment.
+struct HeadsupWatch: Codable, Hashable {
+    /// "flight" or "drive".
+    let kind: String
+    let active: Bool
+    let lastPolled: String?
+    /// The latest plain-words state, or what is blocking it ("needs an API key").
+    let note: String?
+}
+
 /// Something the assistant noticed coming up: a birthday, a bill, an appointment.
 ///
 /// `dueAt` is either a bare "2026-11-28" (an all-day event: a calendar day, not an instant) or a
@@ -705,6 +716,12 @@ struct Headsup: Codable, Identifiable, Hashable {
     let researchError: String?
     let researchNote: String?
     let cards: [HeadsupCard]
+    /// What Yes does, decided by the server so every client agrees: "research" (find ideas),
+    /// "watch" (track a flight or a drive) or "ack" (just note it).
+    let yesAction: String
+    /// The button's words for that action ("Yes, track this flight", "Got it").
+    let yesLabel: String
+    let watch: HeadsupWatch?
 }
 
 /// A date it noticed in something you said, waiting for you to confirm. Nothing is remembered

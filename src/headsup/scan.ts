@@ -8,6 +8,7 @@
 import { isExcludedCalendar } from "./calendars.ts";
 import type { CalendarScope } from "./calendars.ts";
 import { classify, findAmount, LOOKAHEAD_DAYS } from "./rules.ts";
+import { parseFlightNumber } from "./watch/flight.ts";
 import type { HeadsupKind } from "./rules.ts";
 
 /** The subset of a calendar event the scanner reads. `CalendarEvent` satisfies it. */
@@ -33,6 +34,8 @@ export interface Candidate {
   dedupeKey: string;
   /** What changed-detection compares for a recurring series. Empty for everything else. */
   fingerprint: string;
+  /** For a flight: the number as written ("UA 482"), when one was found in the title or description. */
+  flightNumber?: string;
   kind: HeadsupKind;
   location: string;
   /** Series id for a recurring candidate, else the event id. */
@@ -100,6 +103,7 @@ export const scanEvents = (
     const subject = clean(e.title);
     const amount = findAmount(e);
     const recurring = kind === "recurring";
+    const flight = kind === "flight" ? parseFlightNumber(`${e.title} ${e.description}`) : null;
 
     if (recurring) {
       // Events arrive sorted by start, so the first instance seen is the soonest.
@@ -114,6 +118,7 @@ export const scanEvents = (
       dedupeKey: recurring ? `recurring:${e.recurringEventId}` : `${kind}:${e.id}:${date}`,
       // Time of day and place, never the date: the date advances every week by design, so
       // including it would make every instance of a weekly event look "changed".
+      ...(flight ? { flightNumber: flight.display } : {}),
       fingerprint: recurring ? [e.allDay ? "" : e.start.slice(11, 16), clean(e.location)].join("|") : "",
       kind,
       location: clean(e.location),

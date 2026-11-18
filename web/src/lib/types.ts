@@ -480,6 +480,15 @@ export interface HeadsupCard {
   url: string;
 }
 
+/** The standing watch behind a Yes on a flight or a drive. */
+export interface HeadsupWatch {
+  active: boolean;
+  kind: "drive" | "flight";
+  lastPolled: null | string;
+  /** The latest plain-words state, or what is blocking it. */
+  note: null | string;
+}
+
 /** A proactive suggestion: something coming up that the assistant noticed. */
 export interface Headsup {
   amount: null | string;
@@ -496,6 +505,10 @@ export interface Headsup {
   snoozeUntil: null | string;
   state: "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
   subject: string;
+  watch: HeadsupWatch | null;
+  /** What Yes does: find ideas, watch a flight or a drive, or just acknowledge. */
+  yesAction: "ack" | "research" | "watch";
+  yesLabel: string;
 }
 
 /** A date you told it about, or one it noticed in chat and is waiting for you to confirm. */

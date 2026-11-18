@@ -198,6 +198,11 @@ hLedger.markResearched(bday.id, { note: "", query: "birthday gift ideas for a si
 hLedger.markOffered(hCand("bill", "Electric bill $140", "ios:bill", { amount: "$140", daysUntil: 5, startsAt: "2026-11-23T09:00:00-05:00" }), 0, hNow);
 const anniv = hLedger.markOffered(hCand("anniversary", "Your Anniversary", "ios:a"), 0, hNow);
 hLedger.answer(anniv.id, "later", hNow);
+// A flight with a watch started: the "watch" object an app has to decode.
+const { enableWatch: hEnableWatch } = await import("../src/headsup/watch/enable.ts");
+const flightRow = hLedger.markOffered(hCand("flight", "Flight to Denver", "ios:f", { flightNumber: "UA 482", startsAt: "2026-11-20T14:00:00-05:00" }), 0, hNow);
+hLedger.answer(flightRow.id, "yes", hNow);
+hEnableWatch(hLedger.getById(flightRow.id), hNow);
 const headsupsJson = JSON.stringify(hLedger.listForClient("all", 500));
 // The narrow push token must never be part of what any client is sent.
 if (/answer_token|answerToken|headsupToken/i.test(headsupsJson)) throw new Error("a push token leaked into the /api/headsups payload");
@@ -245,7 +250,7 @@ const hFrom = models.indexOf("// MARK: - Heads-up");
 const hTo = hFrom < 0 ? -1 : models.indexOf("\n// MARK:", hFrom + 1);
 if (hFrom < 0 || hTo < 0) throw new Error(`could not find the Heads-up section in ${modelsPath}`);
 const headsupSection = models.slice(hFrom, hTo);
-for (const needle of ["struct HeadsupCard", "struct Headsup:", "struct HeadsupProposal", "struct RememberedDate", "struct HeadsupDates", "struct HeadsupRunResult", "struct HeadsupResearchResult"]) {
+for (const needle of ["struct HeadsupCard", "struct HeadsupWatch", "struct Headsup:", "struct HeadsupProposal", "struct RememberedDate", "struct HeadsupDates", "struct HeadsupRunResult", "struct HeadsupResearchResult"]) {
   if (!headsupSection.includes(needle)) throw new Error(`the Heads-up section is missing ${needle} — markers moved?`);
 }
 
@@ -321,7 +326,7 @@ const main = [
   "}",
   "do {",
   "    let hs = try dec.decode([Headsup].self, from: load(CommandLine.arguments[7]))",
-  '    check("heads-ups decode", hs.count == 3, "\\(hs.count)")',
+  '    check("heads-ups decode", hs.count == 4, "\\(hs.count)")',
   '    let b = hs.first(where: { $0.kind == "birthday" })!',
   '    check("a researched birthday keeps its state", b.state == "researched", b.state)',
   '    check("its cards arrive in order", b.cards.map { $0.title } == ["Pour-Over Set", "Best coffee gifts"], "\\(b.cards.map { $0.title })")',
@@ -342,6 +347,14 @@ const main = [
   '    check("an all-day due date stays a bare date", b.dueAt == "2026-11-28", b.dueAt)',
   '    let a = hs.first(where: { $0.kind == "anniversary" })!',
   '    check("a snoozed item has its snooze time", a.state == "snoozed" && a.snoozeUntil != nil)',
+  '    check("the server says what Yes does on a birthday", b.yesAction == "research" && b.yesLabel == "Yes, find gift ideas", b.yesLabel)',
+  '    check("... and on a bill", bill.yesAction == "ack" && bill.yesLabel == "Got it", bill.yesLabel)',
+  '    check("... and an item with no watch has none", b.watch == nil && bill.watch == nil)',
+  '    let fl = hs.first(where: { $0.kind == "flight" })!',
+  '    check("a flight offers to track itself", fl.yesAction == "watch" && fl.yesLabel == "Yes, track this flight", fl.yesLabel)',
+  '    check("its watch decodes", fl.watch != nil && fl.watch!.kind == "flight" && fl.watch!.active)',
+  '    check("... lastPolled is nil before the first check", fl.watch!.lastPolled == nil)',
+  '    check("... and the note says what is needed", (fl.watch!.note ?? "").contains("Tracking starts once it is"), fl.watch!.note ?? "nil")',
   '    check("the answer is recorded", a.answer == "later", a.answer ?? "nil")',
   "",
   "    let d = try dec.decode(HeadsupDates.self, from: load(CommandLine.arguments[8]))",

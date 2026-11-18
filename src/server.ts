@@ -81,6 +81,8 @@ import { planMorning } from "./headsup/index.ts";
 import { readImage } from "./headsup/research/cards.ts";
 import { RESEARCH_KINDS, researchHeadsup, startResearch } from "./headsup/research/run.ts";
 import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
+import { sweepWatches } from "./headsup/watch/loop.ts";
+import { enableWatch } from "./headsup/watch/enable.ts";
 import { sweepDueCards } from "./study/sweep.ts";
 import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
 import { ensureMorningBrief } from "./briefing.ts";
@@ -1465,7 +1467,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const row = headsupLedger.answer(Number(seg[2]), a, new Date());
         // Yes on a birthday or an anniversary is also "go and look": research runs in the background
         // and the result appears on the page. Anything else has nothing to look up.
-        if (row && a === "yes" && RESEARCH_KINDS.has(row.kind)) startResearch(row.id);
+        if (row && a === "yes") {
+          const action = headsupLedger.toView(row).yesAction;
+          if (action === "research") startResearch(row.id);
+          // Yes on a flight, or on an appointment with a place, starts a watch. That press is the
+          // consent: it is a person in the app, not a scan deciding to create standing work.
+          else if (action === "watch") enableWatch(row);
+        }
         return row ? sendJson(res, 200, headsupLedger.toView(row)) : sendJson(res, 404, { error: "no such heads-up" });
       }
       // Run the research again (it failed, or the prices are stale). Waits for it, so the page can show the result.
@@ -1754,6 +1762,10 @@ setInterval(() => void sweepDueTasks(), 60_000).unref();
 // The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
 void sweepHeadsup();
 setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
+// Watched flights and drives. The tick is short; each watch has its own 30-minute floor, and outside
+// its window a watch makes no call at all, so a quiet day costs nothing.
+void sweepWatches();
+setInterval(() => void sweepWatches(), 5 * 60_000).unref();
 // Flash cards that have come due earn one nudge a day.
 void sweepDueCards();
 setInterval(() => void sweepDueCards(), 10 * 60_000).unref();

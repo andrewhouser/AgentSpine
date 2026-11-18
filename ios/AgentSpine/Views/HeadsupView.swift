@@ -247,11 +247,38 @@ private struct HeadsupRow: View {
                 .controlSize(.small)
             }
 
+            if let watch = item.watch {
+                watchStatus(watch)
+            }
+
             if item.researchesOnYes && (item.state == "accepted" || item.state == "researched") {
                 results
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Where a tracked flight or watched drive stands, in the server's own words, and what is
+    /// blocking it when it cannot run yet (a missing key, a policy switch that is off).
+    @ViewBuilder
+    private func watchStatus(_ watch: HeadsupWatch) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(
+                watch.active
+                    ? (watch.kind == "flight" ? "Tracking this flight" : "Watching traffic")
+                    : (watch.kind == "flight" ? "Flight tracking ended" : "Traffic watch ended"),
+                systemImage: watch.kind == "flight" ? "airplane" : "car"
+            )
+            .font(.footnote.weight(.semibold))
+            if let note = watch.note, !note.isEmpty {
+                Text(note).font(.footnote).foregroundStyle(.secondary)
+            }
+            if let polled = SpineDate.parse(watch.lastPolled) {
+                Text("Last checked " + polled.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder
@@ -423,17 +450,8 @@ extension Headsup {
     /// Still needs an answer.
     var isOpen: Bool { state == "offered" || state == "snoozed" }
 
-    /// "Yes" on these goes and looks things up. Mirrors RESEARCH_KINDS on the server.
-    var researchesOnYes: Bool { kind == "birthday" || kind == "anniversary" }
-
-    /// What the Yes button says it will do, instead of promising nothing.
-    var yesLabel: String {
-        switch kind {
-        case "birthday": return "Yes, find gift ideas"
-        case "anniversary": return "Yes, find restaurants"
-        default: return "Got it"
-        }
-    }
+    /// "Yes" on these goes and looks things up. The server decides, so every client agrees.
+    var researchesOnYes: Bool { yesAction == "research" }
 
     var kindLabel: String {
         switch kind {

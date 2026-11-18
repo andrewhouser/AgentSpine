@@ -40,12 +40,6 @@ const whenText = (iso: string): string => {
   return days > 1 ? `in ${days} days, ${day}` : day;
 };
 
-/** What "Yes" will do, so the button says it instead of promising nothing. */
-const YES_LABEL: Record<string, string> = { anniversary: "Yes, find restaurants", birthday: "Yes, find gift ideas" };
-
-/** Kinds that research on "yes". Mirrors RESEARCH_KINDS on the server. */
-const RESEARCHES = new Set(["anniversary", "birthday"]);
-
 const seenOn = (iso: string): string => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" });
 
 const Card = ({ c }: { c: HeadsupCard }) => (
@@ -87,7 +81,7 @@ export const HeadsupView = () => {
   };
 
   // Research runs in the background after "yes". Poll while any is still looking, then stop.
-  const looking = items.some((h) => RESEARCHES.has(h.kind) && h.state === "accepted" && h.cards.length === 0 && !h.researchError);
+  const looking = items.some((h) => h.yesAction === "research" && h.state === "accepted" && h.cards.length === 0 && !h.researchError);
   useEffect(() => {
     if (!looking) return;
     // Capped at two minutes: an item accepted before research existed never gets cards, and must
@@ -179,7 +173,7 @@ export const HeadsupView = () => {
             {open && (
               <>
                 <button className={`${styles.button} ${styles.primary}`} onClick={() => void answer(h, "yes")} type="button">
-                  {YES_LABEL[h.kind] ?? "Got it"}
+                  {h.yesLabel}
                 </button>
                 <button className={styles.button} onClick={() => void answer(h, "later")} type="button">
                   Remind me tomorrow
@@ -189,7 +183,16 @@ export const HeadsupView = () => {
                 </button>
               </>
             )}
-            {RESEARCHES.has(h.kind) && (h.state === "accepted" || h.state === "researched") && (
+            {h.watch && (
+              <div className={results.results}>
+                <div className={results.status}>
+                  {h.watch.active ? (h.watch.kind === "flight" ? "Tracking this flight" : "Watching traffic") : h.watch.kind === "flight" ? "Flight tracking ended" : "Traffic watch ended"}
+                  {h.watch.note ? `: ${h.watch.note}` : ""}
+                </div>
+                {h.watch.lastPolled && <div className={results.status}>Last checked {new Date(h.watch.lastPolled).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</div>}
+              </div>
+            )}
+            {h.yesAction === "research" && (h.state === "accepted" || h.state === "researched") && (
               <div className={results.results}>
                 {h.cards.length > 0 ? (
                   <>

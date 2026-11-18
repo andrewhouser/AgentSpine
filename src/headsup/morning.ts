@@ -20,7 +20,6 @@ import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
 import { inQuietHours, MORNING_HOUR, MORNING_MINUTE, RETRY_AFTER_ERROR_MINUTES } from "./rules.ts";
-import { RESEARCH_KINDS } from "./research/run.ts";
 import { scanEvents } from "./scan.ts";
 import type { ScanEvent } from "./scan.ts";
 import { kvGet, kvSet } from "../memory/store.ts";
@@ -76,6 +75,9 @@ export const describeOffer = (o: Offer): string => {
   return `${c.subject}${amount}: ${whenText(c.daysUntil)}`;
 };
 
+/** The notification category the app registered for each kind of Yes (ios PushManager). */
+const CATEGORY = { ack: "HEADSUP", research: "HEADSUP_RESEARCH", watch: "HEADSUP_WATCH" } as const;
+
 /**
  * Lock-screen buttons, only when the push is about exactly ONE item. A button has to mean one
  * thing, and "Not now" on a list of three would silently snooze items you never looked at.
@@ -88,7 +90,7 @@ export const answerButtons = (rows: ledger.HeadsupRow[]): { category?: string; h
   const token = ledger.issueAnswerToken(rows[0].id);
   if (!token) return {};
   return {
-    category: RESEARCH_KINDS.has(rows[0].kind) ? "HEADSUP_RESEARCH" : "HEADSUP",
+    category: CATEGORY[ledger.toView(rows[0]).yesAction],
     headsupId: rows[0].id,
     headsupToken: token,
   };

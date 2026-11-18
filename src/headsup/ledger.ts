@@ -11,8 +11,13 @@
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { rawDb } from "../memory/store.ts";
+import { HEADSUP_HOME, HEADSUP_TOMTOM_KEY } from "../config.ts";
+import { yesAction, yesLabel } from "./actions.ts";
+import type { YesAction } from "./actions.ts";
 import { cardsFor, toCardView } from "./research/cards.ts";
 import type { CardView } from "./research/cards.ts";
+import { getWatch, toWatchView } from "./watch/store.ts";
+import type { WatchView } from "./watch/store.ts";
 import type { Candidate } from "./scan.ts";
 import { subjectKey } from "./scan.ts";
 import { SNOOZE_HOURS } from "./rules.ts";
@@ -115,7 +120,7 @@ export const markOffered = (c: Candidate, stage: number, now: Date): HeadsupRow 
         c.fingerprint,
         t,
         t,
-        JSON.stringify({ amount: c.amount, location: c.location, timeSensitive: c.timeSensitive }),
+        JSON.stringify({ amount: c.amount, flightNumber: c.flightNumber, location: c.location, timeSensitive: c.timeSensitive }),
         t,
         t,
       );
@@ -243,15 +248,27 @@ export interface HeadsupView {
   snoozeUntil: null | string;
   state: HeadsupState;
   subject: string;
+  /** The standing watch behind a Yes on a flight or a drive, if one was started. */
+  watch: null | WatchView;
+  /** What Yes does for this item, and the button's words. One answer for every client. */
+  yesAction: YesAction;
+  yesLabel: string;
 }
 
 export const toView = (r: HeadsupRow): HeadsupView => {
-  let payload: { amount?: string; location?: string; note?: string; query?: string; researchError?: string } = {};
+  let payload: { amount?: string; flightNumber?: string; location?: string; note?: string; query?: string; researchError?: string } = {};
   try {
     payload = r.payload_json ? JSON.parse(r.payload_json) : {};
   } catch {
     /* a bad payload is just an absent one */
   }
+  const action = yesAction({
+    flightNumber: payload.flightNumber,
+    kind: r.kind,
+    location: payload.location,
+    timed: r.due_at.includes("T"),
+    travelReady: !!HEADSUP_TOMTOM_KEY && !!HEADSUP_HOME,
+  });
   return {
     amount: payload.amount ?? null,
     answer: r.answer,
@@ -267,14 +284,17 @@ export const toView = (r: HeadsupRow): HeadsupView => {
     snoozeUntil: r.snooze_until,
     state: r.state,
     subject: r.subject,
+    watch: toWatchView(getWatch(r.id)),
+    yesAction: action,
+    yesLabel: yesLabel(r.kind, action),
   };
 };
 
 /**
  * Open items soonest first, or the most recent of everything. "Open" is what still needs you or
  * has something to show: offered and snoozed items, plus accepted or researched birthdays and
- * anniversaries, whose research results are the whole point of having said yes. Answering "got
- * it" to a bill finishes it, so those leave the list.
+ * anniversaries, whose research results are the whole point of having said yes, and anything with
+ * a watch, whose live status is. Answering "got it" to a bill finishes it, so those leave the list.
  */
 export const listForClient = (which: "all" | "open", limit = 100): HeadsupView[] => {
   const rows =
@@ -282,7 +302,8 @@ export const listForClient = (which: "all" | "open", limit = 100): HeadsupView[]
       ? (rawDb
           .prepare(
             "SELECT * FROM headsups WHERE state IN ('offered','snoozed') " +
-              "OR (state IN ('accepted','researched') AND kind IN ('birthday','anniversary')) ORDER BY due_at LIMIT ?",
+              "OR (state IN ('accepted','researched') AND (kind IN ('birthday','anniversary') " +
+              "OR id IN (SELECT headsup_id FROM headsup_watches))) ORDER BY due_at LIMIT ?",
           )
           .all(limit) as unknown as HeadsupRow[])
       : (rawDb.prepare("SELECT * FROM headsups ORDER BY updated DESC LIMIT ?").all(limit) as unknown as HeadsupRow[]);

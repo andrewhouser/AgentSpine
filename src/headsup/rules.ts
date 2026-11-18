@@ -66,6 +66,32 @@ export const SNOOZE_HOURS = 24;
  */
 export const FAST_LOOP_FLOOR_MINUTES = 30;
 
+// --- watches (Phase 5) ---------------------------------------------------------------------
+
+/** A flight is watched from this long before it departs. Earlier than this nothing is polled at all. */
+export const FLIGHT_WATCH_BEFORE_HOURS = 6;
+/** ... and for this long after, at most. It ends sooner when the flight lands or is cancelled. */
+export const FLIGHT_WATCH_AFTER_HOURS = 12;
+/** A drive is watched from this long before the event starts. */
+export const DRIVE_WATCH_BEFORE_HOURS = 3;
+
+/**
+ * Delays are bucketed to this many minutes before they reach a fingerprint, the way weather alerts
+ * bucket snowfall. A feed that wanders between 12 and 17 minutes late means "about 15", and
+ * should not notify twice. Drive times use their own, tighter bucket.
+ */
+export const DELAY_BUCKET_MINUTES = 15;
+export const TRAVEL_BUCKET_MINUTES = 10;
+
+/**
+ * Bad news on the FIRST look is worth saying even though a first look normally just records
+ * state: a flight already cancelled, or already an hour late, when you start tracking it.
+ */
+export const FIRST_LOOK_NOTIFY_DELAY_MINUTES = 30;
+
+/** The first "leave by" notice comes this long before the time to leave. */
+export const LEAVE_NOTICE_MINUTES = 60;
+
 // --- classification -----------------------------------------------------------------------
 
 /** `PAID` as a word, any case. Paid bills are ignored, so this runs before anything else. */
