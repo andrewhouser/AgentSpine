@@ -466,6 +466,27 @@ export interface Task {
   waiting_on: null | string;
 }
 
+/** A proactive suggestion: something coming up that the assistant noticed. */
+export interface Headsup {
+  amount: null | string;
+  answer: null | string;
+  dueAt: string;
+  firstOfferedAt: null | string;
+  id: number;
+  kind: string;
+  location: null | string;
+  snoozeUntil: null | string;
+  state: "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
+  subject: string;
+}
+
+export interface HeadsupRun {
+  deferred: number;
+  errors: string[];
+  offered: number;
+  status: string;
+}
+
 export interface Client {
   email: null | string;
   id: number;

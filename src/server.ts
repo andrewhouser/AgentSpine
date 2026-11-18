@@ -75,6 +75,9 @@ import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
 import { addTask, deleteTask, getTask, listTasks, updateTask } from "./tasks/store.ts";
 import { sweepDueTasks } from "./tasks/sweep.ts";
+import * as headsupLedger from "./headsup/ledger.ts";
+import { planMorning } from "./headsup/index.ts";
+import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
 import { sweepDueCards } from "./study/sweep.ts";
 import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
 import { ensureMorningBrief } from "./briefing.ts";
@@ -1408,6 +1411,45 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
     }
 
+    // /api/headsups — proactive suggestions (src/headsup, docs/PLAN-heads-up.md).
+    if (seg[1] === "headsups") {
+      if (m === "GET" && seg.length === 2)
+        return sendJson(
+          res,
+          200,
+          headsupLedger.listForClient(url.searchParams.get("state") === "all" ? "all" : "open"),
+        );
+      // What a run would offer right now. Reads the calendars, writes nothing.
+      if (m === "GET" && seg.length === 3 && seg[2] === "preview") {
+        const plan = await planMorning().catch((err) => ({
+          deferred: 0,
+          errors: [err instanceof Error ? err.message : String(err)],
+          offers: [],
+        }));
+        return sendJson(res, 200, {
+          deferred: plan.deferred,
+          errors: plan.errors,
+          offers: plan.offers.map((o) => ({
+            daysUntil: o.candidate.daysUntil,
+            kind: o.candidate.kind,
+            reason: o.reason,
+            subject: o.candidate.subject,
+          })),
+        });
+      }
+      // Run the morning job now, ignoring "already ran today". Still honors quiet hours.
+      if (m === "POST" && seg.length === 3 && seg[2] === "run")
+        return sendJson(res, 200, await runMorningHeadsup(new Date(), { force: true }));
+      if (m === "POST" && seg.length === 4 && seg[3] === "answer") {
+        const b = await readBody(req);
+        const a = String(b?.answer ?? "");
+        if (a !== "yes" && a !== "later" && a !== "never")
+          return sendJson(res, 400, { error: 'answer must be "yes", "later" or "never"' });
+        const row = headsupLedger.answer(Number(seg[2]), a, new Date());
+        return row ? sendJson(res, 200, headsupLedger.toView(row)) : sendJson(res, 404, { error: "no such heads-up" });
+      }
+    }
+
     // /api/tasks ... — the assistant's own to-do list and follow-ups (src/tasks).
     if (seg[1] === "tasks") {
       if (m === "GET" && seg.length === 2) {
@@ -1668,6 +1710,9 @@ setInterval(runScheduler, SCHEDULER_TICK_MS);
 // Due tasks and follow-ups become notifications.
 void sweepDueTasks();
 setInterval(() => void sweepDueTasks(), 60_000).unref();
+// The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
+void sweepHeadsup();
+setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
 // Flash cards that have come due earn one nudge a day.
 void sweepDueCards();
 setInterval(() => void sweepDueCards(), 10 * 60_000).unref();

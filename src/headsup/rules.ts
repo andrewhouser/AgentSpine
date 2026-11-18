@@ -46,6 +46,16 @@ export const DAILY_CAP = 3;
 export const QUIET_START_HOUR = 21;
 export const QUIET_END_HOUR = 7;
 
+/**
+ * The morning heads-up does not run before this local time. It is just after quiet hours end
+ * and shortly before the 7:30 morning brief, so the brief can mention what is waiting.
+ */
+export const MORNING_HOUR = 7;
+export const MORNING_MINUTE = 15;
+
+/** After a failed calendar fetch, wait this long before trying again. Keeps a revoked token from nagging the log. */
+export const RETRY_AFTER_ERROR_MINUTES = 60;
+
 /** "Not now" comes back after this long. */
 export const SNOOZE_HOURS = 24;
 

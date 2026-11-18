@@ -1,6 +1,6 @@
 # Plan: Heads-up (proactive suggestions)
 
-Written 2026-11-18. Status: **Phases 0 and 1 built** (calendar reader, scanner, rules, ledger, planner; nothing is wired to a schedule or a notification yet, so nothing user-visible changes). Phases 2 onward are proposed. Prompted by Duet noticing a flight and
+Written 2026-11-18. Status: **Phases 0, 1 and 2 built** (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 2b onward is proposed. Prompted by Duet noticing a flight and
 offering to track it. The goal here is the general version: AgentSpine notices things coming up
 in your life and offers to help, without being asked.
 
@@ -127,8 +127,8 @@ scanner is safe to run as often as you like. "Done" is set automatically once th
 
 ### 4. Two loops
 
-**Morning heads-up** (seeded once like the brief, `ensureHeadsUp()` in a new `src/headsup/seed.ts`,
-a deleted seed stays deleted). It runs shortly before the morning brief, asks the scanner for
+**Morning heads-up** (a code-only timer in the dashboard, `src/headsup/morning.ts`, not a seeded
+schedule row: see "Decisions made while building"). It runs shortly before the morning brief, asks the scanner for
 everything due for a first mention or reminder, and sends **one** notification: a short list with
 a Yes / Not now action per item in the app. The brief can fold the count in ("3 heads-ups today").
 A daily cap on offered items lives in code. Overflow rolls to tomorrow rather than being dropped.
@@ -271,7 +271,7 @@ design changes.
 - Tests with fixture calendars: PAID is ignored, a recurring series is one subject, a birthday is
   offered once, a snooze is honored, quiet hours and the daily cap hold.
 
-**Phase 2: morning heads-up**
+**Phase 2: morning heads-up. Built (web and server; the iOS half is Phase 4).**
 - Seeded schedule, one combined notification, `/api/headsups` endpoints, and Yes / Not now / Never.
 - Web list. No research yet: "Yes" just records the answer.
 
@@ -358,3 +358,39 @@ Decisions made while building, so they are not rediscovered later:
   week by design, so including it would flag every instance as "changed".
 - **A mute ignores amounts and digits**, so muting "Water bill $40" also mutes next month's "$52.10".
 - **Expiry compares calendar dates, not instants**, so an all-day event is still open at 3pm that day.
+
+### Phase 2 (morning heads-up)
+
+| File | Role |
+|---|---|
+| `src/headsup/morning.ts` | `runMorningHeadsup`: gates, scan, record, one notification. `sweepHeadsup` is the timer entry point. |
+| `src/server.ts` | Timer every 10 minutes, and `/api/headsups` (list, `preview`, `run`, `:id/answer`). |
+| `web/src/components/HeadsupView/` | The Heads-up page: open items, three answers, history, "Check now". |
+| `test/headsup-morning.test.mjs` | 41 checks through the `fetchEvents` / `send` seams. |
+
+Decisions made while building:
+
+- **A timer, not a schedule row.** A schedule row runs the agent loop, which is a model call every
+  morning even on an empty day, and sends private dates through a prompt for nothing. The deviation
+  from the original plan is deliberate. The cost is that it does not appear on the Schedules page;
+  `HEADSUP_ENABLED=false` and `policy.json` (Google reads) are the switches instead.
+- **Not before 7:15, never in quiet hours, once per calendar day**, stamped in `kv` so a restart does
+  not repeat it. `force` ("Check now") skips the first and third but never quiet hours.
+- **A failed calendar read backs off for an hour** and is logged, so a revoked token does not
+  produce a line every ten minutes. One failing calendar does not lose the others.
+- **Offers are recorded before the push is sent.** If the push fails the item is still on the list,
+  which is better than offering it again tomorrow as though it were new.
+- **The wording is code, not a model.** Lines are built from the event's own title and a lead-time
+  phrase ("Rent $1,800 due: in 5 days"). Cheaper, deterministic, and no private date goes through
+  a prompt. The model arrives with Phase 3's research.
+- **Button labels are "Got it / Remind me tomorrow / Don't suggest this".** They map to the answers
+  `yes / later / never`. Until research exists, "Yes" has nothing to do, so the label is honest.
+  Phase 3 relabels it ("Yes, find gift ideas").
+- **The push is intentionally plain for now.** It carries `screen: "headsup"` and a collapse id.
+  The iOS build ignores an unknown screen and shows no buttons, so nothing breaks before Phase 4
+  adds the `HEADSUP` category.
+- **Privacy note.** Notification text contains event titles ("Garrett's Birthday"). That is the same
+  posture as task and study notifications. With APNs it goes through Apple; with a public ntfy
+  topic it is readable by anyone who knows the topic name, so use a private topic.
+
+Not done yet from Phase 2: folding the count into the 7:30 morning brief.

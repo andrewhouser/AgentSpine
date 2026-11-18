@@ -18,6 +18,8 @@ import type {
   Confirmation,
   Conversation,
   DictationStatus,
+  Headsup,
+  HeadsupRun,
   IngestResult,
   LiveStatus,
   Meeting,
@@ -128,6 +130,8 @@ export const api = {
   // --- tasks, files, clients, search (the personal-assistant surface) ---
   addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; projectId?: number; title: string; waitingOn?: string }) =>
     post<Task>("/api/tasks", fields),
+  answerHeadsup: (id: number, answer: "later" | "never" | "yes") =>
+    post<Headsup>(`/api/headsups/${id}/answer`, { answer }),
   /**
    * Accept one auto-approval proposal.
    *
@@ -147,7 +151,6 @@ export const api = {
     }),
   askMeetingChat: (id: number, question: string) =>
     post<ChatMessage>(`/api/meetings/${id}/chat`, { question }),
-
   /**
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
@@ -155,6 +158,7 @@ export const api = {
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
+
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
@@ -166,12 +170,10 @@ export const api = {
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
-
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
-
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -237,6 +239,8 @@ export const api = {
 
   listFiles: () => request<SavedFile[]>("/api/files"),
 
+  listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
+
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
 
@@ -244,13 +248,13 @@ export const api = {
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
 
   listProjects: () => request<Project[]>("/api/projects"),
+
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
-
   listRecipes: () => request<Recipe[]>("/api/recipes"),
+
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
   listSchedules: () => request<Schedule[]>("/api/schedules"),
-
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
 
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
@@ -260,6 +264,7 @@ export const api = {
 
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
   markConversationRead: (id: number) => post<{ ok: boolean }>(`/api/conversations/${id}/read`),
+
   meeting: (id: number, pass: "final" | "live" = "final") =>
     request<{
       chat?: ChatMessage[];
@@ -270,7 +275,6 @@ export const api = {
       speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
-
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
 
@@ -329,6 +333,8 @@ export const api = {
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
 
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
+
+  runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 

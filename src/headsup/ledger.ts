@@ -173,3 +173,47 @@ export const expirePast = (now: Date): number => {
     .run(iso(now), localDate(now));
   return Number(r.changes);
 };
+
+/** What a client sees of a row: no internal stage bookkeeping, payload fields lifted out. */
+export interface HeadsupView {
+  amount: null | string;
+  answer: null | string;
+  dueAt: string;
+  firstOfferedAt: null | string;
+  id: number;
+  kind: string;
+  location: null | string;
+  snoozeUntil: null | string;
+  state: HeadsupState;
+  subject: string;
+}
+
+export const toView = (r: HeadsupRow): HeadsupView => {
+  let payload: { amount?: string; location?: string } = {};
+  try {
+    payload = r.payload_json ? JSON.parse(r.payload_json) : {};
+  } catch {
+    /* a bad payload is just an absent one */
+  }
+  return {
+    amount: payload.amount ?? null,
+    answer: r.answer,
+    dueAt: r.due_at,
+    firstOfferedAt: r.first_offered_at,
+    id: r.id,
+    kind: r.kind,
+    location: payload.location || null,
+    snoozeUntil: r.snooze_until,
+    state: r.state,
+    subject: r.subject,
+  };
+};
+
+/** Open items (offered or snoozed) soonest first, or the most recent of everything. */
+export const listForClient = (which: "all" | "open", limit = 100): HeadsupView[] => {
+  const rows =
+    which === "open"
+      ? listByState(["offered", "snoozed"], limit)
+      : (rawDb.prepare("SELECT * FROM headsups ORDER BY updated DESC LIMIT ?").all(limit) as unknown as HeadsupRow[]);
+  return rows.map(toView);
+};

@@ -125,6 +125,17 @@ check("an all-day event is still open at 3pm that day", ledger.getByKey(`bill:t1
 ledger.expirePast(day(1, 0, 5));
 check("... and expired just after midnight", ledger.getByKey(`bill:t1:${dateStr(0)}`)?.state, "expired");
 
+console.log("\nwhat a client sees\n");
+const bill = { ...birthday("v1"), eventType: "default", location: "Online", start: dateStr(4), title: "Gas bill $62.10" };
+morning(0, [bill]);
+const view = ledger.listForClient("open").find((v) => v.subject === "Gas bill $62.10");
+check("kind and subject", [view.kind, view.subject], ["bill", "Gas bill $62.10"]);
+check("the amount and place are lifted out of the payload", [view.amount, view.location], ["$62.10", "Online"]);
+check("internal stage and dedupe key are not exposed", Object.keys(view).some((k) => /stage|dedupe|fingerprint|payload/i.test(k)), false);
+check("open lists only offered and snoozed", ledger.listForClient("open").every((v) => ["offered", "snoozed"].includes(v.state)), true);
+check("all includes finished ones too", ledger.listForClient("all").length > ledger.listForClient("open").length, true);
+check("a row with a corrupt payload still renders", ledger.toView({ ...ledger.getByKey(`bill:v1:${dateStr(4)}`), payload_json: "{nope" }).amount, null);
+
 fs.rmSync(dbPath, { force: true });
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

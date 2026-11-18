@@ -376,6 +376,12 @@ export const HEADSUP_EXCLUDE_CALENDARS = csv(env.HEADSUP_EXCLUDE_CALENDARS);
 export const HEADSUP_INCLUDE_CALENDARS = csv(env.HEADSUP_INCLUDE_CALENDARS);
 
 /**
+ * The morning heads-up (src/headsup/morning.ts). On by default because it is inert until
+ * policy.json enables Google reads; set HEADSUP_ENABLED=false to turn the whole feature off.
+ */
+export const HEADSUP_ENABLED = (env.HEADSUP_ENABLED ?? "true") !== "false";
+
+/**
  * Thresholds for `weather_alerts`. Defaults are aligned with NWS advisory levels rather
  * than picked to feel about right, so an alert corresponds to something the weather service
  * would also consider notable.
