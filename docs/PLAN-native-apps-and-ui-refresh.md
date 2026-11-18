@@ -1,9 +1,9 @@
-# The native Mac app, and a UI refresh for both platforms
+# The native Mac app, and a UI refresh across every client
 
 Written 2026-11-18. Planned, not started. Nothing here has been built.
 
 The goal: a SwiftUI app for macOS 15+ that feels native on the MacBook Pro and the Mac Mini,
-and a visual refresh that the iPhone app gets at the same time. Both are clients of the one
+and a visual refresh that the iPhone app and the web client get too. Both are clients of the one
 server. There is no shared database and no second brain.
 
 Structured like [PLAN-build-loop.md](PLAN-build-loop.md): decisions and invariants first, then
@@ -18,6 +18,7 @@ phases ordered so each is useful alone.
 | Framework | SwiftUI, as native as possible. No web shell. |
 | Minimum OS | macOS 15. iOS stays at 17 for now. |
 | UI refresh | Done in the shared layer so the iPhone gets it too. |
+| Web client | Gets the same identity in a late phase (7), as a **styling change only**: no layout, feature or structure changes. |
 | Visual identity | A strong one of its own: "the spine". See "Design direction" below. |
 | Main entry point (Mac) | The main window, Claude-like: sidebar of threads, a conversation, a composer. The menu bar item is secondary. |
 | iPhone tab structure | Restructured. The user chooses which tabs sit in the bar and which fold under More, in Settings, by drag and drop. |
@@ -127,6 +128,11 @@ Do the refresh once, in the package, before building more screens on top of the 
   (`accessibilityAction`) as well, since drag is not operable there. Persist the order in
   `UserDefaults` through `Settings`, and handle new tabs added by later app versions (append
   them under More) and tabs removed (drop them).
+- **One token source for all three clients.** Colors (both themes), type scale, spacing,
+  radii and the verdict colors live in a single file under `design/`. A small script, with no
+  new runtime dependency, generates the web's CSS custom properties and the Swift constants
+  from it, so the spine cannot drift between platforms. The generated files are committed,
+  and `npm run check` fails if they are out of date.
 - Shared components that both platforms use: thread bubble and tool-call row, approval
   card, status badge, empty state, error notice, markdown text.
 - Platform adaptation lives in the components, not the screens: pointer hover and
@@ -198,6 +204,31 @@ and extracted items, and the confirmation-queue rules from SPEC 15 are untouched
 - Signing and install: same Apple Developer team, a development-signed build on each Mac.
   No App Store, as with the iPhone app.
 
+### Phase 7: web client restyle (styling only)
+
+Give `web/` the same identity, using the generated tokens. Scope is deliberately narrow.
+
+In scope:
+- Replace the colors, fonts, spacing and radii in `web/src/styles/global.css` (about 177
+  lines, about 31 custom properties today) and in component CSS with the generated tokens.
+  Both themes.
+- Draw the spine in the conversation: the vertical line and verdict-colored nodes in
+  `ChatView`, `AssistantMessage` and `DecisionBadge`, and the hollow amber node on
+  `ApprovalCard`. These are CSS and small markup changes, not behavior changes.
+- Restyle the existing components in place: `Sidebar`, `Composer`, `PageHeader`, `ListPage`,
+  dialogs and the rest.
+
+Out of scope for this phase:
+- Layout and navigation changes. The web UI keeps its current structure. It does **not** adopt
+  the Mac's main-window layout.
+- New features, new routes, API changes, or reworking component logic.
+- Dropping or renaming any element a test or the server depends on.
+
+Done when: every existing screen renders in the new identity in light and dark, nothing moved
+or went missing, `npm run web:build` and `npm run lint:css` pass, and `npm run check` is green.
+Verify by walking each view once in a browser, since there are no visual tests; say which
+views were checked. A later change to the web layout is a separate decision.
+
 ## How we will test
 
 This sandbox is Linux. SwiftUI macros do not expand here, so Swift can be written and
@@ -217,6 +248,7 @@ parse-checked (`swiftc -parse`) but **not compiled or run** by me. Practical con
 | Risk | Mitigation |
 |---|---|
 | Package extraction breaks the iPhone app in a wide, hard-to-review diff | Phase 1 is its own change and must be green on a device before anything else starts |
+| Web restyle regresses a screen nobody looks at | Phase 7 walks every existing view in both themes, and keeps markup and behavior unchanged |
 | Redesign churn after screens already exist | Design system lands before the Mac screens, and screens use components only |
 | Screen Recording permission friction | Mic-only is a complete, supported mode |
 | Audio lost on flaky Wi-Fi | Sequence numbers plus a local disk buffer, tested server-side |
@@ -239,6 +271,7 @@ the question and tells you it can only be answered once reconnected. Build it on
    and drop.
 3. Mac entry point: the main window. The menu bar item stays a secondary surface for
    approvals and quick capture.
+4. Web client: restyle only, in phase 7, from the shared tokens. No layout or feature changes.
 
 ## Approval gate
 
