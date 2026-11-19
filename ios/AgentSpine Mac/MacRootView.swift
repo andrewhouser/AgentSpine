@@ -56,6 +56,13 @@ struct MacRootView: View {
         .task {
             if settings.isConfigured { await state.refresh() }
         }
+        // A notification was clicked: show that thread.
+        .onReceive(NotificationCenter.default.publisher(for: .macOpenThread)) { note in
+            guard let id = note.object as? Int else { return }
+            section = .threads
+            selectedThread = id
+            composingNew = false
+        }
         .onChange(of: scenePhase) { _, phase in
             // Coming back to the window is when the lists are most likely to be stale.
             guard phase == .active, settings.isConfigured else { return }

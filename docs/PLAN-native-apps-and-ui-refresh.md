@@ -295,8 +295,19 @@ Memory, Auto-approvals and Agents. The iOS-only modifiers those screens used are
 `Design/PlatformShims.swift` (inline title, number pad, capitalization, grouped list style,
 leading and trailing toolbar placement, `PlatformImage`), so the phone is unchanged. Search is
 ⌘K rather than a section, and Settings is the ⌘, scene. In Projects a thread opens in
-`MacThreadDetail`. Not done: the two-pane Builds diff and Activity trace layouts, the menu bar
-extra, and notifications.
+`MacThreadDetail`. (Builds, Activity and the menu bar extra were built later; see below.)
+
+**Mac notifications (2026-11-19).** Local, while the app runs: `MacNotifier` posts a banner
+"Approval needed" with the summary when `MacApprovalWatcher`'s 30-second poll sees an approval it
+has not seen, and only when the app is not in front. The first poll after launch only seeds the
+set, so what was already waiting is not news. A click activates the app and opens that thread
+(`.macOpenThread`, handled in `MacRootView`); banners for approvals answered elsewhere are taken
+down. The banner has no Approve or Reject: answering stays in the app, through the confirmation
+queue. The system permission prompt appears the first time there is something to say, not at
+launch. Builds with no warnings; not yet seen: the permission prompt and a real banner need your
+build running while another app is in front. Not done: replies finishing and Heads-up items (the
+phone gets those by push), and real push to a Mac, which needs `src/push/apns.ts` to stop using
+one global `apns-topic`.
 
 **Mac layout follows the UI Directions (2026-11-19).** Compared against "AgentSpine UI
 Directions" (Desktop PDF: Mac Threads, Meetings with the coach column, Heads-up; phone Threads,

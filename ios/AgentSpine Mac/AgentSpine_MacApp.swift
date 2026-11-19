@@ -6,7 +6,10 @@ struct AgentSpine_MacApp: App {
     @State private var hub = MacThreadHub()
     @State private var watcher = MacApprovalWatcher()
 
-    init() { SpineFont.registerBundled() }
+    init() {
+        SpineFont.registerBundled()
+        MacNotifier.shared.install()
+    }
 
     var body: some Scene {
         WindowGroup(id: "main") {

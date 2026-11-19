@@ -9,6 +9,10 @@ import SwiftUI
 final class MacApprovalWatcher {
     private(set) var pending: [Confirmation] = []
     private var polling = false
+    /// Approvals already seen, so a notification fires once per approval. The first answer after
+    /// launch only seeds this: whatever was already waiting when the app opened is not news.
+    private var seen: Set<Int> = []
+    private var seeded = false
 
     func refresh() async {
         guard Settings.shared.isConfigured else {
@@ -16,7 +20,15 @@ final class MacApprovalWatcher {
             return
         }
         if let fresh = try? await APIClient.shared.confirmations(state: "pending") {
-            pending = fresh.filter(\.isPending)
+            let waiting = fresh.filter(\.isPending)
+            let unseen = waiting.filter { !seen.contains($0.id) }
+            seen.formUnion(waiting.map(\.id))
+            pending = waiting
+            if seeded {
+                for confirmation in unseen { await MacNotifier.shared.approvalWaiting(confirmation) }
+            }
+            seeded = true
+            await MacNotifier.shared.retire(keeping: Set(waiting.map(\.id)))
         }
     }
 
