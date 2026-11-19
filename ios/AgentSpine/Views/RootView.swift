@@ -25,6 +25,7 @@ struct RootView: View {
                 ConversationsView()
                     .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
             }
+            .spineScreen()
             .tabItem { Label("Threads", systemImage: "bubble.left.and.text.bubble.right") }
             .badge(state.waitingThreads)
             .tag(Tab.threads)
@@ -32,6 +33,7 @@ struct RootView: View {
             NavigationStack {
                 HeadsupView()
             }
+            .spineScreen()
             .tabItem { Label("Heads-up", systemImage: "sparkles") }
             .badge(state.headsupWaiting)
             .tag(Tab.headsup)
@@ -39,36 +41,42 @@ struct RootView: View {
             NavigationStack {
                 TasksView()
             }
+            .spineScreen()
             .tabItem { Label("Tasks", systemImage: "checklist") }
             .tag(Tab.tasks)
 
             NavigationStack {
                 StudyView()
             }
+            .spineScreen()
             .tabItem { Label("Study", systemImage: "brain.head.profile") }
             .tag(Tab.study)
 
             NavigationStack {
                 SchedulesView()
             }
+            .spineScreen()
             .tabItem { Label("Schedules", systemImage: "clock") }
             .tag(Tab.schedules)
 
             NavigationStack {
                 ProjectsView()
             }
+            .spineScreen()
             .tabItem { Label("Projects", systemImage: "folder") }
             .tag(Tab.projects)
 
             NavigationStack {
                 FilesView()
             }
+            .spineScreen()
             .tabItem { Label("Files", systemImage: "doc.text") }
             .tag(Tab.files)
 
             NavigationStack {
                 ClientsView()
             }
+            .spineScreen()
             .tabItem { Label("Clients", systemImage: "person.crop.rectangle.stack") }
             .tag(Tab.clients)
 
@@ -78,30 +86,35 @@ struct RootView: View {
                     threadPath = [id]
                 })
             }
+            .spineScreen()
             .tabItem { Label("Search", systemImage: "magnifyingglass") }
             .tag(Tab.search)
 
             NavigationStack {
                 MeetingsView()
             }
+            .spineScreen()
             .tabItem { Label("Meetings", systemImage: "person.2.wave.2") }
             .tag(Tab.meetings)
 
             NavigationStack {
                 BuildsView()
             }
+            .spineScreen()
             .tabItem { Label("Builds", systemImage: "hammer") }
             .tag(Tab.builds)
 
             NavigationStack {
                 ActivityView()
             }
+            .spineScreen()
             .tabItem { Label("Activity", systemImage: "list.bullet.rectangle") }
             .tag(Tab.activity)
 
             NavigationStack {
                 SettingsView()
             }
+            .spineScreen()
             .tabItem { Label("Settings", systemImage: "gearshape") }
             .tag(Tab.settings)
         }
