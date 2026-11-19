@@ -176,6 +176,8 @@ struct QueueStatus: Codable {
 struct ServerStatus: Codable {
     let queue: QueueStatus?
     let schedules: Int?
+    /// Open tasks. Absent from servers older than the Mac sidebar's badge.
+    let tasks: Int?
     let time: String?
 }
 

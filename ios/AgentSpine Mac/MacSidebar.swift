@@ -95,8 +95,19 @@ struct MacSidebar: View {
         // `.tag` goes last. With `.badge` applied after it the List cannot see the tag, so the
         // row is not selectable and a click does nothing (reproduced in the running app).
         Label(item.title, systemImage: item.symbol)
-            .badge(item == .headsup ? state.headsupWaiting : 0)
+            .badge(count(for: item))
             .tag(MacSidebarItem.section(item))
+    }
+
+    /// Zero hides a badge. Builds has none: "a build" is a view over the actions log with no
+    /// cheap count that means anything.
+    private func count(for item: MacSection) -> Int {
+        switch item {
+        case .headsup: return state.headsupWaiting
+        case .tasks: return state.openTaskCount ?? 0
+        case .schedules: return state.scheduleCount ?? 0
+        default: return 0
+        }
     }
 
     @ViewBuilder private var threadRows: some View {
@@ -161,6 +172,7 @@ struct MacSidebar: View {
 /// Settings test uses), not the model host's. The server exposes no model-host probe yet, so the
 /// design's "Model host connected" line is a later change with a server half.
 private struct ConnectionFooter: View {
+    @Environment(AppState.self) private var state
     @Environment(Settings.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
 
@@ -224,7 +236,9 @@ private struct ConnectionFooter: View {
     private func probe() async {
         let start = ContinuousClock.now
         do {
-            _ = try await APIClient.shared.status()
+            let status = try await APIClient.shared.status()
+            state.openTaskCount = status.tasks
+            state.scheduleCount = status.schedules
             let elapsed = start.duration(to: .now).components
             milliseconds = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
             reachable = true

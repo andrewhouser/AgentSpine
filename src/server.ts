@@ -471,6 +471,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         inbox: store.inboxId(),
         queue: queueStatus(),
         schedules: store.listSchedules().length,
+        // Open tasks, for the Mac sidebar's badge. Same cap as GET /api/tasks, so a count of 300
+        // means "at least 300"; nobody needs that precision on a badge.
+        tasks: listTasks({ limit: 300, status: "open" }).length,
         time: new Date().toISOString(),
       });
     }

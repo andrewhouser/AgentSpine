@@ -337,10 +337,12 @@ phone's `ReadAloud` (now shared: its `AVAudioSession` calls are iOS-only); it ne
 Kokoro voice service, see `docs/VOICE.md`. Heard on a real reply: not yet. The inspector button
 opens the system inspector column (`MacThreadInspector`, remembered in `mac.threadInspector`),
 modelled on Claude's own panel: a sectioned, read-only summary of the thread the view already
-holds, so it makes no request of its own. Sections: Thread (pinned tier, turns, how many ran at
-each tier), Context (what the latest turn had in front of it, `Turn.contextUsed`), Tool calls (by
-tool, with the worst verdict as the dot) and Child runs (agent, tier, status, task). Builds; not
-yet seen running. It shows finished turns only; the run in flight appears when it ends.
+holds, so it makes no request of its own. Four cards: Model (pinned tier, and a bar split by the
+tier each turn ran at), Context (`Turn.contextUsed`, grouped into Memories, Earlier conversations
+and Also in view by the server's "memory: " / "earlier conversation: " prefixes, each group
+collapsed), Tool calls (by tool, a bar for the count and the worst verdict) and Child runs.
+Builds; the first version was a flat list and was redrawn as cards; the cards have not been seen
+running. It shows finished turns only; the run in flight appears when it ends.
 
 Still different from the directions, in the order worth doing:
 - **Heads-up timeline rail: built, not yet seen running.** The Dates column is built
@@ -350,8 +352,11 @@ Still different from the directions, in the order worth doing:
   (hollow amber node while it waits on a yes, a plain node otherwise) under a mono date line
   ("Fri Nov 20 · in 2 days", amber while open). Both schemes build. Not yet done: the directions'
   coloured nodes for tracked flights and researched items. The phone keeps the plain list.
-- **Sidebar counts** (Tasks 4, Schedules 9, Builds 1). Only Heads-up has a count today; the
-  others need a cheap count source, not a fetch of each list.
+- **Sidebar counts: Tasks and Schedules built, Builds not.** `/api/status` now also returns
+  `tasks` (open, capped at 300 like the list), beside the `schedules` it already had; the
+  connection footer's 30-second probe writes both to `AppState`, so the badges cost no extra
+  request. Needs a dashboard restart to show Tasks. Builds has none: a build is a view over the
+  actions log, and the directions' "1" has no definition yet (in flight? failed?).
 - **Footer status.** The footer shows the server's round trip (`/api/status`) and host. The
   directions say "Model host connected 14 ms"; the server has no model-host probe, so that line
   needs a small server route first.
