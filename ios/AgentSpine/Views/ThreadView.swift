@@ -525,12 +525,7 @@ struct TurnView: View {
                 if turn.isDecision {
                     DecisionNote(text: task)
                 } else {
-                    Text(task)
-                        .font(.body)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    ThreadBubble(text: task)
                 }
             }
 
@@ -696,12 +691,7 @@ struct LiveTurnView: View {
             if !task.isEmpty, isDecision {
                 DecisionNote(text: task)
             } else if !task.isEmpty {
-                Text(task)
-                    .font(.body)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                ThreadBubble(text: task)
             }
 
             phaseLine

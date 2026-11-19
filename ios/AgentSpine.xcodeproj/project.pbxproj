@@ -25,8 +25,15 @@
 				Core/Models.swift,
 				Core/RunStream.swift,
 				Core/Settings.swift,
+				Design/Components/ApprovalPrompt.swift,
+				Design/Components/MarkdownText.swift,
+				Design/Components/Notices.swift,
+				Design/Components/SpineRow.swift,
+				Design/Components/ThreadBubble.swift,
+				Design/Components/VerdictBadge.swift,
 				Design/DesignColor.swift,
 				Design/Tokens.generated.swift,
+				Design/SpineFont.swift,
 			);
 			target = 36D8177030AE5E1E007D6CFE /* AgentSpine Mac */;
 		};

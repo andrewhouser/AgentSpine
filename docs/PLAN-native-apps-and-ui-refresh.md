@@ -193,9 +193,16 @@ Risks: a file that looked neutral but uses an iOS-only API (this is what step 5 
 Not done yet, and why:
 - **The Swift is uncompiled.** `Tokens.generated.swift` and `DesignColor.swift` have never met a
   compiler. For the Mac target, tick membership on both in Xcode as with the six shared files.
-- **Shared SwiftUI components and the component gallery** (spine row, verdict badge, approval
-  card, status chip, empty and error states). These replace the styling in `Chrome.swift`. They
-  wait until phase 1 builds on a device, so the first compile errors are not a pile of unknowns.
+- **Shared SwiftUI components: first pass written (2026-11-19), not run.** In
+  `ios/AgentSpine/Design/Components/`: `VerdictBadge` and `StatusChip`, `ErrorNotice` and
+  `EmptyNotice` (moved out of `Chrome.swift`, same call sites), `SpineRow` (the node and line),
+  `ApprovalPrompt` (named so it does not collide with the live `ApprovalCard` in `Views/`, which owns the network call and still needs to adopt it), `ThreadBubble` (now used by `TurnView` and `LiveTurnView`), and `ComponentGallery` (previews in light, dark and large type; iPhone target
+  only because it shows `ToolCallRow`). `Design/SpineFont.swift` picks the token families and
+  falls back to system fonts. `ToolCallRow` uses the tokens. The files are in the Mac target's
+  membership list except the gallery. Typechecked with `swiftc`, then built in Xcode for the iPhone and Mac targets with no
+  errors (2026-11-19, reported by the user). Not yet run on a device or checked in the gallery
+  previews. `MarkdownText` moved from `Views/` to `Design/Components/` and restyled (parser untouched) so the Mac target can share it. Still to do: adopting the components in the other screens, Dynamic Type and
+  VoiceOver checks on a device, and choosing between directions from the gallery.
 - **Fonts.** The stacks name Bricolage Grotesque, Instrument Sans and JetBrains Mono, which are
   open-licensed. They must be **bundled in the app and self-hosted on the web**, not loaded from
   a font CDN, because the web client runs on a private tailnet and the project is local-first.

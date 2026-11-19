@@ -32,7 +32,7 @@ struct ToolCallRow: View {
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(tool)
-                            .font(.caption.weight(.semibold).monospaced())
+                            .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                         if let target, !target.isEmpty {
                             Text(target)
                                 .font(.caption2)
@@ -64,7 +64,7 @@ struct ToolCallRow: View {
             }
         }
         .padding(10)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
     }
 }
 
