@@ -14,6 +14,7 @@ struct MacRootView: View {
     @State private var section: Section? = .threads
     @State private var selectedThread: Int?
     @State private var composingNew = false
+    @State private var searching = false
 
     var body: some View {
         NavigationSplitView {
@@ -48,7 +49,21 @@ struct MacRootView: View {
                 .background(Spine.Palette.bg)
             }
         }
+        .sheet(isPresented: $searching) {
+            MacSearchSheet { id in
+                composingNew = false
+                selectedThread = id
+            }
+        }
         .toolbar {
+            ToolbarItem {
+                Button { searching = true } label: {
+                    Label("Search", systemImage: "magnifyingglass")
+                }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(!settings.isConfigured)
+                .help("Search threads (⌘K)")
+            }
             ToolbarItem {
                 Button {
                     selectedThread = nil
