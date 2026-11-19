@@ -11,6 +11,9 @@ struct HeadsupView: View {
     /// The Mac draws the dates in a column of their own beside this list (`MacHeadsupView`), so it
     /// turns them off here. The phone keeps them as sections.
     var showsDates = true
+    /// The Mac hangs each item on the spine, dated, in the order it comes due (the directions'
+    /// timeline). The phone keeps the plain list.
+    var timeline = false
 
     @Environment(AppState.self) private var state
     @State private var items: [Headsup] = []
@@ -64,12 +67,26 @@ struct HeadsupView: View {
                 .listRowBackground(Color.clear)
             }
 
-            ForEach(items) { item in
-                HeadsupRow(
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                let row = HeadsupRow(
                     item: item,
+                    timeline: timeline,
                     answer: { a in Task { await answer(item, a) } },
                     research: { Task { await research(item) } }
                 )
+                if timeline {
+                    // Open questions are hollow amber, as everywhere else on the spine.
+                    SpineRow(
+                        node: item.isOpen ? .waiting : .plain,
+                        isFirst: index == 0,
+                        isLast: index == items.count - 1
+                    ) { row }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: Spine.Space.lg, bottom: 0, trailing: Spine.Space.lg))
+                } else {
+                    row
+                }
             }
 
             if showsDates, !dates.proposals.isEmpty {
@@ -219,11 +236,23 @@ struct HeadsupView: View {
 
 private struct HeadsupRow: View {
     let item: Headsup
+    var timeline = false
     let answer: (String) -> Void
     let research: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if timeline, let due = item.dueDate {
+                // "Fri Nov 20 · in 2 days", the date in mono and amber while it waits on you.
+                HStack(spacing: Spine.Space.sm) {
+                    Text(due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                        .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(item.isOpen ? Spine.Palette.attention : Spine.Palette.textDim)
+                    Text(item.relativeDays)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
+            }
             HStack(alignment: .firstTextBaseline) {
                 Text(item.subject).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                 Spacer()
@@ -234,9 +263,13 @@ private struct HeadsupRow: View {
                     .background(Spine.Palette.bgInset, in: Capsule())
                     .foregroundStyle(Spine.Palette.textDim)
             }
-            Text(item.detailLine)
-                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                .foregroundStyle(Spine.Palette.textDim)
+            // The timeline already says when in its date line.
+            let detail = timeline ? item.detailLine(includingWhen: false) : item.detailLine
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+            }
 
             if item.isOpen {
                 HStack(spacing: 8) {
@@ -482,26 +515,35 @@ extension Headsup {
         return SpineDate.parse(dueAt)
     }
 
-    /// "in 10 days, Sat, Nov 28".
-    var whenText: String {
-        guard let due = dueDate else { return dueAt }
+    /// "in 10 days", "tomorrow", "today"; empty once it is past.
+    var relativeDays: String {
+        guard let due = dueDate else { return "" }
         let calendar = Calendar.current
         let days = calendar.dateComponents(
             [.day],
             from: calendar.startOfDay(for: Date()),
             to: calendar.startOfDay(for: due)
         ).day ?? 0
-        let day = due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         switch days {
-        case 0: return "today, \(day)"
-        case 1: return "tomorrow, \(day)"
-        case 2...: return "in \(days) days, \(day)"
-        default: return day
+        case 0: return "today"
+        case 1: return "tomorrow"
+        case 2...: return "in \(days) days"
+        default: return ""
         }
     }
 
-    var detailLine: String {
-        var parts = [whenText]
+    /// "in 10 days, Sat, Nov 28".
+    var whenText: String {
+        guard let due = dueDate else { return dueAt }
+        let day = due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let relative = relativeDays
+        return relative.isEmpty ? day : "\(relative), \(day)"
+    }
+
+    var detailLine: String { detailLine(includingWhen: true) }
+
+    func detailLine(includingWhen: Bool) -> String {
+        var parts = includingWhen ? [whenText] : []
         if let amount { parts.append(amount) }
         if let location, !location.isEmpty { parts.append(location) }
         if state == "snoozed", let until = SpineDate.parse(snoozeUntil) {

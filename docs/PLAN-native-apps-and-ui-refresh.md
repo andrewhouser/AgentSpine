@@ -326,11 +326,13 @@ as a row and the approval card as the next node, because nothing links a confirm
 action on the client yet.
 
 Still different from the directions, in the order worth doing:
-- **Heads-up timeline rail.** The Dates column is built (`MacHeadsupView`: the phone's list with
-  its date sections off via `showsDates`, beside `MacHeadsupDates`: "It noticed" with Remember it
-  and Not a date, "It remembers" with a Forget context menu). Both schemes build; the layout has
-  not been seen running, because a rebuilt test copy cannot read the Keychain token without the
-  user's approval. The list itself is still the phone's grouped list, not the directions' rail.
+- **Heads-up timeline rail: built, not yet seen running.** The Dates column is built
+  (`MacHeadsupView`: the phone's list with its date sections off via `showsDates`, beside
+  `MacHeadsupDates`: "It noticed" with Remember it and Not a date, "It remembers" with a Forget
+  context menu). The list now hangs on the spine (`timeline: true`): each item is a `SpineRow`
+  (hollow amber node while it waits on a yes, a plain node otherwise) under a mono date line
+  ("Fri Nov 20 · in 2 days", amber while open). Both schemes build. Not yet done: the directions'
+  coloured nodes for tracked flights and researched items. The phone keeps the plain list.
 - **Sidebar counts** (Tasks 4, Schedules 9, Builds 1). Only Heads-up has a count today; the
   others need a cheap count source, not a fetch of each list.
 - **Footer status.** The footer shows the server's round trip (`/api/status`) and host. The

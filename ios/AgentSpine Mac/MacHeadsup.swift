@@ -6,7 +6,7 @@ import SwiftUI
 struct MacHeadsupView: View {
     var body: some View {
         HSplitView {
-            HeadsupView(showsDates: false)
+            HeadsupView(showsDates: false, timeline: true)
                 .frame(minWidth: 420, maxWidth: .infinity)
             MacHeadsupDates()
                 .frame(minWidth: 240, idealWidth: 280, maxWidth: 340)
