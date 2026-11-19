@@ -29,6 +29,16 @@ nonisolated final class PCMSpooler: @unchecked Sendable {
     private var pending = Data()
     private var seq: Int
     private var writeError: String?
+    private let levelLock = NSLock()
+    private var _level: Float = 0
+
+    /// How loud the microphone is right now, 0 to 1 on a decibel scale (silence at 0, about
+    /// -60 dB, full scale at 1), with a quick fall so a meter reads as a meter and not a flicker.
+    var level: Float {
+        levelLock.lock()
+        defer { levelLock.unlock() }
+        return _level
+    }
 
     init(dir: URL, startSeq: Int) {
         self.dir = dir
@@ -73,8 +83,23 @@ nonisolated final class PCMSpooler: @unchecked Sendable {
             return buffer
         }
         guard error == nil, out.frameLength > 0, let samples = out.int16ChannelData?[0] else { return }
+        measure(samples, count: Int(out.frameLength))
         let bytes = Data(bytes: samples, count: Int(out.frameLength) * 2)
         queue.async { [self] in append(bytes) }
+    }
+
+    private func measure(_ samples: UnsafePointer<Int16>, count: Int) {
+        var sum = 0.0
+        for i in 0..<count {
+            let v = Double(samples[i]) / 32_768
+            sum += v * v
+        }
+        let rms = (sum / Double(max(count, 1))).squareRoot()
+        let db = 20 * log10(max(rms, 0.000_001))
+        let now = Float(min(max((db + 60) / 60, 0), 1))
+        levelLock.lock()
+        _level = max(now, _level * 0.82)
+        levelLock.unlock()
     }
 
     private func append(_ bytes: Data) {
@@ -151,6 +176,7 @@ final class MacRecorder {
     private(set) var phase: Phase = .idle
     private(set) var link: Link = .sending
     private(set) var meetingID: Int?
+    private(set) var startedAt: Date?
     /// Chunks captured and not yet accepted by the server.
     private(set) var unsentChunks = 0
     /// Why the last recording stopped early, or what to know about audio left on this Mac.
@@ -165,6 +191,10 @@ final class MacRecorder {
     }
 
     var isRecording: Bool { phase == .recording || phase == .finishing }
+
+    /// The microphone's level for a meter. Not observable: a meter reads it on a timer, so the
+    /// whole screen does not re-render ten times a second.
+    func inputLevel() -> Float { spooler?.level ?? 0 }
     var unsentSeconds: Int { unsentChunks * 3 }
 
     private var engine: AVAudioEngine?
@@ -214,6 +244,7 @@ final class MacRecorder {
         }
 
         meetingID = started.meetingID
+        startedAt = .now
         link = .sending
         unsentChunks = 0
         phase = .recording
@@ -305,6 +336,7 @@ final class MacRecorder {
         sender = nil
         dir = nil
         self.meetingID = nil
+        startedAt = nil
         unsentChunks = 0
         link = .sending
         phase = .idle

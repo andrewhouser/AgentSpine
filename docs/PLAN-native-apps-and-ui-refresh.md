@@ -448,12 +448,20 @@ points to System Settings when access was refused. The Mac target now has `ENABL
 and an `NSMicrophoneUsageDescription`. The source name it sends is `mac`, so `policy.audio.remoteSources`
 must contain it. "Start a meeting" is a menu: this Mac, or the server's microphone as before.
 
+Mic capture was run against the real server on 2026-11-19 and works. Then added: a microphone level
+meter (`MacLevelMeter`: RMS in dB over a 60 dB range, 14 bars, quick fall, read ten times a second
+from the recorder so nothing else re-renders) in the live view's capture strip and in the menu bar
+panel; and the menu bar indicator, which swaps the icon for `record.circle.fill` and a running clock
+while recording (no colour, because the menu bar draws labels as templates), with a panel at the top
+of the menu showing the clock, the meter, the buffering warning and Stop recording without opening
+the window. Both build; the meter and the menu bar have not been looked at while recording.
+
 Known gaps: spool folders left by a crash are not picked up on the next launch, and audio kept after
 the server gave up can only be recovered by hand (it is raw PCM; ffmpeg can wrap it for
-`/api/meetings/import`). There is no level meter yet.
+`/api/meetings/import`). Nothing warns when the meter stays flat (a muted microphone).
 
-Still to do, in order: (1) done; (2) done, above; (3) call audio through ScreenCaptureKit, optional,
-with the "Sources" row of level meters from the directions; (4) the menu bar recording indicator.
+Still to do: call audio through ScreenCaptureKit, optional, with the "Sources" row of level meters
+from the directions (`MacLevelMeter` is the piece to reuse per source).
 
 ### Phase 6: polish and release hygiene
 

@@ -53,12 +53,22 @@ struct MacMenuBarLabel: View {
     @Environment(AppState.self) private var state
     @Environment(MacApprovalWatcher.self) private var watcher
 
+    private let recorder = MacRecorder.shared
     private var waiting: Int { max(state.waitingThreads, watcher.pending.count) }
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: waiting > 0 ? "bubble.left.and.text.bubble.right.fill" : "bubble.left.and.text.bubble.right")
-            if waiting > 0 { Text("\(waiting)") }
+            if recorder.isRecording, let started = recorder.startedAt {
+                // The menu bar draws its label as a template, so colour is not reliable there:
+                // a distinct glyph and a running clock say "recording" without it.
+                Image(systemName: "record.circle.fill")
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(MacClock.text(context.date.timeIntervalSince(started))).monospacedDigit()
+                }
+            } else {
+                Image(systemName: waiting > 0 ? "bubble.left.and.text.bubble.right.fill" : "bubble.left.and.text.bubble.right")
+                if waiting > 0 { Text("\(waiting)") }
+            }
         }
         .task { await watcher.startPolling(state) }
     }
@@ -91,6 +101,7 @@ struct MacMenuBarContent: View {
                     .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                     .foregroundStyle(Spine.Palette.textDim)
             } else {
+                MacRecordingPanel()
                 capture
                 if let error {
                     Text(error)
