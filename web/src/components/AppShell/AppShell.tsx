@@ -15,6 +15,7 @@ import { BuildsView } from "../BuildsView/BuildsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
+import { HeadsupView } from "../HeadsupView/HeadsupView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { OverviewView } from "../OverviewView/OverviewView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
@@ -33,6 +34,7 @@ const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
   clients: "Clients",
   files: "Files",
+  headsup: "Heads-up",
   meetings: "Meetings",
   overview: "Overview",
   schedules: "Schedules",
@@ -233,6 +235,7 @@ export const AppShell = () => {
         {route.view === "schedules" && <SchedulesView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView />}
+        {route.view === "headsup" && <HeadsupView />}
         {route.view === "tasks" && <TasksView projects={projects} />}
         {route.view === "study" && <StudyView />}
         {route.view === "overview" && <OverviewView />}

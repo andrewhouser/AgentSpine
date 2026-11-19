@@ -129,6 +129,7 @@ struct SettingsView: View {
             Section {
                 NavigationLink("Auto-approval proposals") { ProposalsView() }
                 NavigationLink("Agents") { AgentsView() }
+                NavigationLink("Heads-up") { HeadsupPrefsView() }
                 NavigationLink("Memory") { MemoryView() }
                 NavigationLink("Policy") { PolicyView() }
             } header: {

@@ -165,6 +165,66 @@ fs.writeFileSync(path.join(root, "study-due.json"), JSON.stringify(dueForScreen(
 fs.writeFileSync(path.join(root, "study-review.json"), JSON.stringify(await reviewWithRecall(c1, "the auth code")));
 fs.writeFileSync(path.join(root, "study-overview.json"), JSON.stringify(studyOverview()));
 
+// --- heads-up: real server output, for the app's Headsup models ---
+// Everything here is produced by the server's own functions, so a renamed field breaks this test
+// instead of a phone. The cards are set explicitly so the assertions in Swift are exact.
+process.env.EMBEDDINGS_URL = "";
+const hLedger = await import("../src/headsup/ledger.ts");
+const hCards = await import("../src/headsup/research/cards.ts");
+const hDates = await import("../src/headsup/dates.ts");
+const { researchHeadsup } = await import("../src/headsup/research/run.ts");
+const { runMorningHeadsup } = await import("../src/headsup/morning.ts");
+const hNow = new Date(2026, 10, 18, 8, 0);
+const hCand = (kind, subject, key, extra = {}) => ({ daysUntil: 10, dedupeKey: key, fingerprint: "", kind, location: "", sourceId: key, startsAt: "2026-11-28", subject, timeSensitive: false, ...extra });
+
+// A birthday, answered yes and researched. The first research run (no web) and a failing one are
+// kept as the "what Look again reports" fixtures; then the cards are replaced with exact ones.
+const bday = hLedger.markOffered(hCand("birthday", "Garrett's Birthday", "ios:b"), 0, hNow);
+hLedger.answer(bday.id, "yes", hNow);
+const researchDeps = (over = {}) => ({
+  allNames: () => ["Garrett"], getPage: async () => ({ ok: false, reason: "HTTP 403" }), image: async () => null, now: () => hNow, place: () => "Asheville, NC",
+  recipient: async () => ({ cuisines: [], interests: ["coffee"], namesSeen: [], relationship: "sibling" }),
+  search: async () => [], searchAllowed: () => true, send: async () => {}, ...over,
+});
+const researchOk = await researchHeadsup(bday.id, researchDeps());
+const researchErr = await researchHeadsup(bday.id, researchDeps({ search: async () => { throw new Error("provider down"); } }));
+fs.writeFileSync(path.join(root, "headsup-research.json"), JSON.stringify([researchOk, researchErr]));
+hCards.replaceCards(bday.id, [
+  { amount: 42.5, currency: "USD", host: "shop.example", imageId: 3, kind: "gift", note: "A pour-over set", priceText: "$42.50", title: "Pour-Over Set", url: "https://shop.example/p/1" },
+  { host: "guide.example", kind: "link", note: "A blocked page", title: "Best coffee gifts", url: "https://guide.example/best" },
+], hNow);
+hLedger.markResearched(bday.id, { note: "", query: "birthday gift ideas for a sibling who likes coffee" }, hNow);
+
+hLedger.markOffered(hCand("bill", "Electric bill $140", "ios:bill", { amount: "$140", daysUntil: 5, startsAt: "2026-11-23T09:00:00-05:00" }), 0, hNow);
+const anniv = hLedger.markOffered(hCand("anniversary", "Your Anniversary", "ios:a"), 0, hNow);
+hLedger.answer(anniv.id, "later", hNow);
+// A flight with a watch started: the "watch" object an app has to decode.
+const { enableWatch: hEnableWatch } = await import("../src/headsup/watch/enable.ts");
+const flightRow = hLedger.markOffered(hCand("flight", "Flight to Denver", "ios:f", { flightNumber: "UA 482", startsAt: "2026-11-20T14:00:00-05:00" }), 0, hNow);
+hLedger.answer(flightRow.id, "yes", hNow);
+hEnableWatch(hLedger.getById(flightRow.id), hNow);
+const headsupsJson = JSON.stringify(hLedger.listForClient("all", 500));
+// The narrow push token must never be part of what any client is sent.
+if (/answer_token|answerToken|headsupToken/i.test(headsupsJson)) throw new Error("a push token leaked into the /api/headsups payload");
+fs.writeFileSync(path.join(root, "headsups.json"), headsupsJson);
+
+// Dates: one remembered, one noticed in chat and waiting to be confirmed.
+hDates.addDate({ day: 4, month: 3, occasion: "birthday", who: "Garrett" }, hNow);
+hDates.proposeDatesFromChat("Mia's birthday is June 9");
+fs.writeFileSync(path.join(root, "headsup-dates.json"), JSON.stringify(hDates.datesForClient()));
+
+// Preferences: one changed from the default, so the app has to decode a real mixture.
+const { updatePrefs: hUpdatePrefs } = await import("../src/headsup/prefs.ts");
+const { prefsForClient: hPrefsForClient } = await import("../src/headsup/prefs-view.ts");
+hUpdatePrefs({ dailyCap: 2, kinds: { bill: false }, quietStartHour: 22 });
+fs.writeFileSync(path.join(root, "headsup-prefs.json"), JSON.stringify(hPrefsForClient()));
+
+// What "Check now" reports: a quiet day, and a calendar that could not be read.
+const runDeps = (fetchEvents) => ({ fetchEvents, googleEnabled: () => true, remembered: () => [], send: async () => {} });
+const runNothing = await runMorningHeadsup(hNow, { force: true }, runDeps(async () => ({ errors: [], events: [] })));
+const runError = await runMorningHeadsup(hNow, { force: true }, runDeps(async () => { throw new Error("Google API HTTP 401"); }));
+fs.writeFileSync(path.join(root, "headsup-run.json"), JSON.stringify([runNothing, runError]));
+
 // --- the models, taken from the app rather than restated ---
 const modelsPath = path.join(REPO, "ios", "AgentSpine", "Core", "Models.swift");
 const models = fs.readFileSync(modelsPath, "utf8");
@@ -190,6 +250,14 @@ if (studyFrom < 0 || studyTo < 0) throw new Error(`could not find the Study sect
 const studySection = models.slice(studyFrom, studyTo);
 for (const needle of ["struct StudyOverview", "struct StudyTopic", "struct StudyDueCard", "struct StudyReview"]) {
   if (!studySection.includes(needle)) throw new Error(`the Study section is missing ${needle} — markers moved?`);
+}
+
+const hFrom = models.indexOf("// MARK: - Heads-up");
+const hTo = hFrom < 0 ? -1 : models.indexOf("\n// MARK:", hFrom + 1);
+if (hFrom < 0 || hTo < 0) throw new Error(`could not find the Heads-up section in ${modelsPath}`);
+const headsupSection = models.slice(hFrom, hTo);
+for (const needle of ["struct HeadsupPrefs", "struct HeadsupUnavailable", "struct HeadsupCard", "struct HeadsupWatch", "struct Headsup:", "struct HeadsupProposal", "struct RememberedDate", "struct HeadsupDates", "struct HeadsupRunResult", "struct HeadsupResearchResult"]) {
+  if (!headsupSection.includes(needle)) throw new Error(`the Heads-up section is missing ${needle} — markers moved?`);
 }
 
 const main = [
@@ -262,12 +330,75 @@ const main = [
   '    print("  FAIL  study threw: \\(error)")',
   "    failed += 1",
   "}",
+  "do {",
+  "    let hs = try dec.decode([Headsup].self, from: load(CommandLine.arguments[7]))",
+  '    check("heads-ups decode", hs.count == 4, "\\(hs.count)")',
+  '    let b = hs.first(where: { $0.kind == "birthday" })!',
+  '    check("a researched birthday keeps its state", b.state == "researched", b.state)',
+  '    check("its cards arrive in order", b.cards.map { $0.title } == ["Pour-Over Set", "Best coffee gifts"], "\\(b.cards.map { $0.title })")',
+  '    check("the exact query comes through", b.query == "birthday gift ideas for a sibling who likes coffee", b.query ?? "nil")',
+  '    let g = b.cards[0]',
+  '    check("priceText arrives", g.priceText == "$42.50", g.priceText ?? "nil")',
+  '    check("amount is a number", g.amount == 42.5, "\\(g.amount ?? -1)")',
+  '    check("imageUrl maps onto imageURL", g.imageURL == "/api/headsups/images/3", g.imageURL ?? "nil")',
+  '    check("a card kind is a string", g.kind == "gift", g.kind)',
+  '    let l = b.cards[1]',
+  '    check("a link card has no price or photo", l.priceText == nil && l.imageURL == nil && l.amount == nil)',
+  '    check("a note survives", l.note == "A blocked page", l.note ?? "nil")',
+  '    let bill = hs.first(where: { $0.kind == "bill" })!',
+  '    check("a bill keeps its amount", bill.amount == "$140", bill.amount ?? "nil")',
+  '    check("a bill is open and has no cards", bill.state == "offered" && bill.cards.isEmpty)',
+  '    check("a timed due date is a string", bill.dueAt == "2026-11-23T09:00:00-05:00", bill.dueAt)',
+  '    check("unset fields decode as nil, not absent", bill.query == nil && bill.researchError == nil && bill.researchNote == nil && bill.snoozeUntil == nil)',
+  '    check("an all-day due date stays a bare date", b.dueAt == "2026-11-28", b.dueAt)',
+  '    let a = hs.first(where: { $0.kind == "anniversary" })!',
+  '    check("a snoozed item has its snooze time", a.state == "snoozed" && a.snoozeUntil != nil)',
+  '    check("the server says what Yes does on a birthday", b.yesAction == "research" && b.yesLabel == "Yes, find gift ideas", b.yesLabel)',
+  '    check("... and on a bill", bill.yesAction == "ack" && bill.yesLabel == "Got it", bill.yesLabel)',
+  '    check("... and an item with no watch has none", b.watch == nil && bill.watch == nil)',
+  '    let fl = hs.first(where: { $0.kind == "flight" })!',
+  '    check("a flight offers to track itself", fl.yesAction == "watch" && fl.yesLabel == "Yes, track this flight", fl.yesLabel)',
+  '    check("its watch decodes", fl.watch != nil && fl.watch!.kind == "flight" && fl.watch!.active)',
+  '    check("... lastPolled is nil before the first check", fl.watch!.lastPolled == nil)',
+  '    check("... and the note says what is needed", (fl.watch!.note ?? "").contains("Tracking starts once it is"), fl.watch!.note ?? "nil")',
+  '    check("the answer is recorded", a.answer == "later", a.answer ?? "nil")',
+  "",
+  "    let d = try dec.decode(HeadsupDates.self, from: load(CommandLine.arguments[8]))",
+  '    check("remembered dates decode", d.remembered.count == 1 && d.remembered[0].who == "Garrett", "\\(d.remembered.count)")',
+  '    check("with their month and day", d.remembered[0].month == 3 && d.remembered[0].day == 4)',
+  '    check("and a readable title", d.remembered[0].title == "Garrett\'s Birthday, every March 4", d.remembered[0].title)',
+  '    check("a proposal decodes", d.proposals.count == 1, "\\(d.proposals.count)")',
+  '    check("confirmationId maps onto confirmationID", d.proposals[0].confirmationID > 0, "\\(d.proposals[0].confirmationID)")',
+  '    check("the proposal names who and when", d.proposals[0].who == "Mia" && d.proposals[0].month == 6 && d.proposals[0].day == 9)',
+  '    check("id is the confirmation id", d.proposals[0].id == d.proposals[0].confirmationID)',
+  '    check("the card text is the server\'s", d.proposals[0].summary.hasPrefix("REMEMBER A DATE:"), d.proposals[0].summary)',
+  "",
+  "    let runs = try dec.decode([HeadsupRunResult].self, from: load(CommandLine.arguments[9]))",
+  '    check("run results decode", runs.count == 2, "\\(runs.count)")',
+  '    check("a quiet day", runs[0].status == "nothing" && runs[0].offered == 0 && runs[0].errors.isEmpty)',
+  '    check("a calendar failure carries its reason", runs[1].status == "error" && runs[1].errors == ["Google API HTTP 401"], "\\(runs[1].errors)")',
+  "",
+  "    let rs = try dec.decode([HeadsupResearchResult].self, from: load(CommandLine.arguments[10]))",
+  '    check("research results decode", rs.count == 2, "\\(rs.count)")',
+  '    check("a finished run has no error and reports its query", rs[0].status == "done" && rs[0].error == nil && rs[0].query != nil)',
+  '    check("a failed run has an error and no query", rs[1].status == "error" && rs[1].error == "provider down" && rs[1].query == nil)',
+  "",
+  "    let pf = try dec.decode(HeadsupPrefs.self, from: load(CommandLine.arguments[11]))",
+  '    check("preferences decode", pf.dailyCap == 2, "\\(pf.dailyCap)")',
+  '    check("kinds is a map of booleans", pf.kinds["bill"] == false && pf.kinds["birthday"] == true && pf.kinds.count == 6, "\\(pf.kinds)")',
+  '    check("quiet hours are whole hours", pf.quietStartHour == 22 && pf.quietEndHour == 7, "\\(pf.quietStartHour)-\\(pf.quietEndHour)")',
+  '    check("the floor is carried, read-only", pf.floorMinutes == 30, "\\(pf.floorMinutes)")',
+  '    check("unavailable carries reasons as strings", (pf.unavailable.flights ?? "").contains("AERODATABOX_RAPIDAPI_KEY") && (pf.unavailable.drive ?? "").contains("TOMTOM_API_KEY"), "\\(pf.unavailable)")',
+  "} catch {",
+  '    print("  FAIL  heads-up threw: \\(error)")',
+  "    failed += 1",
+  "}",
   'print("RESULT \\(passed) \\(failed)")',
   "exit(failed == 0 ? 0 : 1)",
 ].join("\n");
 
 const swiftFile = path.join(root, "decode.swift");
-fs.writeFileSync(swiftFile, "import Foundation\n\n" + section + "\n" + liveSection + "\n" + studySection + main);
+fs.writeFileSync(swiftFile, "import Foundation\n\n" + section + "\n" + liveSection + "\n" + studySection + "\n" + headsupSection + main);
 
 // --- compile and run ---
 const binary = path.join(root, "decode");
@@ -293,6 +424,11 @@ try {
     path.join(root, "study-overview.json"),
     path.join(root, "study-due.json"),
     path.join(root, "study-review.json"),
+    path.join(root, "headsups.json"),
+    path.join(root, "headsup-dates.json"),
+    path.join(root, "headsup-run.json"),
+    path.join(root, "headsup-research.json"),
+    path.join(root, "headsup-prefs.json"),
   ], {
     encoding: "utf8",
   });
@@ -301,7 +437,7 @@ try {
   code = 1;
 }
 
-console.log("\nthe app's own Build/BuildCommand/BuildDiff, MeetingLiveStatus and Study models, decoding real server output\n");
+console.log("\nthe app's own Build/BuildCommand/BuildDiff, MeetingLiveStatus, Study and Heads-up models, decoding real server output\n");
 console.log(output.split("\n").filter((l) => !l.startsWith("RESULT")).join("\n").trimEnd());
 
 const tally = /RESULT (\d+) (\d+)/.exec(output);

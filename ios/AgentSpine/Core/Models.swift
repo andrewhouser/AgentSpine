@@ -656,6 +656,143 @@ struct StudyReview: Codable, Hashable {
 }
 
 
+// MARK: - Heads-up
+
+/// One research result under a heads-up: a gift or a restaurant, or a plain link when the page
+/// could not be read. The photo, if any, is served by the AgentSpine server (`imageURL` is a path
+/// on it, not the retailer's address), so the phone never contacts a retailer directly.
+struct HeadsupCard: Codable, Identifiable, Hashable {
+    let id: Int
+    /// "gift", "restaurant", or "link".
+    let kind: String
+    let title: String
+    /// The page this came from. Untrusted web data: shown as text and opened in the browser only.
+    let url: String
+    let host: String
+    let imageURL: String?
+    let priceText: String?
+    let amount: Double?
+    let note: String?
+    let fetchedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, url, host, amount, note, fetchedAt
+        case imageURL = "imageUrl"
+        case priceText
+    }
+}
+
+/// The standing watch behind a Yes on a flight or a drive: tracking delays and gate changes, or
+/// watching traffic toward an appointment.
+struct HeadsupWatch: Codable, Hashable {
+    /// "flight" or "drive".
+    let kind: String
+    let active: Bool
+    let lastPolled: String?
+    /// The latest plain-words state, or what is blocking it ("needs an API key").
+    let note: String?
+}
+
+/// Something the assistant noticed coming up: a birthday, a bill, an appointment.
+///
+/// `dueAt` is either a bare "2026-11-28" (an all-day event: a calendar day, not an instant) or a
+/// full timestamp. It is kept as the string the server sent, because turning a bare date into a
+/// `Date` the naive way puts it a day early west of Greenwich; the view does that carefully.
+struct Headsup: Codable, Identifiable, Hashable {
+    let id: Int
+    /// "birthday", "anniversary", "bill", "appointment", "flight" or "recurring".
+    let kind: String
+    let subject: String
+    let dueAt: String
+    /// "offered", "snoozed", "accepted", "researched", "dismissed", "done" or "expired".
+    let state: String
+    let amount: String?
+    let location: String?
+    let answer: String?
+    let snoozeUntil: String?
+    let firstOfferedAt: String?
+    /// The exact search that left the server, so what was asked is never a mystery.
+    let query: String?
+    let researchError: String?
+    let researchNote: String?
+    let cards: [HeadsupCard]
+    /// What Yes does, decided by the server so every client agrees: "research" (find ideas),
+    /// "watch" (track a flight or a drive) or "ack" (just note it).
+    let yesAction: String
+    /// The button's words for that action ("Yes, track this flight", "Got it").
+    let yesLabel: String
+    let watch: HeadsupWatch?
+}
+
+/// A date it noticed in something you said, waiting for you to confirm. Nothing is remembered
+/// until you do. Answered through the ordinary confirmations routes.
+struct HeadsupProposal: Codable, Identifiable, Hashable {
+    let confirmationID: Int
+    let who: String
+    let occasion: String
+    let day: Int?
+    let month: Int?
+    let summary: String
+
+    var id: Int { confirmationID }
+
+    enum CodingKeys: String, CodingKey {
+        case confirmationID = "confirmationId"
+        case who, occasion, day, month, summary
+    }
+}
+
+/// A date you told it about, kept so it can be mentioned ahead of time every year.
+struct RememberedDate: Codable, Identifiable, Hashable {
+    let id: Int
+    let who: String
+    let occasion: String
+    let month: Int
+    let day: Int
+    let title: String
+}
+
+struct HeadsupDates: Codable {
+    let proposals: [HeadsupProposal]
+    let remembered: [RememberedDate]
+}
+
+/// Why a kind of watch cannot run yet, in words: a missing key, a policy switch that is off.
+/// Nil means it can run.
+struct HeadsupUnavailable: Codable, Hashable {
+    let flights: String?
+    let drive: String?
+}
+
+/// What it may bring up, how many per morning, and when it must stay quiet. The 30 minute floor on
+/// watches is carried so it can be shown; it is not something the app can change.
+struct HeadsupPrefs: Codable, Hashable {
+    let dailyCap: Int
+    let floorMinutes: Int
+    /// A kind set to false is never offered. Keys are "birthday", "anniversary", "bill",
+    /// "appointment", "flight" and "recurring".
+    let kinds: [String: Bool]
+    let quietStartHour: Int
+    let quietEndHour: Int
+    let unavailable: HeadsupUnavailable
+}
+
+/// What "Check now" reports.
+struct HeadsupRunResult: Codable {
+    let status: String
+    let offered: Int
+    let deferred: Int
+    let errors: [String]
+}
+
+/// What "Look again" reports.
+struct HeadsupResearchResult: Codable {
+    let status: String
+    let cards: Int
+    let query: String?
+    let error: String?
+}
+
 // MARK: - Meetings
 
 struct Meeting: Codable, Identifiable, Hashable {

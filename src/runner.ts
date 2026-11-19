@@ -14,6 +14,7 @@
  * long-running callers (server/scheduler) reuse it; the short-lived `do` CLI closes it
  * itself on exit.
  */
+import { proposeDatesFromChat } from "./headsup/dates.ts";
 import {
   loadPolicy,
   CHAT_AUTO_TITLE,
@@ -307,6 +308,11 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   // Created BEFORE the queue, so the caller gets an id it can stream against immediately
   // rather than after the model frees up. Sits in 'queued' until the queue reaches it.
   const runId = store.startRun({ conversationId, kind, scheduleId: opts.scheduleId ?? null, task });
+
+  // A date the user states in a chat message ("Garrett's birthday is March 4") becomes a
+  // proposal in the confirmation queue. Only kind "chat": a schedule's task text, an approval's
+  // synthetic message and a heartbeat are not the user's own words. Regex only, no model.
+  if (kind === "chat") proposeDatesFromChat(task);
 
   // Claim the uploads this message was sent with, before anything is queued, so a browser
   // that reloads the thread a second later already sees the images under the turn. The

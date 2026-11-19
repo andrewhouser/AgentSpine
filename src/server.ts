@@ -76,6 +76,16 @@ import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
 import { addTask, deleteTask, getTask, listTasks, updateTask } from "./tasks/store.ts";
 import { sweepDueTasks } from "./tasks/sweep.ts";
+import * as headsupDates from "./headsup/dates.ts";
+import * as headsupLedger from "./headsup/ledger.ts";
+import { planMorning } from "./headsup/index.ts";
+import { readImage } from "./headsup/research/cards.ts";
+import { RESEARCH_KINDS, researchHeadsup, startResearch } from "./headsup/research/run.ts";
+import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
+import { sweepWatches } from "./headsup/watch/loop.ts";
+import { updatePrefs } from "./headsup/prefs.ts";
+import { prefsForClient } from "./headsup/prefs-view.ts";
+import { enableWatch } from "./headsup/watch/enable.ts";
 import { sweepDueCards } from "./study/sweep.ts";
 import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
 import { ensureMorningBrief } from "./briefing.ts";
@@ -439,6 +449,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     authedByApproval = store.checkApprovalToken(Number(seg[2]), approvalToken);
     if (!authedByApproval)
       return sendJson(res, 401, { error: "invalid, already-used, or expired approval token" });
+  }
+
+  // The same idea for a heads-up: a push can carry a token that answers THAT ONE item, once.
+  const isHeadsupAnswer = m === "POST" && seg[1] === "headsups" && seg.length === 4 && seg[3] === "answer";
+  if (isHeadsupAnswer && approvalToken) {
+    if (!rateOk(ip, "approval")) return sendJson(res, 429, { error: "rate limited" });
+    authedByApproval = headsupLedger.checkAnswerToken(Number(seg[2]), approvalToken);
+    if (!authedByApproval) return sendJson(res, 401, { error: "invalid, already-used, or expired answer token" });
   }
 
   if (TOKEN && !authedByApproval) {
@@ -1440,6 +1458,89 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
     }
 
+    // /api/headsups — proactive suggestions (src/headsup, docs/PLAN-heads-up.md).
+    if (seg[1] === "headsups") {
+      if (m === "GET" && seg.length === 2)
+        return sendJson(
+          res,
+          200,
+          headsupLedger.listForClient(url.searchParams.get("state") === "all" ? "all" : "open"),
+        );
+      // Dates you told it about, and dates it noticed in chat and is waiting for you to confirm.
+      if (m === "GET" && seg.length === 3 && seg[2] === "dates") return sendJson(res, 200, headsupDates.datesForClient());
+      // Preferences: which kinds, the daily cap, quiet hours. Plus read-only facts about what cannot run yet.
+      if (seg.length === 3 && seg[2] === "prefs") {
+        if (m === "GET") return sendJson(res, 200, prefsForClient());
+        if (m === "POST") {
+          const r = updatePrefs(await readBody(req));
+          return r.ok ? sendJson(res, 200, prefsForClient()) : sendJson(res, 400, { error: r.error });
+        }
+      }
+      if (m === "DELETE" && seg.length === 4 && seg[2] === "dates")
+        return headsupDates.deleteDate(Number(seg[3]))
+          ? sendJson(res, 200, { ok: true })
+          : sendJson(res, 404, { error: "no such remembered date" });
+      // What a run would offer right now. Reads the calendars, writes nothing.
+      if (m === "GET" && seg.length === 3 && seg[2] === "preview") {
+        const plan = await planMorning().catch((err) => ({
+          deferred: 0,
+          errors: [err instanceof Error ? err.message : String(err)],
+          offers: [],
+        }));
+        return sendJson(res, 200, {
+          deferred: plan.deferred,
+          errors: plan.errors,
+          offers: plan.offers.map((o) => ({
+            daysUntil: o.candidate.daysUntil,
+            kind: o.candidate.kind,
+            reason: o.reason,
+            subject: o.candidate.subject,
+          })),
+        });
+      }
+      // Run the morning job now, ignoring "already ran today". Still honors quiet hours.
+      if (m === "POST" && seg.length === 3 && seg[2] === "run")
+        return sendJson(res, 200, await runMorningHeadsup(new Date(), { force: true }));
+      if (m === "POST" && seg.length === 4 && seg[3] === "answer") {
+        const b = await readBody(req);
+        const a = String(b?.answer ?? "");
+        if (a !== "yes" && a !== "later" && a !== "never")
+          return sendJson(res, 400, { error: 'answer must be "yes", "later" or "never"' });
+        const row = headsupLedger.answer(Number(seg[2]), a, new Date());
+        // Yes on a birthday or an anniversary is also "go and look": research runs in the background
+        // and the result appears on the page. Anything else has nothing to look up.
+        if (row && a === "yes") {
+          const action = headsupLedger.toView(row).yesAction;
+          if (action === "research") startResearch(row.id);
+          // Yes on a flight, or on an appointment with a place, starts a watch. That press is the
+          // consent: it is a person in the app, not a scan deciding to create standing work.
+          else if (action === "watch") enableWatch(row);
+        }
+        return row ? sendJson(res, 200, headsupLedger.toView(row)) : sendJson(res, 404, { error: "no such heads-up" });
+      }
+      // Run the research again (it failed, or the prices are stale). Waits for it, so the page can show the result.
+      if (m === "POST" && seg.length === 4 && seg[3] === "research") {
+        const row = headsupLedger.getById(Number(seg[2]));
+        if (!row) return sendJson(res, 404, { error: "no such heads-up" });
+        if (!RESEARCH_KINDS.has(row.kind)) return sendJson(res, 400, { error: "nothing to research for this kind" });
+        return sendJson(res, 200, await researchHeadsup(row.id));
+      }
+      // A cached product photo. Only ever bytes we sniffed as JPEG/PNG/GIF/WebP, served inert.
+      if (m === "GET" && seg.length === 4 && seg[2] === "images") {
+        const img = readImage(Number(seg[3]));
+        if (!img) return sendJson(res, 404, { error: "no such image" });
+        res.writeHead(200, {
+          "Cache-Control": "private, max-age=86400",
+          "Content-Length": img.bytes.length,
+          "Content-Security-Policy": "default-src 'none'",
+          "Content-Type": img.mime,
+          "X-Content-Type-Options": "nosniff",
+        });
+        res.end(img.bytes);
+        return;
+      }
+    }
+
     // /api/tasks ... — the assistant's own to-do list and follow-ups (src/tasks).
     if (seg[1] === "tasks") {
       if (m === "GET" && seg.length === 2) {
@@ -1700,6 +1801,13 @@ setInterval(runScheduler, SCHEDULER_TICK_MS);
 // Due tasks and follow-ups become notifications.
 void sweepDueTasks();
 setInterval(() => void sweepDueTasks(), 60_000).unref();
+// The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
+void sweepHeadsup();
+setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
+// Watched flights and drives. The tick is short; each watch has its own 30-minute floor, and outside
+// its window a watch makes no call at all, so a quiet day costs nothing.
+void sweepWatches();
+setInterval(() => void sweepWatches(), 5 * 60_000).unref();
 // Flash cards that have come due earn one nudge a day.
 void sweepDueCards();
 setInterval(() => void sweepDueCards(), 10 * 60_000).unref();
