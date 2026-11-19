@@ -71,6 +71,7 @@ struct MacThreadDetail: View {
         }
         .background(Spine.Palette.bg)
         .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
+        .toolbar { ToolbarItem { tierMenu } }
         .task { await load() }
         .onDisappear { stream.stop() }
         .onChange(of: stream.phase) { _, phase in
@@ -97,6 +98,46 @@ struct MacThreadDetail: View {
     }
 
     // MARK: - Live turn bookkeeping
+
+    /// Pin the thread to one model — the same menu as the phone's. Sizing is a regex and cannot
+    /// tell that this question is hard, so "use the good model for this whole conversation" has
+    /// to be sayable. Disabled while a turn streams, since the tier applies from the next one.
+    private var tierMenu: some View {
+        let pinned = thread?.conversation.tier
+        return Menu {
+            ForEach(Self.tierOptions, id: \.label) { option in
+                Button {
+                    Task { await setTier(option.value) }
+                } label: {
+                    if pinned == option.value {
+                        Label("\(option.label) · \(option.hint)", systemImage: "checkmark")
+                    } else {
+                        Text("\(option.label) · \(option.hint)")
+                    }
+                }
+            }
+        } label: {
+            Label("Model tier", systemImage: pinned == nil ? "cpu" : "cpu.fill")
+        }
+        .disabled(thread == nil || stream.isLive)
+        .help("Model tier")
+    }
+
+    private static let tierOptions: [(hint: String, label: String, value: String?)] = [
+        ("Size each turn automatically", "Auto", nil),
+        ("Small local model", "Fast", "fast"),
+        ("Main local model", "Local", "standard"),
+        ("Cloud model, leaves your machine", "Cloud", "deep"),
+    ]
+
+    private func setTier(_ tier: String?) async {
+        do {
+            try await APIClient.shared.setTier(conversationID, to: tier)
+            await load()
+        } catch {
+            composerError = error.localizedDescription
+        }
+    }
 
     private var showsLiveTurn: Bool { stream.isLive || stream.transportNote != nil }
 
