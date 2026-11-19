@@ -23,7 +23,7 @@ struct MemoryView: View {
                         Text("·")
                         Text(SpineDate.relative(memory.ts))
                     }
-                    .font(.caption)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.textDim)
                 }
                 .swipeActions {

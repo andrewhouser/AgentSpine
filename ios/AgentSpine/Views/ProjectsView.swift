@@ -48,7 +48,7 @@ struct ProjectsView: View {
                         Text(project.name)
                         if let chunks = project.chunks {
                             Text("\(chunks) indexed chunk\(chunks == 1 ? "" : "s")")
-                                .font(.caption).foregroundStyle(Spine.Palette.textDim)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -199,7 +199,7 @@ struct ProjectDetailView: View {
             Section {
                 ForEach(detail?.sources ?? []) { source in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(source.ref).font(.footnote.monospaced())
+                        Text(source.ref).font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
                         HStack(spacing: 6) {
                             Text(source.kind)
                             Text("·")
@@ -209,9 +209,9 @@ struct ProjectDetailView: View {
                                 Text(SpineDate.relative(indexed))
                             }
                         }
-                        .font(.caption).foregroundStyle(Spine.Palette.textDim)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         if let status = source.status, !status.isEmpty {
-                            Text(status).font(.caption).foregroundStyle(Spine.Palette.warn)
+                            Text(status).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.warn)
                         }
                     }
                     .swipeActions(edge: .trailing) {
@@ -231,7 +231,7 @@ struct ProjectDetailView: View {
                 }
                 .disabled(reindexingAll || (detail?.sources.isEmpty ?? true))
                 if let note {
-                    Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             } header: {
                 Text("Sources")
@@ -367,7 +367,7 @@ private struct ProjectTasksSection: View {
                             .strikethrough(item.isDone)
                             .foregroundStyle(item.isDone ? Spine.Palette.textDim : Spine.Palette.text)
                         if let notes = item.notes, !notes.isEmpty {
-                            Text(notes).font(.caption).foregroundStyle(Spine.Palette.textDim)
+                            Text(notes).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -381,7 +381,7 @@ private struct ProjectTasksSection: View {
                 Button("Add") { Task { await add() } }
                     .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            if let error { Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger) }
+            if let error { Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger) }
         } header: {
             Text("Tasks")
         }

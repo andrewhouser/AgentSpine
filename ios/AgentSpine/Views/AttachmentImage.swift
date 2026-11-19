@@ -46,7 +46,7 @@ struct AttachmentImage: View {
                 // thread sweeps its files), and an empty grey box looks like a bug.
                 VStack(spacing: 4) {
                     Image(systemName: "photo.badge.exclamationmark")
-                    Text("not available").font(.caption2)
+                    Text("not available").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                 }
                 .foregroundStyle(Spine.Palette.textFaint)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -68,7 +68,7 @@ struct AttachmentImage: View {
             // anyway — there is no run to have read it.
             if attachment.described == false, size > 100 {
                 Label("not read", systemImage: "eye.slash")
-                    .font(.caption2.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(.ultraThinMaterial, in: Capsule())

@@ -34,7 +34,7 @@ struct MeetingsView: View {
                                  + Self.clock(live.elapsedMs)
                                  + (live.pendingChunks > 0
                                     ? " · \(live.pendingChunks) chunk(s) behind" : ""))
-                                .font(.caption).foregroundStyle(Spine.Palette.textDim)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                     Button("Stop recording", role: .destructive) {
@@ -57,10 +57,10 @@ struct MeetingsView: View {
                                 Text("·")
                                 Text(SpineDate.relative(meeting.started))
                             }
-                            .font(.caption).foregroundStyle(Spine.Palette.textDim)
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                             if !meeting.tagList.isEmpty {
                                 Text(meeting.tagList.joined(separator: " · "))
-                                    .font(.caption2).foregroundStyle(Spine.Palette.textDim)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
                             }
                         }
                     }
@@ -171,12 +171,12 @@ private struct StartMeetingSheet: View {
         NavigationStack {
             Form {
                 if let error {
-                    Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger)
+                    Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger)
                 }
                 if let devices {
                     if !devices.enabled {
                         Text("Audio capture is off in policy.json on the server.")
-                            .font(.footnote).foregroundStyle(Spine.Palette.warn)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.warn)
                     }
                     Section {
                         Picker("Microphone", selection: $device) {
@@ -361,7 +361,7 @@ struct MeetingDetailView: View {
                 LabeledContent("Project", value: project.name)
             }
             if let note = meeting.note, !note.isEmpty {
-                Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
             }
         }
     }
@@ -430,7 +430,7 @@ struct MeetingDetailView: View {
             if let answer = coach?.answer {
                 VStack(alignment: .leading, spacing: 4) {
                     if !answer.question.isEmpty {
-                        Text(answer.question).font(.caption).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
+                        Text(answer.question).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
                     }
                     Text(answer.notes.isEmpty ? "The coach had nothing to add." : answer.notes)
                 }
@@ -461,8 +461,8 @@ struct MeetingDetailView: View {
             }
             ForEach(Array(all.enumerated()), id: \.offset) { _, card in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(card.text).font(.footnote).lineLimit(4)
-                    Text(card.source).font(.caption2).foregroundStyle(Spine.Palette.textDim)
+                    Text(card.text).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).lineLimit(4)
+                    Text(card.source).font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
                 }
             }
         }
@@ -479,13 +479,13 @@ struct MeetingDetailView: View {
                 if let summary = extraction.summary { Text(summary) }
                 if !extraction.topics.isEmpty {
                     Text(extraction.topics.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(Spine.Palette.textDim)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                 }
                 ForEach(extraction.decisions, id: \.text) { decision in
                     VStack(alignment: .leading, spacing: 2) {
                         Label(decision.text, systemImage: "checkmark.seal")
                         if let quote = decision.quote {
-                            Text("“\(quote)”").font(.caption).foregroundStyle(Spine.Palette.textDim)
+                            Text("“\(quote)”").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -503,20 +503,20 @@ struct MeetingDetailView: View {
                             Text(item.task)
                             Spacer()
                             Text(item.wasFiled ? "added to project tasks" : item.verdict)
-                                .font(.caption2)
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(item.wasQueued || item.wasFiled ? Color.green.opacity(0.2)
                                                            : Color.secondary.opacity(0.2),
                                             in: Capsule())
                         }
                         if let owner = item.owner {
-                            Text(owner).font(.caption).foregroundStyle(Spine.Palette.textDim)
+                            Text(owner).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                         if let note = item.verdictNote, !note.isEmpty {
-                            Text(note).font(.caption).foregroundStyle(Spine.Palette.textDim)
+                            Text(note).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                         if let quote = item.quote {
-                            Text("“\(quote)”").font(.caption).italic().foregroundStyle(Spine.Palette.textDim)
+                            Text("“\(quote)”").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).italic().foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -543,10 +543,10 @@ struct MeetingDetailView: View {
                                 speakerName = name.hasPrefix("Speaker ") ? "" : name
                                 renamingSpeaker = turn
                             }
-                            .font(.subheadline.weight(.semibold))
+                            .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
                             .buttonStyle(.borderless)
                             Text(turn.segments[0].timestamp)
-                                .font(.caption.monospacedDigit()).foregroundStyle(Spine.Palette.textDim)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit()).foregroundStyle(Spine.Palette.textDim)
                         }
                         Text(turn.text)
                     }
@@ -554,7 +554,7 @@ struct MeetingDetailView: View {
                     ForEach(turn.segments) { segment in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(segment.timestamp)
-                                .font(.caption.monospacedDigit()).foregroundStyle(Spine.Palette.textDim)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit()).foregroundStyle(Spine.Palette.textDim)
                             Text(segment.text)
                         }
                     }

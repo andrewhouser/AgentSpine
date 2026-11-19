@@ -212,7 +212,7 @@ Not done yet, and why:
   The **web** must self-host them rather than use a font CDN (private tailnet, local-first).
   That belongs to phase 7: `web/public/fonts/` plus `@font-face`, and `src/server.ts` has no
   `.ttf` entry in its MIME map (only `.woff2`), so either add one or convert to woff2.
-- Applying the tokens to the existing iPhone screens' fonts and grouped-list rows.
+- Screen fonts: the simple `.font(.caption)` style forms in `Views/` now use `SpineFont` (2026-11-19). Left as they were: fixed-size symbol fonts, `.system(...)` mono forms and a few conditional weights. Grouped-list rows still use the system cell fill.
 
 Do the refresh once, in the shared code, before building more screens on top of the old look.
 

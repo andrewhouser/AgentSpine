@@ -204,10 +204,10 @@ struct ScheduleCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(schedule.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
                 Spacer()
                 Text(schedule.isEnabled ? "enabled" : "paused")
-                    .font(.caption2.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(
@@ -219,12 +219,12 @@ struct ScheduleCard: View {
 
             if let spec = schedule.spec, !spec.isEmpty {
                 Label(spec, systemImage: "clock")
-                    .font(.caption)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.textDim)
             }
 
             Text(schedule.task)
-                .font(.footnote)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                 .foregroundStyle(Spine.Palette.textDim)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -233,7 +233,7 @@ struct ScheduleCard: View {
                 Text("·")
                 Text("next \(when(schedule.nextRun))")
             }
-            .font(.caption2)
+            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
             .foregroundStyle(Spine.Palette.textFaint)
 
             // What it has actually been doing. `last_run` says a job ran; this says whether
@@ -247,7 +247,7 @@ struct ScheduleCard: View {
                                 Image(systemName: symbol(for: run))
                                     .font(.system(size: 9))
                                 Text(SpineDate.relative(run.started))
-                                    .font(.caption2)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                             }
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -383,7 +383,7 @@ struct ScheduleForm: View {
                 if let error {
                     Section {
                         Text(error)
-                            .font(.footnote)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                             .foregroundStyle(Spine.Palette.danger)
                     }
                 }

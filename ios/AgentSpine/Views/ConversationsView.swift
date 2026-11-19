@@ -74,7 +74,7 @@ struct ConversationsView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                         .rotationEffect(.degrees(isFolded ? 0 : 90))
                     Label(project.name, systemImage: "folder")
                     if isFolded && count > 0 {
@@ -105,7 +105,7 @@ struct ConversationsView: View {
             .accessibilityLabel("New thread in \(project.name)")
         }
         .textCase(nil)
-        .font(.subheadline.weight(.semibold))
+        .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
         .foregroundStyle(Spine.Palette.textDim)
     }
 
@@ -141,7 +141,7 @@ struct ConversationsView: View {
                             .labelStyle(.titleAndIcon)
                     }
                 }
-                .font(.caption)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                 .foregroundStyle(Spine.Palette.textDim)
             }
             // Something in this thread is waiting on you — an approval. Open it to answer.
@@ -324,7 +324,7 @@ struct NewTaskSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("What should AgentSpine do?", text: $draft, axis: .vertical)
-                    .font(.body)
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body))
                     .focused($focused)
                     .frame(minHeight: 120, alignment: .topLeading)
 
@@ -338,7 +338,7 @@ struct NewTaskSheet: View {
                     .pickerStyle(.menu)
 
                     Text("A thread in a project can read that project's indexed sources.")
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
                 }
 
@@ -346,7 +346,7 @@ struct NewTaskSheet: View {
                     "You'll get a notification when it finishes, so you can close the app.",
                     systemImage: "bell.badge"
                 )
-                .font(.caption)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                 .foregroundStyle(Spine.Palette.textDim)
 
                 Spacer()

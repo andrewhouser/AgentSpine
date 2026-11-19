@@ -269,7 +269,7 @@ struct ThreadView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "stop.circle.fill").font(.system(size: 22))
                     Text(Duration.seconds(Int(dictation.elapsed)).formatted(.time(pattern: .minuteSecond)))
-                        .font(.caption.monospacedDigit())
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit())
                 }
                 .foregroundStyle(Spine.Palette.danger)
             case .transcribing:
@@ -309,15 +309,15 @@ struct ThreadView: View {
             if let composerError {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     Text(composerError)
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                     Button {
                         self.composerError = nil
                     } label: {
-                        Image(systemName: "xmark").font(.caption2)
+                        Image(systemName: "xmark").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     }
                     .accessibilityLabel("Dismiss this error")
                 }
@@ -338,7 +338,7 @@ struct ThreadView: View {
                                         staged.removeAll { $0.id == attachment.id }
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .font(.caption)
+                                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                                             .symbolRenderingMode(.palette)
                                             .foregroundStyle(.white, .black.opacity(0.5))
                                     }
@@ -547,7 +547,7 @@ struct TurnView: View {
                 MarkdownText(summary)
             } else if turn.status == "failed" {
                 Label("This turn failed.", systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                     .foregroundStyle(Spine.Palette.danger)
             }
 
@@ -592,11 +592,11 @@ struct TurnView: View {
                     .accessibilityLabel(reader.current == summary && reader.speaking ? "Stop reading" : "Read aloud")
                 }
             }
-            .font(.caption2)
+            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
             .foregroundStyle(Spine.Palette.textFaint)
 
             if let notice {
-                Text(notice).font(.caption).foregroundStyle(Spine.Palette.textDim)
+                Text(notice).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
             }
         }
         .alert("Save to file", isPresented: $saving) {
@@ -617,7 +617,7 @@ struct TurnView: View {
         }
         .sheet(isPresented: $showContext) {
             NavigationStack {
-                List(turn.contextUsed ?? [], id: \.self) { Text($0).font(.footnote) }
+                List(turn.contextUsed ?? [], id: \.self) { Text($0).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)) }
                     .navigationTitle("Context used")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showContext = false } } }
@@ -643,17 +643,17 @@ struct DelegationRow: View {
                         .foregroundStyle(.purple)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(child.agent ?? "subagent")
-                            .font(.caption.weight(.semibold))
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                         if let task = child.task {
-                            Text(task).font(.caption2).foregroundStyle(Spine.Palette.textDim).lineLimit(1)
+                            Text(task).font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim).lineLimit(1)
                         }
                     }
                     Spacer()
                     Text("\(child.actions.count)")
-                        .font(.caption2.monospacedDigit())
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).monospacedDigit())
                         .foregroundStyle(Spine.Palette.textDim)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2)
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                         .foregroundStyle(Spine.Palette.textFaint)
                 }
             }
@@ -711,11 +711,11 @@ struct LiveTurnView: View {
                 MarkdownText(summary)
             }
             if case .failed(let message) = stream.phase {
-                Text(message).font(.footnote).foregroundStyle(Spine.Palette.danger)
+                Text(message).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger)
             }
             if let note = stream.transportNote {
                 Label(note, systemImage: "wifi.exclamationmark")
-                    .font(.caption)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.textDim)
             }
         }
@@ -730,14 +730,14 @@ struct LiveTurnView: View {
                 ProgressView().controlSize(.small)
                 Text(behind > 0 ? "Queued behind \(behind) run\(behind == 1 ? "" : "s")" : "Starting…")
             }
-            .font(.caption)
+            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
             .foregroundStyle(Spine.Palette.textDim)
         case .running(let step):
             HStack(spacing: 7) {
                 ProgressView().controlSize(.small)
                 Text("Step \(step)")
             }
-            .font(.caption)
+            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
             .foregroundStyle(Spine.Palette.textDim)
         case .failed, .finished, .idle:
             EmptyView()

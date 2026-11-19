@@ -43,7 +43,7 @@ struct TasksView: View {
                         Task { await toggle(item) }
                     } label: {
                         Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
+                            .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
                             .foregroundStyle(item.isDone ? Spine.Palette.ok : Spine.Palette.textDim)
                     }
                     .buttonStyle(.plain)
@@ -65,10 +65,10 @@ struct TasksView: View {
                                     + Text(due.formatted(date: .abbreviated, time: .shortened))
                             }
                         }
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(item.isOverdue ? Color.red : Color.secondary)
                         if let notes = item.notes, !notes.isEmpty {
-                            Text(notes).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                            Text(notes).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -201,7 +201,7 @@ private struct AddTodoSheet: View {
                     TextField("Who (makes it a follow-up)", text: $waitingOn)
                 }
                 if let error {
-                    Section { Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger) }
+                    Section { Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger) }
                 }
             }
             .navigationTitle("New task")

@@ -43,7 +43,7 @@ struct StudyView: View {
                         }
                     } else {
                         Text("Nothing due. Cards come back when their interval runs out.")
-                            .font(.footnote)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                             .foregroundStyle(Spine.Palette.textDim)
                     }
                 } header: {
@@ -53,7 +53,7 @@ struct StudyView: View {
                 Section {
                     if overview.topics.isEmpty {
                         Text("No topics yet. In a thread, try \u{201C}I'm learning statistics, interview me\u{201D}.")
-                            .font(.footnote)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                             .foregroundStyle(Spine.Palette.textDim)
                     }
                     ForEach(overview.topics) { topic in
@@ -89,10 +89,10 @@ private struct StudyTopicRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(topic.name).font(.headline)
+                Text(topic.name).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                 if topic.projectID != nil {
                     Image(systemName: "lock.fill")
-                        .font(.caption2)
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                         .foregroundStyle(Spine.Palette.textDim)
                         .accessibilityLabel("Linked to a project, graded locally")
                 }
@@ -100,27 +100,27 @@ private struct StudyTopicRow: View {
                 LevelPips(level: topic.level)
             }
             if let goal = topic.goal, !goal.isEmpty {
-                Text(goal).font(.subheadline).foregroundStyle(Spine.Palette.textDim)
+                Text(goal).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline)).foregroundStyle(Spine.Palette.textDim)
             }
             Text("\(topic.cards) card\(topic.cards == 1 ? "" : "s") · \(topic.due) due · 14 days: \(topic.produced) produced, \(topic.consumed) read")
-                .font(.caption.monospacedDigit())
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit())
                 .foregroundStyle(Spine.Palette.textDim)
             if !topic.map.isEmpty {
                 DisclosureGroup("Curriculum · \(topic.map.count) modules") {
                     ForEach(Array(topic.map.enumerated()), id: \.offset) { index, module in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(index + 1). \(module.name)").font(.subheadline.weight(.medium))
+                            Text("\(index + 1). \(module.name)").font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.medium))
                             if !module.summary.isEmpty {
-                                Text(module.summary).font(.caption).foregroundStyle(Spine.Palette.textDim)
+                                Text(module.summary).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                             }
                         }
                         .padding(.vertical, 2)
                     }
                 }
-                .font(.subheadline)
+                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline))
             }
             Text(suggestion)
-                .font(.footnote)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                 .foregroundStyle(Spine.Palette.textDim)
         }
         .padding(.vertical, 4)
@@ -174,19 +174,19 @@ struct StudyReviewView: View {
                 if let card {
                     HStack {
                         Text(card.topicName)
-                            .font(.caption)
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(Color.accentColor.opacity(0.12), in: Capsule())
                             .foregroundStyle(Color.accentColor)
                         Spacer()
                         Text("\(reviewed) done · \(queue.count - (result == nil ? 0 : 1)) left")
-                            .font(.caption.monospacedDigit())
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit())
                             .foregroundStyle(Spine.Palette.textDim)
                     }
 
                     Text(card.front)
-                        .font(.title3)
+                        .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let result {
@@ -209,7 +209,7 @@ struct StudyReviewView: View {
 
                 if let error {
                     Text(error)
-                        .font(.footnote)
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                         .foregroundStyle(Spine.Palette.danger)
                 }
             }
@@ -248,16 +248,16 @@ struct StudyReviewView: View {
         VStack(alignment: .leading, spacing: 12) {
             let recalled = r.score >= 0.7
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(Int((r.score * 100).rounded()))%").font(.headline).monospacedDigit()
-                Text(r.feedback).font(.subheadline)
+                Text("\(Int((r.score * 100).rounded()))%").font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold)).monospacedDigit()
+                Text(r.feedback).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline))
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background((recalled ? Color.green : Color.orange).opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
 
-            Text("ANSWER").font(.caption2.weight(.semibold)).foregroundStyle(Spine.Palette.textDim)
+            Text("ANSWER").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold)).foregroundStyle(Spine.Palette.textDim)
             Text(r.back).fixedSize(horizontal: false, vertical: true)
-            Text(nextText(r)).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+            Text(nextText(r)).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
 
             Button("Next card") { Task { await next() } }
                 .buttonStyle(.borderedProminent)

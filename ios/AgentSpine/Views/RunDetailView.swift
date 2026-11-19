@@ -30,7 +30,7 @@ struct RunDetailView: View {
 
                     if detail.actions.isEmpty {
                         Text("No tool calls — this run answered from what it already knew.")
-                            .font(.footnote)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                             .foregroundStyle(Spine.Palette.textDim)
                     } else {
                         ForEach(detail.actions) { action in
@@ -47,7 +47,7 @@ struct RunDetailView: View {
                     if let note = detail.run.note, !note.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("SUMMARY")
-                                .font(.caption2.weight(.semibold))
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                                 .foregroundStyle(Spine.Palette.textFaint)
                             MarkdownText(note)
                         }
@@ -70,7 +70,7 @@ struct RunDetailView: View {
     @ViewBuilder private func header(_ run: Run) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(run.task ?? "(no task recorded)")
-                .font(.body.weight(.medium))
+                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
@@ -84,14 +84,14 @@ struct RunDetailView: View {
                     Text(elapsed)
                 }
             }
-            .font(.caption)
+            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
             .foregroundStyle(Spine.Palette.textDim)
 
             // A failed run's note is the reason it failed, which belongs at the top rather
             // than at the bottom under the summary heading.
             if run.status == "failed", let note = run.note, !note.isEmpty {
                 Label(note, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                     .foregroundStyle(Spine.Palette.danger)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -107,9 +107,9 @@ struct RunDetailView: View {
                 } label: {
                     HStack(spacing: 7) {
                         Image(systemName: showTrace ? "chevron.down" : "chevron.right")
-                            .font(.caption2)
+                            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                         Text("Raw trace — \(messages.count) message\(messages.count == 1 ? "" : "s")")
-                            .font(.caption.weight(.medium))
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.medium))
                         Spacer()
                     }
                     .foregroundStyle(Spine.Palette.textDim)
@@ -118,16 +118,16 @@ struct RunDetailView: View {
 
                 if showTrace {
                     Text("What the model actually saw, in order: the standing context, then the turn.")
-                        .font(.caption2)
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                         .foregroundStyle(Spine.Palette.textFaint)
 
                     ForEach(messages) { message in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(message.role.uppercased())
-                                .font(.caption2.weight(.semibold))
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                                 .foregroundStyle(Spine.Palette.textFaint)
                             Text(message.text)
-                                .font(.caption2.monospaced())
+                                .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

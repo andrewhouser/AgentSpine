@@ -27,7 +27,7 @@ struct ToolCallRow: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver.fill")
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
 
                     VStack(alignment: .leading, spacing: 1) {
@@ -35,7 +35,7 @@ struct ToolCallRow: View {
                             .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                         if let target, !target.isEmpty {
                             Text(target)
-                                .font(.caption2)
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .foregroundStyle(Spine.Palette.textDim)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -47,7 +47,7 @@ struct ToolCallRow: View {
 
                     if hasDetail {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.caption2)
+                            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                             .foregroundStyle(Spine.Palette.textFaint)
                     }
                 }
@@ -75,11 +75,11 @@ private struct DetailBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
-                .font(.caption2.weight(.semibold))
+                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                 .foregroundStyle(Spine.Palette.textFaint)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
-                    .font(.caption2.monospaced())
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }

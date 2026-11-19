@@ -56,7 +56,7 @@ struct SettingsView: View {
                 .disabled(probing || !settings.isConfigured)
 
                 if let probe {
-                    Text(probe).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text(probe).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             } footer: {
                 Text("Hits /api/status, which proves the address, the tunnel and the token at "
@@ -100,7 +100,7 @@ struct SettingsView: View {
                 }
 
                 if let note = push.registrationNote {
-                    Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
 
                 Button {
@@ -115,7 +115,7 @@ struct SettingsView: View {
                 .disabled(pushing || !settings.isConfigured)
 
                 if let pushResult {
-                    Text(pushResult).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text(pushResult).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             } header: {
                 Text("Notifications")
@@ -149,10 +149,10 @@ struct SettingsView: View {
                         Text(device.name ?? "Unnamed device")
                         Text("\(device.environment) · …\(device.token.suffix(8)) · seen "
                              + SpineDate.relative(device.seen))
-                            .font(.caption).foregroundStyle(Spine.Palette.textDim).monospaced()
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim).monospaced()
                         if let disabled = device.disabled {
                             Text("Disabled: \(device.detail ?? disabled)")
-                                .font(.caption).foregroundStyle(Spine.Palette.warn)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.warn)
                         }
                     }
                     .swipeActions {
@@ -162,9 +162,9 @@ struct SettingsView: View {
                     }
                 }
                 if let devicesError {
-                    Text(devicesError).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text(devicesError).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 } else if devices.isEmpty {
-                    Text("No devices registered").font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text("No devices registered").font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             } header: {
                 Text("Registered devices")

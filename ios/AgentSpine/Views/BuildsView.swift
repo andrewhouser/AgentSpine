@@ -55,27 +55,27 @@ struct BuildsView: View {
                 Image(systemName: symbol(build))
                     .foregroundStyle(tint(build))
                 Text(build.repoName)
-                    .font(.body.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
                 Text(build.verdict)
-                    .font(.caption)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(tint(build))
                 Spacer(minLength: 0)
                 if build.branch != nil {
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Spine.Palette.textFaint)
+                    Image(systemName: "chevron.right").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textFaint)
                 }
             }
 
             Text(build.branch ?? "no branch")
-                .font(.caption2.monospaced())
+                .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                 .foregroundStyle(Spine.Palette.textFaint)
                 .lineLimit(1)
 
             if let task = build.task, !task.isEmpty {
-                Text(task).font(.caption).foregroundStyle(Spine.Palette.textDim).lineLimit(2)
+                Text(task).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim).lineLimit(2)
             }
 
             Text(subtitle(build))
-                .font(.caption)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                 .foregroundStyle(Spine.Palette.textDim)
 
             // The commands, in the order they happened, with the verdict the tool reported.
@@ -86,7 +86,7 @@ struct BuildsView: View {
                     HStack(spacing: 6) {
                         ForEach(Array(build.commands.enumerated()), id: \.offset) { _, command in
                             Text("\(command.name): \(command.verdict)")
-                                .font(.caption2)
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
                                 .background(.quaternary, in: Capsule())
@@ -142,27 +142,27 @@ private struct DiffSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         if let branch = diff.branch, let base = diff.base {
                             Text("\(branch) vs \(base)")
-                                .font(.caption.monospaced())
+                                .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
                                 .foregroundStyle(Spine.Palette.textDim)
                         }
 
                         if diff.stat.isEmpty && diff.patch.isEmpty {
                             Text("Nothing committed on this branch.")
-                                .font(.footnote)
+                                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                                 .foregroundStyle(Spine.Palette.textDim)
                         } else {
                             if !diff.stat.isEmpty {
-                                Text(diff.stat).font(.caption2.monospaced())
+                                Text(diff.stat).font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                             }
-                            Text(diff.patch).font(.caption2.monospaced()).textSelection(.enabled)
+                            Text(diff.patch).font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2)).textSelection(.enabled)
                         }
 
                         if !diff.uncommitted.isEmpty {
                             Divider()
                             Text("Still uncommitted in \(diff.repo)")
-                                .font(.caption.weight(.semibold))
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                                 .foregroundStyle(Spine.Palette.warn)
-                            Text(diff.uncommitted).font(.caption2.monospaced()).textSelection(.enabled)
+                            Text(diff.uncommitted).font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2)).textSelection(.enabled)
                         }
 
                         // git diff cannot see these, so they would otherwise be invisible here
@@ -170,17 +170,17 @@ private struct DiffSheet: View {
                         if !diff.untracked.isEmpty {
                             Divider()
                             Text("Not tracked by git at all (\(diff.untracked.count))")
-                                .font(.caption.weight(.semibold))
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                                 .foregroundStyle(Spine.Palette.warn)
                             Text(diff.untracked.joined(separator: "\n"))
-                                .font(.caption2.monospaced())
+                                .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .textSelection(.enabled)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                 } else if let error {
-                    Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger).padding()
+                    Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger).padding()
                 } else {
                     ProgressView().padding()
                 }

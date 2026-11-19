@@ -31,13 +31,13 @@ struct ActivityView: View {
                 NavigationLink(value: run.id) {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: symbol(for: run))
-                            .font(.caption)
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                             .foregroundStyle(tint(for: run))
                             .frame(width: 18)
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(run.task ?? "(no task recorded)")
-                                .font(.subheadline)
+                                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline))
                                 .lineLimit(2)
                             HStack(spacing: 6) {
                                 Text(run.kind)
@@ -46,11 +46,11 @@ struct ActivityView: View {
                                 Text("·")
                                 Text(SpineDate.relative(run.started))
                             }
-                            .font(.caption2)
+                            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                             .foregroundStyle(Spine.Palette.textDim)
                             if let note = run.note, !note.isEmpty, run.status == "failed" {
                                 Text(note)
-                                    .font(.caption2)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                     .foregroundStyle(Spine.Palette.danger)
                                     .lineLimit(3)
                             }

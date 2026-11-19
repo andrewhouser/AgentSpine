@@ -13,14 +13,14 @@ struct AgentsView: View {
             ForEach(agents) { agent in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(agent.name).font(.headline)
+                        Text(agent.name).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                         Spacer()
                         Text("\(agent.tier) · \(agent.maxSteps) steps")
-                            .font(.caption).foregroundStyle(Spine.Palette.textDim)
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                     }
-                    Text(agent.description).font(.subheadline)
+                    Text(agent.description).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline))
                     Text(agent.tools.joined(separator: ", "))
-                        .font(.caption.monospaced()).foregroundStyle(Spine.Palette.textDim)
+                        .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                 }
                 .padding(.vertical, 2)
             }

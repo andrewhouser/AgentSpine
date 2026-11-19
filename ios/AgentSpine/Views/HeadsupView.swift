@@ -48,7 +48,7 @@ struct HeadsupView: View {
                 }
                 .disabled(checking)
                 if let note {
-                    Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                    Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             }
 
@@ -73,9 +73,9 @@ struct HeadsupView: View {
                 Section("Dates it noticed") {
                     ForEach(dates.proposals) { proposal in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(proposal.title).font(.headline)
+                            Text(proposal.title).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                             Text("You mentioned this in a thread. Nothing is remembered until you say so.")
-                                .font(.caption)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                                 .foregroundStyle(Spine.Palette.textDim)
                             HStack(spacing: 8) {
                                 Button("Remember it") { Task { await decide(proposal, yes: true) } }
@@ -222,17 +222,17 @@ private struct HeadsupRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(item.subject).font(.headline)
+                Text(item.subject).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                 Spacer()
                 Text(item.kindLabel)
-                    .font(.caption2.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(Spine.Palette.bgInset, in: Capsule())
                     .foregroundStyle(Spine.Palette.textDim)
             }
             Text(item.detailLine)
-                .font(.caption)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                 .foregroundStyle(Spine.Palette.textDim)
 
             if item.isOpen {
@@ -272,13 +272,13 @@ private struct HeadsupRow: View {
                     : (watch.kind == "flight" ? "Flight tracking ended" : "Traffic watch ended"),
                 systemImage: watch.kind == "flight" ? "airplane" : "car"
             )
-            .font(.footnote.weight(.semibold))
+            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
             if let note = watch.note, !note.isEmpty {
-                Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
             }
             if let polled = SpineDate.parse(watch.lastPolled) {
                 Text("Last checked " + polled.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2)
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .foregroundStyle(Spine.Palette.textDim)
             }
         }
@@ -297,24 +297,24 @@ private struct HeadsupRow: View {
             if let query = item.query {
                 // Shown on purpose: what was asked is never a mystery.
                 Text("Searched for: “\(query)”. No names are ever sent.")
-                    .font(.caption2)
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .foregroundStyle(Spine.Palette.textDim)
             }
             if let note = item.researchNote, !note.isEmpty {
-                Text("\(note).").font(.caption2).foregroundStyle(Spine.Palette.textDim)
+                Text("\(note).").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
             }
         } else if let error = item.researchError {
             Text("Couldn't finish looking: \(error)")
-                .font(.footnote)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                 .foregroundStyle(Spine.Palette.warn)
         } else {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Looking…").font(.footnote).foregroundStyle(Spine.Palette.textDim)
+                Text("Looking…").font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
             }
         }
         Button(item.cards.isEmpty ? "Try again" : "Look again", action: research)
-            .font(.footnote)
+            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
             .buttonStyle(.bordered)
             .controlSize(.small)
     }
@@ -339,19 +339,19 @@ private struct HeadsupCardTile: View {
         let tile = VStack(alignment: .leading, spacing: 4) {
             HeadsupPhoto(path: card.imageURL)
             Text(card.title)
-                .font(.footnote.weight(.semibold))
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
             if card.kind == "gift" {
                 // Said out loud rather than hidden: a page that could not be read has no price.
                 Text(card.priceText ?? "no price available")
-                    .font(.footnote)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                     .foregroundStyle(card.priceText == nil ? Color.secondary : Color.primary)
             }
-            Text(card.host).font(.caption2).foregroundStyle(Spine.Palette.textDim)
+            Text(card.host).font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
             if let note = card.note, !note.isEmpty {
                 Text(note)
-                    .font(.caption2)
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .foregroundStyle(Spine.Palette.textDim)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -386,7 +386,7 @@ private struct HeadsupPhoto: View {
             } else if path == nil || failed {
                 ZStack {
                     Spine.Palette.bgInset
-                    Text("no photo").font(.caption2).foregroundStyle(Spine.Palette.textFaint)
+                    Text("no photo").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textFaint)
                 }
             } else {
                 ZStack {

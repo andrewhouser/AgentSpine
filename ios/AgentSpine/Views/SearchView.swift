@@ -28,9 +28,9 @@ struct SearchView: View {
                     if let id = hit.conversationId { openThread(id) }
                 } label: {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(hit.conversationTitle ?? "Untitled conversation").font(.body.weight(.semibold))
-                        Text("asked: \(hit.task)").font(.caption).foregroundStyle(Spine.Palette.textFaint).lineLimit(1)
-                        Text(hit.snippet).font(.footnote).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
+                        Text(hit.conversationTitle ?? "Untitled conversation").font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                        Text("asked: \(hit.task)").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textFaint).lineLimit(1)
+                        Text(hit.snippet).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
                     }
                 }
                 .buttonStyle(.plain)

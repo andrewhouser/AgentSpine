@@ -68,11 +68,11 @@ struct ApprovalCard: View {
                     .padding(Spine.Space.sm + 1)
                     .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm + 2))
             }
-            .font(.caption)
+            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
             .tint(Spine.Palette.textDim)
 
             if let error {
-                Text(error).font(.caption).foregroundStyle(Spine.Palette.danger)
+                Text(error).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.danger)
             }
 
             HStack(spacing: 10) {
@@ -141,7 +141,7 @@ struct RejectSheet: View {
             Form {
                 Section {
                     Text(confirmation.summary)
-                        .font(.callout)
+                        .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .callout))
                 }
                 Section {
                     TextField("Why not? (optional)", text: $reason, axis: .vertical)
@@ -209,11 +209,11 @@ struct DecisionNote: View {
             ForEach(decisions) { d in
                 VStack(alignment: .leading, spacing: 2) {
                     Label(d.headline, systemImage: d.approved ? "checkmark.circle.fill" : "xmark.circle")
-                        .font(.footnote.weight(.medium))
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.medium))
                         .foregroundStyle(d.approved ? Spine.Palette.ok : Spine.Palette.textDim)
                     if !d.detail.isEmpty {
                         Text(d.detail.joined(separator: "\n"))
-                            .font(.caption2)
+                            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                             .foregroundStyle(Spine.Palette.textDim)
                             .lineLimit(4)
                     }
