@@ -554,8 +554,12 @@ node, hollow while running) and `ApprovalCard` (a hollow amber node); `DecisionB
 accent for a dry run and `PageHeader` the display face. `--attention` changed meaning from a blue
 "needs you" to the amber of a pending question, as on the phone. Markup changes: one wrapper in
 `Turn`, one in `ToolCallCard`. Checked in a browser: a `Turn` with every verdict and a pending
-approval, in both themes, with all three fonts loading. Not checked: every other view by eye, which
-still has to be walked. Spacing and type sizes still use the old literal values in most modules (only
+approval, in both themes, with all three fonts loading. Walked, in both themes, against a scratch
+server (empty database, port 8799, localhost, no token): the new-conversation page, Search, Tasks,
+Files, Meetings, Builds, Overview, Heads-up, Study, Clients, Schedules (with the seeded Morning
+brief), Activity, Settings and a project page. Nothing was broken, clipped or unreadable. Not seen,
+because they need data or a running model: a real streamed conversation, Trace tab, RunDetail,
+populated Meetings with speaker colours, the dialogs, and narrow widths. Spacing and type sizes still use the old literal values in most modules (only
 colours and fonts moved to tokens), and the meeting speaker colours stay hard-coded hues.
 
 ## How we will test
