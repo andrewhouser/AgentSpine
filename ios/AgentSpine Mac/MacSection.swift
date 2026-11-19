@@ -69,7 +69,7 @@ struct MacSectionContent: View {
             case .projects: ProjectsView()
             case .files: FilesView()
             case .clients: ClientsView()
-            case .meetings: MeetingsView()
+            case .meetings: MacMeetingsView()
             case .builds: MacBuildsView()
             case .activity: MacActivityView()
             case .memory: MemoryView()

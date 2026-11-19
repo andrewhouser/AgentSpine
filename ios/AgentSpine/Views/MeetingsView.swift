@@ -156,7 +156,7 @@ struct MeetingsView: View {
     }
 }
 
-private struct StartMeetingSheet: View {
+struct StartMeetingSheet: View {
     let onStarted: () async -> Void
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss

@@ -415,6 +415,24 @@ Server (see "The one real server change") and client.
 Done when: a real meeting recorded from the laptop shows up in Meetings with a transcript
 and extracted items, and the confirmation-queue rules from SPEC 15 are untouched.
 
+**Status (2026-11-19).** Started with the screen, not the audio. `MacMeetingsView` is the history on
+the left (a "Now" row while something records) and, on the right, `MacLiveMeeting` for a meeting in
+progress: the header (red dot, title, a clock that ticks by itself, "Stays on your network", Stop
+recording), the transcript grouped by speaker with a colour per speaker and a "Listening" line, and
+the Coach column from the directions: Ask now, "Suggested for you" (the coach's notes), "From earlier
+notes" (the retrieved context cards) and "Possible action items" (the queued work items, hollow amber,
+with the line that they go to the confirmation queue). A finished meeting opens the phone's own
+detail screen. It is polled every 3 seconds like the phone, and it uses only routes that exist, so
+`src/` is untouched. It builds on both targets; it has not been seen against a live meeting.
+
+Still to do, in order: (1) the server ingest route (chunked POST with sequence numbers, an
+allowlisted "remote source", one recording at a time) recorded in SPEC 15, with its test; (2) mic
+capture with `AVAudioEngine` to 16 kHz mono s16le, the permission explanations and a disk buffer for
+when the server is unreachable; (3) call audio through ScreenCaptureKit, optional, with the "Sources"
+row of level meters from the directions; (4) the menu bar recording indicator. Until (1) lands, the
+Mac starts and stops the same server-side capture the phone does, which records the server's
+microphone, not this Mac's.
+
 ### Phase 6: polish and release hygiene
 
 - Window state restoration, sensible default window sizes, full-screen behavior.
