@@ -434,12 +434,26 @@ wanted. `GET /api/meetings/live` now carries `nextSeq`. It needs a dashboard res
 `"remoteSources": ["mac"]` added to the `audio` block of `policy.json` (with `enabled: true`), which
 only the user can edit. No client uses it yet, so the Mac still records the server's microphone.
 
-Still to do, in order: (1) done, above; (2) mic
-capture with `AVAudioEngine` to 16 kHz mono s16le, the permission explanations and a disk buffer for
-when the server is unreachable; (3) call audio through ScreenCaptureKit, optional, with the "Sources"
-row of level meters from the directions; (4) the menu bar recording indicator. Until (2) lands, the
-Mac starts and stops the same server-side capture the phone does, which records the server's
-microphone, not this Mac's.
+Mic capture is built (2026-11-19), and it builds on both targets, but it has not been run against a
+live meeting or a real microphone. `MacMicCapture.swift` taps `AVAudioEngine`, converts to 16 kHz
+mono s16le and writes a file to `Application Support/AgentSpine/spool/meeting-N/` every three
+seconds; a sender posts them oldest first and deletes each once the server has it, so the disk is the
+buffer. Offline, it keeps trying (1 s backing off to 10 s) and the live view says how many seconds are
+kept on this Mac. A 409 asks `/api/meetings/live` for `nextSeq`: it skips a chunk the server already
+has, and gives up if the server stopped the meeting (its ten-minute idle limit), leaving the unsent
+files on disk with a notice. Stop waits until the server has every chunk, then stops the meeting;
+"Stop without sending" is the way out when it cannot. A route change (headphones) rebuilds the tap and
+keeps the chunk numbers. `MacRecordSheet` explains the microphone prompt before macOS shows it, and
+points to System Settings when access was refused. The Mac target now has `ENABLE_RESOURCE_ACCESS_AUDIO_INPUT`
+and an `NSMicrophoneUsageDescription`. The source name it sends is `mac`, so `policy.audio.remoteSources`
+must contain it. "Start a meeting" is a menu: this Mac, or the server's microphone as before.
+
+Known gaps: spool folders left by a crash are not picked up on the next launch, and audio kept after
+the server gave up can only be recovered by hand (it is raw PCM; ffmpeg can wrap it for
+`/api/meetings/import`). There is no level meter yet.
+
+Still to do, in order: (1) done; (2) done, above; (3) call audio through ScreenCaptureKit, optional,
+with the "Sources" row of level meters from the directions; (4) the menu bar recording indicator.
 
 ### Phase 6: polish and release hygiene
 

@@ -865,6 +865,26 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/meetings", method: "POST", body: body))
     }
 
+    /// Start a meeting whose audio this client captures and sends (`sendAudioChunk`). `source`
+    /// must be in `policy.audio.remoteSources` on the server, or this is a 403.
+    func startRemoteMeeting(source: String, projectID: Int?, title: String?) async throws -> RemoteMeetingStart {
+        var body: [String: Any] = ["source": source]
+        if let projectID { body["projectId"] = projectID }
+        if let title, !title.isEmpty { body["title"] = title }
+        return try await send(jsonRequest("/api/meetings/remote", method: "POST", body: body), as: RemoteMeetingStart.self)
+    }
+
+    /// One chunk of 16 kHz mono signed 16-bit little-endian PCM, numbered from 0. The server
+    /// applies them in order, acknowledges a repeat and refuses a gap (a 409), so retrying a
+    /// chunk whose answer was lost is always safe.
+    func sendAudioChunk(meetingID: Int, seq: Int, pcm: Data) async throws -> AudioChunkAck {
+        var req = try request("/api/meetings/\(meetingID)/chunks", query: ["seq": String(seq)])
+        req.httpMethod = "POST"
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.httpBody = pcm
+        return try await send(req, as: AudioChunkAck.self)
+    }
+
     func stopMeeting() async throws {
         try await sendRaw(jsonRequest("/api/meetings/stop", method: "POST"))
     }

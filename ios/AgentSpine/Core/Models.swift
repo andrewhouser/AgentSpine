@@ -976,6 +976,9 @@ struct MeetingLiveStatus: Codable, Hashable {
     let device: String?
     let elapsedMs: Int
     let meetingID: Int?
+    /// The next chunk number a client-sourced meeting wants; nil for a meeting the server
+    /// records itself, and for a server that predates the ingest route.
+    let nextSeq: Int?
     let pendingChunks: Int
     let recording: Bool
 
@@ -983,8 +986,26 @@ struct MeetingLiveStatus: Codable, Hashable {
         case device, recording
         case elapsedMs = "elapsedMs"
         case meetingID = "meetingId"
+        case nextSeq
         case pendingChunks
     }
+}
+
+/// The answer to starting a meeting whose audio this client sends.
+struct RemoteMeetingStart: Codable, Hashable {
+    let meetingID: Int
+    let nextSeq: Int
+
+    enum CodingKeys: String, CodingKey {
+        case meetingID = "meetingId"
+        case nextSeq
+    }
+}
+
+/// The server's answer to one audio chunk. `duplicate` means it had that one already.
+struct AudioChunkAck: Codable, Hashable {
+    let duplicate: Bool
+    let next: Int
 }
 
 struct AudioDevices: Codable {

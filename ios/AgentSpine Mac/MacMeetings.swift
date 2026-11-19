@@ -13,7 +13,9 @@ struct MacMeetingsView: View {
     @State private var selected: Int?
     @State private var error: String?
     @State private var showStart = false
+    @State private var showRecord = false
     @State private var picked = false
+    private let recorder = MacRecorder.shared
 
     var body: some View {
         HSplitView {
@@ -25,13 +27,19 @@ struct MacMeetingsView: View {
         .navigationTitle("Meetings")
         .toolbar {
             ToolbarItem {
-                Button { showStart = true } label: { Label("Start a meeting", systemImage: "mic.badge.plus") }
-                    .disabled(live?.recording == true)
+                Menu {
+                    Button("Record from this Mac") { showRecord = true }
+                    Button("Record from the server's microphone…") { showStart = true }
+                } label: { Label("Start a meeting", systemImage: "mic.badge.plus") }
+                    .disabled(live?.recording == true || recorder.isRecording)
                     .help("Start a meeting")
             }
         }
         .sheet(isPresented: $showStart) {
             StartMeetingSheet { await load() }
+        }
+        .sheet(isPresented: $showRecord) {
+            MacRecordSheet { await load() }
         }
         .task {
             // Fast while something records, slow otherwise. `.task` ends with the screen.
@@ -143,6 +151,7 @@ struct MacLiveMeeting: View {
     @State private var error: String?
     @State private var asking = false
     @State private var stopping = false
+    private let recorder = MacRecorder.shared
 
     private var meeting: Meeting? { detail?.meeting }
     private var recording: Bool { meeting?.isRecording == true }
@@ -152,6 +161,7 @@ struct MacLiveMeeting: View {
             VStack(spacing: 0) {
                 header
                 Divider()
+                captureStatus
                 transcript
             }
             .frame(minWidth: 360, maxWidth: .infinity)
@@ -164,6 +174,45 @@ struct MacLiveMeeting: View {
                 await load()
                 try? await Task.sleep(for: .seconds(recording ? 3 : 15))
             }
+        }
+    }
+
+    // MARK: Capture status
+
+    /// Only when this Mac is the microphone: whether the audio is getting through, and if not,
+    /// that nothing is lost. The server's own capture has no such state to show.
+    @ViewBuilder private var captureStatus: some View {
+        if recorder.meetingID == meetingID, recorder.isRecording {
+            HStack(spacing: Spine.Space.sm) {
+                switch recorder.link {
+                case .sending where recorder.phase == .finishing:
+                    ProgressView().controlSize(.small)
+                    Text("Sending the last of the audio… \(recorder.unsentSeconds) s left")
+                case .sending:
+                    Image(systemName: "mic.fill")
+                    Text("Recording from this Mac")
+                case .buffering:
+                    Image(systemName: "externaldrive.badge.exclamationmark").foregroundStyle(Spine.Palette.warn)
+                    Text("Can't reach the server. \(recorder.unsentSeconds) s of audio is kept on this Mac and will be sent when it's back.")
+                }
+                Spacer()
+                if case .buffering = recorder.link, recorder.phase == .finishing {
+                    Button("Stop without sending") { Task { await recorder.abandon(); await load(); await onChanged() } }
+                        .buttonStyle(.link)
+                }
+            }
+            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+            .foregroundStyle(Spine.Palette.textDim)
+            .padding(.horizontal, Spine.Space.lg)
+            .padding(.vertical, Spine.Space.sm)
+            Divider()
+        } else if let notice = recorder.notice, recorder.meetingID == nil, recording == false {
+            Text(notice)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.warn)
+                .padding(.horizontal, Spine.Space.lg)
+                .padding(.vertical, Spine.Space.sm)
+            Divider()
         }
     }
 
@@ -413,7 +462,12 @@ struct MacLiveMeeting: View {
         stopping = true
         defer { stopping = false }
         do {
-            try await APIClient.shared.stopMeeting()
+            // A recording from this Mac must hand over its last chunks before the server stops.
+            if recorder.meetingID == meetingID, recorder.isRecording {
+                await recorder.stop()
+            } else {
+                try await APIClient.shared.stopMeeting()
+            }
             await load()
             await onChanged()
         } catch {
