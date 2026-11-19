@@ -12,6 +12,7 @@ struct MacRecordSheet: View {
     @State private var projectID: Int?
     @State private var error: String?
     @State private var starting = false
+    @AppStorage("macRecordCallAudio") private var callAudio = false
     private let recorder = MacRecorder.shared
 
     var body: some View {
@@ -42,6 +43,14 @@ struct MacRecordSheet: View {
                 .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                 .foregroundStyle(Spine.Palette.textDim)
 
+                Section {
+                    Toggle("Also record the other side of a call", isOn: $callAudio)
+                } header: {
+                    Text("Sources")
+                } footer: {
+                    Text("Your microphone only hears you, and the room. To also transcribe the people on a call, AgentSpine can take the sound this Mac is playing. That needs Screen & System Audio Recording turned on in System Settings. Only sound is used, never the screen. If it is off, the microphone alone is recorded.")
+                }
+
                 Section("Title (optional)") { TextField("Title", text: $title) }
                 Section("Project (optional)") {
                     Picker("Project", selection: $projectID) {
@@ -69,7 +78,7 @@ struct MacRecordSheet: View {
         starting = true
         defer { starting = false }
         do {
-            try await recorder.start(projectID: projectID, title: title)
+            try await recorder.start(projectID: projectID, title: title, includeCallAudio: callAudio)
             await onStarted()
             dismiss()
         } catch {

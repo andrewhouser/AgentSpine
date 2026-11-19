@@ -31,6 +31,9 @@ nonisolated final class PCMSpooler: @unchecked Sendable {
     private var writeError: String?
     private let levelLock = NSLock()
     private var _level: Float = 0
+    private var _callLevel: Float = 0
+    /// Call audio waiting to be mixed with the microphone. Touched only on `queue`.
+    private var callPending = Data()
 
     /// How loud the microphone is right now, 0 to 1 on a decibel scale (silence at 0, about
     /// -60 dB, full scale at 1), with a quick fall so a meter reads as a meter and not a flicker.
@@ -38,6 +41,13 @@ nonisolated final class PCMSpooler: @unchecked Sendable {
         levelLock.lock()
         defer { levelLock.unlock() }
         return _level
+    }
+
+    /// The same for the other side of a call.
+    var callLevel: Float {
+        levelLock.lock()
+        defer { levelLock.unlock() }
+        return _callLevel
     }
 
     init(dir: URL, startSeq: Int) {
@@ -83,12 +93,45 @@ nonisolated final class PCMSpooler: @unchecked Sendable {
             return buffer
         }
         guard error == nil, out.frameLength > 0, let samples = out.int16ChannelData?[0] else { return }
-        measure(samples, count: Int(out.frameLength))
+        measure(samples, count: Int(out.frameLength), call: false)
         let bytes = Data(bytes: samples, count: Int(out.frameLength) * 2)
-        queue.async { [self] in append(bytes) }
+        queue.async { [self] in append(mixedWithCall(bytes)) }
     }
 
-    private func measure(_ samples: UnsafePointer<Int16>, count: Int) {
+    /// Call audio, already 16 kHz mono s16le, from `SystemAudioCapture`. Held until the
+    /// microphone's next samples, which set the pace.
+    func addCall(_ bytes: Data) {
+        bytes.withUnsafeBytes { raw in
+            if let p = raw.bindMemory(to: Int16.self).baseAddress { measure(p, count: bytes.count / 2, call: true) }
+        }
+        queue.async { [self] in
+            callPending.append(bytes)
+            // A second of slack is plenty. More means the microphone stopped, and a backlog
+            // mixed in later would put the other side's words in the wrong place.
+            if callPending.count > 64_000 { callPending.removeFirst(callPending.count - 64_000) }
+        }
+    }
+
+    /// The microphone is the clock: for each stretch of it, take that much call audio (silence
+    /// if there is none yet) and add the two, clamped. Everything downstream hears one stream.
+    private func mixedWithCall(_ mic: Data) -> Data {
+        guard !callPending.isEmpty else { return mic }
+        let take = min(callPending.count, mic.count)
+        var out = mic
+        out.withUnsafeMutableBytes { dst in
+            callPending.withUnsafeBytes { src in
+                let d = dst.bindMemory(to: Int16.self)
+                let c = src.bindMemory(to: Int16.self)
+                for i in 0..<(take / 2) {
+                    d[i] = Int16(clamping: Int(d[i]) + Int(c[i]))
+                }
+            }
+        }
+        callPending.removeFirst(take)
+        return out
+    }
+
+    private func measure(_ samples: UnsafePointer<Int16>, count: Int, call: Bool) {
         var sum = 0.0
         for i in 0..<count {
             let v = Double(samples[i]) / 32_768
@@ -98,7 +141,7 @@ nonisolated final class PCMSpooler: @unchecked Sendable {
         let db = 20 * log10(max(rms, 0.000_001))
         let now = Float(min(max((db + 60) / 60, 0), 1))
         levelLock.lock()
-        _level = max(now, _level * 0.82)
+        if call { _callLevel = max(now, _callLevel * 0.82) } else { _level = max(now, _level * 0.82) }
         levelLock.unlock()
     }
 
@@ -177,6 +220,8 @@ final class MacRecorder {
     private(set) var link: Link = .sending
     private(set) var meetingID: Int?
     private(set) var startedAt: Date?
+    /// Whether the other side of a call is being captured too.
+    private(set) var callAudio = false
     /// Chunks captured and not yet accepted by the server.
     private(set) var unsentChunks = 0
     /// Why the last recording stopped early, or what to know about audio left on this Mac.
@@ -195,10 +240,12 @@ final class MacRecorder {
     /// The microphone's level for a meter. Not observable: a meter reads it on a timer, so the
     /// whole screen does not re-render ten times a second.
     func inputLevel() -> Float { spooler?.level ?? 0 }
+    func callLevel() -> Float { spooler?.callLevel ?? 0 }
     var unsentSeconds: Int { unsentChunks * 3 }
 
     private var engine: AVAudioEngine?
     private var spooler: PCMSpooler?
+    private var callCapture: SystemAudioCapture?
     private var dir: URL?
     private var sender: Task<Void, Never>?
     private var configObserver: NSObjectProtocol?
@@ -211,7 +258,7 @@ final class MacRecorder {
 
     // MARK: Start
 
-    func start(projectID: Int?, title: String?) async throws {
+    func start(projectID: Int?, title: String?, includeCallAudio: Bool = false) async throws {
         guard phase == .idle else { return }
         guard await requestMicAccess() else { throw StartError.micDenied }
         phase = .starting
@@ -246,6 +293,7 @@ final class MacRecorder {
         meetingID = started.meetingID
         startedAt = .now
         link = .sending
+        if includeCallAudio { await startCallAudio() }
         unsentChunks = 0
         phase = .recording
         configObserver = NotificationCenter.default.addObserver(
@@ -254,6 +302,31 @@ final class MacRecorder {
             MainActor.assumeIsolated { self?.inputChanged() }
         }
         sender = Task { [weak self] in await self?.runSender(meetingID: started.meetingID) }
+    }
+
+    /// Best effort. A missing permission or a failed stream costs the other side of the call,
+    /// never the recording: the microphone is already running and the meeting already exists.
+    private func startCallAudio() async {
+        guard let spooler else { return }
+        guard SystemAudioCapture.hasAccess else {
+            SystemAudioCapture.requestAccess()
+            notice = "Call audio needs Screen & System Audio Recording turned on for AgentSpine in System Settings, Privacy & Security. Recording the microphone only; you may need to reopen AgentSpine after allowing it."
+            return
+        }
+        let capture = SystemAudioCapture(spooler: spooler)
+        capture.onStopped = { [weak self] why in
+            Task { @MainActor in
+                self?.callAudio = false
+                self?.notice = "Call audio stopped: \(why). The microphone is still recording."
+            }
+        }
+        do {
+            try await capture.start()
+            callCapture = capture
+            callAudio = true
+        } catch {
+            notice = "Call audio could not start (\(error.localizedDescription)). Recording the microphone only."
+        }
     }
 
     enum StartError: LocalizedError {
@@ -326,6 +399,9 @@ final class MacRecorder {
     private func haltCapture() {
         if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
         configObserver = nil
+        if let capture = callCapture { Task { await capture.stop() } }
+        callCapture = nil
+        callAudio = false
         if let engine, let spooler {
             spooler.detach(from: engine)
             spooler.flush()

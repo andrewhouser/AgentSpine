@@ -464,8 +464,22 @@ Known gaps: spool folders left by a crash are not picked up on the next launch, 
 the server gave up can only be recovered by hand (it is raw PCM; ffmpeg can wrap it for
 `/api/meetings/import`). Nothing warns when the meter stays flat (a muted microphone).
 
-Still to do: call audio through ScreenCaptureKit, optional, with the "Sources" row of level meters
-from the directions (`MacLevelMeter` is the piece to reuse per source).
+Call audio is built (2026-11-19), optional, and builds on both targets but has **not** been run on a
+real call. `MacCallAudio.swift` captures what this Mac plays through `SCStream` (audio only: a 2x2
+picture once a second that is discarded; this app's own sound excluded) and converts it to 16 kHz mono
+s16le. `PCMSpooler` mixes it into the microphone stream, with the microphone as the clock: each stretch
+of mic audio takes that much call audio (silence if none has arrived), the two are added and clamped,
+and the server hears one stream, so nothing downstream changed. The record sheet has a "Sources"
+section with a toggle (remembered) and a plain explanation of the Screen & System Audio Recording
+permission. Without that permission, or if the stream fails or dies mid-meeting, it says so and the
+microphone carries on: the meeting already exists, so call audio can only add, never cost, a recording.
+The live view and the menu bar panel show a meter per source ("Mic", and "Call" while it is on).
+
+Known limits: with speakers rather than headphones the microphone also hears the far side, so it is
+heard twice (slightly delayed); and the two sources are mixed, not kept as separate tracks, so speaker
+detection works on the mix. Separate tracks would be a server change.
+
+Phase 5 is otherwise complete. Left: try it on a real call, and the gaps listed above.
 
 ### Phase 6: polish and release hygiene
 

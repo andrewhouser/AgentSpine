@@ -4,11 +4,13 @@ import SwiftUI
 /// timer, ten times a second, straight from the recorder, so nothing else re-renders with it.
 struct MacLevelMeter: View {
     var recorder = MacRecorder.shared
+    /// Which source to show. The call's meter only means anything while call audio is on.
+    var call = false
     private let bars = 14
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-            let level = Double(recorder.inputLevel())
+            let level = Double(call ? recorder.callLevel() : recorder.inputLevel())
             HStack(spacing: 2) {
                 ForEach(0..<bars, id: \.self) { i in
                     let lit = level * Double(bars) > Double(i)
@@ -18,7 +20,7 @@ struct MacLevelMeter: View {
                 }
             }
             .accessibilityElement()
-            .accessibilityLabel("Microphone level")
+            .accessibilityLabel(call ? "Call audio level" : "Microphone level")
             .accessibilityValue("\(Int(level * 100)) percent")
         }
     }
@@ -30,6 +32,27 @@ enum MacClock {
         return s >= 3600
             ? String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
             : String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+/// The "Sources" row: each thing being heard, with its own meter.
+struct MacSourcesRow: View {
+    var recorder = MacRecorder.shared
+
+    var body: some View {
+        HStack(spacing: Spine.Space.md) {
+            source("Mic", call: false)
+            if recorder.callAudio { source("Call", call: true) }
+        }
+    }
+
+    private func source(_ name: String, call: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(name)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+            MacLevelMeter(recorder: recorder, call: call)
+        }
     }
 }
 
@@ -54,7 +77,7 @@ struct MacRecordingPanel: View {
                     }
                 }
                 HStack {
-                    MacLevelMeter(recorder: recorder)
+                    MacSourcesRow(recorder: recorder)
                     Spacer()
                     Button(role: .destructive) {
                         stopping = true

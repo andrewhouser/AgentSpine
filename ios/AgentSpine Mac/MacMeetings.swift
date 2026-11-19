@@ -191,7 +191,7 @@ struct MacLiveMeeting: View {
                 case .sending:
                     Image(systemName: "mic.fill")
                     Text("Recording from this Mac")
-                    MacLevelMeter()
+                    MacSourcesRow()
                 case .buffering:
                     Image(systemName: "externaldrive.badge.exclamationmark").foregroundStyle(Spine.Palette.warn)
                     Text("Can't reach the server. \(recorder.unsentSeconds) s of audio is kept on this Mac and will be sent when it's back.")
