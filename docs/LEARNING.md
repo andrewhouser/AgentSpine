@@ -494,6 +494,150 @@ the README already refuses to build elsewhere.
 
 ---
 
+## Phase 6 — Memory consolidation  🚧 **6.0 BUILT 2026-11-19; 6.1 and 6.2 planned**
+
+> **Status.** 6.0 is `src/learn/consolidate.ts`, `npm run consolidate`, and
+> `test/learn-consolidate.test.mjs` (26 checks). It is read-only and makes no model call.
+> **It has not been run against the real memory table**: the dev MacBook's database is empty,
+> so the first number has to come from the AgentSpine host. 6.1 and 6.2 wait on that number.
+>
+> **A correction to the first draft of this section.** It said the write gate collapses exact
+> text only. That was wrong: `remember` also refuses a new memory whose nearest neighbour
+> scores above `MEMORY_DEDUPE_THRESHOLD` (0.9). So near-duplicates are largely a *backlog*
+> problem (from before the gate, or saved while the embedder was down), and the live gap is
+> narrower than first stated: rephrasings under 0.9, and facts that changed.
+
+Every phase above adds memories. Nothing removes the wrong ones.
+
+- `dedupeMemories` collapses **exact** text only (`lower(trim(text))`), and `remember` refuses
+  new writes only above a 0.9 similarity, so "prefers short replies" and "likes brief
+  answers" can both stay if they score under it.
+- The caps (`NOTE_MEMORY_MAX` and friends) evict the **oldest**, not the wrong. A fact that
+  was true in March and false now outlives a true one from last week if the ceiling is hit
+  in between.
+- A changed fact ("works at X" → "works at Y") leaves both rows, and recall injects whichever
+  scores higher, with equal confidence.
+- The only correction path is you deleting a row by hand (`DELETE /api/memories/:id`).
+
+**Not measured.** How often near-duplicates or contradictions actually occur in this
+database is unknown, which is why 6.0 exists and why the whole phase ships off.
+
+*Prior art:* the `dream` skill (Claude Mods) has an analyzer that checks existing memories
+against recent chats and rewrites the ones the chats contradict, and an organizer that merges
+near-duplicates. Its safety model is write first, review and revert after. That doesn't fit
+invariant 2 here, so this phase keeps the idea and inverts the order: **propose first,
+change after a click.** Its other parts (claude.ai review page, parallel 400 KB chat
+reads, vault and global-file routing) are deliberately not ported: the first sends memory off
+the machine, and the second is the wrong shape for a prefill-bound host (see `MODELS.md`).
+
+### 6.0 Count the candidates (no model)  ✅ **BUILT, 2026-11-19**
+
+`src/learn/consolidate.ts`, same shape as `propose.ts`. Cosine over the embeddings that
+already sit in `memories.embedding`: no new embedding calls. Pairs at or above
+`CONSOLIDATE_SIMILARITY` (0.75) are linked, single-linkage, into groups of at most
+`CONSOLIDATE_GROUP_MAX` (6). A larger component is reported as *oversized* and not judged,
+because a long chain usually means the floor is too low.
+
+**The band starts below the write gate.** Groups with a pair above 0.9 are labelled
+*backlog* (the gate would refuse them today). Groups entirely beneath it are *near*:
+rephrasings and changed facts, which is the case an exact or threshold dedupe cannot
+resolve. The two are counted separately, because they imply different fixes.
+
+`npm run consolidate` prints the counts, a histogram of linked pairs in 0.05 buckets, and
+the ten most similar groups (`-- --all` for every group). **No model call, no writes.**
+Rows it cannot compare are counted rather than guessed at: no vector (saved while the
+embedder was down), or a vector of another length (a different embedding model).
+Exact-text copies are collapsed first, since the daily prune already owns those and they
+would otherwise show up at 1.0 and drown the signal. `--dry` is accepted and does nothing,
+so the command line won't change when 6.1 lands.
+
+**This is the measurement.** If it finds a handful, the pass isn't worth its queue noise
+and the answer is to stop here. 0.75 is a starting guess; set the floor from the
+histogram, not from this paragraph.
+
+Only the first half of the "what is it for" claim is checked by this: it shows *that*
+similar memories exist, not that any is *contradictory*. Telling a duplicate from a changed
+fact is the model's job in 6.1, and nothing here measures how good it is at it.
+
+Only kinds `note`, `reflection` and `preference` are in scope. `friction` is derived by
+regex and capped per tool, `recipe` and `lesson` are procedures where a merge would rewrite
+an instruction, and `conversation` summaries are bound to a date.
+
+### 6.1 Judge each group, queue the result
+
+Only a candidate group reaches the model, never the whole table, so prompts stay small and
+prefix-stable. A local call shaped like `reflect.ts` (strict JSON, not `judge()`'s bare
+yes/no), pinned `sensitivity:"private"` **unconditionally**: it reads every memory, and
+derived memories aren't reliably labelled. Memory text goes in as evidence, never as
+instructions (invariant 2). Per group the model may return one of:
+
+| Result | What it carries | New model-written text? |
+|---|---|---|
+| `distinct` | nothing | no |
+| `duplicate` | which ids to retire, which one to keep | **no**: the kept row is an existing row |
+| `superseded` | which older id to retire in favour of a newer one | **no** |
+| `merge` | one replacement statement | yes, and the only such case |
+
+Preferring `duplicate` and `superseded` is the point: they cannot introduce new standing
+text. A `merge` statement is held to `reflect.ts`'s output shape (short, third person, a
+length cap) and shown in the queue as a diff against the rows it replaces, never alone.
+
+Each proposal lands in the confirmation queue. `CONSOLIDATE_MAX_PROPOSALS` caps one pass so
+a bad run cannot flood the queue (invariant 5, applied to a human's attention). A pair you
+reject is recorded in `kv` under `consolidate:rejected:<idA>:<idB>` so it is never
+proposed again, the same way 1.3 treats a rejected shape.
+
+### 6.2 Retire, don't delete
+
+Approving sets `retired` on the row; recall skips retired rows; `prune.ts` hard-deletes
+them after `CONSOLIDATE_GRACE_DAYS`. That is the revert `dream` gets from backups, for one
+nullable column. Un-retiring a row is a click in Settings → Memory during the grace window.
+
+### When it runs, and how to change that
+
+- **Default off.** `CONSOLIDATE_EVERY_DAYS=0` until 6.0 shows enough candidates to justify it,
+  like 4.5, 4.6 and Phase 5. Set it to `7` for weekly.
+- **Trigger.** No new timer. The existing daily `prune` tick in `server.ts` checks
+  `kv` `consolidate:last` and runs the pass when at least `CONSOLIDATE_EVERY_DAYS` have
+  passed, inside its own try/catch so a failed pass cannot stop the prune (invariant 3).
+  `prune` also runs once at boot, but the `last` stamp keeps a restart from re-running it early.
+- **Adjustable** through `.env`, like every other knob here, which means a restart to change
+  it. There is no UI for it.
+- **Not a wall-clock schedule.** The pass runs when the prune tick lands, which is server boot
+  plus multiples of 24 h, not "Sunday at 3 am". If a fixed time matters, leave
+  `CONSOLIDATE_EVERY_DAYS=0` and run `npm run consolidate` from launchd.
+- **Manual:** `npm run consolidate`, beside `propose` and `rewrite`. Today (6.0) it only
+  counts. From 6.1 it queues proposals, and `-- --dry` will list them without queueing.
+
+**Gap worth knowing.** `propose.ts` says it is "meant for a weekly schedule", but nothing
+in `server.ts` or `index.ts` calls `runProposer` or the rewriter (I did not search the rest
+of `src/`), so today those two run only when someone runs the CLI. Phase 6 should not copy
+that: a learner with no trigger is a learner that never runs.
+
+**Config knobs:** built with 6.0: `CONSOLIDATE_SIMILARITY` (0.75) and
+`CONSOLIDATE_GROUP_MAX` (6), both in `config.ts`. **Not yet `.env.example`**: the file was
+out of reach when 6.0 was written, so document them there. Planned with 6.1/6.2:
+`CONSOLIDATE_EVERY_DAYS` (0), `CONSOLIDATE_MAX_PROPOSALS`, `CONSOLIDATE_GRACE_DAYS` (30).
+
+**Schema:** `memories.retired TEXT` (nullable, best-effort `ALTER` like the others). `kv`
+prefixes `consolidate:last` and `consolidate:rejected:*`.
+
+**Open questions, to settle before building:**
+1. How an approval executes. Phase 2 used a server route no tool can reach; Phases 4 and 5
+   reused the confirmation queue. A retire/merge must not be something the model can call
+   itself. If the registry can hide a tool from the model (`test/chat-tool-visibility.test.mjs`
+   suggests it can), use an internal-only tool; otherwise follow Phase 2's route.
+2. Whether to skip a pass while a chat run or a meeting holds the model host, and what
+   signal says so. The `standard` tier is shared with both.
+3. Whether the Settings → Memory screen can show a retired row and un-retire it. The web side
+   was not read for this draft.
+
+**Judged by:** proposals accepted ÷ proposed, and the 6.0 candidate count trending down
+after the first accepted passes. If acceptance is low, raise the similarity threshold; if
+6.0 never finds much, delete the phase. Do not tune it indefinitely.
+
+---
+
 ## New surfaces this introduces
 
 **Memory kinds** — existing: `note`, `reflection`, `preference`.
@@ -524,16 +668,17 @@ per-tool friction lookup (Phase 1.2); a new optional policy surface `policy.auto
 `watch:horizon` (Phase 4.3). No new tables: `kv` and `stash` are already the right substrate.
 
 **Modules** — `src/learn/denials.ts`, `friction.ts`, `promote.ts`, `critique.ts`, `propose.ts`,
-`horizon.ts`, `interrupt.ts`, `rewrite.ts`. Kept out of `src/tools/` on purpose: none of them
+`horizon.ts`, `interrupt.ts`, `rewrite.ts`, and (Phase 6.0) `consolidate.ts`. Kept out of `src/tools/` on purpose: none of them
 is a capability the model gets to invoke. `applyProposal` (Phase 2) is the only code anywhere
 that writes `policy.json`, and it runs from an authenticated server route, never a tool.
 
-**CLIs** — `npm run propose [--dry]` (Phase 4.1) and `npm run rewrite [--dry]` (Phase 5),
+**CLIs** — `npm run propose [--dry]` (Phase 4.1), `npm run rewrite [--dry]` (Phase 5),
+`npm run consolidate [-- --all]` (Phase 6.0, read-only),
 alongside the existing `digest` / `watcher` / `prune`.
 
 ## How to tell it is working, and what to delete
 
-> **All phases are built and tested as of 2026-09-10** (Phase 0's metrics, Phase 1's three
+> **Phases 0 to 5 are built and tested as of 2026-09-10; Phase 6 has only its read-only counter (6.0) built** (Phase 0's metrics, Phase 1's three
 > learners, Phase 2's approval promotion, Phase 3's recipes and lessons, Phase 4's six
 > anticipation parts, and Phase 5's guarded self-rewrite). What is *not* yet done is the only
 > thing code cannot do: **run it against real use and read the numbers below.** Each learner
@@ -552,6 +697,7 @@ Every phase names a number in Phase 0 that it is supposed to move.
 | 3.1 recipes | steps per repeat task ↓ | delete. Do not tune this indefinitely |
 | 3.2 lessons | rejection rate ↓ | the critique isn't specific enough to act on |
 | 4 anticipation | proposals accepted ÷ proposed | it's guessing; tighten the recurrence threshold |
+| 6 consolidation | proposals accepted ÷ proposed; 6.0 candidate count ↓ | raise the similarity threshold; if 6.0 never finds much, delete it |
 
 The measurement culture already in this repo is the reason to state that up front: the
 `DICTATION_PROMPT` finding and the `MEETING_CORRECTIONS` non-finding are both in the

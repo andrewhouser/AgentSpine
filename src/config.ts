@@ -334,6 +334,19 @@ export const REWRITE_MIN_OVER_BUDGET = Number(env.REWRITE_MIN_OVER_BUDGET ?? "3"
 // standing one. Off by default: this is the phase with teeth.
 export const REWRITE_ENABLED = (env.REWRITE_ENABLED ?? "false") === "true";
 
+// --- Memory consolidation (docs/LEARNING.md Phase 6) ---
+// Two memories whose stored embeddings score at or above this are CANDIDATES for being a
+// duplicate, a rephrasing, or an older version of one another. It sits below
+// MEMORY_DEDUPE_THRESHOLD on purpose: `remember` already refuses anything above that, so the
+// useful band is underneath it, where a changed fact ("works at X" / "works at Y") looks
+// nearly identical to an embedder. 0.75 is a STARTING GUESS, not a measurement: run
+// `npm run consolidate` and read its histogram before trusting it.
+export const CONSOLIDATE_SIMILARITY = Number(env.CONSOLIDATE_SIMILARITY ?? "0.75");
+// Largest group of candidates handed on for judgment. A bigger connected component usually
+// means the floor is too low (single linkage chains unrelated memories through a middleman),
+// so it is reported rather than judged.
+export const CONSOLIDATE_GROUP_MAX = Number(env.CONSOLIDATE_GROUP_MAX ?? "6");
+
 // --- Conversations ---
 // How many earlier turns of a chat are CANDIDATES for the next one's context. Each turn
 // that makes it in costs context on EVERY step of the loop, not once — so candidates are
