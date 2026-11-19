@@ -51,11 +51,17 @@ struct MacSidebar: View {
 
     private var header: some View {
         VStack(spacing: Spine.Space.sm) {
-            Text("AgentSpine")
-                .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
-                .foregroundStyle(Spine.Palette.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, Spine.Space.xs)
+            HStack(spacing: Spine.Space.sm) {
+                SpineMark()
+                    .fill(Spine.Palette.accent)
+                    .frame(width: 10, height: 26)
+                    .accessibilityHidden(true)
+                Text("AgentSpine")
+                    .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
+                    .foregroundStyle(Spine.Palette.text)
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, Spine.Space.xs)
 
             Button(action: newThread) {
                 HStack {

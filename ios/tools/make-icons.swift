@@ -7,6 +7,12 @@
 // middle. Units below are the mock's, 132 tall and 50 wide; keep SpineMenuMark.swift in step.
 import AppKit
 
+/// A colour from a token hex value, tagged sRGB so it is the same colour the app draws.
+func srgb(_ hex: Int, _ a: CGFloat = 1) -> CGColor {
+    CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+            components: [CGFloat(hex >> 16 & 255) / 255, CGFloat(hex >> 8 & 255) / 255, CGFloat(hex & 255) / 255, a])!
+}
+
 func spinePath(height: CGFloat, centerX: CGFloat, top: CGFloat) -> CGPath {
     let k = height / 132
     func y(_ u: CGFloat) -> CGFloat { top + u * k }
@@ -42,18 +48,18 @@ func fillMark(_ c: CGContext, height: CGFloat, centerX: CGFloat, top: CGFloat) {
 func master() -> CGImage {
     let n = 1024
     let c = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: 0,
-                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    let space = CGColorSpaceCreateDeviceRGB()
-    // Background: the sidebar slate to the elevated slate, top to bottom (CG's origin is bottom-left).
+                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    // Background: bgElevated at the top to bgSidebar at the bottom (design/tokens.json, dark).
     let g = CGGradient(colorsSpace: space, colors: [
-        CGColor(red: 0x1B/255, green: 0x22/255, blue: 0x2B/255, alpha: 1),
-        CGColor(red: 0x0B/255, green: 0x0E/255, blue: 0x12/255, alpha: 1)] as CFArray, locations: [0, 1])!
-    c.drawLinearGradient(g, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: CGFloat(n)), options: [])
+        srgb(0x171C23),   // bgElevated, top
+        srgb(0x0B0E12)] as CFArray, locations: [0, 1])!
+    c.drawLinearGradient(g, start: CGPoint(x: 0, y: CGFloat(n)), end: CGPoint(x: 0, y: 0), options: [])
     let h: CGFloat = 600, top = (CGFloat(n) - h) / 2
     // Glow, then the mark in the accent with a light top-to-bottom gradient.
     c.saveGState()
-    c.setShadow(offset: .zero, blur: 60, color: CGColor(red: 0x86/255, green: 0xB6/255, blue: 0xEA/255, alpha: 0.45))
-    c.setFillColor(CGColor(red: 0x86/255, green: 0xB6/255, blue: 0xEA/255, alpha: 1))
+    c.setShadow(offset: .zero, blur: 60, color: srgb(0x86B6EA, 0.45))
+    c.setFillColor(srgb(0x86B6EA))
     fillMark(c, height: h, centerX: CGFloat(n) / 2, top: top)
     c.restoreGState()
     return c.makeImage()!
@@ -68,7 +74,7 @@ func write(_ img: CGImage, _ path: String) {
 func opaque(_ img: CGImage) -> CGImage {
     let n = img.width
     let c = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: 0,
-                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
     c.draw(img, in: CGRect(x: 0, y: 0, width: n, height: n))
     return c.makeImage()!
 }
@@ -76,14 +82,14 @@ func opaque(_ img: CGImage) -> CGImage {
 /// The standard macOS shape: art in an 824 px rounded square on a 1024 canvas, soft shadow.
 func macIcon(_ art: CGImage, size: Int) -> CGImage {
     let c = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     c.interpolationQuality = .high
     let s = CGFloat(size) / 1024
     let rect = CGRect(x: 100 * s, y: 100 * s, width: 824 * s, height: 824 * s)
     let shape = CGPath(roundedRect: rect, cornerWidth: 185 * s, cornerHeight: 185 * s, transform: nil)
     c.saveGState()
-    c.setShadow(offset: CGSize(width: 0, height: -10 * s), blur: 24 * s, color: CGColor(gray: 0, alpha: 0.5))
-    c.addPath(shape); c.setFillColor(CGColor(gray: 0, alpha: 1)); c.fillPath()
+    c.setShadow(offset: CGSize(width: 0, height: -10 * s), blur: 24 * s, color: srgb(0x000000, 0.5))
+    c.addPath(shape); c.setFillColor(srgb(0x000000)); c.fillPath()
     c.restoreGState()
     c.saveGState()
     c.addPath(shape); c.clip()
