@@ -31,10 +31,10 @@ struct FilesView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(file.name)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(file.exists ? .primary : .secondary)
+                            .foregroundStyle(file.exists ? Spine.Palette.text : Spine.Palette.textDim)
                         Text(file.path)
                             .font(.caption2.monospaced())
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Spine.Palette.textFaint)
                             .lineLimit(2)
                         Text(
                             "\(ByteCountFormatter.string(fromByteCount: Int64(file.bytes), countStyle: .file)) · "
@@ -42,7 +42,7 @@ struct FilesView: View {
                                 + (file.exists ? "" : " · no longer on disk")
                         )
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Spine.Palette.textDim)
                     }
                 }
                 .buttonStyle(.plain)
@@ -83,13 +83,13 @@ private struct FilePreview: View {
                             Text(content.text).font(.footnote.monospaced())
                         }
                         if content.truncated {
-                            Text("Preview truncated.").font(.caption).foregroundStyle(.secondary)
+                            Text("Preview truncated.").font(.caption).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                 } else if let error {
-                    Text(error).font(.footnote).foregroundStyle(.red).padding()
+                    Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger).padding()
                 } else {
                     ProgressView().padding()
                 }

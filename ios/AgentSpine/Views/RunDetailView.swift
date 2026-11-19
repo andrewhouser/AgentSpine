@@ -31,7 +31,7 @@ struct RunDetailView: View {
                     if detail.actions.isEmpty {
                         Text("No tool calls — this run answered from what it already knew.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                     } else {
                         ForEach(detail.actions) { action in
                             ToolCallRow(
@@ -48,7 +48,7 @@ struct RunDetailView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("SUMMARY")
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Spine.Palette.textFaint)
                             MarkdownText(note)
                         }
                     }
@@ -85,14 +85,14 @@ struct RunDetailView: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Spine.Palette.textDim)
 
             // A failed run's note is the reason it failed, which belongs at the top rather
             // than at the bottom under the summary heading.
             if run.status == "failed", let note = run.note, !note.isEmpty {
                 Label(note, systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Spine.Palette.danger)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -112,20 +112,20 @@ struct RunDetailView: View {
                             .font(.caption.weight(.medium))
                         Spacer()
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
                 }
                 .buttonStyle(.plain)
 
                 if showTrace {
                     Text("What the model actually saw, in order: the standing context, then the turn.")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Spine.Palette.textFaint)
 
                     ForEach(messages) { message in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(message.role.uppercased())
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Spine.Palette.textFaint)
                             Text(message.text)
                                 .font(.caption2.monospaced())
                                 .textSelection(.enabled)
@@ -133,7 +133,7 @@ struct RunDetailView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(9)
-                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
             }

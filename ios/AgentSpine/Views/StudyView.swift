@@ -26,7 +26,7 @@ struct StudyView: View {
                 Section {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text("\(overview.due)").font(.largeTitle.weight(.semibold)).monospacedDigit()
-                        Text(overview.due == 1 ? "card due" : "cards due").foregroundStyle(.secondary)
+                        Text(overview.due == 1 ? "card due" : "cards due").foregroundStyle(Spine.Palette.textDim)
                     }
                     if overview.due > 0 {
                         NavigationLink {
@@ -44,7 +44,7 @@ struct StudyView: View {
                     } else {
                         Text("Nothing due. Cards come back when their interval runs out.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
                 } header: {
                     Text("Review")
@@ -54,7 +54,7 @@ struct StudyView: View {
                     if overview.topics.isEmpty {
                         Text("No topics yet. In a thread, try \u{201C}I'm learning statistics, interview me\u{201D}.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
                     ForEach(overview.topics) { topic in
                         StudyTopicRow(topic: topic)
@@ -93,25 +93,25 @@ private struct StudyTopicRow: View {
                 if topic.projectID != nil {
                     Image(systemName: "lock.fill")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Spine.Palette.textDim)
                         .accessibilityLabel("Linked to a project, graded locally")
                 }
                 Spacer()
                 LevelPips(level: topic.level)
             }
             if let goal = topic.goal, !goal.isEmpty {
-                Text(goal).font(.subheadline).foregroundStyle(.secondary)
+                Text(goal).font(.subheadline).foregroundStyle(Spine.Palette.textDim)
             }
             Text("\(topic.cards) card\(topic.cards == 1 ? "" : "s") · \(topic.due) due · 14 days: \(topic.produced) produced, \(topic.consumed) read")
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
             if !topic.map.isEmpty {
                 DisclosureGroup("Curriculum · \(topic.map.count) modules") {
                     ForEach(Array(topic.map.enumerated()), id: \.offset) { index, module in
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(index + 1). \(module.name)").font(.subheadline.weight(.medium))
                             if !module.summary.isEmpty {
-                                Text(module.summary).font(.caption).foregroundStyle(.secondary)
+                                Text(module.summary).font(.caption).foregroundStyle(Spine.Palette.textDim)
                             }
                         }
                         .padding(.vertical, 2)
@@ -121,7 +121,7 @@ private struct StudyTopicRow: View {
             }
             Text(suggestion)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
         }
         .padding(.vertical, 4)
     }
@@ -182,7 +182,7 @@ struct StudyReviewView: View {
                         Spacer()
                         Text("\(reviewed) done · \(queue.count - (result == nil ? 0 : 1)) left")
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
 
                     Text(card.front)
@@ -210,7 +210,7 @@ struct StudyReviewView: View {
                 if let error {
                     Text(error)
                         .font(.footnote)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Spine.Palette.danger)
                 }
             }
             .padding()
@@ -255,9 +255,9 @@ struct StudyReviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background((recalled ? Color.green : Color.orange).opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
 
-            Text("ANSWER").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Text("ANSWER").font(.caption2.weight(.semibold)).foregroundStyle(Spine.Palette.textDim)
             Text(r.back).fixedSize(horizontal: false, vertical: true)
-            Text(nextText(r)).font(.footnote).foregroundStyle(.secondary)
+            Text(nextText(r)).font(.footnote).foregroundStyle(Spine.Palette.textDim)
 
             Button("Next card") { Task { await next() } }
                 .buttonStyle(.borderedProminent)

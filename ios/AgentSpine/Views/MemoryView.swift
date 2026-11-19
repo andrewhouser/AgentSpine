@@ -24,7 +24,7 @@ struct MemoryView: View {
                         Text(SpineDate.relative(memory.ts))
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
                 }
                 .swipeActions {
                     Button("Forget", role: .destructive) { Task { await forget(memory) } }
@@ -32,7 +32,7 @@ struct MemoryView: View {
             }
             if memories.isEmpty && !loading && error == nil {
                 Text(query.isEmpty ? "Nothing remembered yet." : "No matches.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
             }
         }
         .navigationTitle("Memory")

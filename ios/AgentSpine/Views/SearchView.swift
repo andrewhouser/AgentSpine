@@ -29,8 +29,8 @@ struct SearchView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(hit.conversationTitle ?? "Untitled conversation").font(.body.weight(.semibold))
-                        Text("asked: \(hit.task)").font(.caption).foregroundStyle(.tertiary).lineLimit(1)
-                        Text(hit.snippet).font(.footnote).foregroundStyle(.secondary).lineLimit(3)
+                        Text("asked: \(hit.task)").font(.caption).foregroundStyle(Spine.Palette.textFaint).lineLimit(1)
+                        Text(hit.snippet).font(.footnote).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
                     }
                 }
                 .buttonStyle(.plain)

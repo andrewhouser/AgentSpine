@@ -211,21 +211,21 @@ struct ScheduleCard: View {
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(
-                        (schedule.isEnabled ? Color.green : Color.secondary).opacity(0.15),
+                        (schedule.isEnabled ? Spine.Palette.ok : Spine.Palette.textDim).opacity(0.15),
                         in: Capsule()
                     )
-                    .foregroundStyle(schedule.isEnabled ? .green : .secondary)
+                    .foregroundStyle(schedule.isEnabled ? Spine.Palette.ok : Spine.Palette.textDim)
             }
 
             if let spec = schedule.spec, !spec.isEmpty {
                 Label(spec, systemImage: "clock")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
             }
 
             Text(schedule.task)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
@@ -234,7 +234,7 @@ struct ScheduleCard: View {
                 Text("next \(when(schedule.nextRun))")
             }
             .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(Spine.Palette.textFaint)
 
             // What it has actually been doing. `last_run` says a job ran; this says whether
             // it worked, which is the question that brings you to this screen. Each chip
@@ -289,7 +289,7 @@ struct ScheduleCard: View {
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func symbol(for run: Run) -> String {
@@ -302,9 +302,9 @@ struct ScheduleCard: View {
 
     private func tint(for run: Run) -> Color {
         switch run.status {
-        case "failed": return .red
-        case "running", "queued": return .orange
-        default: return .green
+        case "failed": return Spine.Palette.danger
+        case "running", "queued": return Spine.Palette.warn
+        default: return Spine.Palette.ok
         }
     }
 
@@ -384,7 +384,7 @@ struct ScheduleForm: View {
                     Section {
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Spine.Palette.danger)
                     }
                 }
             }

@@ -44,7 +44,7 @@ struct TasksView: View {
                     } label: {
                         Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
-                            .foregroundStyle(item.isDone ? .green : .secondary)
+                            .foregroundStyle(item.isDone ? Spine.Palette.ok : Spine.Palette.textDim)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
@@ -52,7 +52,7 @@ struct TasksView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.title)
                             .strikethrough(item.isDone)
-                            .foregroundStyle(item.isDone ? .secondary : .primary)
+                            .foregroundStyle(item.isDone ? Spine.Palette.textDim : Spine.Palette.text)
                         HStack(spacing: 6) {
                             if let name = projectName(item.projectID) {
                                 Label(name, systemImage: "folder")
@@ -68,7 +68,7 @@ struct TasksView: View {
                         .font(.caption)
                         .foregroundStyle(item.isOverdue ? Color.red : Color.secondary)
                         if let notes = item.notes, !notes.isEmpty {
-                            Text(notes).font(.footnote).foregroundStyle(.secondary)
+                            Text(notes).font(.footnote).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -201,7 +201,7 @@ private struct AddTodoSheet: View {
                     TextField("Who (makes it a follow-up)", text: $waitingOn)
                 }
                 if let error {
-                    Section { Text(error).font(.footnote).foregroundStyle(.red) }
+                    Section { Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger) }
                 }
             }
             .navigationTitle("New task")

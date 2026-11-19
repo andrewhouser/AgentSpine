@@ -210,11 +210,11 @@ struct DecisionNote: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Label(d.headline, systemImage: d.approved ? "checkmark.circle.fill" : "xmark.circle")
                         .font(.footnote.weight(.medium))
-                        .foregroundStyle(d.approved ? Color.green : Color.secondary)
+                        .foregroundStyle(d.approved ? Spine.Palette.ok : Spine.Palette.textDim)
                     if !d.detail.isEmpty {
                         Text(d.detail.joined(separator: "\n"))
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                             .lineLimit(4)
                     }
                 }
@@ -225,7 +225,7 @@ struct DecisionNote: View {
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Spine.Palette.textFaint)
         )
         .frame(maxWidth: .infinity, alignment: .trailing)
     }

@@ -90,16 +90,16 @@ struct HeadsupPrefsView: View {
                     Text("Watched flights and drives are checked at most every \(prefs.floorMinutes) minutes. "
                          + "That is not adjustable.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Spine.Palette.textDim)
                     if let reason = prefs.unavailable.flights {
                         Label("Flight tracking is not set up: \(reason)", systemImage: "airplane")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
                     if let reason = prefs.unavailable.drive {
                         Label("Drive watching is not set up: \(reason)", systemImage: "car")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
                 } header: {
                     Text("Watches")

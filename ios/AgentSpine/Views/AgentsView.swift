@@ -16,11 +16,11 @@ struct AgentsView: View {
                         Text(agent.name).font(.headline)
                         Spacer()
                         Text("\(agent.tier) · \(agent.maxSteps) steps")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(Spine.Palette.textDim)
                     }
                     Text(agent.description).font(.subheadline)
                     Text(agent.tools.joined(separator: ", "))
-                        .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        .font(.caption.monospaced()).foregroundStyle(Spine.Palette.textDim)
                 }
                 .padding(.vertical, 2)
             }

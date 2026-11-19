@@ -196,7 +196,7 @@ struct ThreadView: View {
             }
         } label: {
             Image(systemName: handsFree.isActive ? "waveform.circle.fill" : "waveform.circle")
-                .foregroundStyle(handsFree.phase == .hearing || handsFree.phase == .awake ? .red : .accentColor)
+                .foregroundStyle(handsFree.phase == .hearing || handsFree.phase == .awake ? Spine.Palette.danger : Spine.Palette.accent)
         }
         .accessibilityLabel(handsFree.isActive ? "Stop hands-free" : "Start hands-free")
     }
@@ -271,7 +271,7 @@ struct ThreadView: View {
                     Text(Duration.seconds(Int(dictation.elapsed)).formatted(.time(pattern: .minuteSecond)))
                         .font(.caption.monospacedDigit())
                 }
-                .foregroundStyle(.red)
+                .foregroundStyle(Spine.Palette.danger)
             case .transcribing:
                 ProgressView()
             }
@@ -321,7 +321,7 @@ struct ThreadView: View {
                     }
                     .accessibilityLabel("Dismiss this error")
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(Spine.Palette.warn)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
@@ -352,7 +352,7 @@ struct ThreadView: View {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(width: 64, height: 64)
-                                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
                     .padding(.horizontal)
@@ -373,7 +373,7 @@ struct ThreadView: View {
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
+                    .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 20))
                     .lineLimit(1...5)
 
                 Button {
@@ -548,7 +548,7 @@ struct TurnView: View {
             } else if turn.status == "failed" {
                 Label("This turn failed.", systemImage: "exclamationmark.triangle")
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Spine.Palette.danger)
             }
 
             HStack(spacing: 6) {
@@ -593,10 +593,10 @@ struct TurnView: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(Spine.Palette.textFaint)
 
             if let notice {
-                Text(notice).font(.caption).foregroundStyle(.secondary)
+                Text(notice).font(.caption).foregroundStyle(Spine.Palette.textDim)
             }
         }
         .alert("Save to file", isPresented: $saving) {
@@ -645,16 +645,16 @@ struct DelegationRow: View {
                         Text(child.agent ?? "subagent")
                             .font(.caption.weight(.semibold))
                         if let task = child.task {
-                            Text(task).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            Text(task).font(.caption2).foregroundStyle(Spine.Palette.textDim).lineLimit(1)
                         }
                     }
                     Spacer()
                     Text("\(child.actions.count)")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Spine.Palette.textDim)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Spine.Palette.textFaint)
                 }
             }
             .buttonStyle(.plain)
@@ -670,12 +670,12 @@ struct DelegationRow: View {
                     )
                 }
                 if let summary = child.summary, !summary.isEmpty {
-                    MarkdownText(summary, compact: true).foregroundStyle(.secondary)
+                    MarkdownText(summary, compact: true).foregroundStyle(Spine.Palette.textDim)
                 }
             }
         }
         .padding(10)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -711,12 +711,12 @@ struct LiveTurnView: View {
                 MarkdownText(summary)
             }
             if case .failed(let message) = stream.phase {
-                Text(message).font(.footnote).foregroundStyle(.red)
+                Text(message).font(.footnote).foregroundStyle(Spine.Palette.danger)
             }
             if let note = stream.transportNote {
                 Label(note, systemImage: "wifi.exclamationmark")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
             }
         }
     }
@@ -731,14 +731,14 @@ struct LiveTurnView: View {
                 Text(behind > 0 ? "Queued behind \(behind) run\(behind == 1 ? "" : "s")" : "Starting…")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Spine.Palette.textDim)
         case .running(let step):
             HStack(spacing: 7) {
                 ProgressView().controlSize(.small)
                 Text("Step \(step)")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Spine.Palette.textDim)
         case .failed, .finished, .idle:
             EmptyView()
         }

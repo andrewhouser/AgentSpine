@@ -78,7 +78,7 @@ struct ConversationsView: View {
                         .rotationEffect(.degrees(isFolded ? 0 : 90))
                     Label(project.name, systemImage: "folder")
                     if isFolded && count > 0 {
-                        Text("\(count)").foregroundStyle(.secondary)
+                        Text("\(count)").foregroundStyle(Spine.Palette.textDim)
                     }
                     if isFolded && state.conversations.contains(where: { $0.projectID == project.id && $0.needsYou }) {
                         AttentionDot()
@@ -106,7 +106,7 @@ struct ConversationsView: View {
         }
         .textCase(nil)
         .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Spine.Palette.textDim)
     }
 
     /// Threads with no project, or whose project this app does not know about.
@@ -142,7 +142,7 @@ struct ConversationsView: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
             }
             // Something in this thread is waiting on you — an approval. Open it to answer.
             if conversation.needsYou {
@@ -339,7 +339,7 @@ struct NewTaskSheet: View {
 
                     Text("A thread in a project can read that project's indexed sources.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Spine.Palette.textDim)
                 }
 
                 Label(
@@ -347,7 +347,7 @@ struct NewTaskSheet: View {
                     systemImage: "bell.badge"
                 )
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
 
                 Spacer()
             }

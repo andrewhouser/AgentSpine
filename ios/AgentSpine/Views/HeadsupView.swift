@@ -48,7 +48,7 @@ struct HeadsupView: View {
                 }
                 .disabled(checking)
                 if let note {
-                    Text(note).font(.footnote).foregroundStyle(.secondary)
+                    Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
                 }
             }
 
@@ -76,7 +76,7 @@ struct HeadsupView: View {
                             Text(proposal.title).font(.headline)
                             Text("You mentioned this in a thread. Nothing is remembered until you say so.")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Spine.Palette.textDim)
                             HStack(spacing: 8) {
                                 Button("Remember it") { Task { await decide(proposal, yes: true) } }
                                     .buttonStyle(.borderedProminent)
@@ -228,12 +228,12 @@ private struct HeadsupRow: View {
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.secondary)
+                    .background(Spine.Palette.bgInset, in: Capsule())
+                    .foregroundStyle(Spine.Palette.textDim)
             }
             Text(item.detailLine)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
 
             if item.isOpen {
                 HStack(spacing: 8) {
@@ -274,12 +274,12 @@ private struct HeadsupRow: View {
             )
             .font(.footnote.weight(.semibold))
             if let note = watch.note, !note.isEmpty {
-                Text(note).font(.footnote).foregroundStyle(.secondary)
+                Text(note).font(.footnote).foregroundStyle(Spine.Palette.textDim)
             }
             if let polled = SpineDate.parse(watch.lastPolled) {
                 Text("Last checked " + polled.formatted(date: .omitted, time: .shortened))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
             }
         }
     }
@@ -298,19 +298,19 @@ private struct HeadsupRow: View {
                 // Shown on purpose: what was asked is never a mystery.
                 Text("Searched for: “\(query)”. No names are ever sent.")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
             }
             if let note = item.researchNote, !note.isEmpty {
-                Text("\(note).").font(.caption2).foregroundStyle(.secondary)
+                Text("\(note).").font(.caption2).foregroundStyle(Spine.Palette.textDim)
             }
         } else if let error = item.researchError {
             Text("Couldn't finish looking: \(error)")
                 .font(.footnote)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Spine.Palette.warn)
         } else {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Looking…").font(.footnote).foregroundStyle(.secondary)
+                Text("Looking…").font(.footnote).foregroundStyle(Spine.Palette.textDim)
             }
         }
         Button(item.cards.isEmpty ? "Try again" : "Look again", action: research)
@@ -348,11 +348,11 @@ private struct HeadsupCardTile: View {
                     .font(.footnote)
                     .foregroundStyle(card.priceText == nil ? Color.secondary : Color.primary)
             }
-            Text(card.host).font(.caption2).foregroundStyle(.secondary)
+            Text(card.host).font(.caption2).foregroundStyle(Spine.Palette.textDim)
             if let note = card.note, !note.isEmpty {
                 Text(note)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
             }
@@ -385,12 +385,12 @@ private struct HeadsupPhoto: View {
                     .scaledToFill()
             } else if path == nil || failed {
                 ZStack {
-                    Color(.tertiarySystemBackground)
-                    Text("no photo").font(.caption2).foregroundStyle(.tertiary)
+                    Spine.Palette.bgInset
+                    Text("no photo").font(.caption2).foregroundStyle(Spine.Palette.textFaint)
                 }
             } else {
                 ZStack {
-                    Color(.tertiarySystemBackground)
+                    Spine.Palette.bgInset
                     ProgressView().controlSize(.small)
                 }
             }

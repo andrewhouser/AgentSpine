@@ -24,18 +24,18 @@ struct ProposalsView: View {
                      + "Accepting one appends a single {tool, target} pair to "
                      + "policy.autoApprove, so that exact shape stops queueing and nothing "
                      + "broader does.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(Spine.Palette.textDim)
             }
             ForEach(receipts, id: \.self) { receipt in
                 Label(receipt, systemImage: "checkmark.circle.fill")
-                    .font(.footnote).foregroundStyle(.green)
+                    .font(.footnote).foregroundStyle(Spine.Palette.ok)
             }
             if let loadError {
                 ErrorNotice(message: loadError) { Task { await load() } }
             }
             if let proposals {
                 if proposals.isEmpty && loadError == nil {
-                    Text("Nothing has earned a proposal yet.").foregroundStyle(.secondary)
+                    Text("Nothing has earned a proposal yet.").foregroundStyle(Spine.Palette.textDim)
                 }
                 ForEach(proposals) { proposal in card(proposal) }
             }
@@ -66,14 +66,14 @@ struct ProposalsView: View {
                     .font(.system(.subheadline, design: .monospaced)).bold()
                 Text("\(proposal.approvals) approval\(proposal.approvals == 1 ? "" : "s") · "
                      + "\(proposal.spanDays) day\(proposal.spanDays == 1 ? "" : "s") · no rejections")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Spine.Palette.textDim)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("Most recent action of this shape").font(.caption).foregroundStyle(.secondary)
+                Text("Most recent action of this shape").font(.caption).foregroundStyle(Spine.Palette.textDim)
                 Text(proposal.summary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("What accepting changes").font(.caption).foregroundStyle(.secondary)
+                Text("What accepting changes").font(.caption).foregroundStyle(Spine.Palette.textDim)
                 Text(proposal.diff)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -93,17 +93,17 @@ struct ProposalsView: View {
             ) {
                 if let evidenceError {
                     Text("Could not read the ledger (\(evidenceError)); showing bare ids.")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.caption).foregroundStyle(Spine.Palette.warn)
                 }
                 ForEach(proposal.wouldHaveAutoRun, id: \.self) { id in
                     HStack(alignment: .firstTextBaseline) {
-                        Text("#\(id)").font(.caption.monospaced()).foregroundStyle(.secondary)
+                        Text("#\(id)").font(.caption.monospaced()).foregroundStyle(Spine.Palette.textDim)
                         if let row = approvals?[id] {
                             Text(row.summary).font(.footnote)
                         } else if approvals == nil {
-                            Text("Reading the ledger…").font(.footnote).foregroundStyle(.secondary)
+                            Text("Reading the ledger…").font(.footnote).foregroundStyle(Spine.Palette.textDim)
                         } else {
-                            Text("pruned from the ledger").font(.footnote).foregroundStyle(.secondary)
+                            Text("pruned from the ledger").font(.footnote).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -112,7 +112,7 @@ struct ProposalsView: View {
                      + "\(proposal.wouldHaveAutoRun.count == 1 ? "" : "s"), and nothing else")
             }
             if let failure = failures[proposal.id] {
-                Text(failure).font(.footnote).foregroundStyle(.red)
+                Text(failure).font(.footnote).foregroundStyle(Spine.Palette.danger)
             }
             Button {
                 pendingAccept = proposal

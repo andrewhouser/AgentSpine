@@ -47,11 +47,11 @@ struct ActivityView: View {
                                 Text(SpineDate.relative(run.started))
                             }
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textDim)
                             if let note = run.note, !note.isEmpty, run.status == "failed" {
                                 Text(note)
                                     .font(.caption2)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(Spine.Palette.danger)
                                     .lineLimit(3)
                             }
                         }
@@ -82,9 +82,9 @@ struct ActivityView: View {
 
     private func tint(for run: Run) -> Color {
         switch run.status {
-        case "failed": return .red
-        case "running", "queued": return .orange
-        default: return .green
+        case "failed": return Spine.Palette.danger
+        case "running", "queued": return Spine.Palette.warn
+        default: return Spine.Palette.ok
         }
     }
 }

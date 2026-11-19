@@ -48,7 +48,7 @@ struct AttachmentImage: View {
                     Image(systemName: "photo.badge.exclamationmark")
                     Text("not available").font(.caption2)
                 }
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Spine.Palette.textFaint)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ProgressView()
@@ -57,7 +57,7 @@ struct AttachmentImage: View {
             }
         }
         .frame(width: size, height: size)
-        .background(Color(.tertiarySystemBackground))
+        .background(Spine.Palette.bgInset)
         .clipShape(RoundedRectangle(cornerRadius: size > 100 ? 12 : 8))
         .overlay(alignment: .bottomTrailing) {
             // Whether the perception pass actually read this one. Worth showing: an image
@@ -72,7 +72,7 @@ struct AttachmentImage: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(.ultraThinMaterial, in: Capsule())
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Spine.Palette.warn)
                     .padding(6)
             }
         }

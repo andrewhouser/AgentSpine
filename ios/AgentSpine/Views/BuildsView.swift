@@ -61,22 +61,22 @@ struct BuildsView: View {
                     .foregroundStyle(tint(build))
                 Spacer(minLength: 0)
                 if build.branch != nil {
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Spine.Palette.textFaint)
                 }
             }
 
             Text(build.branch ?? "no branch")
                 .font(.caption2.monospaced())
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Spine.Palette.textFaint)
                 .lineLimit(1)
 
             if let task = build.task, !task.isEmpty {
-                Text(task).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(task).font(.caption).foregroundStyle(Spine.Palette.textDim).lineLimit(2)
             }
 
             Text(subtitle(build))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Spine.Palette.textDim)
 
             // The commands, in the order they happened, with the verdict the tool reported.
             // Scrolling horizontally rather than wrapping keeps a long loop from pushing every
@@ -103,8 +103,8 @@ struct BuildsView: View {
     }
 
     private func tint(_ build: Build) -> Color {
-        guard let ok = build.ok else { return .secondary }
-        return ok ? .green : .red
+        guard let ok = build.ok else { return Spine.Palette.textDim }
+        return ok ? Spine.Palette.ok : Spine.Palette.danger
     }
 
     private func subtitle(_ build: Build) -> String {
@@ -143,13 +143,13 @@ private struct DiffSheet: View {
                         if let branch = diff.branch, let base = diff.base {
                             Text("\(branch) vs \(base)")
                                 .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Spine.Palette.textDim)
                         }
 
                         if diff.stat.isEmpty && diff.patch.isEmpty {
                             Text("Nothing committed on this branch.")
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Spine.Palette.textDim)
                         } else {
                             if !diff.stat.isEmpty {
                                 Text(diff.stat).font(.caption2.monospaced())
@@ -161,7 +161,7 @@ private struct DiffSheet: View {
                             Divider()
                             Text("Still uncommitted in \(diff.repo)")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Spine.Palette.warn)
                             Text(diff.uncommitted).font(.caption2.monospaced()).textSelection(.enabled)
                         }
 
@@ -171,7 +171,7 @@ private struct DiffSheet: View {
                             Divider()
                             Text("Not tracked by git at all (\(diff.untracked.count))")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Spine.Palette.warn)
                             Text(diff.untracked.joined(separator: "\n"))
                                 .font(.caption2.monospaced())
                                 .textSelection(.enabled)
@@ -180,7 +180,7 @@ private struct DiffSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                 } else if let error {
-                    Text(error).font(.footnote).foregroundStyle(.red).padding()
+                    Text(error).font(.footnote).foregroundStyle(Spine.Palette.danger).padding()
                 } else {
                     ProgressView().padding()
                 }

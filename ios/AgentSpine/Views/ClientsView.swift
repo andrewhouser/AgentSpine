@@ -24,7 +24,7 @@ struct ClientsView: View {
                         HStack {
                             Text(t.client ?? "(no client)")
                             Spacer()
-                            Text(t.label).foregroundStyle(.secondary).monospacedDigit()
+                            Text(t.label).foregroundStyle(Spine.Palette.textDim).monospacedDigit()
                         }
                     }
                 }
@@ -54,11 +54,11 @@ struct ClientsView: View {
                                 " (by \($0.formatted(date: .abbreviated, time: .omitted)))"
                             } ?? ""
                             Label("\(next)\(by)", systemImage: "arrow.turn.down.right")
-                                .font(.footnote).foregroundStyle(.secondary)
+                                .font(.footnote).foregroundStyle(Spine.Palette.textDim)
                         }
-                        if let email = c.email { Text(email).font(.caption).foregroundStyle(.tertiary) }
+                        if let email = c.email { Text(email).font(.caption).foregroundStyle(Spine.Palette.textFaint) }
                         if let notes = c.notes, !notes.isEmpty {
-                            Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                            Text(notes).font(.caption).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
                         }
                     }
                     .swipeActions(edge: .trailing) {

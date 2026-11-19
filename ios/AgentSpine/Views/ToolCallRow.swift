@@ -28,7 +28,7 @@ struct ToolCallRow: View {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Spine.Palette.textDim)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(tool)
@@ -36,7 +36,7 @@ struct ToolCallRow: View {
                         if let target, !target.isEmpty {
                             Text(target)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Spine.Palette.textDim)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
@@ -48,7 +48,7 @@ struct ToolCallRow: View {
                     if hasDetail {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Spine.Palette.textFaint)
                     }
                 }
             }
@@ -76,7 +76,7 @@ private struct DetailBlock: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Spine.Palette.textFaint)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
                     .font(.caption2.monospaced())
@@ -88,6 +88,6 @@ private struct DetailBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
-        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 8))
     }
 }
