@@ -334,10 +334,13 @@ happened, not what the next Auto turn may do; it says nothing about sensitivity,
 server enforces. The pill sits outside macOS 26's toolbar glass plate (`sharedBackgroundVisibility`),
 which had drawn a second capsule round it. The speaker button reads the latest reply through the
 phone's `ReadAloud` (now shared: its `AVAudioSession` calls are iOS-only); it needs the server's
-Kokoro voice service, see `docs/VOICE.md`. Heard on a real reply: not yet. Not built: the
-inspector button. Proposed baseline, pending a yes: a right-hand panel for the selected turn
-showing what it had in front of it (`Turn.contextUsed`, which the phone already offers as
-"Context used"), the tier it ran at, and its tool calls and children.
+Kokoro voice service, see `docs/VOICE.md`. Heard on a real reply: not yet. The inspector button
+opens the system inspector column (`MacThreadInspector`, remembered in `mac.threadInspector`),
+modelled on Claude's own panel: a sectioned, read-only summary of the thread the view already
+holds, so it makes no request of its own. Sections: Thread (pinned tier, turns, how many ran at
+each tier), Context (what the latest turn had in front of it, `Turn.contextUsed`), Tool calls (by
+tool, with the worst verdict as the dot) and Child runs (agent, tier, status, task). Builds; not
+yet seen running. It shows finished turns only; the run in flight appears when it ends.
 
 Still different from the directions, in the order worth doing:
 - **Heads-up timeline rail: built, not yet seen running.** The Dates column is built

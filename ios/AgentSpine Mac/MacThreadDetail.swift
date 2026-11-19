@@ -26,6 +26,8 @@ struct MacThreadDetail: View {
     @State private var staged: [Attachment] = []
     @State private var uploading = 0
     @State private var reader = ReadAloud()
+    /// Kept across threads and launches: you either want the panel or you do not.
+    @AppStorage("mac.threadInspector") private var showInspector = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,6 +80,17 @@ struct MacThreadDetail: View {
         .background(Spine.Palette.bg)
         .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
         .toolbar { toolbarItems }
+        // The system inspector column: it slides in from the right and remembers its width.
+        .inspector(isPresented: $showInspector) {
+            Group {
+                if let thread {
+                    MacThreadInspector(thread: thread)
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .inspectorColumnWidth(min: 240, ideal: 280, max: 360)
+        }
         .task { await load() }
         .onDisappear {
             stream.stop()
@@ -146,6 +159,12 @@ struct MacThreadDetail: View {
         }
         ToolbarItem { speakButton }
         ToolbarItem { tierMenu }
+        ToolbarItem {
+            Button { showInspector.toggle() } label: {
+                Label("Inspector", systemImage: "sidebar.right")
+            }
+            .help(showInspector ? "Hide the inspector" : "Show tiers, tool calls and child runs")
+        }
     }
 
     /// Reads the latest reply aloud in the server's voice (the same `ReadAloud` the phone uses).
