@@ -54,6 +54,12 @@
     "writableDirs": ["~/Developer"]
   },
 
+  "mcp": {
+    "//": "Remote MCP servers (Streamable HTTP) whose tools the agent may call; see docs/MCP.md. Off until enabled. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
+    "enabled": false,
+    "servers": {}
+  },
+
   "weather": {
     "//": "The weather tool (Open-Meteo, no API key). Gated not because the data is risky but because asking about your home town, on a schedule, tells a third party where you live. Set DEFAULT_LOCATION in .env so the location isn't restated in every run.",
     "enabled": true

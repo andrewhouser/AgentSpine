@@ -50,6 +50,20 @@ export interface BuildRepo {
   gitWrite?: boolean;
 }
 
+/** One remote MCP server (Streamable HTTP), as declared in policy.json. */
+export interface McpServerPolicy {
+  /** Set false to switch one server off without deleting its entry. */
+  enabled?: boolean;
+  /** Name of the environment variable holding a bearer token. The token itself never lives in policy.json. */
+  tokenEnv?: string;
+  /**
+   * Only these server tool names are exposed. Absent = all of them. Worth setting: every
+   * exposed tool's description is part of the prompt, and prefill is the expensive part here.
+   */
+  tools?: string[];
+  url: string;
+}
+
 export interface Policy {
   version: number;
   autoExecute: {
@@ -154,6 +168,12 @@ export interface Policy {
    * decision to make here, not a default.
    */
   images?: { enabled: boolean };
+  /**
+   * MCP servers whose tools the agent may call (docs/MCP.md). Absent = denied, like every
+   * other optional surface. The URL and the allowlist live here, written by a human; nothing
+   * the model can call edits policy.json, so it cannot add a server.
+   */
+  mcp?: { enabled: boolean; servers: Record<string, McpServerPolicy> };
   budgets?: {
     perRun?: { default?: number; tools?: Record<string, number> };
     perDay?: { default?: number; tools?: Record<string, number> };

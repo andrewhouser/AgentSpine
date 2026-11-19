@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
 import { loadPolicy } from "./config.ts";
+import { syncMcpTools } from "./mcp/register.ts";
 import { probeModelHost } from "./model-probe.ts";
 import { deleteAudio, pruneAudio } from "./meetings/audio.ts";
 import { fileQueuedItems } from "./meetings/extract.ts";
@@ -1837,8 +1838,21 @@ if (interrupted) console.log(`marked ${interrupted} interrupted run(s) as failed
 // future capture, because one already claims the microphone.
 const orphaned = meetingStore.reapOrphans();
 if (orphaned) console.log(`marked ${orphaned} interrupted meeting(s) as abandoned`);
+// MCP tools are discovered over the network, so they join the registry here and again every
+// hour (a server can add tools, and policy.json can change). A server that is down is logged
+// and skipped; it must never stop the dashboard starting.
+const refreshMcp = async (): Promise<string[]> => {
+  try {
+    return await syncMcpTools(loadPolicy());
+  } catch (err) {
+    return [`refresh failed (${err instanceof Error ? err.message : String(err)})`];
+  }
+};
+const mcpStatus = await refreshMcp();
+setInterval(() => void refreshMcp(), 3_600_000).unref();
 http.createServer(handle).listen(PORT, HOST, () => {
   console.log(`agentspine dashboard API on http://${HOST}:${PORT}`);
+  if (mcpStatus.length) console.log(`  mcp: ${mcpStatus.join("; ")}`);
   console.log(`  auth: ${TOKEN ? "token required on /api" : IS_LOCAL ? "none (localhost only)" : "NONE"}`);
   console.log(fs.existsSync(PUBLIC_DIR) ? "  serving static frontend from ./public" : "  API only (no ./public) — point your frontend here");
   console.log(`  scheduler: checking due jobs every ${SCHEDULER_TICK_MS / 1000}s`);

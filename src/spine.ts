@@ -7,7 +7,8 @@
  * up in the dashboard alongside scheduled and one-off jobs.
  */
 import fs from "node:fs";
-import { HEARTBEAT_MS, HEARTBEAT_HORIZON, GOALS_PATH } from "./config.ts";
+import { HEARTBEAT_MS, HEARTBEAT_HORIZON, GOALS_PATH, loadPolicy } from "./config.ts";
+import { syncMcpTools } from "./mcp/register.ts";
 import { runTask } from "./runner.ts";
 import { sweepConfirmations } from "./confirmations.ts";
 import { heartbeatHorizonGoal } from "./learn/horizon.ts";
@@ -72,6 +73,8 @@ const loop = async (): Promise<void> => {
 
 const mode = process.argv[2] ?? "once";
 if (import.meta.filename === process.argv[1]) {
+  // Same discovery the dashboard does, for the CLI heartbeat. Failure is logged, not fatal.
+  await syncMcpTools(loadPolicy()).catch((err) => console.error(`mcp: ${err instanceof Error ? err.message : err}`));
   if (mode === "loop") await loop();
   else await tick();
 }
