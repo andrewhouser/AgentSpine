@@ -13,7 +13,7 @@ records live in `docs/`. Read the relevant one before changing an area:
 | Voice / TTS, image generation, watchers | `docs/VOICE.md`, `docs/IMAGE_GENERATION.md`, `docs/WATCHERS.md` |
 | Build loop (`run_command`, `git_write`, builder) | `docs/PLAN-build-loop.md` |
 | Open plan | `docs/PLAN-video-ideas.md` |
-| Native Mac app, shared Swift package, UI refresh (the "spine" identity) | `docs/PLAN-native-apps-and-ui-refresh.md` (planned and approved; phase 1 is the shared package) |
+| Native Mac app, shared Swift package, UI refresh (the "spine" identity) | `docs/PLAN-native-apps-and-ui-refresh.md` (phase 1 done: Mac target shares eight files; next is the SwiftUI components, see its "Where this stands" section) |
 | Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (what is built: phases 0-5 plus tab badge, brief line and preferences; the iOS Swift is uncompiled and the flight and routing integrations are unverified against live keys) and `docs/PLAN-heads-up-next.md` (what is left, in order) |
 
 ## Machines

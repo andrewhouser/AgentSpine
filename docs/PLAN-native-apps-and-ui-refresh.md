@@ -1,7 +1,7 @@
 # The native Mac app, and a UI refresh across every client
 
 Written 2026-11-18, updated the same day after `main` gained Heads-up (phases 0 to 5) and
-`PLAN-heads-up-next.md`. Approved to start. Nothing here has been built yet.
+`PLAN-heads-up-next.md`. Approved. **Phase 1 is done and verified on a Mac; phase 2 is partly done.** See "Where this stands" at the end for the handoff.
 
 The goal: a SwiftUI app for macOS 15+ that feels native on the MacBook Pro and the Mac Mini,
 and a visual refresh that the iPhone app and the web client get too. Both are clients of the one
@@ -125,6 +125,8 @@ Each is useful alone. Order is deliberate: the riskiest structural step goes fir
 
 ### Phase 1: share the platform-neutral code with the Mac target
 
+**Status: done (2026-11-19).** The iPhone app builds, the `AgentSpine Mac` target builds and opens a window, and `npm run check` passes on a Mac with Node 24. The text below is the record of what was decided and done.
+
 **Changed from the first draft** (2026-11-18, agreed with the user). The plan was a local Swift
 package. That needs `public` on about 2,000 lines of types, properties and initializers, with no
 compiler in this sandbox to catch a miss. Instead the files are **compiled into both targets**,
@@ -167,8 +169,8 @@ compile error from Heads-up cannot be mistaken for one from this phase.
 5. Build the Mac target. Expect it to fail on anything iOS-only I missed; paste the first errors
    and I fix them in one pass.
 
-Done when: the iPhone app is unchanged and green, and the Mac target compiles the six shared
-files and launches an empty window. The Mac app's first real screen is phase 3.
+Done when: the iPhone app is unchanged and green, and the Mac target compiles the shared
+files (six here, plus the two `Design/` files from phase 2) and launches an empty window. The Mac app's first real screen is phase 3.
 
 Risks: a file that looked neutral but uses an iOS-only API (this is what step 5 finds), and
 `@Observable` state that quietly assumes iPhone behavior, such as `scenePhase` handling.
@@ -515,3 +517,72 @@ the shared files after phase 1, and it can then be offered to the Mac app too.
 ## Approval gate
 
 Nothing in this plan is implemented. Phase 1 starts only when the user says so.
+
+## Where this stands (handoff, 2026-11-19)
+
+Branch: `claude/zen-hamilton-8iyawg`, merged with `main` and pushed. A new session should start by
+reading this file, `design/tokens.json`, and `docs/PLAN-heads-up-next.md` (it overlaps, see
+"Interaction with the Heads-up work").
+
+### Done and verified
+
+- **Plan, decisions, approval.** Identity "the spine", main-window entry on the Mac, iPhone tabs
+  restructured with drag and drop, web restyled in phase 7 (styling only), shared token source.
+- **Phase 1.** `AgentSpine Mac` target in `ios/AgentSpine.xcodeproj`: bundle id
+  `com.houserphotography.AgentSpine.mac`, macOS 15.6, App Sandbox with Outgoing Connections, the
+  `ts.net` ATS exception in `ios/AgentSpine-Mac-Info.plist`, a shared scheme per target. It
+  compiles the eight shared files through a membership exception set in the project file:
+  `Core/{APIClient,AppState,Keychain,Models,RunStream,Settings}.swift` and
+  `Design/{DesignColor,Tokens.generated}.swift`. The Mac app itself is still the template window
+  (`ios/AgentSpine Mac/ContentView.swift`).
+- **Phase 2, tokens.** `design/tokens.json`, `design/generate.mjs` (`npm run design`), generated
+  `web/src/styles/tokens.generated.css` and `ios/AgentSpine/Design/Tokens.generated.swift`,
+  `test/design-tokens.test.mjs` in `npm test`. Contrast is enforced at WCAG AA.
+- **Mocks.** Design canvas, private: https://claude.ai/artifact/Rg3gLZmvod3ieu7t61YdJz . Boards:
+  Mac thread with approval, Mac live meeting, Mac Heads-up, iPhone Threads, Thread, Customize
+  tabs (interactive), Heads-up. The source files lived in a session scratchpad that may be gone;
+  read them back from the artifact (`Artifact` read, `project/*.dc.html`) before editing.
+
+### Next, in order
+
+1. **Phase 2, SwiftUI components and a gallery.** Replace the styling in
+   `ios/AgentSpine/Views/Chrome.swift` with components built on `Spine.Palette`: spine row, verdict
+   badge, approval card, status chip, empty and error states, markdown text styling. Add a
+   preview-only gallery showing every component in light, dark and large type. Check VoiceOver
+   labels as each lands.
+2. **Fonts.** Bundle Bricolage Grotesque, Instrument Sans and JetBrains Mono (open licences) in the
+   app, and self-host them on the web. No font CDN. Register them in `Info.plist` (`UIAppFonts`)
+   and the Mac target.
+3. **Tab bar customization screen**, drag and drop (`List` with `.onMove`, edit mode, a live bar
+   preview, Threads fixed first, VoiceOver move actions). Persist in `Settings`. Thirteen tabs now,
+   Heads-up second by default.
+4. Apply the tokens to the existing iPhone screens.
+5. **Phase 3**, the Mac shell and Threads. Then phases 4 to 7 as written above.
+
+### Things a new session needs to know
+
+- **No Swift compiler in the sandbox.** Swift can be written but not compiled or parsed. Every Swift
+  change ends with a "press ⌘B and check these things" list for the user, and the user pastes back
+  the first errors. Keep steps small.
+- **Xcode project edits are the user's.** Do not hand-edit the `.pbxproj`. To share another file with
+  the Mac target the user ticks Target Membership in the File Inspector, which adds it to the
+  exception set. A new file in `ios/AgentSpine/` is iPhone only until then.
+- **Keep shared files portable.** `Models.swift` must stay Foundation-only: `test/ios-models.test.mjs`
+  compiles it alone. Shared files must not import UIKit unguarded (use `#if canImport(UIKit)`).
+  `Keychain.swift` and `Settings.swift` already have macOS branches.
+- **`.gitignore` ignores everything in `docs/` except `PLAN-*.md`.** New design docs must be named
+  `PLAN-*.md` or they are silently not committed.
+- **Heads-up overlaps.** Its Live Activity needs a second Xcode target, so do it after the Mac target
+  exists (now true). Its new Settings screens will be restyled by phases 2 and 7. The iOS Heads-up
+  Swift was written uncompiled; the user's build of this branch is the first evidence it compiles.
+- **Untracked file not ours:** `docs/PLAN-nod-learnings.md`. Leave it alone.
+- **How the user likes to work.** Ask clarifying questions, plain language, no em dashes, no emoji.
+  Gate implementation on approval. Commit with the `Co-Authored-By` and `Claude-Session` trailers from
+  the session, and push to this branch after each commit. Do not open a pull request unless asked.
+
+### Open decisions
+
+1. A light-theme review. Light was derived from the dark mocks and has not been drawn.
+2. How many tabs the iPhone bar should allow, now that Heads-up sits second (the mock shows four
+   plus More).
+3. Whether to cut a Swift package later, once there is a compiler to check the `public` changes.
