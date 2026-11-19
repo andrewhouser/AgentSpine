@@ -15,6 +15,8 @@ struct MacComposer: View {
     /// Files chosen with the button or dropped on the box. The thread view uploads them.
     var attach: ([URL]) -> Void = { _ in }
     var removeStaged: (Attachment) -> Void = { _ in }
+    /// Bump this to put the cursor in the box (after "Edit and resend" fills it).
+    var focusRequest = 0
     let send: () -> Void
 
     @State private var choosing = false
@@ -119,5 +121,6 @@ struct MacComposer: View {
             if case .success(let urls) = result { attach(urls) }
         }
         .onAppear { focused = true }
+        .onChange(of: focusRequest) { _, _ in focused = true }
     }
 }

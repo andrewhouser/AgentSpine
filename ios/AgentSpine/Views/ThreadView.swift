@@ -30,6 +30,8 @@ struct ThreadView: View {
     @State private var uploading = 0
     @State private var dictation = Dictation()
     @State private var handsFree = HandsFree()
+    /// Lets "Edit and resend" put the cursor in the box after it fills it.
+    @FocusState private var composerFocused: Bool
     @Environment(ReadAloud.self) private var reader
     @Environment(\.scenePhase) private var scenePhase
 
@@ -45,8 +47,13 @@ struct ThreadView: View {
                     }
 
                     ForEach(ledgerTurns) { turn in
-                        TurnView(turn: turn, projectID: thread?.conversation.projectID)
-                            .id("turn-\(turn.id)")
+                        TurnView(
+                            turn: turn,
+                            projectID: thread?.conversation.projectID,
+                            onEdit: editAction(for: turn),
+                            onRetry: retryAction(for: turn)
+                        )
+                        .id("turn-\(turn.id)")
                         // The buttons go under the turn that asked, where you are reading.
                         ForEach(turn.confirmations) { confirmation in
                             ApprovalCard(confirmation: confirmation) { await afterDecision() }
@@ -371,6 +378,7 @@ struct ThreadView: View {
                 dictationButton
 
                 TextField("Reply", text: $draft, axis: .vertical)
+                    .focused($composerFocused)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
@@ -468,6 +476,60 @@ struct ThreadView: View {
         }
     }
 
+    // MARK: - Retry and Edit on your own message
+
+    /// Whether a past message can be sent again. Not while a turn is running (the send would queue
+    /// behind it and read as a double-tap), not for the turn an Approve resumed (it is not a
+    /// message you wrote), not for an empty one, and never for a message that carried images:
+    /// an image binds to one run only once, so a retry would drop it and answer a different
+    /// question.
+    private func resendable(_ turn: Turn) -> Bool {
+        !stream.isLive && !isSending && !turn.isDecision && turn.attachments.isEmpty
+            && !(turn.task ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The long-press actions for a turn, or nil where they cannot work. Built here rather than
+    /// inline in the view body, where the ternary closures were too much for the type checker.
+    private func editAction(for turn: Turn) -> (() -> Void)? {
+        guard resendable(turn) else { return nil }
+        return { edit(turn) }
+    }
+
+    private func retryAction(for turn: Turn) -> (() -> Void)? {
+        guard resendable(turn) else { return nil }
+        return {
+            Task { await resend(turn) }
+        }
+    }
+
+    /// Put the message back in the box to change it. It does not overwrite what you have typed.
+    private func edit(_ turn: Turn) {
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            composerError = "Clear the message box first, then choose Edit and resend."
+            return
+        }
+        draft = turn.task ?? ""
+        composerFocused = true
+    }
+
+    /// Send the same text again as a NEW turn. The earlier reply and its tool calls stay, since
+    /// the ledger is append-only. It goes straight to the server without touching the draft or
+    /// any staged images.
+    private func resend(_ turn: Turn) async {
+        let task = (turn.task ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !task.isEmpty, !isSending, !stream.isLive else { return }
+        isSending = true
+        defer { isSending = false }
+        do {
+            let started = try await APIClient.shared.send(message: task, to: conversationID, attachmentIDs: [])
+            liveTask = task
+            stream.start(runID: started.runID)
+            composerError = nil
+        } catch {
+            composerError = error.localizedDescription
+        }
+    }
+
     private func send(spoken: Bool = false) async {
         let task = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSend else {
@@ -502,6 +564,9 @@ struct TurnView: View {
     let turn: Turn
     /// The thread's project, so "Save to file" lands in its folder.
     var projectID: Int?
+    /// Long-press actions on your message; nil where they cannot work (see `ThreadView.resendable`).
+    var onEdit: (() -> Void)?
+    var onRetry: (() -> Void)?
     @Environment(ReadAloud.self) private var reader
     @State private var starred: Bool?
     @State private var saving = false
@@ -526,17 +591,20 @@ struct TurnView: View {
                 if turn.isDecision {
                     DecisionNote(text: task)
                 } else {
-                    ThreadBubble(text: task)
+                    ThreadBubble(text: task, onEdit: onEdit, onRetry: onRetry)
                 }
             }
 
-            ForEach(turn.actions) { action in
+            // A failure the turn went on to get past is shown muted (see `RecoveredCalls`).
+            let recovered = RecoveredCalls.flags(turn.actions.map { Optional($0.decision) }, turnFailed: turn.status == "failed")
+            ForEach(Array(turn.actions.enumerated()), id: \.element.id) { index, action in
                 ToolCallRow(
                     tool: action.tool,
                     target: action.target,
                     args: action.args,
                     output: action.output,
-                    status: action.status
+                    status: action.status,
+                    recovered: recovered[index]
                 )
             }
 

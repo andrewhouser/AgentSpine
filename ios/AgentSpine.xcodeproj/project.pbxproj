@@ -27,6 +27,7 @@
 				Core/RunStream.swift,
 				Core/Settings.swift,
 				Core/TabLayout.swift,
+				Core/TurnHelpers.swift,
 				Design/Components/ApprovalPrompt.swift,
 				Design/Components/AttentionDot.swift,
 				Design/Components/ComponentGallery.swift,

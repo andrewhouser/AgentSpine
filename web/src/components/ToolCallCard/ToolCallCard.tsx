@@ -7,6 +7,8 @@ import styles from "./ToolCallCard.module.css";
 
 interface ToolCallCardProps {
   call: LiveToolCall;
+  /** A failure the turn got past (lib/recovery.ts): muted, and does not open itself. */
+  recovered?: boolean;
   /** Hang a verdict node on the spine at the card's left. Only inside a Turn, which draws the line. */
   spine?: boolean;
 }
@@ -25,16 +27,23 @@ const argSummary = (args: unknown): string => {
  * Collapsed by default on purpose. A turn can make eight calls and the transcript is
  * unreadable if each one dumps a page of fetched text — but the output must stay one click
  * away, because "what did it actually read" is the question you ask when an answer looks
- * wrong. Denials and errors open themselves, since those are never incidental.
+ * wrong. Denials and errors open themselves, since those are never incidental, unless the
+ * turn went on to get past the error, in which case it stays one click away like any other.
  */
-export const ToolCallCard = ({ call, spine = false }: ToolCallCardProps) => {
-  const notable = call.status === "denied" || call.status === "error";
+export const ToolCallCard = ({ call, recovered = false, spine = false }: ToolCallCardProps) => {
+  const notable = call.status === "denied" || (call.status === "error" && !recovered);
   const [open, setOpen] = useState(notable);
   const detail = call.summary ?? argSummary(call.args);
 
   return (
     <div className={styles.row}>
-    {spine && <span aria-hidden="true" className={styles.node} data-status={call.status ?? "running"} />}
+    {spine && (
+      <span
+        aria-hidden="true"
+        className={styles.node}
+        data-status={recovered && call.status === "error" ? "recovered" : (call.status ?? "running")}
+      />
+    )}
     <div className={`${styles.card} ${call.status ? "" : styles.live}`}>
       <button aria-expanded={open} className={styles.header} onClick={() => setOpen((v) => !v)} type="button">
         <span className={styles.chevron} data-open={open || undefined}>
@@ -42,7 +51,7 @@ export const ToolCallCard = ({ call, spine = false }: ToolCallCardProps) => {
         </span>
         <code className={styles.tool}>{call.tool}</code>
         {detail && <span className={styles.detail}>{detail}</span>}
-        <DecisionBadge status={call.status} />
+        <DecisionBadge recovered={recovered} status={call.status} />
       </button>
 
       {open && (

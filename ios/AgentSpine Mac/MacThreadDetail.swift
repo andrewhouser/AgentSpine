@@ -20,6 +20,10 @@ struct MacThreadDetail: View {
     @State private var loadError: String?
     @State private var stream = RunStream()
     @State private var liveTask: String?
+    /// When the live message was sent, for the time under it before the ledger row has loaded.
+    @State private var liveSentAt: Date?
+    /// Bumped by "Edit and resend" to put the cursor in the composer.
+    @State private var focusRequest = 0
     @State private var draft = ""
     @State private var isSending = false
     @State private var composerError: String?
@@ -39,7 +43,12 @@ struct MacThreadDetail: View {
                             ErrorNotice(message: loadError) { Task { await load() } }
                         } else if let thread {
                             ForEach(ledgerTurns) { turn in
-                                TurnBlock(turn: turn, onDecided: decided)
+                                TurnBlock(
+                                    turn: turn,
+                                    onDecided: decided,
+                                    onEdit: editAction(for: turn),
+                                    onRetry: retryAction(for: turn)
+                                )
                             }
                             // Questions no turn here raised (the inbox thread's), on a spine of their own.
                             if let open = thread.confirmations, !open.isEmpty {
@@ -75,6 +84,7 @@ struct MacThreadDetail: View {
                 uploading: uploading,
                 attach: { urls in Task { await upload(urls) } },
                 removeStaged: { gone in staged.removeAll { $0.id == gone.id } },
+                focusRequest: focusRequest,
                 send: { Task { await send() } }
             )
         }
@@ -240,7 +250,11 @@ struct MacThreadDetail: View {
     @ViewBuilder private var liveTurn: some View {
         VStack(alignment: .leading, spacing: Spine.Space.sm + 2) {
             if let task = liveTask, !task.isEmpty {
-                if liveIsDecision { DecisionNote(text: task) } else { ThreadBubble(text: task) }
+                if liveIsDecision {
+                    DecisionNote(text: task)
+                } else {
+                    ThreadBubble(text: task, sentAt: liveLedgerTurn.flatMap { SpineDate.parse($0.started) } ?? liveSentAt)
+                }
             }
             MacTurnSpine(
                 calls: stream.calls.map { MacTurnSpine.Call($0) },
@@ -315,6 +329,61 @@ struct MacThreadDetail: View {
         }
     }
 
+    // MARK: - Retry and Edit on your own message
+
+    /// Whether a past message can be sent again. Not while a turn is running, not for the turn an
+    /// Approve resumed (it is not a message you wrote), not for an empty one, and never for a
+    /// message that carried images: an image binds to one run only once, so a retry would drop it
+    /// and answer a different question.
+    private func resendable(_ turn: Turn) -> Bool {
+        !stream.isLive && !isSending && !turn.isDecision && turn.attachments.isEmpty
+            && !(turn.task ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The hover actions for a turn, or nil where they cannot work. Built here rather than inline
+    /// in the view body, where the ternary closures were too much for the type checker.
+    private func editAction(for turn: Turn) -> (() -> Void)? {
+        guard resendable(turn) else { return nil }
+        return { edit(turn) }
+    }
+
+    private func retryAction(for turn: Turn) -> (() -> Void)? {
+        guard resendable(turn) else { return nil }
+        return {
+            Task { await resend(turn) }
+        }
+    }
+
+    /// Put the message back in the box to change it. It does not overwrite what you have typed.
+    private func edit(_ turn: Turn) {
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            composerError = "Clear the message box first, then choose Edit and resend."
+            return
+        }
+        draft = turn.task ?? ""
+        focusRequest += 1
+    }
+
+    /// Send the same text again as a NEW turn. The earlier reply and its tool calls stay, since
+    /// the ledger is append-only. It goes straight to the server without touching the draft or
+    /// any staged images.
+    private func resend(_ turn: Turn) async {
+        let task = (turn.task ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !task.isEmpty, !isSending, !stream.isLive else { return }
+        isSending = true
+        defer { isSending = false }
+        do {
+            let started = try await APIClient.shared.send(message: task, to: conversationID, attachmentIDs: [])
+            liveTask = task
+            liveSentAt = Date()
+            stream.start(runID: started.runID)
+            composerError = nil
+            hub.nudge(conversationID, from: viewID)
+        } catch {
+            composerError = error.localizedDescription
+        }
+    }
+
     private func send() async {
         let task = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !task.isEmpty || !staged.isEmpty, !isSending, !stream.isLive, uploading == 0 else { return }
@@ -331,6 +400,7 @@ struct MacThreadDetail: View {
             // The server answers an image with no words as "What is this?", so the live turn
             // says that rather than show an empty bubble.
             liveTask = task.isEmpty ? "What is this?" : task
+            liveSentAt = Date()
             stream.start(runID: started.runID)
             composerError = nil
             hub.nudge(conversationID, from: viewID)
@@ -344,6 +414,9 @@ struct MacThreadDetail: View {
 private struct TurnBlock: View {
     let turn: Turn
     let onDecided: () async -> Void
+    /// Hover actions on your message; nil where they cannot work (see `resendable`).
+    var onEdit: (() -> Void)?
+    var onRetry: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spine.Space.sm + 2) {
@@ -361,7 +434,7 @@ private struct TurnBlock: View {
                 if turn.isDecision {
                     DecisionNote(text: task)
                 } else {
-                    ThreadBubble(text: task)
+                    ThreadBubble(text: task, sentAt: SpineDate.parse(turn.started), onEdit: onEdit, onRetry: onRetry)
                 }
             }
 

@@ -1,7 +1,63 @@
+.message {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  margin: 20px 0 4px;
+}
+
 .row {
   display: flex;
   justify-content: flex-end;
-  margin: 20px 0 4px;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Always laid out, only its opacity changes, so showing it never nudges the reply below. On a
+   touch screen there is no hover to reveal it, so it is simply there. */
+.actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  min-height: 30px;
+  opacity: 0;
+  padding-top: 2px;
+  transition: opacity 0.12s;
+}
+
+.message:hover .actions,
+.message:focus-within .actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .actions {
+    opacity: 1;
+  }
+}
+
+.time {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-right: 6px;
+}
+
+.btn {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.btn:hover,
+.btn:focus-visible {
+  background: var(--bg-inset);
+  color: var(--text);
 }
 
 .bubble {

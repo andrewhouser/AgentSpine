@@ -32,6 +32,10 @@
   background: var(--verdict-denied);
 }
 
+.node[data-status="recovered"] {
+  background: var(--text-faint);
+}
+
 .node[data-status="queued"] {
   background: var(--verdict-queued);
 }

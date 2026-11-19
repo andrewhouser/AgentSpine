@@ -15,6 +15,8 @@ struct ToolCallRow: View {
     /// On the spine (the Mac thread) the node already says "this is a step", so the row drops its
     /// box and icon and reads as one line: the tool, what it was aimed at, the verdict.
     var flat = false
+    /// An error the turn went on to get past (`RecoveredCalls`): the badge is muted and says so.
+    var recovered = false
 
     @State private var expanded = false
 
@@ -49,7 +51,7 @@ struct ToolCallRow: View {
                     }
 
                     Spacer(minLength: 6)
-                    VerdictBadge(status: status)
+                    VerdictBadge(status: status, recovered: recovered)
 
                     if hasDetail {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
@@ -91,7 +93,7 @@ struct ToolCallRow: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 6)
-            VerdictBadge(status: status)
+            VerdictBadge(status: status, recovered: recovered)
             if hasDetail {
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))

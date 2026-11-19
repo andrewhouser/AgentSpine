@@ -9,6 +9,8 @@ interface ToolTraceProps {
   calls: LiveToolCall[];
   /** Whether the turn is still streaming — a live trace narrates, a finished one archives. */
   live: boolean;
+  /** One flag per call: a failure the turn got past (lib/recovery.ts). Not counted as failed. */
+  recovered?: boolean[];
 }
 
 /** "web_search ×8, web_read ×4" — what happened, recognisable in one line. */
@@ -37,13 +39,13 @@ const breakdown = (calls: LiveToolCall[]): string => {
  *
  * A click is an override and wins over all of that for the rest of the turn's life.
  */
-export const ToolTrace = ({ calls, live }: ToolTraceProps) => {
+export const ToolTrace = ({ calls, live, recovered = [] }: ToolTraceProps) => {
   const [choice, setChoice] = useState<boolean | null>(null);
 
   if (!calls.length) return null;
 
   const denied = calls.filter((c) => c.status === "denied").length;
-  const errored = calls.filter((c) => c.status === "error").length;
+  const errored = calls.filter((c, i) => c.status === "error" && recovered[i] !== true).length;
   const expanded = choice ?? (live || denied + errored > 0);
 
   return (
@@ -68,8 +70,8 @@ export const ToolTrace = ({ calls, live }: ToolTraceProps) => {
 
       {expanded && (
         <div className={styles.cards}>
-          {calls.map((call) => (
-            <ToolCallCard call={call} key={call.callId} spine />
+          {calls.map((call, i) => (
+            <ToolCallCard call={call} key={call.callId} recovered={recovered[i] === true} spine />
           ))}
         </div>
       )}

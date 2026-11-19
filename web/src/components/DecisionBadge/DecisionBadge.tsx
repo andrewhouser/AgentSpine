@@ -3,6 +3,8 @@ import type { BrokerStatus } from "../../lib/types.ts";
 import styles from "./DecisionBadge.module.css";
 
 interface DecisionBadgeProps {
+  /** An `error` the turn went on to get past (see lib/recovery.ts): shown muted, not red. */
+  recovered?: boolean;
   status: BrokerStatus | null;
 }
 
@@ -21,7 +23,13 @@ const LABELS: Record<BrokerStatus, string> = {
   queued: "needs approval",
 };
 
-export const DecisionBadge = ({ status }: DecisionBadgeProps) => {
+export const DecisionBadge = ({ recovered = false, status }: DecisionBadgeProps) => {
   if (!status) return <span className={`${styles.badge} ${styles.pending}`}>running…</span>;
+  if (recovered && status === "error")
+    return (
+      <span className={`${styles.badge} ${styles.recovered}`} title="This call failed, but a later call in the turn ran.">
+        recovered
+      </span>
+    );
   return <span className={`${styles.badge} ${styles[status.replace("-", "")]}`}>{LABELS[status]}</span>;
 };

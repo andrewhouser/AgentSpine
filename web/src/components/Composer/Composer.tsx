@@ -11,6 +11,12 @@ interface ComposerProps {
   busy: boolean;
   /** The thread being written to. Uploads are staged against it before the run exists. */
   conversationId: number;
+  /**
+   * Text to put in the box, from "Edit and resend" on an earlier message. A new object each
+   * time, so editing the same message twice still lands. If you have typed something, you are
+   * asked before it is replaced.
+   */
+  draft?: { text: string } | null;
   onSend: (task: string, attachments: Attachment[]) => void;
   onTierChange?: (tier: null | string) => void;
   placeholder?: string;
@@ -23,6 +29,7 @@ const MAX_HEIGHT = 220;
 export const Composer = ({
   busy,
   conversationId,
+  draft = null,
   onSend,
   onTierChange,
   placeholder,
@@ -33,6 +40,21 @@ export const Composer = ({
   const ref = useRef<HTMLTextAreaElement>(null);
   const filePicker = useRef<HTMLInputElement>(null);
   const images = useAttachments(conversationId);
+
+  // Depends only on `draft`, so it runs when a NEW draft arrives and not on every keystroke
+  // (which would ask the replace question each time). What is typed is read from the box itself
+  // for the same reason: it is the controlled value, without making the effect depend on it.
+  useEffect(() => {
+    if (!draft) return;
+    if (ref.current?.value.trim() && !window.confirm("Replace what you've typed with this message?")) return;
+    setValue(draft.text);
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(draft.text.length, draft.text.length);
+    });
+  }, [draft]);
 
   /**
    * Grow with the content, up to a point, then scroll. A one-line box for a task that wants

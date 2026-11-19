@@ -15,6 +15,9 @@ struct MacTurnSpine: View {
         let args: String?
         let output: String?
         let status: BrokerStatus?
+        /// An error the turn went on to get past (`RecoveredCalls`). Set by the spine, which sees
+        /// the whole turn; a single call cannot know.
+        var recovered = false
 
         init(_ action: Action) {
             id = "action-\(action.id)"
@@ -74,7 +77,14 @@ struct MacTurnSpine: View {
     /// unclaimed queued call. The pair sits where the call was, as one hollow amber node. A
     /// confirmation with no such call (one raised by an earlier turn) stays below the reply.
     private var pairing: (rows: [Row], unmatched: [Confirmation]) {
-        var rows = calls.map(Row.call)
+        // A failure the turn went on to get past is drawn muted, not red. A turn that itself
+        // failed keeps every error as it was.
+        let recovered = RecoveredCalls.flags(calls.map { $0.status?.rawValue }, turnFailed: failure != nil)
+        var rows = calls.enumerated().map { index, call -> Row in
+            var call = call
+            call.recovered = recovered[index]
+            return .call(call)
+        }
         var unmatched: [Confirmation] = []
         for confirmation in confirmations {
             let slot = rows.firstIndex { row in
@@ -124,7 +134,7 @@ struct MacTurnSpine: View {
     @ViewBuilder private func spineRow(_ row: Row, isFirst: Bool, isLast: Bool) -> some View {
         switch row {
         case .call(let call):
-            SpineRow(node: .verdict(call.status), isFirst: isFirst, isLast: isLast) { content(for: row) }
+            SpineRow(node: .verdict(call.status, recovered: call.recovered), isFirst: isFirst, isLast: isLast) { content(for: row) }
         case .failure:
             SpineRow(node: .verdict(.error), isFirst: isFirst, isLast: isLast) { content(for: row) }
         case .waiting:
@@ -137,7 +147,7 @@ struct MacTurnSpine: View {
     @ViewBuilder private func content(for row: Row) -> some View {
         switch row {
         case .call(let call):
-            ToolCallRow(tool: call.tool, target: call.target, args: call.args, output: call.output, status: call.status, flat: true)
+            ToolCallRow(tool: call.tool, target: call.target, args: call.args, output: call.output, status: call.status, flat: true, recovered: call.recovered)
         case .progress(let text):
             HStack(spacing: 7) {
                 ProgressView().controlSize(.small)

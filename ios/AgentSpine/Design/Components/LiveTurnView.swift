@@ -15,13 +15,15 @@ struct LiveTurnView: View {
 
             phaseLine
 
-            ForEach(stream.calls) { call in
+            let recovered = RecoveredCalls.flags(stream.calls.map { $0.status?.rawValue }, turnFailed: turnFailed)
+            ForEach(Array(stream.calls.enumerated()), id: \.element.id) { index, call in
                 ToolCallRow(
                     tool: call.tool,
                     target: call.target,
                     args: nil,
                     output: call.output,
-                    status: call.status
+                    status: call.status,
+                    recovered: recovered[index]
                 )
             }
 
@@ -38,6 +40,12 @@ struct LiveTurnView: View {
                     .foregroundStyle(Spine.Palette.textDim)
             }
         }
+    }
+
+    /// A turn that has itself failed keeps every error as it was (see `RecoveredCalls`).
+    private var turnFailed: Bool {
+        if case .failed = stream.phase { return true }
+        return false
     }
 
     @ViewBuilder private var phaseLine: some View {

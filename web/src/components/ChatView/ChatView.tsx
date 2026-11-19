@@ -98,6 +98,10 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
     setActive({ attachments: inFlight.attachments, runId: inFlight.id, task: inFlight.task ?? "" });
   }
   const bottom = useRef<HTMLDivElement>(null);
+  // "Edit and resend" hands its text to the composer; a fresh object each time so the same
+  // message can be edited twice. When each message was sent, for the run that has no row yet.
+  const [draft, setDraft] = useState<{ text: string } | null>(null);
+  const [sentAt, setSentAt] = useState<Record<number, string>>({});
 
   const runId = active?.runId;
   const voiceConfig = useVoiceConfig();
@@ -113,6 +117,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
       // in hand, and the turn has to render them the moment it appears — waiting for the thread
       // to reload would show a question about a photograph with no photograph under it.
       setActive({ attachments, runId: id, task });
+      setSentAt((prev) => ({ ...prev, [id]: new Date().toISOString() }));
     },
     [conversationId],
   );
@@ -261,9 +266,12 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               kind={turn.kind ?? null}
               live={false}
               onConfirmationResolved={onDecided}
+              onEdit={active ? undefined : () => setDraft({ text: turn.task ?? "" })}
+              onRetry={active ? undefined : () => void send(turn.task ?? "", [])}
               projectId={thread?.conversation.project_id ?? null}
               runId={turn.id}
               starred={turn.starred}
+              startedAt={turn.started}
               step={0}
               summary={turn.status === "failed" ? null : turn.summary}
               task={turn.task ?? ""}
@@ -289,6 +297,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               kind={persistedKind(turns, live.runId)}
               live={live.status === "queued" || live.status === "running"}
               onConfirmationResolved={onDecided}
+              startedAt={turns.find((t) => t.id === live.runId)?.started ?? sentAt[live.runId]}
               step={live.step}
               summary={live.summary}
               task={live.task}
@@ -329,6 +338,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
           <Composer
             busy={!!active}
             conversationId={conversationId}
+            draft={draft}
             onSend={(task, attachments) => void send(task, attachments)}
             onTierChange={(t) => {
               void api.setConversationTier(conversationId, t).then(reloadThread);

@@ -7,9 +7,12 @@ import SwiftUI
 /// the same in greyscale and under VoiceOver.
 struct VerdictBadge: View {
     let status: BrokerStatus?
+    /// An `error` the turn went on to get past (`RecoveredCalls`): kept visible and labelled, and
+    /// no longer drawn in the failure colour. Ignored for any other verdict.
+    var recovered = false
 
     var body: some View {
-        let style = Self.style(for: status)
+        let style = Self.style(for: status, recovered: recovered)
         Label(style.label, systemImage: style.symbol)
             .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
             .padding(.horizontal, 7)
@@ -17,13 +20,22 @@ struct VerdictBadge: View {
             .background(style.color.opacity(0.14), in: Capsule())
             .foregroundStyle(style.color)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Broker verdict: \(style.label)")
+            .accessibilityLabel(
+                recovered && status == .error
+                    ? "Broker verdict: error, but a later call in the turn ran"
+                    : "Broker verdict: \(style.label)"
+            )
     }
 
     /// The colour a verdict gets. Public to the module so the spine's nodes use the same mapping.
-    static func color(for status: BrokerStatus?) -> Color { style(for: status).color }
+    static func color(for status: BrokerStatus?, recovered: Bool = false) -> Color {
+        style(for: status, recovered: recovered).color
+    }
 
-    private static func style(for status: BrokerStatus?) -> (label: String, symbol: String, color: Color) {
+    private static func style(for status: BrokerStatus?, recovered: Bool) -> (label: String, symbol: String, color: Color) {
+        if recovered && status == .error {
+            return ("recovered", "arrow.uturn.right.circle", Spine.Palette.textDim)
+        }
         switch status {
         case .executed: return ("ran", "checkmark.circle.fill", Spine.Verdict.executed)
         case .denied: return ("denied", "hand.raised.fill", Spine.Verdict.denied)

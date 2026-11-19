@@ -8,7 +8,8 @@ import SwiftUI
 /// to start and end the line at the node.
 struct SpineRow<Content: View>: View {
     enum Node {
-        case verdict(BrokerStatus?)
+        /// `recovered`: an error the turn got past, drawn muted instead of in the failure colour.
+        case verdict(BrokerStatus?, recovered: Bool = false)
         case waiting
         case plain
     }
@@ -47,8 +48,8 @@ struct SpineRow<Content: View>: View {
 
     @ViewBuilder private var nodeShape: some View {
         switch node {
-        case .verdict(let status):
-            Circle().fill(VerdictBadge.color(for: status))
+        case .verdict(let status, let recovered):
+            Circle().fill(VerdictBadge.color(for: status, recovered: recovered))
         case .waiting:
             Circle()
                 .strokeBorder(Spine.Palette.attention, lineWidth: 2)

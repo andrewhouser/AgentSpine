@@ -5,6 +5,8 @@ import styles from "./SpineCalls.module.css";
 
 interface SpineCallsProps {
   calls: LiveToolCall[];
+  /** One flag per call: a failure the turn got past (lib/recovery.ts). Muted, not hidden. */
+  recovered?: boolean[];
 }
 
 /** More than this and the rest fold into one line; the Trace tab has every call in full. */
@@ -20,19 +22,23 @@ const MAX_ROWS = 6;
  * lines and not a wall. The node is the point: it is how a reply shows that code decided each
  * step.
  */
-export const SpineCalls = ({ calls }: SpineCallsProps) => {
+export const SpineCalls = ({ calls, recovered = [] }: SpineCallsProps) => {
   if (!calls.length) return null;
   const shown = calls.slice(0, MAX_ROWS);
   const hidden = calls.length - shown.length;
 
   return (
     <ul className={styles.list}>
-      {shown.map((call) => (
+      {shown.map((call, i) => (
         <li className={styles.row} key={call.callId}>
-          <span aria-hidden="true" className={styles.node} data-status={call.status ?? "running"} />
+          <span
+            aria-hidden="true"
+            className={styles.node}
+            data-status={recovered[i] === true ? "recovered" : (call.status ?? "running")}
+          />
           <code className={styles.tool}>{call.tool}</code>
           <span className={styles.detail}>{call.summary ?? call.target}</span>
-          <DecisionBadge status={call.status} />
+          <DecisionBadge recovered={recovered[i] === true} status={call.status} />
         </li>
       ))}
       {hidden > 0 && <li className={styles.more}>+ {hidden} more steps, in the Trace tab</li>}

@@ -1800,6 +1800,16 @@ without modifying them. To let the builder compile and commit in it, add the fol
 `policy.json`; `"parse": "xcodebuild"`, `CODE_SIGNING_ALLOWED=NO`). That declaration is yours to
 make: the agent can never add it.
 
+**Your messages and failed calls** — hover a message of yours (web and Mac; a long press on the
+phone) for when you sent it, **Copy**, **Retry** (send it again) and **Edit and resend** (put it back
+in the box). Retry and Edit add a *new* turn: the earlier reply, its tool calls and its audit rows
+stay. They are not offered on a message that carried images, because an image binds to one turn
+only once, so a retry would drop it and answer a different question. A tool call that failed but
+was followed by one that ran, in the same turn, is drawn muted and labelled "recovered" rather than
+red, since a lookup that misses before a search that finds it is the loop working. That is a
+heuristic: a denial, an error with nothing after it, and any error in a turn that itself failed are
+never softened. The rule is in `web/src/lib/recovery.ts` and `ios/AgentSpine/Core/TurnHelpers.swift`.
+
 **Memory and search** — `find_past_output` searches every old conversation; the Search page
 does too; replies can be starred; **Context used** under a reply shows which memories,
 documents and earlier turns it had. Idle threads are summarised into long-term memory by

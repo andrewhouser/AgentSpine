@@ -567,7 +567,14 @@ denied or failed (the full trace lives in the Trace tab). `SpineCalls` now draws
 line on the spine (node, tool, target, verdict; the first six, then "+ N more steps"), and a denial
 still opens the full `ToolTrace`. The nodes on `ToolCallCard` are opt-in (`spine`) so the Trace tab
 shows no stray dots. Markup changes: one wrapper in `Turn`, one in `ToolCallCard`, one new
-component. Checked in a browser: a `Turn` with every verdict and a pending
+component. A second follow-up (2026-11-19), on web, Mac and iPhone together: a failed call that a
+later call in the same turn got past is drawn muted and labelled "recovered" instead of red, and
+no longer opens the full trace by itself (`recoveredCalls`, mirrored in Swift as `RecoveredCalls`;
+both are tested). And your own message gained a row of actions on hover (web, Mac) or long press
+(phone): when it was sent, Copy, Retry and Edit and resend. Retry and Edit add a new turn, and are
+withheld for a message with images, which cannot be re-sent. **Not checked by eye**: the web and
+native builds compile and the rules are tested, but the hover row has not been looked at in a
+browser, the Mac app or the simulator. Checked in a browser: a `Turn` with every verdict and a pending
 approval, in both themes, with all three fonts loading. Walked, in both themes, against a scratch
 server (empty database, port 8799, localhost, no token): the new-conversation page, Search, Tasks,
 Files, Meetings, Builds, Overview, Heads-up, Study, Clients, Schedules (with the seeded Morning

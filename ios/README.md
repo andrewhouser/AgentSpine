@@ -13,6 +13,8 @@ Threads        the conversation list — rename, archive, delete — and a compo
                marks a thread with a question waiting on you or a reply you have not read
 Thread         turns live: every tool call with its verdict, your photos, markdown replies;
                under each reply: star, save to file, and the context it was written from;
+               on your own message (hover on the Mac, long press here): copy, retry, edit and
+               resend; a failed call a later one got past is shown muted as "recovered";
                Approve/Reject buttons inline, and answering resumes the conversation
 Schedules      jobs that run on a clock: pause, edit, run now, and how the last few went
 Tasks          to-dos and follow-ups, with due times; the Mac pushes when one falls due

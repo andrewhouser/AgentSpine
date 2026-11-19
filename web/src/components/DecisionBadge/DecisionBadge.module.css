@@ -28,6 +28,13 @@
   color: var(--danger);
 }
 
+/* A failure the turn got past: kept visible, and no longer a warning colour. */
+.recovered {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
 .dryrun {
   background: var(--accent-soft);
   border-color: var(--accent-line);

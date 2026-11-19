@@ -1,6 +1,7 @@
 import type { Attachment, LiveToolCall, VisionPass } from "../../lib/types.ts";
 
 import { describeActivity } from "../../lib/activity.ts";
+import { recoveredCalls } from "../../lib/recovery.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
@@ -27,9 +28,15 @@ interface TurnProps {
   kind?: null | string;
   live: boolean;
   onConfirmationResolved: () => void;
+  /** Put the message back in the composer to change it. Offered only on a finished turn. */
+  onEdit?: () => void;
+  /** Send the message again as a new turn. Offered only on a finished turn. */
+  onRetry?: () => void;
   projectId?: null | number;
   runId?: number;
   starred?: boolean;
+  /** When the message was sent. */
+  startedAt?: string;
   step: number;
   summary: null | string;
   task: string;
@@ -60,9 +67,12 @@ export const Turn = ({
   kind = null,
   live,
   onConfirmationResolved,
+  onEdit,
+  onRetry,
   projectId = null,
   runId,
   starred = false,
+  startedAt,
   step,
   summary,
   task,
@@ -71,9 +81,26 @@ export const Turn = ({
   toolCalls,
   vision = null,
   waitingBehind,
-}: TurnProps) => (
+}: TurnProps) => {
+  // A failure the turn went on to get past reads as a quiet step, not an alarm (lib/recovery.ts).
+  const recovered = recoveredCalls(toolCalls, !!error);
+  // Images bind to one run, once, so a message that carried any cannot be sent again: a retry
+  // would quietly drop them and answer a different question. Copy and the time still show.
+  const canResend = attachments.length === 0 && task.trim() !== "";
+
+  return (
   <article className={styles.turn}>
-    {kind === "approval" ? <DecisionNote text={task} /> : <UserMessage attachments={attachments} text={task} />}
+    {kind === "approval" ? (
+      <DecisionNote text={task} />
+    ) : (
+      <UserMessage
+        attachments={attachments}
+        onEdit={canResend ? onEdit : undefined}
+        onRetry={canResend ? onRetry : undefined}
+        startedAt={startedAt}
+        text={task}
+      />
+    )}
 
     {/* The spine: everything the assistant did in answer to that hangs on one vertical line.
         Tool calls are nodes coloured by the broker's verdict; a hollow amber node is a
@@ -87,10 +114,10 @@ export const Turn = ({
     {/* Each call is a node on the spine. When one was denied or failed, the full trace opens
         instead (see ToolTrace): those are never incidental. Arguments and results for the rest
         live in the chat's Trace tab. */}
-    {toolCalls.some((c) => c.status === "denied" || c.status === "error") ? (
-      <ToolTrace calls={toolCalls} live={false} />
+    {toolCalls.some((c, i) => c.status === "denied" || (c.status === "error" && !recovered[i])) ? (
+      <ToolTrace calls={toolCalls} live={false} recovered={recovered} />
     ) : (
-      <SpineCalls calls={toolCalls} />
+      <SpineCalls calls={toolCalls} recovered={recovered} />
     )}
 
     {delegations.length > 0 && (
@@ -138,4 +165,5 @@ export const Turn = ({
     {live && !summary && !error && <ThinkingIndicator activity={describeActivity(toolCalls)} step={step} waitingBehind={waitingBehind} />}
     </div>
   </article>
-);
+  );
+};
