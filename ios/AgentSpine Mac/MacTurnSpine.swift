@@ -67,8 +67,32 @@ struct MacTurnSpine: View {
         }
     }
 
-    private var rows: [Row] {
+    /// A queued call and the confirmation it created are one thing to the reader: "it wanted to
+    /// do this, and is waiting on you". The server records them separately and links them only
+    /// through the broker's queue, so they are paired here by tool and, when the call has its
+    /// arguments, by those too (a live call has none yet), each confirmation claiming the first
+    /// unclaimed queued call. The pair sits where the call was, as one hollow amber node. A
+    /// confirmation with no such call (one raised by an earlier turn) stays below the reply.
+    private var pairing: (rows: [Row], unmatched: [Confirmation]) {
         var rows = calls.map(Row.call)
+        var unmatched: [Confirmation] = []
+        for confirmation in confirmations {
+            let slot = rows.firstIndex { row in
+                guard case .call(let call) = row, call.status == .queued, call.tool == confirmation.tool else { return false }
+                return call.args == nil || call.args == confirmation.args
+            }
+            if let slot {
+                rows[slot] = .waiting(confirmation)
+            } else {
+                unmatched.append(confirmation)
+            }
+        }
+        return (rows, unmatched)
+    }
+
+    private var rows: [Row] {
+        let (paired, unmatched) = pairing
+        var rows = paired
         switch phase {
         case .queued(let behind):
             // Agent cycles are serialised on the server, so this run may genuinely be waiting
@@ -82,7 +106,7 @@ struct MacTurnSpine: View {
         if let summary, !summary.isEmpty { rows.append(.text(summary)) }
         if let failure, !failure.isEmpty { rows.append(.failure(failure)) }
         if let note, !note.isEmpty { rows.append(.note(note)) }
-        rows += confirmations.map(Row.waiting)
+        rows += unmatched.map(Row.waiting)
         return rows
     }
 

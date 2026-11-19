@@ -320,10 +320,13 @@ line, a hollow amber node where a question is waiting. One view draws a finished
 ledger) and the live one (from the stream), so a turn cannot look different the instant it stops
 streaming. `ToolCallRow` gained `flat` (one line: tool, target, verdict; no box) for the rail; the
 phone keeps the boxed default and `LiveTurnView` is unchanged. Your messages stay as bubbles
-outside the rail, as in the directions. Not done: the directions fold a waiting call and its
-approval into one card (the call row *is* the card); here a call that needs approval still shows
-as a row and the approval card as the next node, because nothing links a confirmation to its
-action on the client yet.
+outside the rail, as in the directions. A waiting call and its approval are one node: nothing
+links a confirmation to its action in the API, so `MacTurnSpine` pairs them on the client by tool
+(and by arguments when the call has them; a live call has none yet), each confirmation taking the
+first unclaimed queued call, and the approval card replaces that call's row. A confirmation with
+no matching call stays below the reply. Builds; not yet seen with a real pending approval. If two
+queued calls share a tool and arguments the pairing is by order, which is safe because the card
+still answers by confirmation id.
 
 Still different from the directions, in the order worth doing:
 - **Heads-up timeline rail: built, not yet seen running.** The Dates column is built
