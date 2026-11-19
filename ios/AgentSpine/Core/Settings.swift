@@ -15,6 +15,7 @@ final class Settings {
         static let baseURL = "baseURL"
         static let deviceName = "deviceName"
         static let token = "dashboardToken"
+        static let tabOrder = "tabOrder"
     }
 
     /// e.g. `http://mini.tail1234.ts.net:8787`, or `https://mini.tail1234.ts.net` behind
@@ -33,7 +34,16 @@ final class Settings {
         didSet { UserDefaults.standard.set(deviceName, forKey: Key.deviceName) }
     }
 
+    /// The tab order as saved. Read it through `tabs`, which repairs it.
+    var tabOrder: [String] {
+        didSet { UserDefaults.standard.set(tabOrder, forKey: Key.tabOrder) }
+    }
+
+    /// Every tab, in the user's order, always complete and valid (see `TabLayout.reconcile`).
+    var tabs: [AppTab] { TabLayout.reconcile(tabOrder) }
+
     private init() {
+        tabOrder = UserDefaults.standard.stringArray(forKey: Key.tabOrder) ?? []
         rawBaseURL = UserDefaults.standard.string(forKey: Key.baseURL) ?? ""
         deviceName = UserDefaults.standard.string(forKey: Key.deviceName) ?? ""
         token = Keychain.get(Key.token) ?? ""
@@ -68,6 +78,12 @@ final class Settings {
 import UIKit
 enum UIDeviceName {
     @MainActor static var current: String { UIDevice.current.name }
+}
+#elseif os(macOS)
+/// The Mac app shares this file. Without this branch it would register as "iPhone", which is
+/// worse than useless in a device list that exists to tell your machines apart.
+enum UIDeviceName {
+    static var current: String { Host.current().localizedName ?? ProcessInfo.processInfo.hostName }
 }
 #else
 enum UIDeviceName {

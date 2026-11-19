@@ -37,6 +37,13 @@ final class AppState {
     /// badge on either is how a badge stops meaning anything.
     var headsupWaiting = 0
 
+    /// The Mac sidebar's badges, from `/api/status`. Nil until the server has answered (or when
+    /// it is too old to say), so a badge is hidden rather than showing a made-up zero.
+    var openTaskCount: Int?
+    var scheduleCount: Int?
+    /// Whether the Cloud tier exists on the server; nil until it has said.
+    var cloud: CloudStatus?
+
     /// Refresh the Heads-up badge. Failures leave the old number alone rather than blanking it:
     /// a tailnet blip is not the same as "nothing is waiting".
     func refreshHeadsups() async {
@@ -91,6 +98,18 @@ final class AppState {
         // Coming back to the app is exactly when you have probably answered something from a
         // notification, so the Heads-up badge is refreshed alongside the thread dots.
         await refreshHeadsups()
+    }
+
+    /// The server names a thread after the turn is persisted (src/runner.ts, titleConversation),
+    /// which is later than the stream's "finished" — so one refresh at the end of a turn misses
+    /// the title. Poll the list a few times until the thread has one; gives up quietly, since
+    /// the titler is allowed to fail and the thread keeps its fallback name.
+    func refreshUntilTitled(_ id: Int) async {
+        for delay in [2, 3, 5, 10, 15, 25, 30] {
+            if let c = conversations.first(where: { $0.id == id }), !(c.title ?? "").isEmpty { return }
+            try? await Task.sleep(for: .seconds(delay))
+            await refreshConversations()
+        }
     }
 
     /// Approve or reject, from the thread that asked. The server picks the conversation back

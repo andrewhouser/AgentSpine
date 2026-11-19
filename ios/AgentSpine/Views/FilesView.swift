@@ -30,19 +30,19 @@ struct FilesView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(file.name)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(file.exists ? .primary : .secondary)
+                            .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                            .foregroundStyle(file.exists ? Spine.Palette.text : Spine.Palette.textDim)
                         Text(file.path)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.tertiary)
+                            .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                            .foregroundStyle(Spine.Palette.textFaint)
                             .lineLimit(2)
                         Text(
                             "\(ByteCountFormatter.string(fromByteCount: Int64(file.bytes), countStyle: .file)) · "
                                 + "\(file.action) \(SpineDate.relative(file.ts))"
                                 + (file.exists ? "" : " · no longer on disk")
                         )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
                     }
                 }
                 .buttonStyle(.plain)
@@ -80,26 +80,26 @@ private struct FilePreview: View {
                         if file.name.lowercased().hasSuffix(".md") {
                             MarkdownText(content.text)
                         } else {
-                            Text(content.text).font(.footnote.monospaced())
+                            Text(content.text).font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
                         }
                         if content.truncated {
-                            Text("Preview truncated.").font(.caption).foregroundStyle(.secondary)
+                            Text("Preview truncated.").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                 } else if let error {
-                    Text(error).font(.footnote).foregroundStyle(.red).padding()
+                    Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger).padding()
                 } else {
                     ProgressView().padding()
                 }
             }
             .navigationTitle(file.name)
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
                 if let content {
-                    ToolbarItem(placement: .topBarLeading) { ShareLink(item: content.text) }
+                    ToolbarItem(placement: .spineLeading) { ShareLink(item: content.text) }
                 }
             }
         }

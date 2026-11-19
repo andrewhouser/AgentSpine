@@ -29,12 +29,12 @@ struct MeetingsView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Label("Recording", systemImage: "record.circle")
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Spine.Palette.danger)
                             Text("\(live.device ?? "microphone") · "
                                  + Self.clock(live.elapsedMs)
                                  + (live.pendingChunks > 0
                                     ? " · \(live.pendingChunks) chunk(s) behind" : ""))
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                     Button("Stop recording", role: .destructive) {
@@ -57,16 +57,16 @@ struct MeetingsView: View {
                                 Text("·")
                                 Text(SpineDate.relative(meeting.started))
                             }
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                             if !meeting.tagList.isEmpty {
                                 Text(meeting.tagList.joined(separator: " · "))
-                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
                             }
                         }
                     }
                 }
                 if meetings.isEmpty && !loading && error == nil {
-                    Text(emptyMessage).foregroundStyle(.secondary)
+                    Text(emptyMessage).foregroundStyle(Spine.Palette.textDim)
                 }
             } header: {
                 if let filterTag { Text("Tagged “\(filterTag)”") }
@@ -75,7 +75,7 @@ struct MeetingsView: View {
         .navigationTitle("Meetings")
         .toolbar {
             if !tagCounts.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .spineTrailing) {
                     Menu {
                         // A Picker inside the menu gives the checkmark on the active tag for
                         // free, so the toolbar icon is not the only sign a filter is on.
@@ -93,7 +93,7 @@ struct MeetingsView: View {
                     .accessibilityLabel("Filter by tag")
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { showStart = true } label: { Image(systemName: "mic.badge.plus") }
                     .disabled(live?.recording == true)
                     .accessibilityLabel("Start a meeting")
@@ -156,7 +156,7 @@ struct MeetingsView: View {
     }
 }
 
-private struct StartMeetingSheet: View {
+struct StartMeetingSheet: View {
     let onStarted: () async -> Void
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
@@ -171,12 +171,12 @@ private struct StartMeetingSheet: View {
         NavigationStack {
             Form {
                 if let error {
-                    Text(error).font(.footnote).foregroundStyle(.red)
+                    Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger)
                 }
                 if let devices {
                     if !devices.enabled {
                         Text("Audio capture is off in policy.json on the server.")
-                            .font(.footnote).foregroundStyle(.orange)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.warn)
                     }
                     Section {
                         Picker("Microphone", selection: $device) {
@@ -197,7 +197,7 @@ private struct StartMeetingSheet: View {
                 }
             }
             .navigationTitle("Start a meeting")
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -276,9 +276,9 @@ struct MeetingDetailView: View {
             }
         }
         .navigationTitle(detail?.meeting.displayTitle ?? "Meeting")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 if let meeting = detail?.meeting {
                     Menu {
                         Button("Rename…") { newTitle = meeting.title ?? ""; renaming = true }
@@ -314,7 +314,7 @@ struct MeetingDetailView: View {
         }
         .alert("Re-run transcript", isPresented: $reprocessing) {
             TextField("People in the meeting (blank = detect)", text: $headCount)
-                .keyboardType(.numberPad)
+                .spineNumberPad()
             Button("Re-run") { Task { await reprocess() } }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -361,7 +361,7 @@ struct MeetingDetailView: View {
                 LabeledContent("Project", value: project.name)
             }
             if let note = meeting.note, !note.isEmpty {
-                Text(note).font(.footnote).foregroundStyle(.secondary)
+                Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
             }
         }
     }
@@ -430,7 +430,7 @@ struct MeetingDetailView: View {
             if let answer = coach?.answer {
                 VStack(alignment: .leading, spacing: 4) {
                     if !answer.question.isEmpty {
-                        Text(answer.question).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        Text(answer.question).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
                     }
                     Text(answer.notes.isEmpty ? "The coach had nothing to add." : answer.notes)
                 }
@@ -457,12 +457,12 @@ struct MeetingDetailView: View {
         Section("Related right now") {
             let all = cards.documents + cards.meetings + cards.memories
             if all.isEmpty {
-                Text("Nothing relevant retrieved yet.").foregroundStyle(.secondary)
+                Text("Nothing relevant retrieved yet.").foregroundStyle(Spine.Palette.textDim)
             }
             ForEach(Array(all.enumerated()), id: \.offset) { _, card in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(card.text).font(.footnote).lineLimit(4)
-                    Text(card.source).font(.caption2).foregroundStyle(.secondary)
+                    Text(card.text).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).lineLimit(4)
+                    Text(card.source).font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
                 }
             }
         }
@@ -474,18 +474,18 @@ struct MeetingDetailView: View {
             case "running":
                 HStack { ProgressView(); Text("Extracting…") }
             case "failed":
-                Text(extraction.note ?? "Extraction failed.").foregroundStyle(.red)
+                Text(extraction.note ?? "Extraction failed.").foregroundStyle(Spine.Palette.danger)
             default:
                 if let summary = extraction.summary { Text(summary) }
                 if !extraction.topics.isEmpty {
                     Text(extraction.topics.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                 }
                 ForEach(extraction.decisions, id: \.text) { decision in
                     VStack(alignment: .leading, spacing: 2) {
                         Label(decision.text, systemImage: "checkmark.seal")
                         if let quote = decision.quote {
-                            Text("“\(quote)”").font(.caption).foregroundStyle(.secondary)
+                            Text("“\(quote)”").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -503,20 +503,20 @@ struct MeetingDetailView: View {
                             Text(item.task)
                             Spacer()
                             Text(item.wasFiled ? "added to project tasks" : item.verdict)
-                                .font(.caption2)
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(item.wasQueued || item.wasFiled ? Color.green.opacity(0.2)
                                                            : Color.secondary.opacity(0.2),
                                             in: Capsule())
                         }
                         if let owner = item.owner {
-                            Text(owner).font(.caption).foregroundStyle(.secondary)
+                            Text(owner).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                         if let note = item.verdictNote, !note.isEmpty {
-                            Text(note).font(.caption).foregroundStyle(.secondary)
+                            Text(note).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                         if let quote = item.quote {
-                            Text("“\(quote)”").font(.caption).italic().foregroundStyle(.secondary)
+                            Text("“\(quote)”").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).italic().foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -533,7 +533,7 @@ struct MeetingDetailView: View {
     private func transcriptSection(_ segments: [MeetingSegment]) -> some View {
         Section("Transcript") {
             if segments.isEmpty {
-                Text("No transcript yet.").foregroundStyle(.secondary)
+                Text("No transcript yet.").foregroundStyle(Spine.Palette.textDim)
             }
             ForEach(SpeakerTurn.group(segments)) { turn in
                 if let name = turn.speakerName {
@@ -543,10 +543,10 @@ struct MeetingDetailView: View {
                                 speakerName = name.hasPrefix("Speaker ") ? "" : name
                                 renamingSpeaker = turn
                             }
-                            .font(.subheadline.weight(.semibold))
+                            .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
                             .buttonStyle(.borderless)
                             Text(turn.segments[0].timestamp)
-                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit()).foregroundStyle(Spine.Palette.textDim)
                         }
                         Text(turn.text)
                     }
@@ -554,7 +554,7 @@ struct MeetingDetailView: View {
                     ForEach(turn.segments) { segment in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(segment.timestamp)
-                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit()).foregroundStyle(Spine.Palette.textDim)
                             Text(segment.text)
                         }
                     }

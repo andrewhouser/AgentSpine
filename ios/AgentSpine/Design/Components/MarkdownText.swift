@@ -39,12 +39,16 @@ struct MarkdownText: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 5 : 9) {
+        VStack(alignment: .leading, spacing: compact ? Spine.Space.xs + 1 : Spine.Space.sm + 1) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Compact text is quoted, not read, so it sits a step down. The colour is set here and
+        // not per block so a caller's own foregroundStyle on a parent still reads as intended.
+        .foregroundStyle(compact ? Spine.Palette.textDim : Spine.Palette.text)
+        .tint(Spine.Palette.accent)
         .textSelection(.enabled)
     }
 
@@ -57,12 +61,13 @@ struct MarkdownText: View {
             // to read than one you have to push sideways, and indentation is information.
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(source)
-                    .font(.system(compact ? .caption2 : .caption, design: .monospaced))
+                    .font(SpineFont.mono(compact ? Spine.TypeSize.caption - 1 : Spine.TypeSize.caption, relativeTo: compact ? .caption2 : .caption))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(9)
+            .padding(Spine.Space.sm + 1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+            .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm + 2))
+            .overlay(RoundedRectangle(cornerRadius: Spine.Radius.sm + 2).strokeBorder(Spine.Palette.border, lineWidth: 0.5))
 
         case .heading(let level, let text):
             Text(Self.inline(text))
@@ -74,12 +79,12 @@ struct MarkdownText: View {
                 .padding(.top, compact ? 2 : 5)
 
         case .list(let items):
-            VStack(alignment: .leading, spacing: compact ? 3 : 5) {
+            VStack(alignment: .leading, spacing: compact ? 3 : Spine.Space.xs + 1) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm - 1) {
                         Text(item.marker)
                             .font(baseFont.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Spine.Palette.textFaint)
                         Text(Self.inline(item.text))
                             .font(baseFont)
                             .fixedSize(horizontal: false, vertical: true)
@@ -96,33 +101,37 @@ struct MarkdownText: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .quote(let text):
-            HStack(alignment: .top, spacing: 9) {
+            HStack(alignment: .top, spacing: Spine.Space.sm + 1) {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.accentColor.opacity(0.45))
+                    .fill(Spine.Palette.accentLine)
                     .frame(width: 3)
                 Text(Self.inline(text))
                     .font(baseFont)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .fixedSize(horizontal: false, vertical: true)
 
         case .rule:
-            Divider()
+            Rectangle().fill(Spine.Palette.border).frame(height: 1)
         }
     }
 
-    private var baseFont: Font { compact ? .footnote : .body }
+    private var baseFont: Font {
+        compact
+            ? SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)
+            : SpineFont.sans(Spine.TypeSize.body, relativeTo: .body)
+    }
 
     /// Three sizes, not six. `####` and deeper are rare in a reply and a fourth step would
     /// be indistinguishable from the body text it sits above.
     private func headingFont(_ level: Int) -> Font {
-        if compact { return .footnote.weight(.bold) }
+        if compact { return SpineFont.display(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.bold) }
         switch level {
-        case 1: return .title3.weight(.semibold)
-        case 2: return .headline
-        default: return .subheadline.weight(.semibold)
+        case 1: return SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3)
+        case 2: return SpineFont.display(Spine.TypeSize.body + 1, relativeTo: .headline)
+        default: return SpineFont.display(Spine.TypeSize.body, relativeTo: .subheadline)
         }
     }
 

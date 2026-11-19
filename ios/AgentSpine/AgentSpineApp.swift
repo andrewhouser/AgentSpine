@@ -7,6 +7,7 @@ struct AgentSpineApp: App {
     @State private var reader = ReadAloud()
 
     init() {
+        SpineFont.registerBundled()
         // Categories before permission, so a notification arriving in the same second as the
         // grant already knows which buttons it has.
         PushManager.shared.configure()
@@ -15,6 +16,7 @@ struct AgentSpineApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .tint(Spine.Palette.accent)
                 .environment(state)
                 .environment(Settings.shared)
                 .environment(PushManager.shared)

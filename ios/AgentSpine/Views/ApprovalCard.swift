@@ -1,21 +1,5 @@
 import SwiftUI
 
-/// The blue of "this is waiting on you" — the dot on a thread row and the edge of an inline
-/// approval card. Its own colour rather than the accent, so it reads as a signal.
-extension Color {
-    static let attention = Color(red: 0.10, green: 0.45, blue: 0.91)
-}
-
-/// The blue dot on a thread that has a question waiting on you.
-struct AttentionDot: View {
-    var body: some View {
-        Circle()
-            .fill(Color.attention)
-            .frame(width: 10, height: 10)
-            .accessibilityLabel("Waiting on you")
-    }
-}
-
 /// An irreversible action, asked about in the thread that wanted it.
 ///
 /// The way a chat assistant asks: the buttons appear in the conversation, under the turn that
@@ -42,35 +26,36 @@ struct ApprovalCard: View {
             HStack(spacing: 8) {
                 AttentionDot()
                 Text("Waiting on you")
-                    .font(.caption.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                     .foregroundStyle(Color.attention)
                 Text(confirmation.tool)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textDim)
                 Spacer()
                 Text("#\(confirmation.id)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textFaint)
             }
 
             Text(confirmation.summary)
-                .font(.callout)
+                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .callout))
+                .foregroundStyle(Spine.Palette.text)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
             DisclosureGroup("Details", isExpanded: $showArgs) {
                 Text(PrettyJSON.format(confirmation.args))
-                    .font(.caption2.monospaced())
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(9)
-                    .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(Spine.Space.sm + 1)
+                    .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm + 2))
             }
-            .font(.caption)
-            .tint(.secondary)
+            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+            .tint(Spine.Palette.textDim)
 
             if let error {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.danger)
             }
 
             HStack(spacing: 10) {
@@ -81,6 +66,7 @@ struct ApprovalCard: View {
                     Text("Reject").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .tint(Spine.Palette.danger)
 
                 Button {
                     Task { await decide(approve: true) }
@@ -95,9 +81,9 @@ struct ApprovalCard: View {
             }
             .disabled(busy)
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.attention.opacity(0.6), lineWidth: 1))
+        .padding(Spine.Space.lg)
+        .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))
+        .overlay(RoundedRectangle(cornerRadius: Spine.Radius.lg).strokeBorder(Spine.Palette.attentionLine, lineWidth: 1))
         .sheet(isPresented: $rejecting) {
             RejectSheet(confirmation: confirmation, reason: $reason) { text in
                 await decide(approve: false, reason: text)
@@ -138,7 +124,7 @@ struct RejectSheet: View {
             Form {
                 Section {
                     Text(confirmation.summary)
-                        .font(.callout)
+                        .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .callout))
                 }
                 Section {
                     TextField("Why not? (optional)", text: $reason, axis: .vertical)
@@ -176,54 +162,3 @@ struct RejectSheet: View {
     }
 }
 
-/// Where you pressed Approve or Reject, in the thread's timeline — the resumed turn's
-/// "message", drawn as the record of an answer rather than as something you typed.
-struct DecisionNote: View {
-    let text: String
-
-    private struct Decision: Identifiable {
-        let id: Int
-        let approved: Bool
-        let headline: String
-        var detail: [String]
-    }
-
-    /// Split the server's message (see decisionMessage in src/confirmations.ts).
-    private var decisions: [Decision] {
-        var out: [Decision] = []
-        for line in text.components(separatedBy: "\n") {
-            if line.hasPrefix("✓ ") || line.hasPrefix("✗ ") || line.hasPrefix("• ") {
-                out.append(Decision(id: out.count, approved: line.hasPrefix("✓"), headline: String(line.dropFirst(2)), detail: []))
-            } else if line.hasPrefix("  "), !out.isEmpty {
-                out[out.count - 1].detail.append(line.trimmingCharacters(in: .whitespaces))
-            }
-        }
-        return out
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(decisions) { d in
-                VStack(alignment: .leading, spacing: 2) {
-                    Label(d.headline, systemImage: d.approved ? "checkmark.circle.fill" : "xmark.circle")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(d.approved ? Color.green : Color.secondary)
-                    if !d.detail.isEmpty {
-                        Text(d.detail.joined(separator: "\n"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(4)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                .foregroundStyle(.tertiary)
-        )
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-}

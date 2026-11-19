@@ -12,6 +12,9 @@ struct ToolCallRow: View {
     let args: String?
     let output: String?
     let status: BrokerStatus?
+    /// On the spine (the Mac thread) the node already says "this is a step", so the row drops its
+    /// box and icon and reads as one line: the tool, what it was aimed at, the verdict.
+    var flat = false
 
     @State private var expanded = false
 
@@ -25,18 +28,21 @@ struct ToolCallRow: View {
                 guard hasDetail else { return }
                 withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
             } label: {
+                if flat {
+                    flatLabel
+                } else {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(tool)
-                            .font(.caption.weight(.semibold).monospaced())
+                            .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                         if let target, !target.isEmpty {
                             Text(target)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                                .foregroundStyle(Spine.Palette.textDim)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
@@ -47,9 +53,10 @@ struct ToolCallRow: View {
 
                     if hasDetail {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                            .foregroundStyle(Spine.Palette.textFaint)
                     }
+                }
                 }
             }
             .buttonStyle(.plain)
@@ -63,8 +70,35 @@ struct ToolCallRow: View {
                 }
             }
         }
-        .padding(10)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .padding(flat ? 0 : 10)
+        .background {
+            if !flat {
+                RoundedRectangle(cornerRadius: Spine.Radius.md).fill(Spine.Palette.bgInset)
+            }
+        }
+    }
+
+    private var flatLabel: some View {
+        HStack(spacing: 10) {
+            Text(tool)
+                .font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                .foregroundStyle(Spine.Palette.text)
+            if let target, !target.isEmpty {
+                Text(target)
+                    .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 6)
+            VerdictBadge(status: status)
+            if hasDetail {
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textFaint)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -75,11 +109,11 @@ private struct DetailBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
+                .foregroundStyle(Spine.Palette.textFaint)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(text)
-                    .font(.caption2.monospaced())
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -88,6 +122,6 @@ private struct DetailBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
-        .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 8))
     }
 }

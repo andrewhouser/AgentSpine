@@ -149,6 +149,9 @@ struct Turn: Codable, Identifiable, Hashable {
     let summary: String?
     let task: String?
     let tier: String?
+    /// What actually answered, as opposed to `tier`, which is what was asked for. Absent from
+    /// turns recorded before the server kept it, and from older servers.
+    let served: ServedModel?
     /// What the assistant had in front of it for this turn; absent from older servers.
     let contextUsed: [String]?
     let starred: Bool?
@@ -173,9 +176,37 @@ struct QueueStatus: Codable {
     let running: Bool?
 }
 
+/// The model that answered a turn. `cloud` is true if any call of the turn went to the cloud,
+/// whichever call came last; `via` and `model` describe the latest call.
+struct ServedModel: Codable, Hashable {
+    let cloud: Bool
+    let model: String
+    let tier: String
+    let via: String
+}
+
+/// Whether the server has a Cloud tier at all. When it does not, a thread pinned to Cloud runs
+/// on the local model.
+struct CloudStatus: Codable {
+    let configured: Bool
+    let host: String?
+    let model: String?
+}
+
+/// Whether the server can reach its model host, and the round trip. `ms` is nil when it cannot.
+struct ModelHostStatus: Codable {
+    let ms: Int?
+    let ok: Bool
+}
+
 struct ServerStatus: Codable {
+    /// Absent from servers older than the Mac sidebar's model-host line.
+    let model: ModelHostStatus?
+    let cloud: CloudStatus?
     let queue: QueueStatus?
     let schedules: Int?
+    /// Open tasks. Absent from servers older than the Mac sidebar's badge.
+    let tasks: Int?
     let time: String?
 }
 

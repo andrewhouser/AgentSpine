@@ -23,8 +23,8 @@ struct MemoryView: View {
                         Text("·")
                         Text(SpineDate.relative(memory.ts))
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
                 }
                 .swipeActions {
                     Button("Forget", role: .destructive) { Task { await forget(memory) } }
@@ -32,7 +32,7 @@ struct MemoryView: View {
             }
             if memories.isEmpty && !loading && error == nil {
                 Text(query.isEmpty ? "Nothing remembered yet." : "No matches.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Spine.Palette.textDim)
             }
         }
         .navigationTitle("Memory")
@@ -87,7 +87,7 @@ struct PolicyView: View {
             }
         }
         .navigationTitle("Policy")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
     }

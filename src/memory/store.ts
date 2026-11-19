@@ -147,6 +147,7 @@ addColumn("runs", "task", "TEXT");
 addColumn("runs", "schedule_id", "INTEGER");
 addColumn("runs", "conversation_id", "INTEGER");
 addColumn("runs", "tier", "TEXT");
+addColumn("runs", "served", "TEXT");
 addColumn("runs", "parent_run_id", "INTEGER");
 addColumn("runs", "agent", "TEXT");
 addColumn("conversations", "tier", "TEXT");
@@ -401,6 +402,29 @@ export const childRuns = (parentRunId: number): any[] =>
 /** Record which tier the dispatcher sized this run to, once it has been decided. */
 export const setRunTier = (id: number, tier: string): void => {
   db.prepare("UPDATE runs SET tier = ? WHERE id = ?").run(tier, id);
+};
+
+/**
+ * What actually answered, as opposed to `tier` (what was asked for). The two differ whenever a
+ * tier is unconfigured and quietly becomes `standard`, a private request is pinned local, or the
+ * router falls back after a failure, and a thread pinned to Cloud that ran on the local model
+ * is exactly the case worth being able to see. `tier`, `model` and `via` are the latest call;
+ * `cloud` is sticky, true once ANY call of the run went to the cloud, because "did this leave
+ * the machine" must not be answered by whichever call happened to come last.
+ */
+export type Served = { cloud: boolean; model: string; tier: string; via: "cloud" | "local" };
+
+export const noteServed = (id: number, now: { model: string; tier: string; via: "cloud" | "local" }): void => {
+  const row = db.prepare("SELECT served FROM runs WHERE id = ?").get(id) as { served: null | string } | undefined;
+  if (!row) return;
+  let before: Partial<Served> = {};
+  try {
+    before = row.served ? JSON.parse(row.served) : {};
+  } catch {
+    /* an unreadable earlier value is replaced */
+  }
+  const served: Served = { ...now, cloud: before.cloud === true || now.via === "cloud" };
+  db.prepare("UPDATE runs SET served = ? WHERE id = ?").run(JSON.stringify(served), id);
 };
 
 /** The queue has reached this run and the model is now working on it. */

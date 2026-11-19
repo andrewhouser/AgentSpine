@@ -24,7 +24,7 @@ struct ClientsView: View {
                         HStack {
                             Text(t.client ?? "(no client)")
                             Spacer()
-                            Text(t.label).foregroundStyle(.secondary).monospacedDigit()
+                            Text(t.label).foregroundStyle(Spine.Palette.textDim).monospacedDigit()
                         }
                     }
                 }
@@ -43,9 +43,9 @@ struct ClientsView: View {
                 ForEach(clients) { c in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text(c.name).font(.body.weight(.semibold))
+                            Text(c.name).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
                             Text(c.status)
-                                .font(.caption2)
+                                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .padding(.horizontal, 7).padding(.vertical, 2)
                                 .background(.quaternary, in: Capsule())
                         }
@@ -54,11 +54,11 @@ struct ClientsView: View {
                                 " (by \($0.formatted(date: .abbreviated, time: .omitted)))"
                             } ?? ""
                             Label("\(next)\(by)", systemImage: "arrow.turn.down.right")
-                                .font(.footnote).foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                         }
-                        if let email = c.email { Text(email).font(.caption).foregroundStyle(.tertiary) }
+                        if let email = c.email { Text(email).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textFaint) }
                         if let notes = c.notes, !notes.isEmpty {
-                            Text(notes).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                            Text(notes).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
                         }
                     }
                     .swipeActions(edge: .trailing) {
@@ -75,7 +75,7 @@ struct ClientsView: View {
         .refreshable { await load() }
         .task { await load() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { adding = true } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New client")
             }

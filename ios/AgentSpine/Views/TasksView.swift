@@ -43,8 +43,8 @@ struct TasksView: View {
                         Task { await toggle(item) }
                     } label: {
                         Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(item.isDone ? .green : .secondary)
+                            .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
+                            .foregroundStyle(item.isDone ? Spine.Palette.ok : Spine.Palette.textDim)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
@@ -52,7 +52,7 @@ struct TasksView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.title)
                             .strikethrough(item.isDone)
-                            .foregroundStyle(item.isDone ? .secondary : .primary)
+                            .foregroundStyle(item.isDone ? Spine.Palette.textDim : Spine.Palette.text)
                         HStack(spacing: 6) {
                             if let name = projectName(item.projectID) {
                                 Label(name, systemImage: "folder")
@@ -65,10 +65,10 @@ struct TasksView: View {
                                     + Text(due.formatted(date: .abbreviated, time: .shortened))
                             }
                         }
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(item.isOverdue ? Color.red : Color.secondary)
                         if let notes = item.notes, !notes.isEmpty {
-                            Text(notes).font(.footnote).foregroundStyle(.secondary)
+                            Text(notes).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -96,12 +96,12 @@ struct TasksView: View {
         .onChange(of: showDone) { Task { await load() } }
         .onChange(of: filterProject) { Task { await load() } }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .spineLeading) {
                 Toggle(isOn: $showDone) { Image(systemName: "checkmark.circle") }
                     .toggleStyle(.button)
                     .accessibilityLabel("Show completed")
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Menu {
                     Picker("Project", selection: $filterProject) {
                         Text("All projects").tag(Int?.none)
@@ -115,7 +115,7 @@ struct TasksView: View {
                 }
                 .accessibilityLabel("Filter by project")
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { adding = true } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New task")
             }
@@ -195,17 +195,17 @@ private struct AddTodoSheet: View {
                 Section {
                     TextField("What needs doing?", text: $title)
                     TextField("Due — e.g. friday 3pm", text: $due)
-                        .textInputAutocapitalization(.never)
+                        .spineNoAutocapitalization()
                 }
                 Section("Waiting on someone?") {
                     TextField("Who (makes it a follow-up)", text: $waitingOn)
                 }
                 if let error {
-                    Section { Text(error).font(.footnote).foregroundStyle(.red) }
+                    Section { Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger) }
                 }
             }
             .navigationTitle("New task")
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

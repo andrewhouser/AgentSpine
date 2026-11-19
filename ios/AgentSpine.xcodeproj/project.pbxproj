@@ -7,21 +7,90 @@
 	objects = {
 
 /* Begin PBXFileReference section */
+		36D8177130AE5E1E007D6CFE /* AgentSpine Mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "AgentSpine Mac.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		36D8184930AF11F9007D6CFE /* AgentSpine-Mac-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AgentSpine-Mac-Info.plist"; sourceTree = "<group>"; };
 		AA0000000000000000000001 /* AgentSpine.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentSpine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000016 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA0000000000000000000017 /* AgentSpine.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AgentSpine.entitlements; sourceTree = "<group>"; };
 		AA0000000000000000000019 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		36D8177D30AE5F10007D6CFE /* Exceptions for "AgentSpine" folder in "AgentSpine Mac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Core/APIClient.swift,
+				Core/AppState.swift,
+				Core/Keychain.swift,
+				Core/Models.swift,
+				Core/ReadAloud.swift,
+				Core/RunStream.swift,
+				Core/Settings.swift,
+				Core/TabLayout.swift,
+				Design/Components/ApprovalPrompt.swift,
+				Design/Components/AttentionDot.swift,
+				Design/Components/ComponentGallery.swift,
+				Design/Components/DecisionNote.swift,
+				Design/Components/LiveTurnView.swift,
+				Design/Components/MarkdownText.swift,
+				Design/Components/Notices.swift,
+				Design/Components/PrettyJSON.swift,
+				Design/Components/SpineRow.swift,
+				Design/Components/SpineScreen.swift,
+				Design/Components/ThreadBubble.swift,
+				Design/Components/ToolCallRow.swift,
+				Design/Components/VerdictBadge.swift,
+				Design/DesignColor.swift,
+				Design/PlatformShims.swift,
+				Design/SpineFont.swift,
+				Design/Tokens.generated.swift,
+				Fonts/BricolageGrotesque.ttf,
+				Fonts/InstrumentSans.ttf,
+				Fonts/JetBrainsMono.ttf,
+				Views/ActivityView.swift,
+				Views/AgentsView.swift,
+				Views/BuildsView.swift,
+				Views/ClientsView.swift,
+				Views/FilesView.swift,
+				Views/HeadsupPrefsView.swift,
+				Views/HeadsupView.swift,
+				Views/MeetingsView.swift,
+				Views/MemoryView.swift,
+				Views/ProjectsView.swift,
+				Views/ProposalsView.swift,
+				Views/RunDetailView.swift,
+				Views/SchedulesView.swift,
+				Views/StudyView.swift,
+				Views/TasksView.swift,
+			);
+			target = 36D8177030AE5E1E007D6CFE /* AgentSpine Mac */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		36D8177230AE5E1E007D6CFE /* AgentSpine Mac */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "AgentSpine Mac";
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000002 /* AgentSpine */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				36D8177D30AE5F10007D6CFE /* Exceptions for "AgentSpine" folder in "AgentSpine Mac" target */,
+			);
 			path = AgentSpine;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		36D8176E30AE5E1E007D6CFE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -35,8 +104,10 @@
 		AA0000000000000000000004 = {
 			isa = PBXGroup;
 			children = (
+				36D8184930AF11F9007D6CFE /* AgentSpine-Mac-Info.plist */,
 				AA0000000000000000000002 /* AgentSpine */,
 				AA0000000000000000000018 /* Supporting */,
+				36D8177230AE5E1E007D6CFE /* AgentSpine Mac */,
 				AA0000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,6 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000001 /* AgentSpine.app */,
+				36D8177130AE5E1E007D6CFE /* AgentSpine Mac.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -62,6 +134,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		36D8177030AE5E1E007D6CFE /* AgentSpine Mac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 36D8177B30AE5E1E007D6CFE /* Build configuration list for PBXNativeTarget "AgentSpine Mac" */;
+			buildPhases = (
+				36D8176D30AE5E1E007D6CFE /* Sources */,
+				36D8176E30AE5E1E007D6CFE /* Frameworks */,
+				36D8176F30AE5E1E007D6CFE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				36D8177230AE5E1E007D6CFE /* AgentSpine Mac */,
+			);
+			name = "AgentSpine Mac";
+			packageProductDependencies = (
+			);
+			productName = "AgentSpine Mac";
+			productReference = 36D8177130AE5E1E007D6CFE /* AgentSpine Mac.app */;
+			productType = "com.apple.product-type.application";
+		};
 		AA0000000000000000000006 /* AgentSpine */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA0000000000000000000007 /* Build configuration list for PBXNativeTarget "AgentSpine" */;
@@ -94,6 +188,9 @@
 				LastSwiftUpdateCheck = 2720;
 				LastUpgradeCheck = 2720;
 				TargetAttributes = {
+					36D8177030AE5E1E007D6CFE = {
+						CreatedOnToolsVersion = 27.2;
+					};
 					AA0000000000000000000006 = {
 						CreatedOnToolsVersion = 27.2;
 					};
@@ -114,11 +211,19 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000006 /* AgentSpine */,
+				36D8177030AE5E1E007D6CFE /* AgentSpine Mac */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		36D8176F30AE5E1E007D6CFE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000009 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -129,6 +234,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		36D8176D30AE5E1E007D6CFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000008 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -139,6 +251,104 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		36D8177930AE5E1E007D6CFE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 47A87M9KU5;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "AgentSpine-Mac-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = AgentSpine;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.houserphotography.AgentSpine.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		36D8177A30AE5E1E007D6CFE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 47A87M9KU5;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "AgentSpine-Mac-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = AgentSpine;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.houserphotography.AgentSpine.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		AA0000000000000000000012 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -309,6 +519,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		36D8177B30AE5E1E007D6CFE /* Build configuration list for PBXNativeTarget "AgentSpine Mac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				36D8177930AE5E1E007D6CFE /* Debug */,
+				36D8177A30AE5E1E007D6CFE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AA0000000000000000000007 /* Build configuration list for PBXNativeTarget "AgentSpine" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

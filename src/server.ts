@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
 import { loadPolicy } from "./config.ts";
+import { probeModelHost } from "./model-probe.ts";
 import { deleteAudio, pruneAudio } from "./meetings/audio.ts";
 import { fileQueuedItems } from "./meetings/extract.ts";
 import { cardsFor } from "./meetings/context.ts";
@@ -60,7 +61,7 @@ import {
   TRACE_RETENTION_DAYS,
   TRANSCRIPT_RETENTION_DAYS,
 } from "./config.ts";
-import { describeTiers, visionConfigured } from "./tiers.ts";
+import { describeTiers, tierConfig, visionConfigured } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
 import { hasEnded, replay, subscribe } from "./events.ts";
 import type { RunEvent } from "./events.ts";
@@ -70,7 +71,7 @@ import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
-import { BASE, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
+import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
@@ -161,6 +162,23 @@ const cors = (req: http.IncomingMessage, res: Res) => {
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Dashboard-Token, X-Approval-Token");
   }
+};
+
+/**
+ * Whether the Cloud tier exists, and where it points, for the thread inspector. When it is not
+ * configured a thread pinned to Cloud quietly runs on the local model (see `resolveTier`), so
+ * the app needs this to say so. Model and host are not secrets; the key never leaves config.
+ */
+const cloudStatus = (): { configured: boolean; host: null | string; model: null | string } => {
+  const deep = tierConfig("deep");
+  if (!deep.configured) return { configured: false, host: null, model: null };
+  let host: null | string = null;
+  try {
+    host = new URL(CLOUD_BASE_URL).hostname;
+  } catch {
+    /* an unparseable URL just has no host to show */
+  }
+  return { configured: true, host, model: deep.model };
 };
 
 const sendJson = (res: Res, status: number, body: unknown) => {
@@ -470,8 +488,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       return sendJson(res, 200, {
         // The thread where questions nobody's chat raised are asked, once one has been.
         inbox: store.inboxId(),
+        // Whether the local model host answers, and how fast (cached ten seconds).
+        model: await probeModelHost(LOCAL_BASE_URL),
         queue: queueStatus(),
+        // Whether the Cloud tier exists at all, so a thread pinned to it can say why it ran
+        // local. The model name is not a secret; the key never leaves config.
+        cloud: cloudStatus(),
         schedules: store.listSchedules().length,
+        // Open tasks, for the Mac sidebar's badge. Same cap as GET /api/tasks, so a count of 300
+        // means "at least 300"; nobody needs that precision on a badge.
+        tasks: listTasks({ limit: 300, status: "open" }).length,
         time: new Date().toISOString(),
       });
     }
@@ -552,6 +578,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             tier: c.tier,
           })),
           tier: r.tier,
+          // What actually answered (null for turns before this was recorded); see noteServed.
+          served: (() => {
+            try {
+              return r.served ? JSON.parse(r.served) : null;
+            } catch {
+              return null;
+            }
+          })(),
           // What the assistant had in front of it, and whether this reply is starred.
           contextUsed: (() => {
             try {

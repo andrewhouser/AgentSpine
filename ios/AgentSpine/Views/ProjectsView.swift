@@ -48,7 +48,7 @@ struct ProjectsView: View {
                         Text(project.name)
                         if let chunks = project.chunks {
                             Text("\(chunks) indexed chunk\(chunks == 1 ? "" : "s")")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -66,12 +66,12 @@ struct ProjectsView: View {
                 }
             }
             if projects.isEmpty && !loading && error == nil {
-                Text("No projects yet.").foregroundStyle(.secondary)
+                Text("No projects yet.").foregroundStyle(Spine.Palette.textDim)
             }
         }
         .navigationTitle("Projects")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { newName = ""; prompt = .create } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New project")
             }
@@ -199,7 +199,7 @@ struct ProjectDetailView: View {
             Section {
                 ForEach(detail?.sources ?? []) { source in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(source.ref).font(.footnote.monospaced())
+                        Text(source.ref).font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
                         HStack(spacing: 6) {
                             Text(source.kind)
                             Text("·")
@@ -209,16 +209,16 @@ struct ProjectDetailView: View {
                                 Text(SpineDate.relative(indexed))
                             }
                         }
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         if let status = source.status, !status.isEmpty {
-                            Text(status).font(.caption).foregroundStyle(.orange)
+                            Text(status).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.warn)
                         }
                     }
                     .swipeActions(edge: .trailing) {
                         Button("Remove", role: .destructive) { Task { await remove(source) } }
                     }
                     .swipeActions(edge: .leading) {
-                        Button("Reindex") { Task { await reindex(source) } }.tint(.blue)
+                        Button("Reindex") { Task { await reindex(source) } }.tint(Spine.Palette.accent)
                     }
                     .overlay(alignment: .trailing) {
                         if busySource == source.id { ProgressView() }
@@ -231,7 +231,7 @@ struct ProjectDetailView: View {
                 }
                 .disabled(reindexingAll || (detail?.sources.isEmpty ?? true))
                 if let note {
-                    Text(note).font(.footnote).foregroundStyle(.secondary)
+                    Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             } header: {
                 Text("Sources")
@@ -241,7 +241,7 @@ struct ProjectDetailView: View {
             }
             Section("Add a source") {
                 TextField("/path/on/the/server", text: $newPath)
-                    .textInputAutocapitalization(.never)
+                    .spineNoAutocapitalization()
                     .autocorrectionDisabled()
                 Button {
                     Task { await addSource() }
@@ -254,13 +254,19 @@ struct ProjectDetailView: View {
             if let threads = detail?.conversations, !threads.isEmpty {
                 Section("Threads") {
                     ForEach(threads) { thread in
-                        NavigationLink(thread.displayTitle) { ThreadView(conversationID: thread.id) }
+                        NavigationLink(thread.displayTitle) {
+                            #if os(macOS)
+                            MacThreadDetail(conversationID: thread.id)
+                            #else
+                            ThreadView(conversationID: thread.id)
+                            #endif
+                        }
                     }
                 }
             }
         }
         .navigationTitle(detail?.project.name ?? "Project")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
     }
@@ -358,16 +364,16 @@ private struct ProjectTasksSection: View {
                         Task { await toggle(item) }
                     } label: {
                         Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(item.isDone ? .green : .secondary)
+                            .foregroundStyle(item.isDone ? Spine.Palette.ok : Spine.Palette.textDim)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.isDone ? "Mark not done" : "Mark done")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title)
                             .strikethrough(item.isDone)
-                            .foregroundStyle(item.isDone ? .secondary : .primary)
+                            .foregroundStyle(item.isDone ? Spine.Palette.textDim : Spine.Palette.text)
                         if let notes = item.notes, !notes.isEmpty {
-                            Text(notes).font(.caption).foregroundStyle(.secondary)
+                            Text(notes).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
                 }
@@ -375,13 +381,13 @@ private struct ProjectTasksSection: View {
                     Button("Delete", role: .destructive) { Task { await remove(item) } }
                 }
             }
-            if items.isEmpty { Text("No tasks yet.").foregroundStyle(.secondary) }
+            if items.isEmpty { Text("No tasks yet.").foregroundStyle(Spine.Palette.textDim) }
             HStack {
                 TextField("Add a task", text: $newTitle).onSubmit { Task { await add() } }
                 Button("Add") { Task { await add() } }
                     .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+            if let error { Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger) }
         } header: {
             Text("Tasks")
         }

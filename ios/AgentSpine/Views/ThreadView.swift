@@ -86,7 +86,7 @@ struct ThreadView: View {
                 if new > old { withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
             }
         }
-        .navigationTitle(thread?.conversation.displayTitle ?? "Thread")
+        .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { tierMenu }
@@ -105,6 +105,7 @@ struct ThreadView: View {
                     await load()
                     liveTask = nil
                     await state.refreshConversations()
+                    Task { await state.refreshUntilTitled(conversationID) }
                     if handsFree.phase == .busy { await speakReplyThenResume() }
                 }
             default:
@@ -196,7 +197,7 @@ struct ThreadView: View {
             }
         } label: {
             Image(systemName: handsFree.isActive ? "waveform.circle.fill" : "waveform.circle")
-                .foregroundStyle(handsFree.phase == .hearing || handsFree.phase == .awake ? .red : .accentColor)
+                .foregroundStyle(handsFree.phase == .hearing || handsFree.phase == .awake ? Spine.Palette.danger : Spine.Palette.accent)
         }
         .accessibilityLabel(handsFree.isActive ? "Stop hands-free" : "Start hands-free")
     }
@@ -269,9 +270,9 @@ struct ThreadView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "stop.circle.fill").font(.system(size: 22))
                     Text(Duration.seconds(Int(dictation.elapsed)).formatted(.time(pattern: .minuteSecond)))
-                        .font(.caption.monospacedDigit())
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit())
                 }
-                .foregroundStyle(.red)
+                .foregroundStyle(Spine.Palette.danger)
             case .transcribing:
                 ProgressView()
             }
@@ -309,19 +310,19 @@ struct ThreadView: View {
             if let composerError {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     Text(composerError)
-                        .font(.caption)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                     Button {
                         self.composerError = nil
                     } label: {
-                        Image(systemName: "xmark").font(.caption2)
+                        Image(systemName: "xmark").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     }
                     .accessibilityLabel("Dismiss this error")
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(Spine.Palette.warn)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
@@ -338,7 +339,7 @@ struct ThreadView: View {
                                         staged.removeAll { $0.id == attachment.id }
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .font(.caption)
+                                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                                             .symbolRenderingMode(.palette)
                                             .foregroundStyle(.white, .black.opacity(0.5))
                                     }
@@ -352,7 +353,7 @@ struct ThreadView: View {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(width: 64, height: 64)
-                                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
                     .padding(.horizontal)
@@ -373,7 +374,7 @@ struct ThreadView: View {
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
+                    .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 20))
                     .lineLimit(1...5)
 
                 Button {
@@ -525,12 +526,7 @@ struct TurnView: View {
                 if turn.isDecision {
                     DecisionNote(text: task)
                 } else {
-                    Text(task)
-                        .font(.body)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    ThreadBubble(text: task)
                 }
             }
 
@@ -552,8 +548,8 @@ struct TurnView: View {
                 MarkdownText(summary)
             } else if turn.status == "failed" {
                 Label("This turn failed.", systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.danger)
             }
 
             HStack(spacing: 6) {
@@ -597,11 +593,11 @@ struct TurnView: View {
                     .accessibilityLabel(reader.current == summary && reader.speaking ? "Stop reading" : "Read aloud")
                 }
             }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+            .foregroundStyle(Spine.Palette.textFaint)
 
             if let notice {
-                Text(notice).font(.caption).foregroundStyle(.secondary)
+                Text(notice).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
             }
         }
         .alert("Save to file", isPresented: $saving) {
@@ -622,7 +618,7 @@ struct TurnView: View {
         }
         .sheet(isPresented: $showContext) {
             NavigationStack {
-                List(turn.contextUsed ?? [], id: \.self) { Text($0).font(.footnote) }
+                List(turn.contextUsed ?? [], id: \.self) { Text($0).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)) }
                     .navigationTitle("Context used")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showContext = false } } }
@@ -648,18 +644,18 @@ struct DelegationRow: View {
                         .foregroundStyle(.purple)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(child.agent ?? "subagent")
-                            .font(.caption.weight(.semibold))
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                         if let task = child.task {
-                            Text(task).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            Text(task).font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim).lineLimit(1)
                         }
                     }
                     Spacer()
                     Text("\(child.actions.count)")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).monospacedDigit())
+                        .foregroundStyle(Spine.Palette.textDim)
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                        .foregroundStyle(Spine.Palette.textFaint)
                 }
             }
             .buttonStyle(.plain)
@@ -675,82 +671,11 @@ struct DelegationRow: View {
                     )
                 }
                 if let summary = child.summary, !summary.isEmpty {
-                    MarkdownText(summary, compact: true).foregroundStyle(.secondary)
+                    MarkdownText(summary, compact: true).foregroundStyle(Spine.Palette.textDim)
                 }
             }
         }
         .padding(10)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-// MARK: - The turn in flight
-
-struct LiveTurnView: View {
-    let task: String
-    var isDecision = false
-    let stream: RunStream
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !task.isEmpty, isDecision {
-                DecisionNote(text: task)
-            } else if !task.isEmpty {
-                Text(task)
-                    .font(.body)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-
-            phaseLine
-
-            ForEach(stream.calls) { call in
-                ToolCallRow(
-                    tool: call.tool,
-                    target: call.target,
-                    args: nil,
-                    output: call.output,
-                    status: call.status
-                )
-            }
-
-
-            if case .finished(let summary) = stream.phase, let summary, !summary.isEmpty {
-                MarkdownText(summary)
-            }
-            if case .failed(let message) = stream.phase {
-                Text(message).font(.footnote).foregroundStyle(.red)
-            }
-            if let note = stream.transportNote {
-                Label(note, systemImage: "wifi.exclamationmark")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    @ViewBuilder private var phaseLine: some View {
-        switch stream.phase {
-        case .queued(let behind):
-            // Agent cycles are serialised on the server, so this run may genuinely be waiting
-            // behind a scheduled job. Saying so beats a spinner that looks like a hang.
-            HStack(spacing: 7) {
-                ProgressView().controlSize(.small)
-                Text(behind > 0 ? "Queued behind \(behind) run\(behind == 1 ? "" : "s")" : "Starting…")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        case .running(let step):
-            HStack(spacing: 7) {
-                ProgressView().controlSize(.small)
-                Text("Step \(step)")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        case .failed, .finished, .idle:
-            EmptyView()
-        }
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 12))
     }
 }

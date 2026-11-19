@@ -113,7 +113,7 @@ struct SchedulesView: View {
             Text(actionError ?? "")
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { editor = .create } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New schedule")
             }
@@ -204,28 +204,28 @@ struct ScheduleCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(schedule.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
                 Spacer()
                 Text(schedule.isEnabled ? "enabled" : "paused")
-                    .font(.caption2.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(
-                        (schedule.isEnabled ? Color.green : Color.secondary).opacity(0.15),
+                        (schedule.isEnabled ? Spine.Palette.ok : Spine.Palette.textDim).opacity(0.15),
                         in: Capsule()
                     )
-                    .foregroundStyle(schedule.isEnabled ? .green : .secondary)
+                    .foregroundStyle(schedule.isEnabled ? Spine.Palette.ok : Spine.Palette.textDim)
             }
 
             if let spec = schedule.spec, !spec.isEmpty {
                 Label(spec, systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
             }
 
             Text(schedule.task)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.textDim)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
@@ -233,8 +233,8 @@ struct ScheduleCard: View {
                 Text("·")
                 Text("next \(when(schedule.nextRun))")
             }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+            .foregroundStyle(Spine.Palette.textFaint)
 
             // What it has actually been doing. `last_run` says a job ran; this says whether
             // it worked, which is the question that brings you to this screen. Each chip
@@ -247,7 +247,7 @@ struct ScheduleCard: View {
                                 Image(systemName: symbol(for: run))
                                     .font(.system(size: 9))
                                 Text(SpineDate.relative(run.started))
-                                    .font(.caption2)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                             }
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -289,7 +289,7 @@ struct ScheduleCard: View {
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func symbol(for run: Run) -> String {
@@ -302,9 +302,9 @@ struct ScheduleCard: View {
 
     private func tint(for run: Run) -> Color {
         switch run.status {
-        case "failed": return .red
-        case "running", "queued": return .orange
-        default: return .green
+        case "failed": return Spine.Palette.danger
+        case "running", "queued": return Spine.Palette.warn
+        default: return Spine.Palette.ok
         }
     }
 
@@ -355,13 +355,13 @@ struct ScheduleForm: View {
             Form {
                 Section("Name") {
                     TextField("morning-brief", text: $name)
-                        .textInputAutocapitalization(.never)
+                        .spineNoAutocapitalization()
                         .autocorrectionDisabled()
                 }
 
                 Section {
                     TextField("weekdays at 8:00am", text: $spec)
-                        .textInputAutocapitalization(.never)
+                        .spineNoAutocapitalization()
                         .autocorrectionDisabled()
                 } header: {
                     Text("When")
@@ -383,13 +383,13 @@ struct ScheduleForm: View {
                 if let error {
                     Section {
                         Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.danger)
                     }
                 }
             }
             .navigationTitle(schedule == nil ? "New schedule" : "Edit schedule")
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

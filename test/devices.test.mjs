@@ -157,6 +157,8 @@ check("  delivered nothing", test.json.delivered, 0);
 
 console.log("\nUNCHANGED ROUTES — the new ones did not shadow anything");
 check("/api/status still answers", (await call("GET", "/api/status")).status, 200);
+const statusBody = (await call("GET", "/api/status")).json;
+check("/api/status carries the sidebar counts", [typeof statusBody.tasks, typeof statusBody.schedules], ["number", "number"]);
 check("/api/confirmations still answers", (await call("GET", "/api/confirmations")).status, 200);
 check("an unknown route is still a 404", (await call("GET", "/api/nope")).status, 404);
 

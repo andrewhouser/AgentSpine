@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Things the assistant noticed coming up: birthdays, anniversaries, bills, appointments.
 ///
@@ -9,6 +8,13 @@ import UIKit
 /// the browser; its photo comes from the AgentSpine server, not the retailer, so this phone never
 /// contacts a shop just because you looked at an idea.
 struct HeadsupView: View {
+    /// The Mac draws the dates in a column of their own beside this list (`MacHeadsupView`), so it
+    /// turns them off here. The phone keeps them as sections.
+    var showsDates = true
+    /// The Mac hangs each item on the spine, dated, in the order it comes due (the directions'
+    /// timeline). The phone keeps the plain list.
+    var timeline = false
+
     @Environment(AppState.self) private var state
     @State private var items: [Headsup] = []
     @State private var dates = HeadsupDates(proposals: [], remembered: [])
@@ -48,7 +54,7 @@ struct HeadsupView: View {
                 }
                 .disabled(checking)
                 if let note {
-                    Text(note).font(.footnote).foregroundStyle(.secondary)
+                    Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
             }
 
@@ -61,22 +67,36 @@ struct HeadsupView: View {
                 .listRowBackground(Color.clear)
             }
 
-            ForEach(items) { item in
-                HeadsupRow(
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                let row = HeadsupRow(
                     item: item,
+                    timeline: timeline,
                     answer: { a in Task { await answer(item, a) } },
                     research: { Task { await research(item) } }
                 )
+                if timeline {
+                    // Open questions are hollow amber, as everywhere else on the spine.
+                    SpineRow(
+                        node: item.isOpen ? .waiting : .plain,
+                        isFirst: index == 0,
+                        isLast: index == items.count - 1
+                    ) { row }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: Spine.Space.lg, bottom: 0, trailing: Spine.Space.lg))
+                } else {
+                    row
+                }
             }
 
-            if !dates.proposals.isEmpty {
+            if showsDates, !dates.proposals.isEmpty {
                 Section("Dates it noticed") {
                     ForEach(dates.proposals) { proposal in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(proposal.title).font(.headline)
+                            Text(proposal.title).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                             Text("You mentioned this in a thread. Nothing is remembered until you say so.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.textDim)
                             HStack(spacing: 8) {
                                 Button("Remember it") { Task { await decide(proposal, yes: true) } }
                                     .buttonStyle(.borderedProminent)
@@ -90,7 +110,7 @@ struct HeadsupView: View {
                 }
             }
 
-            if !dates.remembered.isEmpty {
+            if showsDates, !dates.remembered.isEmpty {
                 Section("Dates it remembers") {
                     ForEach(dates.remembered) { date in
                         Text(date.title)
@@ -105,7 +125,7 @@ struct HeadsupView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .spineGroupedListStyle()
         .navigationTitle("Heads-up")
         .refreshable { await load() }
         .task { await load() }
@@ -216,24 +236,40 @@ struct HeadsupView: View {
 
 private struct HeadsupRow: View {
     let item: Headsup
+    var timeline = false
     let answer: (String) -> Void
     let research: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if timeline, let due = item.dueDate {
+                // "Fri Nov 20 · in 2 days", the date in mono and amber while it waits on you.
+                HStack(spacing: Spine.Space.sm) {
+                    Text(due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                        .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(item.isOpen ? Spine.Palette.attention : Spine.Palette.textDim)
+                    Text(item.relativeDays)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
+            }
             HStack(alignment: .firstTextBaseline) {
-                Text(item.subject).font(.headline)
+                Text(item.subject).font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .headline).weight(.semibold))
                 Spacer()
                 Text(item.kindLabel)
-                    .font(.caption2.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.secondary)
+                    .background(Spine.Palette.bgInset, in: Capsule())
+                    .foregroundStyle(Spine.Palette.textDim)
             }
-            Text(item.detailLine)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // The timeline already says when in its date line.
+            let detail = timeline ? item.detailLine(includingWhen: false) : item.detailLine
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+            }
 
             if item.isOpen {
                 HStack(spacing: 8) {
@@ -272,14 +308,14 @@ private struct HeadsupRow: View {
                     : (watch.kind == "flight" ? "Flight tracking ended" : "Traffic watch ended"),
                 systemImage: watch.kind == "flight" ? "airplane" : "car"
             )
-            .font(.footnote.weight(.semibold))
+            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
             if let note = watch.note, !note.isEmpty {
-                Text(note).font(.footnote).foregroundStyle(.secondary)
+                Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
             }
             if let polled = SpineDate.parse(watch.lastPolled) {
                 Text("Last checked " + polled.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textDim)
             }
         }
     }
@@ -297,24 +333,24 @@ private struct HeadsupRow: View {
             if let query = item.query {
                 // Shown on purpose: what was asked is never a mystery.
                 Text("Searched for: “\(query)”. No names are ever sent.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textDim)
             }
             if let note = item.researchNote, !note.isEmpty {
-                Text("\(note).").font(.caption2).foregroundStyle(.secondary)
+                Text("\(note).").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
             }
         } else if let error = item.researchError {
             Text("Couldn't finish looking: \(error)")
-                .font(.footnote)
-                .foregroundStyle(.orange)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.warn)
         } else {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Looking…").font(.footnote).foregroundStyle(.secondary)
+                Text("Looking…").font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
             }
         }
         Button(item.cards.isEmpty ? "Try again" : "Look again", action: research)
-            .font(.footnote)
+            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
             .buttonStyle(.bordered)
             .controlSize(.small)
     }
@@ -339,20 +375,20 @@ private struct HeadsupCardTile: View {
         let tile = VStack(alignment: .leading, spacing: 4) {
             HeadsupPhoto(path: card.imageURL)
             Text(card.title)
-                .font(.footnote.weight(.semibold))
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
             if card.kind == "gift" {
                 // Said out loud rather than hidden: a page that could not be read has no price.
                 Text(card.priceText ?? "no price available")
-                    .font(.footnote)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                     .foregroundStyle(card.priceText == nil ? Color.secondary : Color.primary)
             }
-            Text(card.host).font(.caption2).foregroundStyle(.secondary)
+            Text(card.host).font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
             if let note = card.note, !note.isEmpty {
                 Text(note)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textDim)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
             }
@@ -374,23 +410,23 @@ private struct HeadsupCardTile: View {
 private struct HeadsupPhoto: View {
     let path: String?
 
-    @State private var image: UIImage?
+    @State private var image: PlatformImage?
     @State private var failed = false
 
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image)
+                Image(platformImage: image)
                     .resizable()
                     .scaledToFill()
             } else if path == nil || failed {
                 ZStack {
-                    Color(.tertiarySystemBackground)
-                    Text("no photo").font(.caption2).foregroundStyle(.tertiary)
+                    Spine.Palette.bgInset
+                    Text("no photo").font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textFaint)
                 }
             } else {
                 ZStack {
-                    Color(.tertiarySystemBackground)
+                    Spine.Palette.bgInset
                     ProgressView().controlSize(.small)
                 }
             }
@@ -408,7 +444,7 @@ private struct HeadsupPhoto: View {
         }
         do {
             let data = try await APIClient.shared.headsupImageData(path: path)
-            guard let decoded = UIImage(data: data) else {
+            guard let decoded = PlatformImage(data: data) else {
                 failed = true
                 return
             }
@@ -426,15 +462,15 @@ private struct HeadsupPhoto: View {
 final class HeadsupImageCache {
     static let shared = HeadsupImageCache()
 
-    private let cache = NSCache<NSString, UIImage>()
+    private let cache = NSCache<NSString, PlatformImage>()
 
     private init() {
         cache.countLimit = 80
     }
 
-    func image(for path: String) -> UIImage? { cache.object(forKey: path as NSString) }
+    func image(for path: String) -> PlatformImage? { cache.object(forKey: path as NSString) }
 
-    func store(_ image: UIImage, for path: String) {
+    func store(_ image: PlatformImage, for path: String) {
         cache.setObject(image, forKey: path as NSString)
     }
 }
@@ -479,26 +515,35 @@ extension Headsup {
         return SpineDate.parse(dueAt)
     }
 
-    /// "in 10 days, Sat, Nov 28".
-    var whenText: String {
-        guard let due = dueDate else { return dueAt }
+    /// "in 10 days", "tomorrow", "today"; empty once it is past.
+    var relativeDays: String {
+        guard let due = dueDate else { return "" }
         let calendar = Calendar.current
         let days = calendar.dateComponents(
             [.day],
             from: calendar.startOfDay(for: Date()),
             to: calendar.startOfDay(for: due)
         ).day ?? 0
-        let day = due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         switch days {
-        case 0: return "today, \(day)"
-        case 1: return "tomorrow, \(day)"
-        case 2...: return "in \(days) days, \(day)"
-        default: return day
+        case 0: return "today"
+        case 1: return "tomorrow"
+        case 2...: return "in \(days) days"
+        default: return ""
         }
     }
 
-    var detailLine: String {
-        var parts = [whenText]
+    /// "in 10 days, Sat, Nov 28".
+    var whenText: String {
+        guard let due = dueDate else { return dueAt }
+        let day = due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let relative = relativeDays
+        return relative.isEmpty ? day : "\(relative), \(day)"
+    }
+
+    var detailLine: String { detailLine(includingWhen: true) }
+
+    func detailLine(includingWhen: Bool) -> String {
+        var parts = includingWhen ? [whenText] : []
         if let amount { parts.append(amount) }
         if let location, !location.isEmpty { parts.append(location) }
         if state == "snoozed", let until = SpineDate.parse(snoozeUntil) {
