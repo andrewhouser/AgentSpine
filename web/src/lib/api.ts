@@ -210,6 +210,8 @@ export const api = {
 
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
+  headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
+
   /**
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
@@ -225,8 +227,6 @@ export const api = {
       method: "POST",
     });
   },
-
-  headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
 
   listAgents: () => request<Agent[]>("/api/agents"),
 
