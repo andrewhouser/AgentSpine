@@ -22,6 +22,12 @@ struct MacComposer: View {
 
     @FocusState private var focused: Bool
 
+    /// The height of the box's first line (one line of text plus its padding). The buttons are
+    /// centred in that, not on the whole box, so they stay level with the first line as the
+    /// field grows to several.
+    @ScaledMetric(relativeTo: .body) private var textLine: CGFloat = 20
+    private var firstLine: CGFloat { textLine + 2 * (Spine.Space.sm + 2) }
+
     private var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return !isBusy && !isDisabled && uploading == 0 && (hasText || !staged.isEmpty)
@@ -58,9 +64,10 @@ struct MacComposer: View {
                     }
                 }
             }
-            HStack(alignment: .bottom, spacing: Spine.Space.sm) {
+            HStack(alignment: .top, spacing: Spine.Space.sm) {
                 Button { choosing = true } label: {
                     Image(systemName: "photo.on.rectangle.angled").font(.system(size: 20))
+                        .frame(height: firstLine)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Spine.Palette.textDim)
@@ -86,6 +93,7 @@ struct MacComposer: View {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 26))
                     }
                 }
+                .frame(height: firstLine)
                 .buttonStyle(.plain)
                 .foregroundStyle(canSend ? Spine.Palette.accent : Spine.Palette.textFaint)
                 .disabled(!canSend)

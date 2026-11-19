@@ -23,6 +23,7 @@
 				Core/AppState.swift,
 				Core/Keychain.swift,
 				Core/Models.swift,
+				Core/ReadAloud.swift,
 				Core/RunStream.swift,
 				Core/Settings.swift,
 				Core/TabLayout.swift,

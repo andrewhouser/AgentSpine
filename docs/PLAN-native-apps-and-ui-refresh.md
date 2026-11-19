@@ -328,6 +328,17 @@ no matching call stays below the reply. Builds; not yet seen with a real pending
 queued calls share a tool and arguments the pairing is by order, which is safe because the card
 still answers by confirmation id.
 
+Thread top bar: the "Local only" pill is built (`MacThreadDetail.localOnlyPill`). It shows while
+the thread is not pinned to Cloud and no recorded turn ran at Cloud, so it describes what has
+happened, not what the next Auto turn may do; it says nothing about sensitivity, which the
+server enforces. The pill sits outside macOS 26's toolbar glass plate (`sharedBackgroundVisibility`),
+which had drawn a second capsule round it. The speaker button reads the latest reply through the
+phone's `ReadAloud` (now shared: its `AVAudioSession` calls are iOS-only); it needs the server's
+Kokoro voice service, see `docs/VOICE.md`. Heard on a real reply: not yet. Not built: the
+inspector button. Proposed baseline, pending a yes: a right-hand panel for the selected turn
+showing what it had in front of it (`Turn.contextUsed`, which the phone already offers as
+"Context used"), the tier it ran at, and its tool calls and children.
+
 Still different from the directions, in the order worth doing:
 - **Heads-up timeline rail: built, not yet seen running.** The Dates column is built
   (`MacHeadsupView`: the phone's list with its date sections off via `showsDates`, beside

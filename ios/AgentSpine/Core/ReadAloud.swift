@@ -30,7 +30,9 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
         finished = nil
         speaking = false
         current = nil
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 
     private func start(_ text: String) {
@@ -39,8 +41,11 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
         current = text
         task = Task {
             do {
+                // macOS has no audio session to configure: AVAudioPlayer just plays.
+                #if os(iOS)
                 try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
                 try AVAudioSession.sharedInstance().setActive(true)
+                #endif
                 let chunks = try await APIClient.shared.planSpeech(text)
                 guard !chunks.isEmpty else { throw APIError.server(422, "Nothing to read aloud.") }
                 // Fetch one ahead of the one playing.

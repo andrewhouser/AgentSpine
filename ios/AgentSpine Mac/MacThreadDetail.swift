@@ -25,6 +25,7 @@ struct MacThreadDetail: View {
     @State private var composerError: String?
     @State private var staged: [Attachment] = []
     @State private var uploading = 0
+    @State private var reader = ReadAloud()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -76,9 +77,12 @@ struct MacThreadDetail: View {
         }
         .background(Spine.Palette.bg)
         .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
-        .toolbar { ToolbarItem { tierMenu } }
+        .toolbar { toolbarItems }
         .task { await load() }
-        .onDisappear { stream.stop() }
+        .onDisappear {
+            stream.stop()
+            reader.stop()
+        }
         .onChange(of: stream.phase) { _, phase in
             // The turn is over: reload so it is drawn from the ledger, which also picks up what
             // the stream does not carry (the tier it ran at, child runs).
@@ -114,6 +118,50 @@ struct MacThreadDetail: View {
     /// Pin the thread to one model — the same menu as the phone's. Sizing is a regex and cannot
     /// tell that this question is hard, so "use the good model for this whole conversation" has
     /// to be sayable. Disabled while a turn streams, since the tier applies from the next one.
+    /// "Local only": nothing in this thread has gone to the cloud tier, and the tier it is pinned
+    /// to cannot. Read from the tiers the server recorded, so it is a statement about what has
+    /// happened, not a promise about the next Auto turn, which may be sized up to Cloud (the
+    /// thread reloads when a turn ends, so the pill drops then). It says nothing about
+    /// sensitivity, which the server enforces on its own.
+    @ViewBuilder private var localOnlyPill: some View {
+        if let thread, thread.conversation.tier != "deep", !thread.turns.contains(where: { $0.tier == "deep" }) {
+            Text("Local only")
+                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.medium))
+                .foregroundStyle(Spine.Palette.accent)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Spine.Palette.accent.opacity(0.14), in: Capsule())
+                .help("No turn in this thread has used the Cloud tier")
+        }
+    }
+
+    /// On macOS 26 a toolbar item is drawn on its own glass plate, which put a second capsule
+    /// around the pill (seen in the running app). The plate is turned off for it.
+    @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
+        if #available(macOS 26, *) {
+            ToolbarItem(placement: .principal) { localOnlyPill }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .principal) { localOnlyPill }
+        }
+        ToolbarItem { speakButton }
+        ToolbarItem { tierMenu }
+    }
+
+    /// Reads the latest reply aloud in the server's voice (the same `ReadAloud` the phone uses).
+    /// Press again to stop. The server's voice service may be off; its error is shown on the
+    /// button's tooltip rather than as an alert, since a missing voice is not a thread failure.
+    private var speakButton: some View {
+        let reply = thread?.turns.last(where: { !($0.summary ?? "").isEmpty })?.summary
+        return Button {
+            if let reply { reader.toggle(reply) }
+        } label: {
+            Label(reader.speaking ? "Stop reading" : "Read aloud", systemImage: reader.speaking ? "speaker.wave.2.fill" : "speaker.wave.2")
+        }
+        .disabled(reply == nil && !reader.speaking)
+        .help(reader.error ?? (reader.speaking ? "Stop reading" : "Read the latest reply aloud"))
+    }
+
     private var tierMenu: some View {
         let pinned = thread?.conversation.tier
         return Menu {
