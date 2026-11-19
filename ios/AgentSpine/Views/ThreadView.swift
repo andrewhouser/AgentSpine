@@ -86,7 +86,7 @@ struct ThreadView: View {
                 if new > old { withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
             }
         }
-        .navigationTitle(thread?.conversation.displayTitle ?? "Thread")
+        .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { tierMenu }
@@ -105,6 +105,7 @@ struct ThreadView: View {
                     await load()
                     liveTask = nil
                     await state.refreshConversations()
+                    Task { await state.refreshUntilTitled(conversationID) }
                     if handsFree.phase == .busy { await speakReplyThenResume() }
                 }
             default:

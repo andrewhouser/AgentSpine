@@ -93,6 +93,18 @@ final class AppState {
         await refreshHeadsups()
     }
 
+    /// The server names a thread after the turn is persisted (src/runner.ts, titleConversation),
+    /// which is later than the stream's "finished" — so one refresh at the end of a turn misses
+    /// the title. Poll the list a few times until the thread has one; gives up quietly, since
+    /// the titler is allowed to fail and the thread keeps its fallback name.
+    func refreshUntilTitled(_ id: Int) async {
+        for delay in [2, 3, 5, 10, 15, 25, 30] {
+            if let c = conversations.first(where: { $0.id == id }), !(c.title ?? "").isEmpty { return }
+            try? await Task.sleep(for: .seconds(delay))
+            await refreshConversations()
+        }
+    }
+
     /// Approve or reject, from the thread that asked. The server picks the conversation back
     /// up with the result (see resumeConversation in src/confirmations.ts); the caller reloads
     /// its thread to stream that turn.

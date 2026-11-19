@@ -70,7 +70,7 @@ struct MacThreadDetail: View {
             )
         }
         .background(Spine.Palette.bg)
-        .navigationTitle(thread?.conversation.displayTitle ?? "Thread")
+        .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
         .task { await load() }
         .onDisappear { stream.stop() }
         .onChange(of: stream.phase) { _, phase in
@@ -82,6 +82,7 @@ struct MacThreadDetail: View {
                     await load()
                     liveTask = nil
                     await state.refreshConversations()
+                    Task { await state.refreshUntilTitled(conversationID) }
                 }
             default:
                 break
