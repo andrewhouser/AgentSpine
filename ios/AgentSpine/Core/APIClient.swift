@@ -158,6 +158,20 @@ final class APIClient {
         try await send(request("/api/status"), as: ServerStatus.self)
     }
 
+    /// `/api/status` with credentials that are not (yet) the saved ones, so a settings screen
+    /// can test what the user typed without adopting it. Touches no stored state.
+    func probe(baseURL: URL, token: String) async throws -> ServerStatus {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw APIError.badURL
+        }
+        components.path = "/api/status"
+        guard let url = components.url else { throw APIError.badURL }
+        var req = URLRequest(url: url)
+        req.setValue(token, forHTTPHeaderField: "X-Dashboard-Token")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        return try await send(req, as: ServerStatus.self)
+    }
+
     // MARK: - Conversations
 
     func conversations(limit: Int = 60) async throws -> [Conversation] {

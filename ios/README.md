@@ -137,7 +137,7 @@ xcodebuild -project ios/AgentSpine.xcodeproj -scheme "AgentSpine Mac" -destinati
 
 It is for the Mac you work at: a sidebar of sections and threads with an inspector, Heads-up,
 meetings, approvals from the menu bar (with a notification when one arrives), and read-aloud. Like
-the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). There is no
+the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). There, **Test connection** only checks what you typed; **Connect** saves it and closes the window. There is no
 App Store step: a development-signed build on each Mac, as with the iPhone.
 
 **Recording a meeting from the Mac** (Meetings, then the microphone button, "Record from this Mac"):

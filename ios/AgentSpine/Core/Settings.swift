@@ -55,8 +55,12 @@ final class Settings {
     /// everyone makes: no scheme, a trailing slash, and stray whitespace from a paste. It
     /// deliberately does not guess a port — `:8787` and a `tailscale serve` setup on 443 are
     /// both correct and nothing here can tell which you meant.
-    var baseURL: URL? {
-        var text = rawBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    var baseURL: URL? { Self.normalizedURL(rawBaseURL) }
+
+    /// The repair above, as a pure function so a settings screen can check a draft without
+    /// saving it.
+    static func normalizedURL(_ raw: String) -> URL? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         if !text.contains("://") { text = "http://" + text }
         while text.hasSuffix("/") { text.removeLast() }

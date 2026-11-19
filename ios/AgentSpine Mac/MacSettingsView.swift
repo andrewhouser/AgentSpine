@@ -2,26 +2,33 @@ import SwiftUI
 
 /// ⌘, : the server address and the dashboard token. The address is a preference in
 /// `UserDefaults`; the token goes to the Keychain through `Settings`, as on the phone.
+///
+/// The fields edit a draft. "Test connection" only tests the draft; "Connect" is what saves
+/// it, and it closes the window once the server has answered. Editing the saved settings
+/// directly made Test look like a harmless check while it was in fact connecting the app.
 struct MacSettingsView: View {
     @Environment(Settings.self) private var settings
     @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
 
+    @State private var address = ""
+    @State private var token = ""
+    @State private var loaded = false
     @State private var probe: String?
-    @State private var probing = false
+    @State private var probeFailed = false
+    @State private var busy = false
+
+    /// The draft run through the same repair as the saved address.
+    private var draftURL: URL? { Settings.normalizedURL(address) }
+
+    private var draftReady: Bool { draftURL != nil && !token.isEmpty }
 
     var body: some View {
         Form {
             Section {
-                TextField("Address", text: Binding(
-                    get: { settings.rawBaseURL },
-                    set: { settings.rawBaseURL = $0 }
-                ), prompt: Text("http://mini.tail1234.ts.net:8787"))
-                .autocorrectionDisabled()
-
-                SecureField("Dashboard token", text: Binding(
-                    get: { settings.token },
-                    set: { settings.token = $0 }
-                ))
+                TextField("Address", text: $address, prompt: Text("http://mini.tail1234.ts.net:8787"))
+                    .autocorrectionDisabled()
+                SecureField("Dashboard token", text: $token)
             } header: {
                 Text("Server")
             } footer: {
@@ -30,30 +37,49 @@ struct MacSettingsView: View {
 
             Section {
                 HStack {
-                    Button("Test connection") { Task { await probeConnection() } }
-                        .disabled(probing || !settings.isConfigured)
-                    if probing { ProgressView().controlSize(.small) }
+                    Button("Test connection") { Task { await run(connect: false) } }
+                        .disabled(busy || !draftReady)
+                    Button("Connect") { Task { await run(connect: true) } }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(busy || !draftReady)
+                    if busy { ProgressView().controlSize(.small) }
                 }
                 if let probe {
                     Text(probe)
                         .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
-                        .foregroundStyle(Spine.Palette.textDim)
+                        .foregroundStyle(probeFailed ? Spine.Palette.text : Spine.Palette.textDim)
                 }
+            } footer: {
+                Text("Test checks the address and token without saving them. Connect saves them and closes this window.")
             }
         }
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            address = settings.rawBaseURL
+            token = settings.token
+        }
     }
 
-    private func probeConnection() async {
-        probing = true
-        defer { probing = false }
+    private func run(connect: Bool) async {
+        guard let url = draftURL else { return }
+        busy = true
+        defer { busy = false }
         do {
-            let status = try await APIClient.shared.status()
-            probe = "Connected. \(status.schedules ?? 0) schedule(s), \(status.queue?.depth ?? 0) run(s) queued."
-            await state.refresh()
+            let status = try await APIClient.shared.probe(baseURL: url, token: token)
+            probeFailed = false
+            probe = "Reached the server. \(status.schedules ?? 0) schedule(s), \(status.queue?.depth ?? 0) run(s) queued."
+            if connect {
+                settings.rawBaseURL = address
+                settings.token = token
+                await state.refresh()
+                dismiss()
+            }
         } catch {
+            probeFailed = true
             probe = error.localizedDescription
         }
     }
