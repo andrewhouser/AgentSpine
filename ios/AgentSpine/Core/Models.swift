@@ -173,7 +173,15 @@ struct QueueStatus: Codable {
     let running: Bool?
 }
 
+/// Whether the server can reach its model host, and the round trip. `ms` is nil when it cannot.
+struct ModelHostStatus: Codable {
+    let ms: Int?
+    let ok: Bool
+}
+
 struct ServerStatus: Codable {
+    /// Absent from servers older than the Mac sidebar's model-host line.
+    let model: ModelHostStatus?
     let queue: QueueStatus?
     let schedules: Int?
     /// Open tasks. Absent from servers older than the Mac sidebar's badge.

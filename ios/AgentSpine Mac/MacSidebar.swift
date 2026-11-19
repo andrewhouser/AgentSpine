@@ -168,9 +168,9 @@ struct MacSidebar: View {
 
 /// The foot of the sidebar: whether the server answers, how long it took, and where it is.
 ///
-/// This is the *server's* round trip (`/api/status`, the same cheapest authenticated route the
-/// Settings test uses), not the model host's. The server exposes no model-host probe yet, so the
-/// design's "Model host connected" line is a later change with a server half.
+/// The first line is the *server's* round trip (`/api/status`, the same cheapest authenticated
+/// route the Settings test uses). Under it, the model host as the server sees it: `/api/status`
+/// carries a cached probe of the host, so this app never talks to the model host itself.
 private struct ConnectionFooter: View {
     @Environment(AppState.self) private var state
     @Environment(Settings.self) private var settings
@@ -178,6 +178,7 @@ private struct ConnectionFooter: View {
 
     @State private var reachable: Bool?
     @State private var milliseconds: Int?
+    @State private var modelHost: ModelHostStatus?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -191,6 +192,20 @@ private struct ConnectionFooter: View {
                     Text("\(milliseconds) ms")
                         .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textFaint)
+                }
+            }
+            if reachable == true, let modelHost {
+                HStack(spacing: 6) {
+                    Circle().fill(modelHost.ok ? Spine.Palette.ok : Spine.Palette.attention).frame(width: 8, height: 8)
+                    Text(modelHost.ok ? "Model host connected" : "Model host not answering")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    Spacer()
+                    if modelHost.ok, let ms = modelHost.ms {
+                        Text("\(ms) ms")
+                            .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textFaint)
+                    }
                 }
             }
             if let host = settings.baseURL?.host {
@@ -239,6 +254,7 @@ private struct ConnectionFooter: View {
             let status = try await APIClient.shared.status()
             state.openTaskCount = status.tasks
             state.scheduleCount = status.schedules
+            modelHost = status.model
             let elapsed = start.duration(to: .now).components
             milliseconds = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
             reachable = true

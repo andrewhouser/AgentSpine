@@ -357,9 +357,13 @@ Still different from the directions, in the order worth doing:
   connection footer's 30-second probe writes both to `AppState`, so the badges cost no extra
   request. Needs a dashboard restart to show Tasks. Builds has none: a build is a view over the
   actions log, and the directions' "1" has no definition yet (in flight? failed?).
-- **Footer status.** The footer shows the server's round trip (`/api/status`) and host. The
-  directions say "Model host connected 14 ms"; the server has no model-host probe, so that line
-  needs a small server route first.
+- **Footer status: built, needs a dashboard restart.** The footer shows the server's round trip
+  (`/api/status`) and host, and now the directions' "Model host connected 14 ms" line under it.
+  `/api/status` carries `model: { ok, ms }` from `src/model-probe.ts`: a `GET <base>/models` to
+  the local model host (no model is loaded or run), 1.5 s timeout, cached ten seconds so several
+  windows do not each ask the host. Any answer below 500 counts as up. The cost: while the host
+  is down, a status call can wait up to 1.5 s once per ten seconds. Tested in
+  `test/model-probe.test.mjs`; not yet seen in the app against the real host.
 - **Search label.** The directions say "Search everything"; `/api/search` covers threads, so the
   field says "Search threads" until it covers more.
 - **Live meeting with a coach column** is phase 5.

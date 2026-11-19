@@ -82,16 +82,21 @@ struct MacThreadInspector: View {
                 .foregroundStyle(Spine.Palette.textFaint)
             ForEach(contextGroups(used), id: \.title) { group in
                 DisclosureGroup {
-                    VStack(alignment: .leading, spacing: Spine.Space.sm) {
-                        ForEach(group.items, id: \.self) { item in
+                    // Indented past the group's icon, with a hairline between items so
+                    // neighbouring multi-line entries do not run together.
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(group.items.enumerated()), id: \.offset) { index, item in
+                            if index > 0 { Divider().overlay(Spine.Palette.border) }
                             Text(item)
                                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                                 .foregroundStyle(Spine.Palette.textDim)
                                 .lineLimit(3)
                                 .help(item)
+                                .padding(.vertical, Spine.Space.sm)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .padding(.leading, Spine.Space.lg)
                     .padding(.top, Spine.Space.xs)
                 } label: {
                     HStack(spacing: Spine.Space.sm) {
@@ -142,7 +147,8 @@ struct MacThreadInspector: View {
                 empty("None yet")
             }
             let most = toolSummaries.map(\.count).max() ?? 1
-            ForEach(toolSummaries, id: \.tool) { summary in
+            ForEach(Array(toolSummaries.enumerated()), id: \.element.tool) { index, summary in
+                if index > 0 { Divider().overlay(Spine.Palette.border) }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: Spine.Space.sm) {
                         Text(summary.tool)
@@ -175,7 +181,8 @@ struct MacThreadInspector: View {
             if children.isEmpty {
                 empty("This thread has not handed anything to another agent.")
             }
-            ForEach(children) { child in
+            ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                if index > 0 { Divider().overlay(Spine.Palette.border) }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(child.agent ?? "agent")

@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
 import { loadPolicy } from "./config.ts";
+import { probeModelHost } from "./model-probe.ts";
 import { deleteAudio, pruneAudio } from "./meetings/audio.ts";
 import { fileQueuedItems } from "./meetings/extract.ts";
 import { cardsFor } from "./meetings/context.ts";
@@ -69,7 +70,7 @@ import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote
 import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
-import { BASE, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
+import { BASE, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
@@ -469,6 +470,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       return sendJson(res, 200, {
         // The thread where questions nobody's chat raised are asked, once one has been.
         inbox: store.inboxId(),
+        // Whether the local model host answers, and how fast (cached ten seconds).
+        model: await probeModelHost(LOCAL_BASE_URL),
         queue: queueStatus(),
         schedules: store.listSchedules().length,
         // Open tasks, for the Mac sidebar's badge. Same cap as GET /api/tasks, so a count of 300
