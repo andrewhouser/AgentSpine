@@ -93,3 +93,40 @@
     display: none;
   }
 }
+
+/* The node this call hangs on the spine (the line is drawn by Turn). Coloured by the broker's
+   verdict, the same mapping as the native apps' --verdict-* tokens; never the accent for a
+   failure. Solid once decided, hollow while it is still running. */
+.row {
+  position: relative;
+}
+
+.node {
+  background: var(--verdict-executed);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  box-sizing: border-box;
+  height: 12px;
+  left: -22px;
+  position: absolute;
+  top: 12px;
+  width: 12px;
+}
+
+.node[data-status="denied"],
+.node[data-status="error"] {
+  background: var(--verdict-denied);
+}
+
+.node[data-status="queued"] {
+  background: var(--verdict-queued);
+}
+
+.node[data-status="dry-run"] {
+  background: var(--verdict-dry-run);
+}
+
+.node[data-status="running"] {
+  background: var(--bg);
+  border-color: var(--accent);
+}

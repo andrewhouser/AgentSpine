@@ -74,6 +74,11 @@ export const Turn = ({
   <article className={styles.turn}>
     {kind === "approval" ? <DecisionNote text={task} /> : <UserMessage attachments={attachments} text={task} />}
 
+    {/* The spine: everything the assistant did in answer to that hangs on one vertical line.
+        Tool calls are nodes coloured by the broker's verdict; a hollow amber node is a
+        question waiting on you. Drawn in CSS (Turn.module.css). Empty until there is
+        something to hang on it, and then hidden, so a bare question has no dangling line. */}
+    <div className={styles.thread}>
     {/* Before the tool trace: the looking happens first, and it is what the rest of the
         turn is reasoning from. */}
     {vision && <VisionNote pass={vision} />}
@@ -127,5 +132,6 @@ export const Turn = ({
       />
     ))}
     {live && !summary && !error && <ThinkingIndicator activity={describeActivity(toolCalls)} step={step} waitingBehind={waitingBehind} />}
+    </div>
   </article>
 );

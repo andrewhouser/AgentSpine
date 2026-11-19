@@ -31,6 +31,8 @@ export const ToolCallCard = ({ call }: ToolCallCardProps) => {
   const detail = call.summary ?? argSummary(call.args);
 
   return (
+    <div className={styles.row}>
+    <span aria-hidden="true" className={styles.node} data-status={call.status ?? "running"} />
     <div className={`${styles.card} ${call.status ? "" : styles.live}`}>
       <button aria-expanded={open} className={styles.header} onClick={() => setOpen((v) => !v)} type="button">
         <span className={styles.chevron} data-open={open || undefined}>
@@ -53,6 +55,7 @@ export const ToolCallCard = ({ call }: ToolCallCardProps) => {
           )}
         </div>
       )}
+    </div>
     </div>
   );
 };

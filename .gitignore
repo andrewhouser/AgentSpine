@@ -12,6 +12,8 @@ test_recording/
 *.wav
 # Build output of the web client (source lives in web/). `npm run web:build` regenerates it.
 public/
+# ...but not web/public, which is source: the fonts, favicon and touch icon the build copies in.
+!web/public/
 data/
 audit/
 # Approved drafts — unsent mail and event proposals, i.e. your correspondence.

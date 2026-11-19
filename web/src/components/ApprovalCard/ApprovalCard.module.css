@@ -5,6 +5,7 @@
   box-shadow: var(--shadow);
   margin: 12px 0;
   padding: 12px 14px 14px;
+  position: relative;
 }
 
 .head {
@@ -109,4 +110,19 @@
   overflow-wrap: anywhere;
   padding: 4px 0 4px 12px;
   white-space: pre-wrap;
+}
+
+/* A hollow amber node on the spine: a question waiting on you, not a result. Hollow because
+   nothing has been decided yet; it is the one node that is not a verdict. */
+.card::before {
+  background: var(--bg);
+  border: 2px solid var(--attention);
+  border-radius: 50%;
+  box-sizing: border-box;
+  content: "";
+  height: 12px;
+  left: -22px;
+  position: absolute;
+  top: 16px;
+  width: 12px;
 }

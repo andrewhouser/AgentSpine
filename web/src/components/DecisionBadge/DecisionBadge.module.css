@@ -29,9 +29,9 @@
 }
 
 .dryrun {
-  background: var(--bg-inset);
-  border-color: var(--border);
-  color: var(--text-dim);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 
 .pending {

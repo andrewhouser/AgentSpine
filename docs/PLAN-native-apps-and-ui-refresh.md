@@ -543,6 +543,21 @@ or went missing, `npm run web:build` and `npm run lint:css` pass, and `npm run c
 Verify by walking each view once in a browser, since there are no visual tests; say which
 views were checked. A later change to the web layout is a separate decision.
 
+**Status (first pass built).** `global.css` no longer defines a palette: it imports
+`tokens.generated.css` and keeps the reset, the font faces and the text-scale rule. The three faces
+(Bricolage Grotesque, Instrument Sans, JetBrains Mono) are the files the iOS app bundles, copied to
+`web/public/fonts` and served from this origin; `web/public` is source and is un-ignored in
+`.gitignore` (`public/` is the build output). The favicon and touch icon, which `index.html` already
+linked but nothing supplied, now come from `ios/tools/make-icons.swift`. The spine is drawn in
+`Turn` (a left line behind everything after the user's message), `ToolCallCard` (a verdict-coloured
+node, hollow while running) and `ApprovalCard` (a hollow amber node); `DecisionBadge` takes the
+accent for a dry run and `PageHeader` the display face. `--attention` changed meaning from a blue
+"needs you" to the amber of a pending question, as on the phone. Markup changes: one wrapper in
+`Turn`, one in `ToolCallCard`. Checked in a browser: a `Turn` with every verdict and a pending
+approval, in both themes, with all three fonts loading. Not checked: every other view by eye, which
+still has to be walked. Spacing and type sizes still use the old literal values in most modules (only
+colours and fonts moved to tokens), and the meeting speaker colours stay hard-coded hues.
+
 ## How we will test
 
 This sandbox is Linux. SwiftUI macros do not expand here, so Swift can be written and

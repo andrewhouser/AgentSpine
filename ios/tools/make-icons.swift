@@ -1,8 +1,8 @@
 // Regenerates the app icons from the spine mark in "AgentSpine UI Directions".
 //
-//   swiftc -o /tmp/make-icons ios/tools/make-icons.swift && /tmp/make-icons ios
+//   swiftc -o /tmp/make-icons ios/tools/make-icons.swift && /tmp/make-icons ios web/public
 //
-// Writes the iPhone icon and the Mac icon set. The mark is five stacked shapes: a thin spine
+// Writes the iPhone icon, the Mac icon set and the web client's favicon and touch icon. The mark is five stacked shapes: a thin spine
 // with a bulb near each end and a hollow ring (the open node, the one waiting on you) in the
 // middle. Units below are the mock's, 132 tall and 50 wide; keep SpineMenuMark.swift in step.
 import AppKit
@@ -104,4 +104,17 @@ write(opaque(art), "\(root)/AgentSpine/Assets.xcassets/AppIcon.appiconset/AppIco
 for n in [16, 32, 64, 128, 256, 512, 1024] {
     write(macIcon(art, size: n), "\(root)/AgentSpine Mac/Assets.xcassets/AppIcon.appiconset/icon_\(n).png")
 }
+
+/// The web client's favicon and touch icon: the square art, scaled.
+func scaled(_ img: CGImage, to n: Int) -> CGImage {
+    let c = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: 0,
+                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    c.interpolationQuality = .high
+    c.draw(img, in: CGRect(x: 0, y: 0, width: n, height: n))
+    return c.makeImage()!
+}
+let web = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "web/public"
+try? FileManager.default.createDirectory(atPath: web, withIntermediateDirectories: true)
+write(scaled(art, to: 32), "\(web)/favicon.png")
+write(scaled(art, to: 180), "\(web)/apple-touch-icon.png")
 print("wrote icons")

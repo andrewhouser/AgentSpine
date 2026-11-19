@@ -23,3 +23,26 @@
   gap: 6px;
   margin: 2px 0 4px;
 }
+
+/* The spine. A 2px line down the left of everything the assistant did; nodes sit on it at
+   x = 6px, which is why the gutter is 22px and the nodes are 12px wide. See ToolCallCard
+   and ApprovalCard for the nodes themselves. */
+.thread {
+  padding-left: 22px;
+  position: relative;
+}
+
+.thread:empty {
+  display: none;
+}
+
+.thread::before {
+  background: var(--spine);
+  border-radius: 1px;
+  bottom: 6px;
+  content: "";
+  left: 5px;
+  position: absolute;
+  top: 6px;
+  width: 2px;
+}
