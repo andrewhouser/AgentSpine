@@ -69,7 +69,7 @@ export const ToolTrace = ({ calls, live }: ToolTraceProps) => {
       {expanded && (
         <div className={styles.cards}>
           {calls.map((call) => (
-            <ToolCallCard call={call} key={call.callId} />
+            <ToolCallCard call={call} key={call.callId} spine />
           ))}
         </div>
       )}

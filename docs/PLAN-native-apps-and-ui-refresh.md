@@ -561,8 +561,13 @@ linked but nothing supplied, now come from `ios/tools/make-icons.swift`. The spi
 `Turn` (a left line behind everything after the user's message), `ToolCallCard` (a verdict-coloured
 node, hollow while running) and `ApprovalCard` (a hollow amber node); `DecisionBadge` takes the
 accent for a dry run and `PageHeader` the display face. `--attention` changed meaning from a blue
-"needs you" to the amber of a pending question, as on the phone. Markup changes: one wrapper in
-`Turn`, one in `ToolCallCard`. Checked in a browser: a `Turn` with every verdict and a pending
+"needs you" to the amber of a pending question, as on the phone. A follow-up fix: the first pass drew
+the line but no nodes in an ordinary chat, because the chat only showed tool calls when one was
+denied or failed (the full trace lives in the Trace tab). `SpineCalls` now draws every call as one
+line on the spine (node, tool, target, verdict; the first six, then "+ N more steps"), and a denial
+still opens the full `ToolTrace`. The nodes on `ToolCallCard` are opt-in (`spine`) so the Trace tab
+shows no stray dots. Markup changes: one wrapper in `Turn`, one in `ToolCallCard`, one new
+component. Checked in a browser: a `Turn` with every verdict and a pending
 approval, in both themes, with all three fonts loading. Walked, in both themes, against a scratch
 server (empty database, port 8799, localhost, no token): the new-conversation page, Search, Tasks,
 Files, Meetings, Builds, Overview, Heads-up, Study, Clients, Schedules (with the seeded Morning

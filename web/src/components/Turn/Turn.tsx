@@ -6,6 +6,7 @@ import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
 import { ReplyActions } from "../ReplyActions/ReplyActions.tsx";
+import { SpineCalls } from "../SpineCalls/SpineCalls.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
 import { TierBadge } from "../TierBadge/TierBadge.tsx";
 import { ToolTrace } from "../ToolTrace/ToolTrace.tsx";
@@ -83,10 +84,13 @@ export const Turn = ({
         turn is reasoning from. */}
     {vision && <VisionNote pass={vision} />}
 
-    {/* The full trace lives in the chat's Trace tab. Only a denial or failure surfaces here,
-        since those are never incidental. */}
-    {toolCalls.some((c) => c.status === "denied" || c.status === "error") && (
+    {/* Each call is a node on the spine. When one was denied or failed, the full trace opens
+        instead (see ToolTrace): those are never incidental. Arguments and results for the rest
+        live in the chat's Trace tab. */}
+    {toolCalls.some((c) => c.status === "denied" || c.status === "error") ? (
       <ToolTrace calls={toolCalls} live={false} />
+    ) : (
+      <SpineCalls calls={toolCalls} />
     )}
 
     {delegations.length > 0 && (

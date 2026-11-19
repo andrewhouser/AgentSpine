@@ -7,6 +7,8 @@ import styles from "./ToolCallCard.module.css";
 
 interface ToolCallCardProps {
   call: LiveToolCall;
+  /** Hang a verdict node on the spine at the card's left. Only inside a Turn, which draws the line. */
+  spine?: boolean;
 }
 
 const argSummary = (args: unknown): string => {
@@ -25,14 +27,14 @@ const argSummary = (args: unknown): string => {
  * away, because "what did it actually read" is the question you ask when an answer looks
  * wrong. Denials and errors open themselves, since those are never incidental.
  */
-export const ToolCallCard = ({ call }: ToolCallCardProps) => {
+export const ToolCallCard = ({ call, spine = false }: ToolCallCardProps) => {
   const notable = call.status === "denied" || call.status === "error";
   const [open, setOpen] = useState(notable);
   const detail = call.summary ?? argSummary(call.args);
 
   return (
     <div className={styles.row}>
-    <span aria-hidden="true" className={styles.node} data-status={call.status ?? "running"} />
+    {spine && <span aria-hidden="true" className={styles.node} data-status={call.status ?? "running"} />}
     <div className={`${styles.card} ${call.status ? "" : styles.live}`}>
       <button aria-expanded={open} className={styles.header} onClick={() => setOpen((v) => !v)} type="button">
         <span className={styles.chevron} data-open={open || undefined}>
