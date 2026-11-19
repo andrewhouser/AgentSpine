@@ -249,16 +249,26 @@ Done when: the existing iPhone screens use the new components and look as intend
 
 New macOS target, deployment target macOS 15.
 
-**Status (2026-11-19).** Started. The shell runs on the Mac (confirmed by the user): split
-view, thread list with the waiting dot, ⌘, Settings scene (`SwiftUI.Settings`, because our
-`Settings` class shadows the scene). Written since, not yet built or run: the thread view with
-live streaming (`MacThreadDetail`, the same ledger-plus-stream rule as the phone), a composer
-(`MacComposer`: Return sends, Shift-Return a new line), the inline `MacApprovalCard` (goes
-through `AppState.answer`, no new write path), and ⌘N for a new thread (`MacNewThread`).
+**Status (2026-11-19).** Built and confirmed working on the Mac by the user: the split view,
+thread list with the waiting dot, ⌘, Settings scene (`SwiftUI.Settings`, because our
+`Settings` class shadows the scene), the thread view with live streaming (`MacThreadDetail`,
+the same ledger-plus-stream rule as the phone), the composer (`MacComposer`: Return sends,
+Shift-Return a new line), the inline `MacApprovalCard` (goes through `AppState.answer`, no new
+write path), ⌘N for a new thread (`MacNewThread`), ⌘K search (`MacSearch`, the same
+read-only `/api/search` as the phone), the model tier menu in the thread toolbar, pop-out thread
+windows (context menu, "Open in New Window"), and image attach by button or drop, in threads
+and new threads. Details worth knowing:
+- Windows showing the same thread stay in step through `MacThreadHub`: a send, a finished turn,
+  an approval or a tier change nudges the others, which reload and attach to the run in flight.
+- A thread gets its title from the server after the turn is saved, which can take a while on the
+  local model, so `AppState.refreshUntilTitled` polls the list for about 90 seconds.
+- Attaching an image in ⌘N creates the thread first, because the server only binds an upload to a
+  turn in the same conversation. Abandoning the screen after that leaves an empty thread.
+- Keyboard navigation in the lists is the native `List` behaviour (↑/↓), nothing custom.
+- Images only: PNG, JPEG, HEIC and WebP. No clipboard paste or drag from a web page yet.
 `ToolCallRow`, `PrettyJSON`, `AttentionDot`, `LiveTurnView` and `DecisionNote` live in the shared
-`Design/Components/`. Not done: ⌘K search, pop-out thread windows, drag files and images into
-the composer, keyboard navigation checks, tier menu, hands-free (not planned for Mac), and the
-done-when test against the real server.
+`Design/Components/`. Not done: looking at `ComponentGallery` in the Mac previews, hands-free
+(not planned for Mac), and the done-when test against the real server.
 
 ### Phase 4: remaining sections and menu bar
 
