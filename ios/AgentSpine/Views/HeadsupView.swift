@@ -8,6 +8,10 @@ import SwiftUI
 /// the browser; its photo comes from the AgentSpine server, not the retailer, so this phone never
 /// contacts a shop just because you looked at an idea.
 struct HeadsupView: View {
+    /// The Mac draws the dates in a column of their own beside this list (`MacHeadsupView`), so it
+    /// turns them off here. The phone keeps them as sections.
+    var showsDates = true
+
     @Environment(AppState.self) private var state
     @State private var items: [Headsup] = []
     @State private var dates = HeadsupDates(proposals: [], remembered: [])
@@ -68,7 +72,7 @@ struct HeadsupView: View {
                 )
             }
 
-            if !dates.proposals.isEmpty {
+            if showsDates, !dates.proposals.isEmpty {
                 Section("Dates it noticed") {
                     ForEach(dates.proposals) { proposal in
                         VStack(alignment: .leading, spacing: 6) {
@@ -89,7 +93,7 @@ struct HeadsupView: View {
                 }
             }
 
-            if !dates.remembered.isEmpty {
+            if showsDates, !dates.remembered.isEmpty {
                 Section("Dates it remembers") {
                     ForEach(dates.remembered) { date in
                         Text(date.title)

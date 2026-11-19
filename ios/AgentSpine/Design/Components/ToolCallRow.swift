@@ -12,6 +12,9 @@ struct ToolCallRow: View {
     let args: String?
     let output: String?
     let status: BrokerStatus?
+    /// On the spine (the Mac thread) the node already says "this is a step", so the row drops its
+    /// box and icon and reads as one line: the tool, what it was aimed at, the verdict.
+    var flat = false
 
     @State private var expanded = false
 
@@ -25,6 +28,9 @@ struct ToolCallRow: View {
                 guard hasDetail else { return }
                 withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
             } label: {
+                if flat {
+                    flatLabel
+                } else {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver.fill")
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
@@ -51,6 +57,7 @@ struct ToolCallRow: View {
                             .foregroundStyle(Spine.Palette.textFaint)
                     }
                 }
+                }
             }
             .buttonStyle(.plain)
 
@@ -63,8 +70,35 @@ struct ToolCallRow: View {
                 }
             }
         }
-        .padding(10)
-        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+        .padding(flat ? 0 : 10)
+        .background {
+            if !flat {
+                RoundedRectangle(cornerRadius: Spine.Radius.md).fill(Spine.Palette.bgInset)
+            }
+        }
+    }
+
+    private var flatLabel: some View {
+        HStack(spacing: 10) {
+            Text(tool)
+                .font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                .foregroundStyle(Spine.Palette.text)
+            if let target, !target.isEmpty {
+                Text(target)
+                    .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 6)
+            VerdictBadge(status: status)
+            if hasDetail {
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textFaint)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 

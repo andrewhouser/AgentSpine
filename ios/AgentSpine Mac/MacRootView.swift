@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// The Mac window: a sidebar of sections and the section's own content beside it.
+/// The Mac window: a sidebar (new thread, search, sections, the threads, connection status) and
+/// one detail pane beside it, as in `docs/PLAN-native-apps-and-ui-refresh.md`.
 ///
-/// Threads is the one section with a list and a detail pane of its own, so it is a split inside
-/// the detail column; every other section is the phone's screen in a navigation stack, which
-/// already knows how to push its own detail.
+/// A thread opens in the detail pane; every other section is the phone's screen in a navigation
+/// stack, which already knows how to push its own detail.
 struct MacRootView: View {
     @Environment(AppState.self) private var state
     @Environment(Settings.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var section: MacSection? = .threads
+    @State private var section: MacSection = .threads
     @State private var selectedThread: Int?
     @State private var composingNew = false
     @State private var searching = false
@@ -18,30 +18,12 @@ struct MacRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $section) {
-                ForEach(MacSection.Group.allCases, id: \.self) { group in
-                    Section(group.rawValue) {
-                        ForEach(MacSection.sections(in: group), id: \.self) { item in
-                            Label(item.title, systemImage: item.symbol)
-                                .tag(item)
-                                .badge(badge(for: item))
-                        }
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
-            .scrollContentBackground(.hidden)
-            .background(Spine.Palette.bgSidebar)
+            MacSidebar(selection: sidebarSelection, newThread: startNewThread) { searching = true }
+                .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 360)
         } detail: {
-            switch section ?? .threads {
+            switch section {
             case .threads:
-                HSplitView {
-                    MacThreadList(selection: $selectedThread)
-                        .onChange(of: selectedThread) { _, id in if id != nil { composingNew = false } }
-                        .frame(minWidth: 260, idealWidth: 320, maxWidth: 460)
-                    threadDetail
-                        .frame(minWidth: 420, maxWidth: .infinity)
-                }
+                threadDetail
             case let other:
                 MacSectionContent(section: other)
                     .id(other)
@@ -62,26 +44,6 @@ struct MacRootView: View {
                 .environment(settings)
         }
         .toolbar {
-            ToolbarItem {
-                Button { searching = true } label: {
-                    Label("Search", systemImage: "magnifyingglass")
-                }
-                .keyboardShortcut("k", modifiers: .command)
-                .disabled(!settings.isConfigured)
-                .help("Search threads (⌘K)")
-            }
-            ToolbarItem {
-                Button {
-                    section = .threads
-                    selectedThread = nil
-                    composingNew = true
-                } label: {
-                    Label("New Thread", systemImage: "square.and.pencil")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(!settings.isConfigured)
-                .help("New thread (⌘N)")
-            }
             if section == .headsup {
                 ToolbarItem {
                     Button { headsupPrefs = true } label: {
@@ -110,22 +72,57 @@ struct MacRootView: View {
         } else if let selectedThread {
             MacThreadDetail(conversationID: selectedThread)
                 .id(selectedThread)
+        } else if !settings.isConfigured {
+            VStack(spacing: Spine.Space.md) {
+                EmptyNotice(
+                    symbol: "network",
+                    title: "Connect to your server",
+                    detail: "Enter the server address and dashboard token in Settings."
+                )
+                SettingsLink { Text("Open Settings…") }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Spine.Palette.bg)
         } else {
             EmptyNotice(
                 symbol: "bubble.left.and.text.bubble.right",
                 title: "No thread selected",
-                detail: "Pick a thread from the list, or press ⌘N to start one."
+                detail: "Pick a thread from the sidebar, or press ⌘N to start one."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Spine.Palette.bg)
         }
     }
 
-    private func badge(for item: MacSection) -> Int {
-        switch item {
-        case .threads: return state.waitingThreads
-        case .headsup: return state.headsupWaiting
-        default: return 0
-        }
+    private func startNewThread() {
+        section = .threads
+        selectedThread = nil
+        composingNew = true
+    }
+
+    /// One selection for sections and threads. Having a thread open (or the new-thread screen)
+    /// is `section == .threads`; the thread row is highlighted only then.
+    private var sidebarSelection: Binding<MacSidebarItem?> {
+        Binding(
+            get: {
+                if section == .threads {
+                    return composingNew ? nil : selectedThread.map(MacSidebarItem.thread)
+                }
+                return .section(section)
+            },
+            set: { item in
+                switch item {
+                case .thread(let id):
+                    section = .threads
+                    selectedThread = id
+                    composingNew = false
+                case .section(let picked):
+                    section = picked
+                    composingNew = false
+                case nil:
+                    break
+                }
+            }
+        )
     }
 }

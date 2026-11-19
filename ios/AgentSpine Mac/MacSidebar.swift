@@ -1,0 +1,238 @@
+import SwiftUI
+
+/// What a sidebar row selects: one of the sections, or one thread. Threads live in the sidebar
+/// under the sections, as in the design, so a single selection covers both.
+enum MacSidebarItem: Hashable {
+    case section(MacSection)
+    case thread(Int)
+}
+
+/// The Mac sidebar from `docs/PLAN-native-apps-and-ui-refresh.md` ("Mac layout"): a new-thread
+/// button, search, the sections, recent threads, and the connection status at the foot.
+struct MacSidebar: View {
+    @Binding var selection: MacSidebarItem?
+    let newThread: () -> Void
+    let search: () -> Void
+
+    @Environment(AppState.self) private var state
+    @Environment(Settings.self) private var settings
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage("sidebarMoreExpanded") private var moreExpanded = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            List(selection: $selection) {
+                Section {
+                    ForEach(MacSection.primary, id: \.self) { sectionRow($0) }
+                    DisclosureGroup("More", isExpanded: $moreExpanded) {
+                        ForEach(MacSection.more, id: \.self) { sectionRow($0) }
+                    }
+                }
+                Section("Threads") { threadRows }
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            ConnectionFooter()
+        }
+        .background(Spine.Palette.bgSidebar)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        VStack(spacing: Spine.Space.sm) {
+            Text("AgentSpine")
+                .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
+                .foregroundStyle(Spine.Palette.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, Spine.Space.xs)
+
+            Button(action: newThread) {
+                HStack {
+                    Label("New thread", systemImage: "plus")
+                    Spacer()
+                    Text("⌘N").font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption)).opacity(0.7)
+                }
+                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                // Accent ground, page-coloured text: readable in both themes, as in the design.
+                .foregroundStyle(Spine.Palette.bg)
+                .padding(.horizontal, Spine.Space.md)
+                .padding(.vertical, Spine.Space.sm)
+                .background(Spine.Palette.accent, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("n", modifiers: .command)
+            .disabled(!settings.isConfigured)
+            .help("New thread (⌘N)")
+
+            Button(action: search) {
+                HStack {
+                    Label("Search threads", systemImage: "magnifyingglass")
+                    Spacer()
+                    Text("⌘K").font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                }
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.textDim)
+                .padding(.horizontal, Spine.Space.md)
+                .padding(.vertical, Spine.Space.sm)
+                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+                .overlay(RoundedRectangle(cornerRadius: Spine.Radius.md).strokeBorder(Spine.Palette.border))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("k", modifiers: .command)
+            .disabled(!settings.isConfigured)
+            .help("Search threads (⌘K)")
+        }
+        .padding(.horizontal, Spine.Space.md)
+        .padding(.top, Spine.Space.md)
+        .padding(.bottom, Spine.Space.sm)
+    }
+
+    // MARK: Rows
+
+    private func sectionRow(_ item: MacSection) -> some View {
+        // `.tag` goes last. With `.badge` applied after it the List cannot see the tag, so the
+        // row is not selectable and a click does nothing (reproduced in the running app).
+        Label(item.title, systemImage: item.symbol)
+            .badge(item == .headsup ? state.headsupWaiting : 0)
+            .tag(MacSidebarItem.section(item))
+    }
+
+    @ViewBuilder private var threadRows: some View {
+        if !settings.isConfigured {
+            Text("Add your server in Settings (⌘,).")
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+            SettingsLink { Text("Open Settings…") }
+                .buttonStyle(.link)
+        } else if let error = state.loadError, state.conversations.isEmpty {
+            Text(error)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+            Button("Try again") { Task { await state.refresh() } }
+                .buttonStyle(.link)
+        } else if state.conversations.isEmpty && state.lastLoaded != nil {
+            Text("No threads yet. Start one and it shows up here.")
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+        } else {
+            ForEach(state.conversations) { conversation in
+                threadRow(conversation)
+                    .tag(MacSidebarItem.thread(conversation.id))
+                    .contextMenu {
+                        Button("Open in New Window") { openWindow(id: "thread", value: conversation.id) }
+                    }
+            }
+        }
+    }
+
+    private func threadRow(_ conversation: Conversation) -> some View {
+        HStack(spacing: Spine.Space.sm) {
+            // Hollow amber: a question is waiting on you. Solid accent: a reply you have not
+            // read. A shape difference as well as a colour one, as on the phone.
+            Group {
+                if conversation.isWaiting {
+                    AttentionDot()
+                } else if conversation.isUnread {
+                    Circle().fill(Spine.Palette.accent).frame(width: 8, height: 8)
+                        .accessibilityLabel("Unread reply")
+                } else {
+                    Color.clear.frame(width: 8, height: 8)
+                }
+            }
+            Text(conversation.displayTitle)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)
+                    .weight(conversation.needsYou ? .semibold : .regular))
+                .lineLimit(1)
+                .foregroundStyle(Spine.Palette.text)
+            Spacer(minLength: Spine.Space.xs)
+            Text(SpineDate.relative(conversation.updated))
+                .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textFaint)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The foot of the sidebar: whether the server answers, how long it took, and where it is.
+///
+/// This is the *server's* round trip (`/api/status`, the same cheapest authenticated route the
+/// Settings test uses), not the model host's. The server exposes no model-host probe yet, so the
+/// design's "Model host connected" line is a later change with a server half.
+private struct ConnectionFooter: View {
+    @Environment(Settings.self) private var settings
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var reachable: Bool?
+    @State private var milliseconds: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle().fill(dotColor).frame(width: 8, height: 8)
+                Text(label)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+                Spacer()
+                if reachable == true, let milliseconds {
+                    Text("\(milliseconds) ms")
+                        .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
+            }
+            if let host = settings.baseURL?.host {
+                Text(host)
+                    .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textFaint)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .padding(.horizontal, Spine.Space.md)
+        .padding(.vertical, Spine.Space.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { Divider() }
+        .accessibilityElement(children: .combine)
+        // Restarts when the address, the token or the window's activity changes; it is cancelled
+        // with the view, so a background window does not keep polling.
+        .task(id: "\(settings.rawBaseURL)|\(settings.token)|\(scenePhase == .active)") {
+            guard settings.isConfigured, scenePhase == .active else { reachable = nil; return }
+            while !Task.isCancelled {
+                await probe()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    private var label: String {
+        switch reachable {
+        case .some(true): return "Server connected"
+        case .some(false): return "Can't reach server"
+        case .none: return settings.isConfigured ? "Checking…" : "Not connected"
+        }
+    }
+
+    private var dotColor: Color {
+        switch reachable {
+        case .some(true): return Spine.Palette.ok
+        case .some(false): return Spine.Palette.attention
+        case .none: return Spine.Palette.textFaint
+        }
+    }
+
+    private func probe() async {
+        let start = ContinuousClock.now
+        do {
+            _ = try await APIClient.shared.status()
+            let elapsed = start.duration(to: .now).components
+            milliseconds = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
+            reachable = true
+        } catch {
+            // URLSession reports a cancelled request as URLError, not CancellationError, so ask
+            // the task: a window going inactive must not flash "Can't reach server".
+            if Task.isCancelled { return }
+            reachable = false
+        }
+    }
+}

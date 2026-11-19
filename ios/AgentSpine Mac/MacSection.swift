@@ -7,19 +7,13 @@ enum MacSection: String, CaseIterable, Hashable {
     case threads, headsup, tasks, study, schedules, projects, files, clients, meetings
     case builds, activity, memory, proposals, agents
 
-    enum Group: String, CaseIterable {
-        case work = "Work"
-        case people = "People and time"
-        case agent = "Agent"
-    }
+    /// The rows the design shows in the sidebar, in its order. Threads is not one of them: the
+    /// threads themselves are listed below the sections, so `.threads` is the state of having a
+    /// thread (or the new-thread screen) open rather than a row.
+    static let primary: [MacSection] = [.headsup, .tasks, .schedules, .meetings, .projects, .files, .builds]
 
-    var group: Group {
-        switch self {
-        case .threads, .tasks, .projects, .files, .builds: return .work
-        case .headsup, .study, .schedules, .clients, .meetings: return .people
-        case .activity, .memory, .proposals, .agents: return .agent
-        }
-    }
+    /// Everything else, folded under "More" so it does not push the threads off the screen.
+    static let more: [MacSection] = [.study, .clients, .activity, .memory, .proposals, .agents]
 
     var title: String {
         switch self {
@@ -58,10 +52,6 @@ enum MacSection: String, CaseIterable, Hashable {
         case .agents: return "person.crop.square"
         }
     }
-
-    static func sections(in group: Group) -> [MacSection] {
-        allCases.filter { $0.group == group }
-    }
 }
 
 /// The phone's screen for a section, in a navigation stack of its own so its pushed screens work.
@@ -72,7 +62,7 @@ struct MacSectionContent: View {
         NavigationStack {
             switch section {
             case .threads: EmptyView() // drawn by MacRootView, which owns the selection
-            case .headsup: HeadsupView()
+            case .headsup: MacHeadsupView()
             case .tasks: TasksView()
             case .study: StudyView()
             case .schedules: SchedulesView()
@@ -80,8 +70,8 @@ struct MacSectionContent: View {
             case .files: FilesView()
             case .clients: ClientsView()
             case .meetings: MeetingsView()
-            case .builds: BuildsView()
-            case .activity: ActivityView()
+            case .builds: MacBuildsView()
+            case .activity: MacActivityView()
             case .memory: MemoryView()
             case .proposals: ProposalsView()
             case .agents: AgentsView()

@@ -35,28 +35,14 @@ struct MacThreadDetail: View {
                             ErrorNotice(message: loadError) { Task { await load() } }
                         } else if let thread {
                             ForEach(ledgerTurns) { turn in
-                                TurnBlock(turn: turn)
-                                ForEach(turn.confirmations) { confirmation in
-                                    MacApprovalCard(confirmation: confirmation) {
-                                        await load()
-                                        hub.nudge(conversationID, from: viewID)
-                                    }
-                                }
+                                TurnBlock(turn: turn, onDecided: decided)
                             }
-                            ForEach(thread.confirmations ?? []) { confirmation in
-                                MacApprovalCard(confirmation: confirmation) {
-                                        await load()
-                                        hub.nudge(conversationID, from: viewID)
-                                    }
+                            // Questions no turn here raised (the inbox thread's), on a spine of their own.
+                            if let open = thread.confirmations, !open.isEmpty {
+                                MacTurnSpine(confirmations: open, onDecided: decided)
                             }
                             if showsLiveTurn {
-                                LiveTurnView(task: liveTask ?? "", isDecision: liveIsDecision, stream: stream)
-                                ForEach(liveConfirmations) { confirmation in
-                                    MacApprovalCard(confirmation: confirmation) {
-                                        await load()
-                                        hub.nudge(conversationID, from: viewID)
-                                    }
-                                }
+                                liveTurn
                             }
                         } else {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, Spine.Space.xxl)
@@ -166,6 +152,41 @@ struct MacThreadDetail: View {
         }
     }
 
+    /// An approval or rejection landed: reload this thread and tell the other windows on it.
+    private func decided() async {
+        await load()
+        hub.nudge(conversationID, from: viewID)
+    }
+
+    /// The turn in flight: what you asked, then the same spine a finished turn gets, fed from the
+    /// stream. A run that has just finished still shows here until the reload replaces it.
+    @ViewBuilder private var liveTurn: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.sm + 2) {
+            if let task = liveTask, !task.isEmpty {
+                if liveIsDecision { DecisionNote(text: task) } else { ThreadBubble(text: task) }
+            }
+            MacTurnSpine(
+                calls: stream.calls.map { MacTurnSpine.Call($0) },
+                phase: stream.phase,
+                summary: liveSummary,
+                failure: liveFailure,
+                note: stream.transportNote,
+                confirmations: liveConfirmations,
+                onDecided: decided
+            )
+        }
+    }
+
+    private var liveSummary: String? {
+        if case .finished(let summary) = stream.phase { return summary }
+        return nil
+    }
+
+    private var liveFailure: String? {
+        if case .failed(let message) = stream.phase { return message }
+        return nil
+    }
+
     private var showsLiveTurn: Bool { stream.isLive || stream.transportNote != nil }
 
     private var liveLedgerTurn: Turn? {
@@ -245,6 +266,7 @@ struct MacThreadDetail: View {
 /// One finished turn: what you asked, what the agent did, what it said.
 private struct TurnBlock: View {
     let turn: Turn
+    let onDecided: () async -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spine.Space.sm + 2) {
@@ -266,23 +288,13 @@ private struct TurnBlock: View {
                 }
             }
 
-            ForEach(turn.actions) { action in
-                ToolCallRow(
-                    tool: action.tool,
-                    target: action.target,
-                    args: action.args,
-                    output: action.output,
-                    status: action.status
-                )
-            }
-
-            if let summary = turn.summary, !summary.isEmpty {
-                MarkdownText(summary)
-            } else if turn.status == "failed" {
-                Label("This turn failed.", systemImage: "exclamationmark.triangle")
-                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
-                    .foregroundStyle(Spine.Palette.danger)
-            }
+            MacTurnSpine(
+                calls: turn.actions.map { MacTurnSpine.Call($0) },
+                summary: turn.summary,
+                failure: (turn.summary ?? "").isEmpty && turn.status == "failed" ? "This turn failed." : nil,
+                confirmations: turn.confirmations,
+                onDecided: onDecided
+            )
         }
     }
 }

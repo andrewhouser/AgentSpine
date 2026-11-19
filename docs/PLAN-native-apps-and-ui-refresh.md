@@ -298,6 +298,48 @@ leading and trailing toolbar placement, `PlatformImage`), so the phone is unchan
 `MacThreadDetail`. Not done: the two-pane Builds diff and Activity trace layouts, the menu bar
 extra, and notifications.
 
+**Mac layout follows the UI Directions (2026-11-19).** Compared against "AgentSpine UI
+Directions" (Desktop PDF: Mac Threads, Meetings with the coach column, Heads-up; phone Threads,
+a thread, the tab bar, Heads-up). The first Mac shell had drifted from this plan's own "Mac
+layout" line: sections in a sidebar, then a separate thread-list column, then the thread. It is
+now what the directions draw: one sidebar (`MacSidebar`) holding New thread (⌘N), search (⌘K),
+the sections, the thread list (hollow amber dot = a question waiting, solid accent dot = unread
+reply) and a connection footer, with a single detail pane. Study, Clients, Activity, Memory,
+Auto-approvals and Agents fold under "More" so the threads keep the room. `MacThreadList` is
+gone. Built and driven in the running app: both Mac and iPhone schemes build.
+
+Two things that cost time and are worth knowing. A sidebar row needs `.tag` as its *last*
+modifier: with `.badge` after it the `List` cannot see the tag and the row silently ignores
+clicks (found by clicking through the running app, not by reading the code). And the first
+launch of a freshly built copy can show "Not connected" for a moment before the Keychain read
+lands; wait and look again before concluding the settings are lost.
+
+**The thread is now a spine (2026-11-19).** `MacTurnSpine` lays a turn's agent side onto the
+existing `SpineRow`: a solid node per tool call in the verdict's colour, the reply beside the
+line, a hollow amber node where a question is waiting. One view draws a finished turn (from the
+ledger) and the live one (from the stream), so a turn cannot look different the instant it stops
+streaming. `ToolCallRow` gained `flat` (one line: tool, target, verdict; no box) for the rail; the
+phone keeps the boxed default and `LiveTurnView` is unchanged. Your messages stay as bubbles
+outside the rail, as in the directions. Not done: the directions fold a waiting call and its
+approval into one card (the call row *is* the card); here a call that needs approval still shows
+as a row and the approval card as the next node, because nothing links a confirmation to its
+action on the client yet.
+
+Still different from the directions, in the order worth doing:
+- **Heads-up timeline rail.** The Dates column is built (`MacHeadsupView`: the phone's list with
+  its date sections off via `showsDates`, beside `MacHeadsupDates`: "It noticed" with Remember it
+  and Not a date, "It remembers" with a Forget context menu). Both schemes build; the layout has
+  not been seen running, because a rebuilt test copy cannot read the Keychain token without the
+  user's approval. The list itself is still the phone's grouped list, not the directions' rail.
+- **Sidebar counts** (Tasks 4, Schedules 9, Builds 1). Only Heads-up has a count today; the
+  others need a cheap count source, not a fetch of each list.
+- **Footer status.** The footer shows the server's round trip (`/api/status`) and host. The
+  directions say "Model host connected 14 ms"; the server has no model-host probe, so that line
+  needs a small server route first.
+- **Search label.** The directions say "Search everything"; `/api/search` covers threads, so the
+  field says "Search threads" until it covers more.
+- **Live meeting with a coach column** is phase 5.
+
 **Push finding.** The server cannot yet push to a Mac. `/api/devices` accepts any hex token, but
 `sendToDevice` in `src/push/apns.ts` sends one global `apns-topic` (`APNS_BUNDLE_ID`), and the
 Mac's bundle id is different (`...AgentSpine.mac`), so APNs would refuse its token with
