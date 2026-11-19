@@ -11,6 +11,10 @@ struct MacThreadDetail: View {
     let conversationID: Int
 
     @Environment(AppState.self) private var state
+    @Environment(MacThreadHub.self) private var hub
+
+    /// Who is nudging, so a window ignores its own nudge.
+    @State private var viewID = UUID()
 
     @State private var thread: Thread?
     @State private var loadError: String?
@@ -31,16 +35,25 @@ struct MacThreadDetail: View {
                             ForEach(ledgerTurns) { turn in
                                 TurnBlock(turn: turn)
                                 ForEach(turn.confirmations) { confirmation in
-                                    MacApprovalCard(confirmation: confirmation) { await load() }
+                                    MacApprovalCard(confirmation: confirmation) {
+                                        await load()
+                                        hub.nudge(conversationID, from: viewID)
+                                    }
                                 }
                             }
                             ForEach(thread.confirmations ?? []) { confirmation in
-                                MacApprovalCard(confirmation: confirmation) { await load() }
+                                MacApprovalCard(confirmation: confirmation) {
+                                        await load()
+                                        hub.nudge(conversationID, from: viewID)
+                                    }
                             }
                             if showsLiveTurn {
                                 LiveTurnView(task: liveTask ?? "", isDecision: liveIsDecision, stream: stream)
                                 ForEach(liveConfirmations) { confirmation in
-                                    MacApprovalCard(confirmation: confirmation) { await load() }
+                                    MacApprovalCard(confirmation: confirmation) {
+                                        await load()
+                                        hub.nudge(conversationID, from: viewID)
+                                    }
                                 }
                             }
                         } else {
@@ -82,6 +95,7 @@ struct MacThreadDetail: View {
                 Task {
                     await load()
                     liveTask = nil
+                    hub.nudge(conversationID, from: viewID)
                     await state.refreshConversations()
                     Task { await state.refreshUntilTitled(conversationID) }
                 }
@@ -91,6 +105,12 @@ struct MacThreadDetail: View {
         }
         // The live turn just asked something: fetch now so its buttons appear under the turn
         // rather than when the turn ends.
+        // Another window showing this thread did something: reload, which also attaches to a
+        // turn it just started.
+        .onChange(of: hub.tick) { _, _ in
+            guard hub.lastConversation == conversationID, hub.lastSource != viewID else { return }
+            Task { await load() }
+        }
         .onChange(of: stream.pendingConfirmationIDs) { _, ids in
             guard !ids.isEmpty else { return }
             Task { await load() }
@@ -134,6 +154,7 @@ struct MacThreadDetail: View {
         do {
             try await APIClient.shared.setTier(conversationID, to: tier)
             await load()
+            hub.nudge(conversationID, from: viewID)
         } catch {
             composerError = error.localizedDescription
         }
@@ -186,6 +207,7 @@ struct MacThreadDetail: View {
             liveTask = task
             stream.start(runID: started.runID)
             composerError = nil
+            hub.nudge(conversationID, from: viewID)
         } catch {
             composerError = error.localizedDescription
         }

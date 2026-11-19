@@ -7,6 +7,7 @@ struct MacThreadList: View {
 
     @Environment(AppState.self) private var state
     @Environment(Settings.self) private var settings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -26,6 +27,9 @@ struct MacThreadList: View {
             } else {
                 List(state.conversations, selection: $selection) { conversation in
                     row(conversation).tag(conversation.id)
+                        .contextMenu {
+                            Button("Open in New Window") { openWindow(id: "thread", value: conversation.id) }
+                        }
                 }
                 .scrollContentBackground(.hidden)
             }

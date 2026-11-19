@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct AgentSpine_MacApp: App {
     @State private var state = AppState()
+    @State private var hub = MacThreadHub()
 
     init() { SpineFont.registerBundled() }
 
@@ -10,6 +11,7 @@ struct AgentSpine_MacApp: App {
         WindowGroup {
             MacRootView()
                 .environment(state)
+                .environment(hub)
                 .environment(Settings.shared)
                 .tint(Spine.Palette.accent)
                 .frame(minWidth: 900, minHeight: 560)
@@ -18,6 +20,19 @@ struct AgentSpine_MacApp: App {
             CommandGroup(after: .newItem) {
                 Button("Refresh") { Task { await state.refresh() } }
                     .keyboardShortcut("r", modifiers: .command)
+            }
+        }
+
+        // A thread in a window of its own, opened from the list's context menu. Keyed by the
+        // conversation id, so asking for the same thread again brings its window forward.
+        WindowGroup("Thread", id: "thread", for: Int.self) { $id in
+            if let id {
+                MacThreadDetail(conversationID: id)
+                    .environment(state)
+                    .environment(hub)
+                    .environment(Settings.shared)
+                    .tint(Spine.Palette.accent)
+                    .frame(minWidth: 480, minHeight: 420)
             }
         }
 
