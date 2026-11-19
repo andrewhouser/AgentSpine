@@ -131,13 +131,12 @@ struct MacThreadDetail: View {
     /// Pin the thread to one model — the same menu as the phone's. Sizing is a regex and cannot
     /// tell that this question is hard, so "use the good model for this whole conversation" has
     /// to be sayable. Disabled while a turn streams, since the tier applies from the next one.
-    /// "Local only": nothing in this thread has gone to the cloud tier, and the tier it is pinned
-    /// to cannot. Read from the tiers the server recorded, so it is a statement about what has
-    /// happened, not a promise about the next Auto turn, which may be sized up to Cloud (the
-    /// thread reloads when a turn ends, so the pill drops then). It says nothing about
-    /// sensitivity, which the server enforces on its own.
+    /// "Local only": no turn here went to the cloud, and the tier it is pinned to cannot. It
+    /// describes what has happened, not a promise about the next Auto turn, which may be sized up
+    /// to Cloud (the thread reloads when a turn ends, so the pill drops then). It says nothing
+    /// about sensitivity, which the server enforces on its own.
     @ViewBuilder private var localOnlyPill: some View {
-        if let thread, thread.conversation.tier != "deep", !thread.turns.contains(where: { $0.tier == "deep" }) {
+        if let thread, staysLocal(thread) {
             Text("Local only")
                 .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.medium))
                 .foregroundStyle(Spine.Palette.accent)
@@ -146,6 +145,16 @@ struct MacThreadDetail: View {
                 .background(Spine.Palette.accent.opacity(0.14), in: Capsule())
                 .help("No turn in this thread has used the Cloud tier")
         }
+    }
+
+    /// Nothing has left the machine, and nothing about to. Each turn's own record of what served
+    /// it wins; a turn from before that was kept falls back to the tier it asked for. A thread
+    /// pinned to Cloud is not local-only unless the server has no Cloud tier to send it to.
+    private func staysLocal(_ thread: Thread) -> Bool {
+        let left = thread.turns.contains { $0.served?.cloud ?? ($0.tier == "deep") }
+        if left { return false }
+        if thread.conversation.tier == "deep" { return state.cloud?.configured == false }
+        return true
     }
 
     /// On macOS 26 a toolbar item is drawn on its own glass plate, which put a second capsule

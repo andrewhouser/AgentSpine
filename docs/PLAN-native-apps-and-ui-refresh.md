@@ -337,12 +337,24 @@ phone's `ReadAloud` (now shared: its `AVAudioSession` calls are iOS-only); it ne
 Kokoro voice service, see `docs/VOICE.md`. Heard on a real reply: not yet. The inspector button
 opens the system inspector column (`MacThreadInspector`, remembered in `mac.threadInspector`),
 modelled on Claude's own panel: a sectioned, read-only summary of the thread the view already
-holds, so it makes no request of its own. Four cards: Model (pinned tier, and a bar split by the
-tier each turn ran at), Context (`Turn.contextUsed`, grouped into Memories, Earlier conversations
-and Also in view by the server's "memory: " / "earlier conversation: " prefixes, each group
-collapsed), Tool calls (by tool, a bar for the count and the worst verdict) and Child runs.
-Builds; the first version was a flat list and was redrawn as cards; the cards have not been seen
-running. It shows finished turns only; the run in flight appears when it ends.
+holds, so it makes no request of its own. Four cards: Model (what the thread is pinned to, and the model that actually answered each turn,
+with the provider host for Cloud; a warning when Cloud was asked for and a local model answered),
+Context (`Turn.contextUsed`, grouped into Memories, Earlier conversations and Also in view by the
+server's "memory: " / "earlier conversation: " prefixes, each group collapsed), Tool calls (by
+tool, a bar for the count and the worst verdict) and Child runs. Builds; redrawn from a flat list
+to cards; not yet seen running.
+
+**What actually served a turn.** `runs.tier` is the tier that was *asked for* (the pin, or the
+dispatcher's sizing), not the one that answered. An unconfigured Cloud tier quietly becomes
+`standard` (`resolveTier`, by design: "degrading safely"), a private request is pinned local, and
+the router can fall back after a failure, so a thread pinned to Cloud could run locally with
+nothing to show it. The router now writes what served each call to `runs.served`
+(`store.noteServed`: latest model, tier and route, plus a sticky `cloud` flag, true if any call of
+the run left the machine), the thread API returns it as `served`, and `/api/status` returns
+`cloud: { configured, host, model }`. The "Local only" pill reads `served.cloud` and falls back to
+the asked-for tier for older turns. Turns from before this have no record, so they show the tier
+with "model not recorded". Needs a dashboard restart; tested in `test/served.test.mjs`.
+ It shows finished turns only; the run in flight appears when it ends.
 
 Still different from the directions, in the order worth doing:
 - **Heads-up timeline rail: built, not yet seen running.** The Dates column is built

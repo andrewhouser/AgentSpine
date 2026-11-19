@@ -20,6 +20,7 @@
 import { LLM_RETRIES, LLM_RETRY_BASE_MS } from "./config.ts";
 import { chatReply, clientFor, LLMError } from "./llm.ts";
 import type { ChatOpts, Msg } from "./llm.ts";
+import * as store from "./memory/store.ts";
 import { resolveTier, tierConfig } from "./tiers.ts";
 import type { Tier, TierConfig } from "./tiers.ts";
 
@@ -68,7 +69,17 @@ const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promis
     ...opts,
     tier: config.tier,
   });
-  return { model: config.model, text, tier: config.tier, truncated, via: config.tier === "deep" ? "cloud" : "local" };
+  const via = config.tier === "deep" ? "cloud" : "local";
+  // Written down against the run so the thread can say what really answered. A bookkeeping
+  // failure must never fail the call it describes.
+  if (opts.runId != null) {
+    try {
+      store.noteServed(opts.runId, { model: config.model, tier: config.tier, via });
+    } catch (err) {
+      console.warn(`[router] could not note which model served run ${opts.runId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { model: config.model, text, tier: config.tier, truncated, via };
 };
 
 /**

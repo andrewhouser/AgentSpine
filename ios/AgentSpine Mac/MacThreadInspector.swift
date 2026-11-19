@@ -10,6 +10,8 @@ import SwiftUI
 struct MacThreadInspector: View {
     let thread: Thread
 
+    @Environment(AppState.self) private var state
+
     private var turns: [Turn] { thread.turns }
     private var actions: [Action] { turns.flatMap(\.actions) }
     private var children: [ChildRun] { turns.flatMap(\.children) }
@@ -30,7 +32,7 @@ struct MacThreadInspector: View {
         .background(Spine.Palette.bgSidebar)
     }
 
-    // MARK: - Tiers
+    // MARK: - Model
 
     private var tiersCard: some View {
         card("Model", symbol: "cpu") {
@@ -41,36 +43,108 @@ struct MacThreadInspector: View {
                 Spacer()
                 chip(pinnedLabel, tint: Spine.Palette.accent)
             }
-            if tierCounts.isEmpty {
+            if let notice = pinnedCloudNotice {
+                Label(notice, systemImage: "exclamationmark.triangle")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.attention)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if servedGroups.isEmpty {
                 empty("No turns yet")
             } else {
-                // One bar, split by how many turns ran at each tier.
+                // One bar, split by how many turns each model answered.
                 GeometryReader { proxy in
                     HStack(spacing: 2) {
-                        ForEach(tierCounts, id: \.tier) { entry in
+                        ForEach(servedGroups) { group in
                             Capsule()
-                                .fill(tint(for: entry.tier))
-                                .frame(width: max(6, proxy.size.width * CGFloat(entry.count) / CGFloat(turns.count)))
+                                .fill(group.tint)
+                                .frame(width: max(6, proxy.size.width * CGFloat(group.count) / CGFloat(turns.count)))
                         }
                     }
                 }
                 .frame(height: 6)
-                HStack(spacing: Spine.Space.md) {
-                    ForEach(tierCounts, id: \.tier) { entry in
-                        HStack(spacing: 5) {
-                            Circle().fill(tint(for: entry.tier)).frame(width: 7, height: 7)
-                            Text("\(entry.tier) \(entry.count)")
+                ForEach(Array(servedGroups.enumerated()), id: \.element.id) { index, group in
+                    if index > 0 { Divider().overlay(Spine.Palette.border) }
+                    HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+                        Circle().fill(group.tint).frame(width: 8, height: 8)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(group.title)
+                                .font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
+                                .foregroundStyle(Spine.Palette.text)
+                                .lineLimit(2)
+                                .help(group.title)
+                            Text(group.subtitle)
                                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                                .foregroundStyle(Spine.Palette.textDim)
+                                .foregroundStyle(Spine.Palette.textFaint)
                         }
+                        Spacer(minLength: Spine.Space.sm)
+                        Text("\(group.count) turn\(group.count == 1 ? "" : "s")")
+                            .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
-                    Spacer()
-                    Text("\(turns.count) turn\(turns.count == 1 ? "" : "s")")
-                        .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
-                        .foregroundStyle(Spine.Palette.textFaint)
                 }
             }
         }
+    }
+
+    private struct ServedGroup: Identifiable {
+        let id: String
+        let title: String
+        let subtitle: String
+        let tint: Color
+        let count: Int
+    }
+
+    /// Turns grouped by the model that answered. A turn recorded before the server kept that
+    /// falls back to the tier it asked for, and says the model was not recorded.
+    private var servedGroups: [ServedGroup] {
+        var order: [String] = []
+        var groups: [String: ServedGroup] = [:]
+        for turn in turns {
+            let key: String
+            let title: String
+            let subtitle: String
+            let tint: Color
+            if let served = turn.served {
+                key = "\(served.via)|\(served.model)"
+                title = served.model.replacingOccurrences(of: "mlx-community/", with: "")
+                if served.via == "cloud" {
+                    subtitle = ["Cloud", state.cloud?.host].compactMap { $0 }.joined(separator: " · ")
+                    tint = Spine.Palette.attention
+                } else {
+                    subtitle = served.tier == "fast" ? "Local · fast tier" : "Local"
+                    tint = served.tier == "fast" ? Spine.Palette.ok : Spine.Palette.accent
+                }
+            } else if let tier = turn.tier {
+                key = "tier|\(tier)"
+                title = label(tier)
+                subtitle = "model not recorded"
+                tint = tierTint(tier)
+            } else {
+                continue
+            }
+            if let existing = groups[key] {
+                groups[key] = ServedGroup(id: key, title: title, subtitle: subtitle, tint: tint, count: existing.count + 1)
+            } else {
+                order.append(key)
+                groups[key] = ServedGroup(id: key, title: title, subtitle: subtitle, tint: tint, count: 1)
+            }
+        }
+        return order.compactMap { groups[$0] }
+    }
+
+    /// A thread pinned to Cloud on a server with no Cloud tier runs on the local model, and
+    /// nothing in the thread said so. Also named: a turn that asked for Cloud and was served
+    /// locally anyway (a private thread, or the router falling back after a failure).
+    private var pinnedCloudNotice: String? {
+        if thread.conversation.tier == "deep", state.cloud?.configured == false {
+            return "Pinned to Cloud, but this server has no Cloud model configured, so these turns run on the local model."
+        }
+        if let miss = turns.last(where: { $0.tier == "deep" && $0.served != nil && $0.served?.cloud == false }),
+           let model = miss.served?.model {
+            return "Cloud was asked for, but the latest such turn ran on \(model.replacingOccurrences(of: "mlx-community/", with: ""))."
+        }
+        return nil
     }
 
     // MARK: - Context
@@ -189,7 +263,7 @@ struct MacThreadInspector: View {
                             .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
                             .foregroundStyle(Spine.Palette.text)
                         Spacer(minLength: Spine.Space.sm)
-                        if let tier = child.tier { chip(tier, tint: tint(for: tier)) }
+                        if let tier = child.tier { chip(label(tier), tint: tierTint(tier)) }
                     }
                     if let task = child.task, !task.isEmpty {
                         Text(task)
@@ -221,22 +295,13 @@ struct MacThreadInspector: View {
     }
 
     /// Cloud is the one that leaves the machine, so it is the one with a warm colour.
-    private func tint(for tier: String) -> Color {
+    private func tierTint(_ tier: String) -> Color {
         switch tier {
-        case "fast", "Fast": return Spine.Palette.ok
-        case "standard", "Local": return Spine.Palette.accent
-        case "deep", "Cloud": return Spine.Palette.attention
+        case "fast": return Spine.Palette.ok
+        case "standard": return Spine.Palette.accent
+        case "deep": return Spine.Palette.attention
         default: return Spine.Palette.textFaint
         }
-    }
-
-    /// How many turns ran at each tier, in a fixed order so the list does not shuffle.
-    private var tierCounts: [(tier: String, count: Int)] {
-        let order = ["fast", "standard", "deep"]
-        let counts = Dictionary(grouping: turns.compactMap(\.tier), by: { $0 }).mapValues(\.count)
-        let known = order.compactMap { tier in counts[tier].map { (tier: label(tier), count: $0) } }
-        let others = counts.filter { !order.contains($0.key) }.sorted { $0.key < $1.key }.map { (tier: label($0.key), count: $0.value) }
-        return known + others
     }
 
     private struct ToolSummary {

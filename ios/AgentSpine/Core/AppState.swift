@@ -41,6 +41,8 @@ final class AppState {
     /// it is too old to say), so a badge is hidden rather than showing a made-up zero.
     var openTaskCount: Int?
     var scheduleCount: Int?
+    /// Whether the Cloud tier exists on the server; nil until it has said.
+    var cloud: CloudStatus?
 
     /// Refresh the Heads-up badge. Failures leave the old number alone rather than blanking it:
     /// a tailnet blip is not the same as "nothing is waiting".

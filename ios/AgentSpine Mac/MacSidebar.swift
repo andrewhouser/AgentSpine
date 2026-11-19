@@ -25,8 +25,16 @@ struct MacSidebar: View {
             List(selection: $selection) {
                 Section {
                     ForEach(MacSection.primary, id: \.self) { sectionRow($0) }
-                    DisclosureGroup("More", isExpanded: $moreExpanded) {
+                    DisclosureGroup(isExpanded: $moreExpanded) {
                         ForEach(MacSection.more, id: \.self) { sectionRow($0) }
+                    } label: {
+                        // The whole word toggles, not just the chevron: a plain string label
+                        // only answers to the arrow (seen in the running app).
+                        Text("More")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture { withAnimation { moreExpanded.toggle() } }
+                            .accessibilityAddTraits(.isButton)
                     }
                 }
                 Section("Threads") { threadRows }
@@ -254,6 +262,7 @@ private struct ConnectionFooter: View {
             let status = try await APIClient.shared.status()
             state.openTaskCount = status.tasks
             state.scheduleCount = status.schedules
+            state.cloud = status.cloud
             modelHost = status.model
             let elapsed = start.duration(to: .now).components
             milliseconds = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
