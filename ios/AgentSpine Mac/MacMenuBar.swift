@@ -65,10 +65,15 @@ struct MacMenuBarLabel: View {
                 // too, so colour would not show: a distinct glyph says "recording".
                 Image(systemName: "record.circle.fill")
             } else {
-                Image(systemName: waiting > 0 ? "bubble.left.and.text.bubble.right.fill" : "bubble.left.and.text.bubble.right")
+                Image(nsImage: SpineMenuMark.image)
                 if waiting > 0 { Text("\(waiting)") }
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            recorder.isRecording ? "AgentSpine, recording a meeting"
+                : waiting > 0 ? "AgentSpine, \(waiting) waiting for you" : "AgentSpine"
+        )
         .task { await watcher.startPolling(state) }
     }
 }

@@ -93,6 +93,12 @@ There are two microphones, and which ones you can use depends on how you reached
 | **This browser** | on `localhost` or over HTTPS | Records where you're sitting. `getUserMedia` doesn't exist on a plain-http LAN address — a browser rule, not something the server can grant. |
 | **Server mic** | `policy.audio` allows it | Records the room the *server* is in. Refused while a meeting is recording — one microphone, one session. |
 
+A third source is the **AgentSpine Mac app's own microphone**, which records the laptop in front of
+you and sends the audio to the server over Tailscale. It needs the client's name in
+`policy.audio.remoteSources` (the Mac app calls itself `"mac"`), on top of `enabled: true`; the
+list is empty by default and separate from `devices`, so allowlisting a server microphone never
+allows a client. See [docs/SPEC.md](docs/SPEC.md) §15, "Audio sent by a client".
+
 The picker only appears when both are actually available. Dictation uses the **accurate**
 Whisper model rather than the fast one: 14 seconds of speech takes about 1.4s, and that is a
 cheap price for not sending a misheard command.

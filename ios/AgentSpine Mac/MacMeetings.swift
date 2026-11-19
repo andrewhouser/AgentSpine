@@ -152,6 +152,7 @@ struct MacLiveMeeting: View {
     @State private var asking = false
     @State private var stopping = false
     private let recorder = MacRecorder.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var meeting: Meeting? { detail?.meeting }
     private var recording: Bool { meeting?.isRecording == true }
@@ -189,11 +190,12 @@ struct MacLiveMeeting: View {
                     ProgressView().controlSize(.small)
                     Text("Sending the last of the audio… \(recorder.unsentSeconds) s left")
                 case .sending:
-                    Image(systemName: "mic.fill")
+                    Image(systemName: "mic.fill").accessibilityHidden(true)
                     Text("Recording from this Mac")
                     MacSourcesRow()
                 case .buffering:
                     Image(systemName: "externaldrive.badge.exclamationmark").foregroundStyle(Spine.Palette.warn)
+                        .accessibilityHidden(true)
                     Text("Can't reach the server. \(recorder.unsentSeconds) s of audio is kept on this Mac and will be sent when it's back.")
                 }
                 Spacer()
@@ -308,7 +310,7 @@ struct MacLiveMeeting: View {
                 .padding(Spine.Space.lg)
             }
             .onChange(of: detail?.segments.count) { _, _ in
-                withAnimation { proxy.scrollTo("end", anchor: .bottom) }
+                withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo("end", anchor: .bottom) }
             }
         }
     }

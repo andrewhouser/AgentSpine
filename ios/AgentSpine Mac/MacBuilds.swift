@@ -54,6 +54,7 @@ struct MacBuildsView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Image(systemName: MacBuildStyle.symbol(build)).foregroundStyle(MacBuildStyle.tint(build))
+                    .accessibilityLabel(MacBuildStyle.label(build))
                 Text(build.repoName)
                     .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
                 Text(build.verdict)
@@ -89,6 +90,12 @@ enum MacBuildStyle {
     static func symbol(_ build: Build) -> String {
         guard let ok = build.ok else { return "circle.dashed" }
         return ok ? "checkmark.circle.fill" : "xmark.circle.fill"
+    }
+
+    /// The symbol and colour are the only thing saying how a build ended, so VoiceOver gets words.
+    static func label(_ build: Build) -> String {
+        guard let ok = build.ok else { return "Not finished" }
+        return ok ? "Passed" : "Failed"
     }
 
     static func tint(_ build: Build) -> Color {
@@ -140,6 +147,7 @@ private struct MacBuildDetail: View {
         VStack(alignment: .leading, spacing: Spine.Space.sm) {
             HStack(spacing: Spine.Space.sm) {
                 Image(systemName: MacBuildStyle.symbol(build)).foregroundStyle(MacBuildStyle.tint(build))
+                    .accessibilityLabel(MacBuildStyle.label(build))
                 Text(build.repoName).font(SpineFont.display(Spine.TypeSize.title2, relativeTo: .title2))
                 Text(build.verdict)
                     .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))

@@ -26,6 +26,7 @@ struct MacThreadDetail: View {
     @State private var staged: [Attachment] = []
     @State private var uploading = 0
     @State private var reader = ReadAloud()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Kept across threads and launches: you either want the panel or you do not.
     @AppStorage("mac.threadInspector") private var showInspector = false
 
@@ -57,7 +58,7 @@ struct MacThreadDetail: View {
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: stream.calls.count) { _, _ in
-                    withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                    withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
                 .onChange(of: thread?.turns.count) { _, _ in
                     proxy.scrollTo("bottom", anchor: .bottom)

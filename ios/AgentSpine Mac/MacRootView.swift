@@ -15,6 +15,10 @@ struct MacRootView: View {
     @State private var composingNew = false
     @State private var searching = false
     @State private var headsupPrefs = false
+    /// Per window, restored by macOS with the window: the section and thread it was showing.
+    @SceneStorage("mac.section") private var savedSection = MacSection.threads.rawValue
+    @SceneStorage("mac.thread") private var savedThread = 0
+    @State private var restored = false
 
     var body: some View {
         NavigationSplitView {
@@ -29,6 +33,18 @@ struct MacRootView: View {
                     .id(other)
             }
         }
+        .focusedSceneValue(\.macSection, $section)
+        .onAppear {
+            guard !restored else { return }
+            restored = true
+            section = MacSection(rawValue: savedSection) ?? .threads
+            selectedThread = savedThread == 0 ? nil : savedThread
+        }
+        .onChange(of: section) {
+            savedSection = section.rawValue
+            if section != .threads { composingNew = false }
+        }
+        .onChange(of: selectedThread) { savedThread = selectedThread ?? 0 }
         .sheet(isPresented: $searching) {
             MacSearchSheet { id in
                 composingNew = false

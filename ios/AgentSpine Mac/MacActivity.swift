@@ -51,6 +51,7 @@ struct MacActivityView: View {
     private func row(_ run: Run) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: symbol(for: run))
+                .accessibilityLabel(run.status == "failed" ? "Failed" : run.status == "running" || run.status == "queued" ? "In progress" : "Done")
                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                 .foregroundStyle(tint(for: run))
                 .frame(width: 18)

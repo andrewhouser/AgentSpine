@@ -491,6 +491,31 @@ Phase 5 is otherwise complete. Left: try it on a real call, and the gaps listed 
 - Signing and install: same Apple Developer team, a development-signed build on each Mac.
   No App Store, as with the iPhone app.
 
+**Status (2026-11-19).** Built, and it builds on both targets; none of it has been seen in the running
+app yet except where stated.
+
+- *Windows.* `WindowGroup` already restores each window's size and place and supports full screen; the
+  work was a first-launch size (1200x780, thread windows 720x700) and `@SceneStorage` for the section
+  and thread a window was showing, so a relaunch reopens on them.
+- *Keyboard.* A Go menu (`MacCommands.swift`, via a focused binding) puts the sidebar's seven sections
+  on ⌘1 to ⌘7. ⌘N, ⌘K and ⌘R already existed. Approve is Return and Reject is Escape on the approval card.
+- *Accessibility.* Build and run status was colour and symbol only, so VoiceOver now hears "Passed",
+  "Failed", "In progress"; decorative glyphs are hidden; the menu bar item has a spoken label that
+  includes the waiting count or "recording a meeting"; the three animated scrolls and the "More"
+  toggle respect Reduce Motion. The meters have labels and percentage values. Increase Contrast comes
+  from the menu bar mark being a template image and the rest using system materials and the shared
+  palette; it was not audited screen by screen.
+- *Icons.* The Mac app icon is the iPhone artwork set into the standard rounded square with a soft
+  shadow (`AppIcon.appiconset`, generated from the 1024 px original). The idle menu bar item is the
+  spine mark, a template drawn in code (`SpineMenuMark.swift`); it still shows the waiting count, and
+  becomes a record circle while recording.
+- *Docs.* `README.md` (the Mac microphone and `remoteSources`), `ios/README.md` (a Mac app section:
+  build, recording, keyboard) and `ios/ROADMAP.md` (a pointer here).
+
+Not done: a VoiceOver pass by actually using it, an Increase Contrast and Dynamic Type check on the
+device, light-mode screenshots, and the notarised/distribution route (the plan says development-signed
+only, as with the phone).
+
 ### Phase 7: web client restyle (styling only)
 
 Give `web/` the same identity, using the generated tokens. Scope is deliberately narrow.

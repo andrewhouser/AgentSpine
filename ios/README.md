@@ -125,6 +125,40 @@ First run only, on the phone: **Settings → General → VPN & Device Management
 developer certificate → Trust**. iOS will not launch a development-signed app until you do,
 and the error it shows instead does not say so clearly.
 
+### 5b. The Mac app
+
+The same project builds a native Mac app, scheme **AgentSpine Mac** (`com.houserphotography.AgentSpine.mac`,
+or your own bundle id), signed with the same team. Pick "My Mac" as the destination and press ⌘R,
+or build it from the command line:
+
+```bash
+xcodebuild -project ios/AgentSpine.xcodeproj -scheme "AgentSpine Mac" -destination 'platform=macOS' build
+```
+
+It is for the Mac you work at: a sidebar of sections and threads with an inspector, Heads-up,
+meetings, approvals from the menu bar (with a notification when one arrives), and read-aloud. Like
+the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). There is no
+App Store step: a development-signed build on each Mac, as with the iPhone.
+
+**Recording a meeting from the Mac** (Meetings, then the microphone button, "Record from this Mac"):
+
+- It sends this Mac's microphone to the server, which transcribes it as it does any meeting. For
+  that, `policy.json` needs `"remoteSources": ["mac"]` in its `audio` block (with `enabled: true`),
+  and the server must be on a version that has the route.
+- The first time, macOS asks for microphone access; the sheet explains why before it does. If you
+  said no, it points you to System Settings, Privacy & Security, Microphone.
+- **Also record the other side of a call** is optional and needs Screen & System Audio Recording
+  turned on for the app. Only sound is used, never the screen. Without it, the microphone alone is
+  recorded. With speakers instead of headphones, the microphone also hears the other side.
+- Audio is written to disk in three-second pieces before it is sent, so a dropped connection loses
+  nothing: the window says how many seconds are kept on the Mac, and they go when the server is back.
+  Unsent audio lives in `~/Library/Containers/<bundle id>/Data/Library/Application Support/AgentSpine/spool`.
+- While recording, the menu bar icon becomes a record circle and its menu starts with a clock, level
+  meters and a Stop button.
+
+**Keyboard:** ⌘N new thread, ⌘K search, ⌘1 to ⌘7 the sections in the sidebar's order (Go menu), ⌘R
+refresh. Windows reopen where you left them, on the section and thread you had.
+
 ### 6. Point it at the Mini
 
 Open the app — it starts on Settings, since nothing is configured yet.

@@ -20,7 +20,11 @@ struct AgentSpine_MacApp: App {
                 .tint(Spine.Palette.accent)
                 .frame(minWidth: 900, minHeight: 560)
         }
+        // First launch only: after that macOS restores each window's own size and place, and
+        // full screen works as for any window.
+        .defaultSize(width: 1200, height: 780)
         .commands {
+            MacGoCommands()
             CommandGroup(after: .newItem) {
                 Button("Refresh") { Task { await state.refresh() } }
                     .keyboardShortcut("r", modifiers: .command)
@@ -54,6 +58,7 @@ struct AgentSpine_MacApp: App {
                     .frame(minWidth: 480, minHeight: 420)
             }
         }
+        .defaultSize(width: 720, height: 700)
 
         // Our own `Settings` class (the server address and token) shadows SwiftUI's scene of
         // the same name, so the scene is spelled out.

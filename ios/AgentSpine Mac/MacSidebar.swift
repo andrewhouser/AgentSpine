@@ -18,6 +18,7 @@ struct MacSidebar: View {
     @Environment(Settings.self) private var settings
     @Environment(\.openWindow) private var openWindow
     @AppStorage("sidebarMoreExpanded") private var moreExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,7 +34,7 @@ struct MacSidebar: View {
                         Text("More")
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
-                            .onTapGesture { withAnimation { moreExpanded.toggle() } }
+                            .onTapGesture { withAnimation(reduceMotion ? nil : .default) { moreExpanded.toggle() } }
                             .accessibilityAddTraits(.isButton)
                     }
                 }
