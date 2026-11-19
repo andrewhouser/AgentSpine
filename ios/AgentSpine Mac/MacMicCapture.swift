@@ -315,7 +315,9 @@ final class MacRecorder {
         }
         let capture = SystemAudioCapture(spooler: spooler)
         capture.onStopped = { [weak self] why in
-            Task { @MainActor in
+            // Capture weakly in the Task itself: a `[weak self]` var captured from the outer
+            // closure is a mutable capture, which Swift 6 rejects in concurrent code.
+            Task { @MainActor [weak self] in
                 self?.callAudio = false
                 self?.notice = "Call audio stopped: \(why). The microphone is still recording."
             }
