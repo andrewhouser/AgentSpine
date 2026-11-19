@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Things the assistant noticed coming up: birthdays, anniversaries, bills, appointments.
 ///
@@ -105,7 +104,7 @@ struct HeadsupView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .spineGroupedListStyle()
         .navigationTitle("Heads-up")
         .refreshable { await load() }
         .task { await load() }
@@ -374,13 +373,13 @@ private struct HeadsupCardTile: View {
 private struct HeadsupPhoto: View {
     let path: String?
 
-    @State private var image: UIImage?
+    @State private var image: PlatformImage?
     @State private var failed = false
 
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image)
+                Image(platformImage: image)
                     .resizable()
                     .scaledToFill()
             } else if path == nil || failed {
@@ -408,7 +407,7 @@ private struct HeadsupPhoto: View {
         }
         do {
             let data = try await APIClient.shared.headsupImageData(path: path)
-            guard let decoded = UIImage(data: data) else {
+            guard let decoded = PlatformImage(data: data) else {
                 failed = true
                 return
             }
@@ -426,15 +425,15 @@ private struct HeadsupPhoto: View {
 final class HeadsupImageCache {
     static let shared = HeadsupImageCache()
 
-    private let cache = NSCache<NSString, UIImage>()
+    private let cache = NSCache<NSString, PlatformImage>()
 
     private init() {
         cache.countLimit = 80
     }
 
-    func image(for path: String) -> UIImage? { cache.object(forKey: path as NSString) }
+    func image(for path: String) -> PlatformImage? { cache.object(forKey: path as NSString) }
 
-    func store(_ image: UIImage, for path: String) {
+    func store(_ image: PlatformImage, for path: String) {
         cache.setObject(image, forKey: path as NSString)
     }
 }

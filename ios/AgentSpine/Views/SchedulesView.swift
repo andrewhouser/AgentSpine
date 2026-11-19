@@ -113,7 +113,7 @@ struct SchedulesView: View {
             Text(actionError ?? "")
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { editor = .create } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New schedule")
             }
@@ -355,13 +355,13 @@ struct ScheduleForm: View {
             Form {
                 Section("Name") {
                     TextField("morning-brief", text: $name)
-                        .textInputAutocapitalization(.never)
+                        .spineNoAutocapitalization()
                         .autocorrectionDisabled()
                 }
 
                 Section {
                     TextField("weekdays at 8:00am", text: $spec)
-                        .textInputAutocapitalization(.never)
+                        .spineNoAutocapitalization()
                         .autocorrectionDisabled()
                 } header: {
                     Text("When")
@@ -389,7 +389,7 @@ struct ScheduleForm: View {
                 }
             }
             .navigationTitle(schedule == nil ? "New schedule" : "Edit schedule")
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -71,7 +71,7 @@ struct ProjectsView: View {
         }
         .navigationTitle("Projects")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { newName = ""; prompt = .create } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New project")
             }
@@ -241,7 +241,7 @@ struct ProjectDetailView: View {
             }
             Section("Add a source") {
                 TextField("/path/on/the/server", text: $newPath)
-                    .textInputAutocapitalization(.never)
+                    .spineNoAutocapitalization()
                     .autocorrectionDisabled()
                 Button {
                     Task { await addSource() }
@@ -254,13 +254,19 @@ struct ProjectDetailView: View {
             if let threads = detail?.conversations, !threads.isEmpty {
                 Section("Threads") {
                     ForEach(threads) { thread in
-                        NavigationLink(thread.displayTitle) { ThreadView(conversationID: thread.id) }
+                        NavigationLink(thread.displayTitle) {
+                            #if os(macOS)
+                            MacThreadDetail(conversationID: thread.id)
+                            #else
+                            ThreadView(conversationID: thread.id)
+                            #endif
+                        }
                     }
                 }
             }
         }
         .navigationTitle(detail?.project.name ?? "Project")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
     }

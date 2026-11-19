@@ -95,11 +95,11 @@ private struct FilePreview: View {
                 }
             }
             .navigationTitle(file.name)
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
                 if let content {
-                    ToolbarItem(placement: .topBarLeading) { ShareLink(item: content.text) }
+                    ToolbarItem(placement: .spineLeading) { ShareLink(item: content.text) }
                 }
             }
         }

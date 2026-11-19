@@ -41,7 +41,7 @@ struct ProposalsView: View {
             }
         }
         .navigationTitle("Proposals")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
         .overlay { if proposals == nil && loadError == nil { ProgressView() } }

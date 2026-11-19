@@ -75,7 +75,7 @@ struct ClientsView: View {
         .refreshable { await load() }
         .task { await load() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { adding = true } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New client")
             }

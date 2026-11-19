@@ -107,7 +107,7 @@ struct HeadsupPrefsView: View {
             }
         }
         .navigationTitle("Heads-up")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .task { await load() }
         .alert(
             "That didn't work",

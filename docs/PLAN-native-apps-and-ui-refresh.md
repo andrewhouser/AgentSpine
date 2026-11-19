@@ -249,7 +249,7 @@ Done when: the existing iPhone screens use the new components and look as intend
 
 New macOS target, deployment target macOS 15.
 
-**Status (2026-11-19).** Built and confirmed working on the Mac by the user: the split view,
+**Status (2026-11-19). Complete.** Built and confirmed working on the Mac by the user: the split view,
 thread list with the waiting dot, ⌘, Settings scene (`SwiftUI.Settings`, because our
 `Settings` class shadows the scene), the thread view with live streaming (`MacThreadDetail`,
 the same ledger-plus-stream rule as the phone), the composer (`MacComposer`: Return sends,
@@ -267,8 +267,8 @@ and new threads. Details worth knowing:
 - Keyboard navigation in the lists is the native `List` behaviour (↑/↓), nothing custom.
 - Images only: PNG, JPEG, HEIC and WebP. No clipboard paste or drag from a web page yet.
 `ToolCallRow`, `PrettyJSON`, `AttentionDot`, `LiveTurnView` and `DecisionNote` live in the shared
-`Design/Components/`. Not done: looking at `ComponentGallery` in the Mac previews, hands-free
-(not planned for Mac), and the done-when test against the real server.
+`Design/Components/`. The `ComponentGallery` Mac previews and the done-when test against the real
+server were checked by the user. Phase 3 is complete; hands-free is not planned for Mac.
 
 ### Phase 4: remaining sections and menu bar
 
@@ -286,6 +286,24 @@ and new threads. Details worth knowing:
 
 Done when: nothing you use on the web UI is missing, apart from whatever the iPhone
 README already lists as deliberately omitted.
+
+**Status (2026-11-19).** Started. Written, not yet built or run: the sidebar is now sections
+(`MacSection`), and every section except Threads is the phone's own screen in a navigation stack,
+shared between the targets rather than copied. That is Heads-up (with its preferences as a sheet
+from the toolbar), Tasks, Study, Schedules, Projects, Files, Clients, Meetings, Builds, Activity,
+Memory, Auto-approvals and Agents. The iOS-only modifiers those screens used are wrapped in
+`Design/PlatformShims.swift` (inline title, number pad, capitalization, grouped list style,
+leading and trailing toolbar placement, `PlatformImage`), so the phone is unchanged. Search is
+⌘K rather than a section, and Settings is the ⌘, scene. In Projects a thread opens in
+`MacThreadDetail`. Not done: the two-pane Builds diff and Activity trace layouts, the menu bar
+extra, and notifications.
+
+**Push finding.** The server cannot yet push to a Mac. `/api/devices` accepts any hex token, but
+`sendToDevice` in `src/push/apns.ts` sends one global `apns-topic` (`APNS_BUNDLE_ID`), and the
+Mac's bundle id is different (`...AgentSpine.mac`), so APNs would refuse its token with
+`TopicDisallowed`. A native Mac push needs a per-device topic stored on the device row, the push
+entitlement on the Mac target and a Mac registration. Until then the Mac uses local
+notifications while it runs.
 
 ### Phase 5: meeting audio capture
 

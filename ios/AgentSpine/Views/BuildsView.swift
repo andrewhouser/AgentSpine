@@ -186,7 +186,7 @@ private struct DiffSheet: View {
                 }
             }
             .navigationTitle(build.repoName)
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }

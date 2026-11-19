@@ -62,7 +62,7 @@ struct RunDetailView: View {
             .padding(.vertical, 12)
         }
         .navigationTitle("Run #\(runID)")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
     }

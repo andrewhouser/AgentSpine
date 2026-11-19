@@ -216,7 +216,7 @@ struct StudyReviewView: View {
             .padding()
         }
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .task { await reload() }
     }
 

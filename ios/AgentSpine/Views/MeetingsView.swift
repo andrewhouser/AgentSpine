@@ -75,7 +75,7 @@ struct MeetingsView: View {
         .navigationTitle("Meetings")
         .toolbar {
             if !tagCounts.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .spineTrailing) {
                     Menu {
                         // A Picker inside the menu gives the checkmark on the active tag for
                         // free, so the toolbar icon is not the only sign a filter is on.
@@ -93,7 +93,7 @@ struct MeetingsView: View {
                     .accessibilityLabel("Filter by tag")
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 Button { showStart = true } label: { Image(systemName: "mic.badge.plus") }
                     .disabled(live?.recording == true)
                     .accessibilityLabel("Start a meeting")
@@ -197,7 +197,7 @@ private struct StartMeetingSheet: View {
                 }
             }
             .navigationTitle("Start a meeting")
-            .navigationBarTitleDisplayMode(.inline)
+            .spineInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -276,9 +276,9 @@ struct MeetingDetailView: View {
             }
         }
         .navigationTitle(detail?.meeting.displayTitle ?? "Meeting")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .spineTrailing) {
                 if let meeting = detail?.meeting {
                     Menu {
                         Button("Rename…") { newTitle = meeting.title ?? ""; renaming = true }
@@ -314,7 +314,7 @@ struct MeetingDetailView: View {
         }
         .alert("Re-run transcript", isPresented: $reprocessing) {
             TextField("People in the meeting (blank = detect)", text: $headCount)
-                .keyboardType(.numberPad)
+                .spineNumberPad()
             Button("Re-run") { Task { await reprocess() } }
             Button("Cancel", role: .cancel) {}
         } message: {

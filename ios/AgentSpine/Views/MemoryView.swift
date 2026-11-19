@@ -87,7 +87,7 @@ struct PolicyView: View {
             }
         }
         .navigationTitle("Policy")
-        .navigationBarTitleDisplayMode(.inline)
+        .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
     }
