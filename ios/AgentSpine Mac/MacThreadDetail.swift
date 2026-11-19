@@ -23,6 +23,8 @@ struct MacThreadDetail: View {
     @State private var draft = ""
     @State private var isSending = false
     @State private var composerError: String?
+    @State private var staged: [Attachment] = []
+    @State private var uploading = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,6 +81,10 @@ struct MacThreadDetail: View {
                 isBusy: isSending,
                 isDisabled: thread == nil || stream.isLive,
                 error: composerError,
+                staged: staged,
+                uploading: uploading,
+                attach: { urls in Task { await upload(urls) } },
+                removeStaged: { gone in staged.removeAll { $0.id == gone.id } },
                 send: { Task { await send() } }
             )
         }
@@ -196,15 +202,37 @@ struct MacThreadDetail: View {
         }
     }
 
+    /// Upload each chosen or dropped image and keep its id, so it goes with the next message.
+    /// A failure names the file and leaves the rest alone.
+    private func upload(_ urls: [URL]) async {
+        uploading += urls.count
+        for url in urls {
+            defer { uploading -= 1 }
+            do {
+                staged.append(try await MacImageUpload.upload(url, conversationID: conversationID))
+                composerError = nil
+            } catch {
+                composerError = error.localizedDescription
+            }
+        }
+    }
+
     private func send() async {
         let task = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !task.isEmpty, !isSending, !stream.isLive else { return }
+        guard !task.isEmpty || !staged.isEmpty, !isSending, !stream.isLive, uploading == 0 else { return }
         isSending = true
         defer { isSending = false }
         do {
-            let started = try await APIClient.shared.send(message: task, to: conversationID)
+            let started = try await APIClient.shared.send(
+                message: task,
+                to: conversationID,
+                attachmentIDs: staged.map(\.id)
+            )
             draft = ""
-            liveTask = task
+            staged = []
+            // The server answers an image with no words as "What is this?", so the live turn
+            // says that rather than show an empty bubble.
+            liveTask = task.isEmpty ? "What is this?" : task
             stream.start(runID: started.runID)
             composerError = nil
             hub.nudge(conversationID, from: viewID)
@@ -220,6 +248,16 @@ private struct TurnBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spine.Space.sm + 2) {
+            // Images first: they were part of the message, and read as attached to it.
+            if !turn.attachments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Spine.Space.sm) {
+                        ForEach(turn.attachments) { MacAttachmentImage(attachment: $0) }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
             if let task = turn.task, !task.isEmpty {
                 if turn.isDecision {
                     DecisionNote(text: task)
