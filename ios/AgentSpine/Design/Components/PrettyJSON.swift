@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Small shared pieces, kept together so the screens stay about their own job.
+/// Shared by both targets: a tool call's arguments, pretty-printed.
 
 /// A tool call's arguments, pretty-printed.
 ///
