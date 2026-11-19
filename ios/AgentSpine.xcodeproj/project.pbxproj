@@ -58,6 +58,7 @@
 				Views/MemoryView.swift,
 				Views/ProjectsView.swift,
 				Views/ProposalsView.swift,
+				Views/RecipesView.swift,
 				Views/RunDetailView.swift,
 				Views/SchedulesView.swift,
 				Views/StudyView.swift,

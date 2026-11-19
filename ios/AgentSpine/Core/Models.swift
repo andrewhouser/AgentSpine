@@ -594,6 +594,24 @@ struct Memory: Codable, Identifiable, Hashable {
     let ts: String
 }
 
+/// A named recipe from `GET /api/recipes`: a procedure you approved in chat, which a later run
+/// follows when you ask for it by name.
+struct Recipe: Codable, Identifiable, Hashable {
+    let created: String
+    let id: Int
+    let lastUsed: String?
+    let name: String
+    let steps: [String]
+    let uses: Int
+    let whenText: String
+
+    enum CodingKeys: String, CodingKey {
+        case created, id, name, steps, uses
+        case lastUsed = "last_used"
+        case whenText = "when_text"
+    }
+}
+
 /// An auto-approval proposal from `GET /api/proposals`.
 struct PromotionProposal: Codable, Identifiable, Hashable {
     let approvals: Int

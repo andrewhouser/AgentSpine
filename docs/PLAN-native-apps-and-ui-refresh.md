@@ -513,6 +513,15 @@ app yet except where stated.
   first version of all three used the old stack-of-bars logo, which the mocks had replaced.
 - *Docs.* `README.md` (the Mac microphone and `remoteSources`), `ios/README.md` (a Mac app section:
   build, recording, keyboard) and `ios/ROADMAP.md` (a pointer here).
+- *Settings parity.* A comparison with the web Settings page found one feature the native apps lacked:
+  **Recipes** (list, edit, delete; there is no create, since `recipe_save` in a chat is the approved
+  path). It is `Views/RecipesView.swift`, shared by the iPhone and the Mac, linked from the iPhone's
+  Assistant section. The Mac's Settings window, which only held the server address and token, is now
+  two tabs, Server and Assistant; the Assistant tab pushes the same shared screens the phone has
+  (recipes, auto-approval proposals, agents, Heads-up, memory, policy). Deliberately not ported:
+  theme and text size (the phone and Mac follow the system appearance and Dynamic Type) and the
+  wake word (hands-free is a browser feature; nothing native uses it). Both schemes build; the recipe
+  screens have not been run against a server by hand.
 
 Not done: a VoiceOver pass by actually using it, an Increase Contrast and Dynamic Type check on the
 device, light-mode screenshots, and the notarised/distribution route (the plan says development-signed

@@ -63,7 +63,7 @@ struct AgentSpine_MacApp: App {
         // Our own `Settings` class (the server address and token) shadows SwiftUI's scene of
         // the same name, so the scene is spelled out.
         SwiftUI.Settings {
-            MacSettingsView()
+            MacSettingsRoot()
                 .environment(state)
                 .environment(Settings.shared)
                 .tint(Spine.Palette.accent)

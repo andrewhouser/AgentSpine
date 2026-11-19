@@ -1,6 +1,39 @@
 import SwiftUI
 
-/// ⌘, : the server address and the dashboard token. The address is a preference in
+/// ⌘, : two tabs. Server is the address and the token; Assistant is the same list of screens the
+/// phone's Settings has (recipes, auto-approval proposals, agents, Heads-up, memory, policy), so
+/// nothing about the assistant can only be changed from a browser or a phone.
+struct MacSettingsRoot: View {
+    var body: some View {
+        TabView {
+            MacSettingsView()
+                .tabItem { Label("Server", systemImage: "network") }
+            MacAssistantSettings()
+                .tabItem { Label("Assistant", systemImage: "sparkles") }
+        }
+    }
+}
+
+/// The shared phone screens, pushed inside the settings window. They are the same views the
+/// iPhone uses, so a change to one lands on both.
+struct MacAssistantSettings: View {
+    var body: some View {
+        NavigationStack {
+            List {
+                NavigationLink("Recipes") { RecipesView() }
+                NavigationLink("Auto-approval proposals") { ProposalsView() }
+                NavigationLink("Agents") { AgentsView() }
+                NavigationLink("Heads-up") { HeadsupPrefsView() }
+                NavigationLink("Memory") { MemoryView() }
+                NavigationLink("Policy") { PolicyView() }
+            }
+            .navigationTitle("Assistant")
+        }
+        .frame(width: 560, height: 520)
+    }
+}
+
+/// The server address and the dashboard token. The address is a preference in
 /// `UserDefaults`; the token goes to the Keychain through `Settings`, as on the phone.
 ///
 /// The fields edit a draft. "Test connection" only tests the draft; "Connect" is what saves

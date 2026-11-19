@@ -625,6 +625,26 @@ final class APIClient {
         return try await send(request("/api/memories", query: q), as: [Memory].self)
     }
 
+    // MARK: - Recipes
+
+    func recipes() async throws -> [Recipe] {
+        try await send(request("/api/recipes"), as: [Recipe].self)
+    }
+
+    /// The server re-validates the whole recipe; a 400 carries a message saying what to fix
+    /// (too few steps, a name that clashes), which `APIError` surfaces as it is.
+    func updateRecipe(_ id: Int, name: String, whenText: String, steps: [String]) async throws -> Recipe {
+        try await send(
+            jsonRequest("/api/recipes/\(id)", method: "PATCH",
+                        body: ["name": name, "when": whenText, "steps": steps]),
+            as: Recipe.self
+        )
+    }
+
+    func deleteRecipe(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/recipes/\(id)", method: "DELETE"))
+    }
+
     func forgetMemory(_ id: Int) async throws {
         try await sendRaw(jsonRequest("/api/memories/\(id)", method: "DELETE"))
     }
