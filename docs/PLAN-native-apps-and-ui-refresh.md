@@ -203,10 +203,15 @@ Not done yet, and why:
   errors (2026-11-19, reported by the user). Not yet run on a device or checked in the gallery
   previews. `MarkdownText` moved from `Views/` to `Design/Components/` and restyled (parser untouched) so the Mac target can share it. Adopted so far: `ThreadBubble`, `ToolCallRow`, the notices, `MarkdownText`, the live `ApprovalCard` and `AttentionDot` (now the token amber, hollow) and an app-wide accent tint. Screen ground: `spineScreen()` (`Design/Components/SpineScreen.swift`) on each tab's navigation stack (macOS gets a plain background); full coverage of pushed screens needs iOS 18, grouped-list rows keep the system cell fill. Tab bar customization is built (`Core/TabLayout.swift` with a compiled test in `test/ios-tab-layout.test.mjs`, `Views/TabBarSettingsView.swift`, `RootView` now renders `settings.tabs`); Xcode build and a drag test on a device are pending. Still to do: the other screens' own styling (`.secondary`, system colours, `Color(.…Background)`), Dynamic Type and
   VoiceOver checks on a device, and choosing between directions from the gallery.
-- **Fonts.** The stacks name Bricolage Grotesque, Instrument Sans and JetBrains Mono, which are
-  open-licensed. They must be **bundled in the app and self-hosted on the web**, not loaded from
-  a font CDN, because the web client runs on a private tailnet and the project is local-first.
-  Until they are bundled every stack falls back to the system font, so nothing breaks.
+- **Fonts: bundled in the apps (2026-11-19), web still to do.** Bricolage Grotesque, Instrument
+  Sans and JetBrains Mono (variable TTFs, about 0.9 MB, SIL OFL, licences in
+  `ios/AgentSpine/Fonts/LICENSES-OFL.txt`, fetched from the families' official GitHub repos).
+  `SpineFont.registerBundled()` registers them at launch in both apps; if a file is missing the
+  system fallback still applies. Not yet checked on screen: whether SwiftUI picks the right
+  default instance and weights from the variable files, especially Bricolage's optical size.
+  The **web** must self-host them rather than use a font CDN (private tailnet, local-first).
+  That belongs to phase 7: `web/public/fonts/` plus `@font-face`, and `src/server.ts` has no
+  `.ttf` entry in its MIME map (only `.woff2`), so either add one or convert to woff2.
 - Applying the tokens to the existing iPhone screens' fonts and grouped-list rows.
 
 Do the refresh once, in the shared code, before building more screens on top of the old look.

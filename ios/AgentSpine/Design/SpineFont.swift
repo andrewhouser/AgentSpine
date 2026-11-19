@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -7,13 +8,27 @@ import AppKit
 
 /// Fonts from the token file's families, with the system font as the fallback.
 ///
-/// The families are not bundled yet (see PLAN-native-apps-and-ui-refresh.md, phase 2), and
-/// `Font.custom` with a missing family silently gives proportional system text, which would turn
+/// The families are bundled in `Fonts/` (open-licensed, see LICENSES-OFL.txt there), but if a
+/// file is ever missing, `Font.custom` with a missing family silently gives proportional system text, which would turn
 /// tool names into the wrong face. So each helper asks whether the family exists and otherwise
 /// picks the closest system design. When the files are bundled nothing here changes.
 ///
 /// Every helper takes a text style, so sizes follow Dynamic Type on both platforms.
 enum SpineFont {
+    /// Register the bundled font files for this process. Call once at launch, before the first
+    /// view. Done in code rather than through Info.plist (`UIAppFonts` on iOS,
+    /// `ATSApplicationFontsPath` on macOS) so one path serves both targets and a missing file
+    /// just leaves the system fallback in place. The files are variable fonts, so one file
+    /// covers every weight the app asks for.
+    static func registerBundled() {
+        for name in ["BricolageGrotesque", "InstrumentSans", "JetBrainsMono"] {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "ttf")
+                ?? Bundle.main.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts")
+            else { continue }
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+    }
+
     private static func installed(_ family: String) -> Bool {
         #if canImport(UIKit)
         return !UIFont.fontNames(forFamilyName: family).isEmpty

@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct AgentSpine_MacApp: App {
+    init() { SpineFont.registerBundled() }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
