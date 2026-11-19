@@ -451,10 +451,14 @@ must contain it. "Start a meeting" is a menu: this Mac, or the server's micropho
 Mic capture was run against the real server on 2026-11-19 and works. Then added: a microphone level
 meter (`MacLevelMeter`: RMS in dB over a 60 dB range, 14 bars, quick fall, read ten times a second
 from the recorder so nothing else re-renders) in the live view's capture strip and in the menu bar
-panel; and the menu bar indicator, which swaps the icon for `record.circle.fill` and a running clock
-while recording (no colour, because the menu bar draws labels as templates), with a panel at the top
-of the menu showing the clock, the meter, the buffering warning and Stop recording without opening
-the window. Both build; the meter and the menu bar have not been looked at while recording.
+panel; and the menu bar indicator, which swaps the icon for `record.circle.fill` while recording (no
+colour, because the menu bar draws labels as templates), with a panel at the top of the menu showing
+the clock, the meter, the buffering warning and Stop recording without opening the window. The first
+version also put a ticking clock in the icon, and the app froze the moment recording started. It was
+not sampled (the app had been quit), so the cause is inferred: a `TimelineView` in a `MenuBarExtra`
+label. The clock was removed from the label, and the engine's configuration-change handler now
+ignores a change that arrives while the engine is running, so a restart cannot trigger itself. If it
+freezes again, run `sample <pid> 3` while it is frozen before changing anything else.
 
 Known gaps: spool folders left by a crash are not picked up on the next launch, and audio kept after
 the server gave up can only be recovered by hand (it is raw PCM; ffmpeg can wrap it for

@@ -274,7 +274,10 @@ final class MacRecorder {
     /// itself; rebuild the tap for the new format and carry on. Chunks keep their numbers, so
     /// the server sees one unbroken recording.
     private func inputChanged() {
-        guard phase == .recording, let engine, let spooler else { return }
+        // A running engine means this is the echo of our own restart, not a real change.
+        // Without this guard a restart that posts another change restarts again, on the main
+        // thread, for ever.
+        guard phase == .recording, let engine, let spooler, !engine.isRunning else { return }
         do {
             try spooler.attach(to: engine)
             engine.prepare()

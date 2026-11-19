@@ -58,13 +58,12 @@ struct MacMenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if recorder.isRecording, let started = recorder.startedAt {
-                // The menu bar draws its label as a template, so colour is not reliable there:
-                // a distinct glyph and a running clock say "recording" without it.
+            if recorder.isRecording {
+                // Static on purpose. The menu bar draws this label as a status item, and a
+                // TimelineView in it (a ticking clock) is a known way to hang the app. The
+                // clock lives in the panel that opens from the icon. It is a template image
+                // too, so colour would not show: a distinct glyph says "recording".
                 Image(systemName: "record.circle.fill")
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(MacClock.text(context.date.timeIntervalSince(started))).monospacedDigit()
-                }
             } else {
                 Image(systemName: waiting > 0 ? "bubble.left.and.text.bubble.right.fill" : "bubble.left.and.text.bubble.right")
                 if waiting > 0 { Text("\(waiting)") }
