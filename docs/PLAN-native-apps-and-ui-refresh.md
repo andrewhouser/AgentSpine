@@ -249,26 +249,16 @@ Done when: the existing iPhone screens use the new components and look as intend
 
 New macOS target, deployment target macOS 15.
 
-**Status (2026-11-19).** Started. Written, not yet built or run: `NavigationSplitView` shell
-(`MacRootView`), the thread list with the waiting dot (`MacThreadList`), a read-only thread
-transcript (`MacThreadDetail`: your messages, tool calls with verdicts, markdown replies), and
-the ⌘, Settings scene for server address and token (`MacSettingsView`; the SwiftUI scene is
-spelled `SwiftUI.Settings` because our `Settings` class shadows it). `ToolCallRow`,
-`PrettyJSON` and `AttentionDot` moved into the shared `Design/Components/`. Not done:
-composer and ⌘N, live streaming, the inline approval card (the iPhone `ApprovalCard` needs a
-Mac version), ⌘K search, pop-out thread windows, drag files into the composer, keyboard
-navigation checks.
-
-- `NavigationSplitView`: sidebar of sections, content list, detail pane.
-- Threads list and live thread view first, since that is where the work happens.
-- Mac conventions: real toolbar, ⌘N new thread, ⌘K search, ⌘, Settings scene,
-  keyboard navigation in lists, multiple windows (a thread can pop out), standard menu
-  bar commands, drag files and images into the composer.
-- Connection setup: server URL and token in a Settings scene, token in the Keychain.
-  Same Tailscale `ts.net` ATS exception the iPhone uses.
-
-Done when: you can run a conversation, see tool calls stream in, and approve or reject
-inline on the Mac, against your real server.
+**Status (2026-11-19).** Started. The shell runs on the Mac (confirmed by the user): split
+view, thread list with the waiting dot, ⌘, Settings scene (`SwiftUI.Settings`, because our
+`Settings` class shadows the scene). Written since, not yet built or run: the thread view with
+live streaming (`MacThreadDetail`, the same ledger-plus-stream rule as the phone), a composer
+(`MacComposer`: Return sends, Shift-Return a new line), the inline `MacApprovalCard` (goes
+through `AppState.answer`, no new write path), and ⌘N for a new thread (`MacNewThread`).
+`ToolCallRow`, `PrettyJSON`, `AttentionDot`, `LiveTurnView` and `DecisionNote` live in the shared
+`Design/Components/`. Not done: ⌘K search, pop-out thread windows, drag files and images into
+the composer, keyboard navigation checks, tier menu, hands-free (not planned for Mac), and the
+done-when test against the real server.
 
 ### Phase 4: remaining sections and menu bar
 

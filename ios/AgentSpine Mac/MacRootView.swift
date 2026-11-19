@@ -13,6 +13,7 @@ struct MacRootView: View {
 
     @State private var section: Section? = .threads
     @State private var selectedThread: Int?
+    @State private var composingNew = false
 
     var body: some View {
         NavigationSplitView {
@@ -26,18 +27,38 @@ struct MacRootView: View {
             .background(Spine.Palette.bgSidebar)
         } content: {
             MacThreadList(selection: $selectedThread)
+                .onChange(of: selectedThread) { _, id in if id != nil { composingNew = false } }
                 .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 460)
         } detail: {
-            if let selectedThread {
+            if composingNew {
+                MacNewThread { id in
+                    composingNew = false
+                    selectedThread = id
+                }
+            } else if let selectedThread {
                 MacThreadDetail(conversationID: selectedThread)
                     .id(selectedThread)
             } else {
                 EmptyNotice(
                     symbol: "bubble.left.and.text.bubble.right",
                     title: "No thread selected",
-                    detail: "Pick a thread from the list."
+                    detail: "Pick a thread from the list, or press ⌘N to start one."
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Spine.Palette.bg)
+            }
+        }
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    selectedThread = nil
+                    composingNew = true
+                } label: {
+                    Label("New Thread", systemImage: "square.and.pencil")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(!settings.isConfigured)
+                .help("New thread (⌘N)")
             }
         }
         .task {
