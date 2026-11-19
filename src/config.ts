@@ -814,6 +814,15 @@ export const DICTATION_MAX_SECONDS = Number(env.DICTATION_MAX_SECONDS ?? "120");
 export const DICTATION_PROMPT =
   env.DICTATION_PROMPT ??
   "The following is a clearly punctuated transcript, with correct capitalisation and full stops.";
+
+/**
+ * How long a client-sourced meeting may go without a chunk before it ends itself. A client that
+ * vanishes (laptop lid shut, VPN gone) would otherwise hold the one recording slot until someone
+ * noticed. Ending runs the normal final pass on what arrived. Ten minutes rides out a long
+ * Tailscale outage; a client offline longer can send its buffered audio to /api/meetings/import.
+ */
+export const MEETING_REMOTE_IDLE_SECONDS = Number(env.MEETING_REMOTE_IDLE_SECONDS ?? "600");
+
 /**
  * Hard cap on an uploaded recording, in bytes. Opus at the browser's default runs about
  * 12 kB/s, so 16 MB is far more audio than DICTATION_MAX_SECONDS will decode — this is here

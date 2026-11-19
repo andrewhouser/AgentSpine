@@ -1123,6 +1123,50 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
 
       /**
+       * POST /api/meetings/remote {source, projectId?, title?} — start a meeting whose audio a
+       * client sends itself (the Mac app's microphone). `source` must be in
+       * policy.audio.remoteSources. Answers 201 {meetingId, nextSeq: 0}; send chunks next.
+       */
+      if (m === "POST" && seg.length === 3 && seg[2] === "remote") {
+        const b = await readBody(req);
+        if (!b?.source) return sendJson(res, 400, { error: "source is required" });
+        try {
+          const started = await meetings.startRemoteMeeting(loadPolicy(), {
+            projectId: b.projectId == null ? null : Number(b.projectId),
+            source: String(b.source),
+            title: b.title ? String(b.title) : undefined,
+          });
+          return sendJson(res, 201, started);
+        } catch (err) {
+          const message = (err as Error).message;
+          return sendJson(res, message.startsWith("denied:") ? 403 : 409, { error: message });
+        }
+      }
+
+      /**
+       * POST /api/meetings/:id/chunks?seq=N — the next piece of a remote meeting's audio, as the
+       * raw request body: 16 kHz mono signed 16-bit little-endian PCM, a few seconds at a time.
+       * Numbered from 0 and applied strictly in order; a repeat is acknowledged and ignored, a
+       * gap is refused with the number wanted. Every answer carries `next`, so a client that
+       * lost its place (dropped connection, lost response) resumes from there.
+       */
+      if (m === "POST" && seg.length === 4 && seg[3] === "chunks") {
+        let pcm: Buffer;
+        try {
+          pcm = await readBinary(req, meetings.REMOTE_CHUNK_MAX_BYTES);
+        } catch (err) {
+          return sendJson(res, err instanceof TooLargeError ? 413 : 400, { error: (err as Error).message });
+        }
+        try {
+          return sendJson(res, 200, meetings.ingestChunk(Number(seg[2]), Number(url.searchParams.get("seq")), pcm));
+        } catch (err) {
+          if (err instanceof meetings.ChunkSequenceError) return sendJson(res, 409, { error: err.message, next: err.next });
+          const message = (err as Error).message;
+          return sendJson(res, message.startsWith("that meeting is not recording") ? 409 : 400, { error: message });
+        }
+      }
+
+      /**
        * GET /api/meetings/:id/context — the context cards for a meeting, computed now.
        *
        * The stream pushes these on a timer, so the dashboard rarely needs this. It exists for

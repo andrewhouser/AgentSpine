@@ -136,8 +136,12 @@ export interface Policy {
    * here whose risk lands on someone who is not the operator. It is off unless set to exactly
    * `true`: a Mac capturing its own operator has nobody to tell, and a line spoken into the
    * room is the wrong default for that, which is the common case.
+   *
+   * `remoteSources` names clients allowed to send their own captured audio (the Mac app's
+   * microphone, POST /api/meetings/remote). Same inversion as `devices`: [] or absent means
+   * none, and it needs `enabled` too.
    */
-  audio?: { enabled: boolean; devices: string[]; announce?: boolean };
+  audio?: { enabled: boolean; devices: string[]; announce?: boolean; remoteSources?: string[] };
   /**
    * Local image generation via the MFLUX service (the `generate_image` tool). Absent =
    * denied, like every other optional surface.

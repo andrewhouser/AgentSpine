@@ -42,11 +42,12 @@ import {
   MEETING_CORRECTIONS,
   MEETING_EXTRACT_ENABLED,
   MEETING_MIN_WORDS,
+  MEETING_REMOTE_IDLE_SECONDS,
 } from "../config.ts";
 import { getEmbedder, toBlob } from "../memory/rag.ts";
 import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
-import { checkAudioPolicy, Listener, writeWav } from "../senses/listen.ts";
+import { checkAudioPolicy, checkRemoteSource, Listener, writeWav } from "../senses/listen.ts";
 import type { Policy } from "../types.ts";
 import { chat, coach } from "./coach.ts";
 import type { CoachAnswer } from "./coach.ts";
@@ -83,6 +84,8 @@ interface Active {
   cards: NodeJS.Timeout | null;
   listener: Listener;
   meetingId: number;
+  /** Present for a client-sourced meeting (see `startRemoteMeeting`). */
+  remote?: { idle: NodeJS.Timeout | null; nextSeq: number; source: string };
 }
 
 let active: Active | null = null;
@@ -139,6 +142,11 @@ export interface StartResult {
   meetingId: number;
 }
 
+const correctionsPrompt = (): string | undefined =>
+  // Bias the live decoder toward names it would otherwise mangle. The right-hand sides of
+  // the correction list are exactly the words we already know it gets wrong.
+  MEETING_CORRECTIONS.map(([, right]) => right).join(", ") || undefined;
+
 /**
  * Begin capture. Rejects rather than half-starting: if policy denies the device or ffmpeg
  * cannot open it, no meeting row is left behind claiming to be recording.
@@ -152,12 +160,26 @@ export const startMeeting = async (
   const verdict = checkAudioPolicy(policy, opts.device);
   if (!verdict.allowed) throw new Error(`denied: ${verdict.reason}`);
 
-  // Bias the live decoder toward names it would otherwise mangle. The right-hand sides of
-  // the correction list are exactly the words we already know it gets wrong.
-  const prompt = MEETING_CORRECTIONS.map(([, right]) => right).join(", ") || undefined;
-  const listener = new Listener({ device: opts.device, prompt });
+  return begin(
+    new Listener({ device: opts.device, prompt: correctionsPrompt() }),
+    opts.device,
+    opts.projectId ?? null,
+    opts.title,
+    `recording from ${opts.device}`,
+    policy,
+  );
+};
 
-  const meetingId = store.startMeeting(opts.device, opts.projectId ?? null, opts.title);
+/** What both kinds of meeting share once policy has said yes: the row, the events, the slot. */
+const begin = async (
+  listener: Listener,
+  device: string,
+  projectId: null | number,
+  title: string | undefined,
+  note: string,
+  policy: Policy,
+): Promise<StartResult> => {
+  const meetingId = store.startMeeting(device, projectId, title);
   let ord = 0;
 
   listener.on("segment", (s) => {
@@ -184,7 +206,7 @@ export const startMeeting = async (
   // people being recorded would not otherwise know; it is not wanted on a machine capturing
   // its own operator, so enabling it is a deliberate act rather than something to turn off.
   if (policy.audio?.announce === true) announce("This meeting is being transcribed.");
-  emit({ kind: "status", meetingId, note: `recording from ${opts.device}`, status: "recording" });
+  emit({ kind: "status", meetingId, note, status: "recording" });
   return { meetingId };
 };
 
@@ -215,6 +237,84 @@ const startCards = (meetingId: number): NodeJS.Timeout | null => {
   return timer;
 };
 
+// --- audio sent by a client ---
+
+/** Largest chunk accepted: 30 s of 16 kHz mono s16le. Clients send a few seconds at a time. */
+export const REMOTE_CHUNK_MAX_BYTES = 30 * 32_000;
+
+export class ChunkSequenceError extends Error {
+  next: number;
+  constructor(message: string, next: number) {
+    super(message);
+    this.next = next;
+  }
+}
+
+/**
+ * Begin a meeting whose audio arrives from a client rather than from a device on this machine.
+ *
+ * The source must be named in `policy.audio.remoteSources`: the server cannot see that
+ * microphone, so the allowlist is "which clients may send audio", not "which devices exist".
+ * Everything after the policy check is `startMeeting`'s pipeline, so there is still exactly one
+ * recording at a time, and the live pass, cards, coach, final pass and extraction are untouched.
+ *
+ * A client that drops off without saying so would otherwise hold the one recording slot
+ * forever, so a remote meeting ends itself after MEETING_REMOTE_IDLE_SECONDS without a chunk,
+ * and goes through the normal final pass with what it has. A client that was only offline for
+ * longer than that still holds its buffered audio, and can send it to /api/meetings/import.
+ */
+export const startRemoteMeeting = async (
+  policy: Policy,
+  opts: { live?: boolean; projectId?: null | number; source: string; title?: string },
+): Promise<StartResult & { nextSeq: number }> => {
+  if (active) throw new Error(`already recording (meeting ${active.meetingId}) — one recording at a time`);
+  const verdict = checkRemoteSource(policy, opts.source);
+  if (!verdict.allowed) throw new Error(`denied: ${verdict.reason}`);
+  const { meetingId } = await begin(
+    new Listener({ device: opts.source, live: opts.live, prompt: correctionsPrompt(), push: true }),
+    `remote: ${opts.source}`,
+    opts.projectId ?? null,
+    opts.title,
+    `recording from ${opts.source} (sent over the network)`,
+    policy,
+  );
+  active!.remote = { idle: null, nextSeq: 0, source: opts.source };
+  armIdle(meetingId);
+  return { meetingId, nextSeq: 0 };
+};
+
+const armIdle = (meetingId: number): void => {
+  const r = active?.remote;
+  if (!r || active?.meetingId !== meetingId) return;
+  if (r.idle) clearTimeout(r.idle);
+  r.idle = setTimeout(() => {
+    if (active?.meetingId === meetingId) void finish(meetingId, `no audio from ${r.source} for ${MEETING_REMOTE_IDLE_SECONDS} s`);
+  }, MEETING_REMOTE_IDLE_SECONDS * 1000);
+  r.idle.unref();
+};
+
+/**
+ * One chunk of 16 kHz mono s16le PCM, numbered from 0. Chunks are applied strictly in order:
+ *
+ * - `seq` is the next expected: accepted, and the answer says what comes next.
+ * - `seq` is lower: a retry whose first answer was lost (a Tailscale hop dropped mid-response).
+ *   Acknowledged without being applied, so a retry can never duplicate audio.
+ * - `seq` is higher: something earlier never arrived. Refused with the number the server wants,
+ *   so the client resends from there rather than leaving a hole that shifts every timestamp.
+ */
+export const ingestChunk = (meetingId: number, seq: number, pcm: Buffer): { duplicate: boolean; next: number } => {
+  const r = active?.remote;
+  if (!active || !r || active.meetingId !== meetingId) throw new Error("that meeting is not recording from a remote source");
+  if (!Number.isInteger(seq) || seq < 0) throw new Error("seq must be a whole number from 0");
+  if (seq < r.nextSeq) return { duplicate: true, next: r.nextSeq };
+  if (seq > r.nextSeq) throw new ChunkSequenceError(`expected chunk ${r.nextSeq}, got ${seq}`, r.nextSeq);
+  if (pcm.length === 0 || pcm.length > REMOTE_CHUNK_MAX_BYTES) throw new Error(`a chunk is 1 to ${REMOTE_CHUNK_MAX_BYTES} bytes`);
+  active.listener.push(pcm); // throws on a half sample, before nextSeq moves
+  r.nextSeq++;
+  armIdle(meetingId);
+  return { duplicate: false, next: r.nextSeq };
+};
+
 /** Stop capture. Returns once recording has ended; the final pass continues in background. */
 export const stopMeeting = async (): Promise<{ meetingId: number }> => {
   if (!active) throw new Error("nothing is recording");
@@ -231,6 +331,7 @@ const finish = async (meetingId: number, reason: string): Promise<void> => {
   finishing = true;
   const { listener } = active;
   if (active.cards) clearInterval(active.cards);
+  if (active.remote?.idle) clearTimeout(active.remote.idle);
 
   try {
     const pcm = await listener.stop(reason);
@@ -581,17 +682,20 @@ export interface LiveStatus {
   device: null | string;
   elapsedMs: number;
   meetingId: null | number;
+  /** The next chunk number a remote source should send, so a client that lost its place can resume. Null for a device meeting. */
+  nextSeq: null | number;
   pendingChunks: number;
   recording: boolean;
 }
 
 export const liveStatus = (): LiveStatus => {
-  if (!active) return { device: null, elapsedMs: 0, meetingId: null, pendingChunks: 0, recording: false };
+  if (!active) return { device: null, elapsedMs: 0, meetingId: null, nextSeq: null, pendingChunks: 0, recording: false };
   const meeting = store.getMeeting(active.meetingId);
   return {
     device: meeting?.device ?? null,
     elapsedMs: active.listener.elapsedMs,
     meetingId: active.meetingId,
+    nextSeq: active.remote?.nextSeq ?? null,
     pendingChunks: active.listener.pendingChunks,
     recording: true,
   };

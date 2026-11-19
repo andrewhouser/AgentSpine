@@ -1060,6 +1060,44 @@ npm run tick | loop    # legacy single-goal heartbeat
 > (`narrow-policy.ts`) before that moment, not after. Recording other people is also the one
 > capability here whose risk lands on someone who is not the operator; consent law varies by
 > state and employer policy is a separate question from the law.
+>
+> ### Audio sent by a client (the Mac app's own microphone)
+>
+> Capture used to mean ffmpeg on the machine running the server, so a laptop's microphone was out
+> of reach. A client can now capture the sound itself and send it as 16 kHz mono s16le PCM. The
+> server feeds it into the same `Listener` that ffmpeg feeds (`Listener.push` calls the same
+> `intake` as ffmpeg's pipe), so chunking, the live pass, the duration ceiling, kept audio, the
+> final pass, extraction, cards and the coach are unchanged. Nothing downstream knows the source.
+>
+> - **Transport: chunked POST, not a WebSocket.** `POST /api/meetings/remote {source, projectId?,
+>   title?}` starts it (201 `{meetingId, nextSeq: 0}`). `POST /api/meetings/:id/chunks?seq=N`
+>   carries one chunk as the raw body, a few seconds at a time, capped at 30 s
+>   (`REMOTE_CHUNK_MAX_BYTES`). It fits `readBinary` and survives a Tailscale reconnect with no
+>   session to re-establish. Stop is the existing `POST /api/meetings/stop`.
+> - **Sequence numbers, applied strictly in order.** The expected number is applied. A lower one
+>   is a retry whose answer was lost: acknowledged (`duplicate: true`) and not applied, so a retry
+>   can never duplicate audio. A higher one is a gap: 409 with `next`, so the client resends from
+>   there instead of leaving a hole that would shift every later timestamp. Every answer carries
+>   `next`, and `GET /api/meetings/live` carries `nextSeq`, so a client that lost its place
+>   resumes. A half sample (odd byte count) is refused before the number moves.
+> - **The client buffers on disk while the server is unreachable**, and sends from `next` when it
+>   is back. The server holds no audio for a client that is away.
+> - **Policy: a named remote source, not a bypass of the device allowlist.** `policy.audio.
+>   remoteSources` lists the clients allowed to send audio (`"mac"`). It needs `audio.enabled` and
+>   it is empty by default, so allowlisting a microphone for the server never allows a client by
+>   accident, and the reverse. A source that is not listed is a 403. The route answers to the
+>   dashboard token like the rest of `/api/meetings`; as with the device route, the person
+>   pressing Record in their own app has already given the only consent this mechanism collects.
+> - **One recording at a time.** A remote start while anything records is a 409, and so is a
+>   device start or an import while a remote meeting runs.
+> - **A silent client ends itself.** After `MEETING_REMOTE_IDLE_SECONDS` (600) without a chunk the
+>   meeting finishes through the normal final pass with what it has, so a closed lid or a dead VPN
+>   cannot hold the one slot indefinitely. A client that was offline longer keeps its buffer and
+>   can send it to `/api/meetings/import`.
+>
+> Tested in `test/meeting-remote.test.mjs`: policy denial, ordering, retry, gap, odd bytes, one at
+> a time, stop, kept audio, and the idle limit. The Whisper pass and real capture are not exercised
+> (live is off in the test); the Mac client is phase 5 of `PLAN-native-apps-and-ui-refresh.md`.
 
 ---
 

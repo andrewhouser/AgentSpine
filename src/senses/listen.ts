@@ -75,6 +75,22 @@ export const checkAudioPolicy = (policy: Policy, device: string): { allowed: boo
 };
 
 /**
+ * The same check for a client that sends its own audio. A named source, not a device: the
+ * server cannot see that microphone, so what it can allow is "audio from this client, under
+ * this name". It sits behind the same `enabled` switch as the devices and has its own list,
+ * empty by default, so turning on server-side capture never turns on remote capture by itself.
+ */
+export const checkRemoteSource = (policy: Policy, source: string): { allowed: boolean; reason: string } => {
+  const audio = policy.audio;
+  if (!audio?.enabled) return { allowed: false, reason: "policy.audio.enabled is false (deny by default)" };
+  if (!audio.remoteSources?.length)
+    return { allowed: false, reason: "policy.audio.remoteSources is empty — no remote source is allowlisted" };
+  if (!audio.remoteSources.includes(source))
+    return { allowed: false, reason: `"${source}" is not in policy.audio.remoteSources` };
+  return { allowed: true, reason: `"${source}" is allowlisted` };
+};
+
+/**
  * Input devices ffmpeg can see. Parsed out of avfoundation's device dump, which it prints
  * to stderr and then exits non-zero by design — that exit code is not an error here.
  */
@@ -197,6 +213,13 @@ export interface ListenerOptions {
   live?: boolean;
   /** Names to bias the live decoder toward. */
   prompt?: string;
+  /**
+   * No ffmpeg: the caller hands audio in with `push()`. For a client that captured the sound
+   * somewhere else (the Mac app's own microphone) and sends 16 kHz mono s16le PCM. From
+   * `intake()` onward it is the same pipeline, so chunking, the live pass, the duration
+   * ceiling and the retained audio for the final pass behave identically.
+   */
+  push?: boolean;
 }
 
 /**
@@ -242,8 +265,7 @@ export class Listener extends EventEmitter {
   }
 
   start(): Promise<void> {
-    const chunkBytes = MEETING_CHUNK_SECONDS * BYTES_PER_SECOND;
-    const maxBytes = MEETING_MAX_MINUTES * 60 * BYTES_PER_SECOND;
+    if (this.opts.push) return Promise.resolve();
 
     return new Promise((resolve, reject) => {
       const proc = spawn("ffmpeg", [
@@ -263,32 +285,7 @@ export class Listener extends EventEmitter {
           settled = true;
           resolve();
         }
-        if (this.stopping) return;
-
-        this.pending.push(data);
-        this.pendingBytes += data.length;
-        this.retained.push(data);
-        this.retainedBytes += data.length;
-
-        if (this.retainedBytes >= maxBytes) {
-          this.stop(`hit the ${MEETING_MAX_MINUTES}-minute ceiling`);
-          return;
-        }
-        // With live transcription off the pending buffer has no job — the retained audio is
-        // the whole product — so it is dropped rather than grown for the length of the take.
-        if (this.opts.live === false) {
-          this.pending = [];
-          this.pendingBytes = 0;
-          return;
-        }
-        while (this.pendingBytes >= chunkBytes) {
-          const all = Buffer.concat(this.pending);
-          const chunk = all.subarray(0, chunkBytes);
-          const rest = all.subarray(chunkBytes);
-          this.pending = rest.length ? [rest] : [];
-          this.pendingBytes = rest.length;
-          this.enqueue(chunk, this.retainedBytes - rest.length - chunk.length);
-        }
+        this.intake(data);
       });
 
       proc.on("error", (e) => {
@@ -308,6 +305,51 @@ export class Listener extends EventEmitter {
         if (!this.stopping) this.emit("stopped", `ffmpeg exited ${code}`);
       });
     });
+  }
+
+  /**
+   * One read of PCM, from ffmpeg or from `push()`. Reads are arbitrary lengths, so everything
+   * here works in bytes and cuts chunks only when enough has built up.
+   */
+  private intake(data: Buffer): void {
+    const chunkBytes = MEETING_CHUNK_SECONDS * BYTES_PER_SECOND;
+    const maxBytes = MEETING_MAX_MINUTES * 60 * BYTES_PER_SECOND;
+    if (this.stopping) return;
+
+    this.pending.push(data);
+    this.pendingBytes += data.length;
+    this.retained.push(data);
+    this.retainedBytes += data.length;
+
+    if (this.retainedBytes >= maxBytes) {
+      this.stop(`hit the ${MEETING_MAX_MINUTES}-minute ceiling`);
+      return;
+    }
+    // With live transcription off the pending buffer has no job — the retained audio is
+    // the whole product — so it is dropped rather than grown for the length of the take.
+    if (this.opts.live === false) {
+      this.pending = [];
+      this.pendingBytes = 0;
+      return;
+    }
+    while (this.pendingBytes >= chunkBytes) {
+      const all = Buffer.concat(this.pending);
+      const chunk = all.subarray(0, chunkBytes);
+      const rest = all.subarray(chunkBytes);
+      this.pending = rest.length ? [rest] : [];
+      this.pendingBytes = rest.length;
+      this.enqueue(chunk, this.retainedBytes - rest.length - chunk.length);
+    }
+  }
+
+  /**
+   * Audio from a client (see `ListenerOptions.push`). Odd lengths are the caller's bug: a
+   * dangling byte would shift every later sample by half a frame and the model would hear noise.
+   */
+  push(data: Buffer): void {
+    if (!this.opts.push) throw new Error("this listener captures from a device, not from pushed audio");
+    if (data.length % 2 !== 0) throw new Error("PCM must be whole 16-bit samples");
+    this.intake(data);
   }
 
   /**
