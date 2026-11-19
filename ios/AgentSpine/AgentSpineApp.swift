@@ -15,6 +15,7 @@ struct AgentSpineApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .tint(Spine.Palette.accent)
                 .environment(state)
                 .environment(Settings.shared)
                 .environment(PushManager.shared)

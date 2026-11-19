@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// The blue of "this is waiting on you" — the dot on a thread row and the edge of an inline
-/// approval card. Its own colour rather than the accent, so it reads as a signal.
+/// The amber of "this is waiting on you" — the dot on a thread row and the edge of an inline
+/// approval card. Its own token rather than the accent, so it reads as a signal.
 extension Color {
-    static let attention = Color(red: 0.10, green: 0.45, blue: 0.91)
+    static let attention = Spine.Palette.attention
 }
 
 /// The blue dot on a thread that has a question waiting on you.
 struct AttentionDot: View {
     var body: some View {
+        // Hollow, like the spine's waiting node: a shape difference as well as a colour one.
         Circle()
-            .fill(Color.attention)
+            .strokeBorder(Color.attention, lineWidth: 2)
             .frame(width: 10, height: 10)
             .accessibilityLabel("Waiting on you")
     }
@@ -42,35 +43,36 @@ struct ApprovalCard: View {
             HStack(spacing: 8) {
                 AttentionDot()
                 Text("Waiting on you")
-                    .font(.caption.weight(.semibold))
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                     .foregroundStyle(Color.attention)
                 Text(confirmation.tool)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textDim)
                 Spacer()
                 Text("#\(confirmation.id)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textFaint)
             }
 
             Text(confirmation.summary)
-                .font(.callout)
+                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .callout))
+                .foregroundStyle(Spine.Palette.text)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
             DisclosureGroup("Details", isExpanded: $showArgs) {
                 Text(PrettyJSON.format(confirmation.args))
-                    .font(.caption2.monospaced())
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(9)
-                    .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(Spine.Space.sm + 1)
+                    .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm + 2))
             }
             .font(.caption)
-            .tint(.secondary)
+            .tint(Spine.Palette.textDim)
 
             if let error {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(.caption).foregroundStyle(Spine.Palette.danger)
             }
 
             HStack(spacing: 10) {
@@ -81,6 +83,7 @@ struct ApprovalCard: View {
                     Text("Reject").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .tint(Spine.Palette.danger)
 
                 Button {
                     Task { await decide(approve: true) }
@@ -95,9 +98,9 @@ struct ApprovalCard: View {
             }
             .disabled(busy)
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.attention.opacity(0.6), lineWidth: 1))
+        .padding(Spine.Space.lg)
+        .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))
+        .overlay(RoundedRectangle(cornerRadius: Spine.Radius.lg).strokeBorder(Spine.Palette.attentionLine, lineWidth: 1))
         .sheet(isPresented: $rejecting) {
             RejectSheet(confirmation: confirmation, reason: $reason) { text in
                 await decide(approve: false, reason: text)

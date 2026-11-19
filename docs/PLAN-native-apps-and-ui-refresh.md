@@ -201,7 +201,7 @@ Not done yet, and why:
   falls back to system fonts. `ToolCallRow` uses the tokens. The files are in the Mac target's
   membership list except the gallery. Typechecked with `swiftc`, then built in Xcode for the iPhone and Mac targets with no
   errors (2026-11-19, reported by the user). Not yet run on a device or checked in the gallery
-  previews. `MarkdownText` moved from `Views/` to `Design/Components/` and restyled (parser untouched) so the Mac target can share it. Still to do: adopting the components in the other screens, Dynamic Type and
+  previews. `MarkdownText` moved from `Views/` to `Design/Components/` and restyled (parser untouched) so the Mac target can share it. Adopted so far: `ThreadBubble`, `ToolCallRow`, the notices, `MarkdownText`, the live `ApprovalCard` and `AttentionDot` (now the token amber, hollow) and an app-wide accent tint. Still to do: the other screens' own styling (`.secondary`, system colours, `Color(.…Background)`), Dynamic Type and
   VoiceOver checks on a device, and choosing between directions from the gallery.
 - **Fonts.** The stacks name Bricolage Grotesque, Instrument Sans and JetBrains Mono, which are
   open-licensed. They must be **bundled in the app and self-hosted on the web**, not loaded from

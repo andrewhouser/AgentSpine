@@ -32,8 +32,8 @@
 				Design/Components/ThreadBubble.swift,
 				Design/Components/VerdictBadge.swift,
 				Design/DesignColor.swift,
-				Design/Tokens.generated.swift,
 				Design/SpineFont.swift,
+				Design/Tokens.generated.swift,
 			);
 			target = 36D8177030AE5E1E007D6CFE /* AgentSpine Mac */;
 		};
