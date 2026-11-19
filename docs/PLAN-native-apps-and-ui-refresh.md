@@ -201,14 +201,13 @@ Not done yet, and why:
   falls back to system fonts. `ToolCallRow` uses the tokens. The files are in the Mac target's
   membership list except the gallery. Typechecked with `swiftc`, then built in Xcode for the iPhone and Mac targets with no
   errors (2026-11-19, reported by the user). Not yet run on a device or checked in the gallery
-  previews. `MarkdownText` moved from `Views/` to `Design/Components/` and restyled (parser untouched) so the Mac target can share it. Adopted so far: `ThreadBubble`, `ToolCallRow`, the notices, `MarkdownText`, the live `ApprovalCard` and `AttentionDot` (now the token amber, hollow) and an app-wide accent tint. Screen ground: `spineScreen()` (`Design/Components/SpineScreen.swift`) on each tab's navigation stack (macOS gets a plain background); full coverage of pushed screens needs iOS 18, grouped-list rows keep the system cell fill. Still to do: the other screens' own styling (`.secondary`, system colours, `Color(.…Background)`), Dynamic Type and
+  previews. `MarkdownText` moved from `Views/` to `Design/Components/` and restyled (parser untouched) so the Mac target can share it. Adopted so far: `ThreadBubble`, `ToolCallRow`, the notices, `MarkdownText`, the live `ApprovalCard` and `AttentionDot` (now the token amber, hollow) and an app-wide accent tint. Screen ground: `spineScreen()` (`Design/Components/SpineScreen.swift`) on each tab's navigation stack (macOS gets a plain background); full coverage of pushed screens needs iOS 18, grouped-list rows keep the system cell fill. Tab bar customization is built (`Core/TabLayout.swift` with a compiled test in `test/ios-tab-layout.test.mjs`, `Views/TabBarSettingsView.swift`, `RootView` now renders `settings.tabs`); Xcode build and a drag test on a device are pending. Still to do: the other screens' own styling (`.secondary`, system colours, `Color(.…Background)`), Dynamic Type and
   VoiceOver checks on a device, and choosing between directions from the gallery.
 - **Fonts.** The stacks name Bricolage Grotesque, Instrument Sans and JetBrains Mono, which are
   open-licensed. They must be **bundled in the app and self-hosted on the web**, not loaded from
   a font CDN, because the web client runs on a private tailnet and the project is local-first.
   Until they are bundled every stack falls back to the system font, so nothing breaks.
-- **Tab bar customization screen** (drag and drop), and applying the tokens to existing iPhone
-  screens.
+- Applying the tokens to the existing iPhone screens' fonts and grouped-list rows.
 
 Do the refresh once, in the shared code, before building more screens on top of the old look.
 

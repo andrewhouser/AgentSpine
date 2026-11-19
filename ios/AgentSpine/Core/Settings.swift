@@ -15,6 +15,7 @@ final class Settings {
         static let baseURL = "baseURL"
         static let deviceName = "deviceName"
         static let token = "dashboardToken"
+        static let tabOrder = "tabOrder"
     }
 
     /// e.g. `http://mini.tail1234.ts.net:8787`, or `https://mini.tail1234.ts.net` behind
@@ -33,7 +34,16 @@ final class Settings {
         didSet { UserDefaults.standard.set(deviceName, forKey: Key.deviceName) }
     }
 
+    /// The tab order as saved. Read it through `tabs`, which repairs it.
+    var tabOrder: [String] {
+        didSet { UserDefaults.standard.set(tabOrder, forKey: Key.tabOrder) }
+    }
+
+    /// Every tab, in the user's order, always complete and valid (see `TabLayout.reconcile`).
+    var tabs: [AppTab] { TabLayout.reconcile(tabOrder) }
+
     private init() {
+        tabOrder = UserDefaults.standard.stringArray(forKey: Key.tabOrder) ?? []
         rawBaseURL = UserDefaults.standard.string(forKey: Key.baseURL) ?? ""
         deviceName = UserDefaults.standard.string(forKey: Key.deviceName) ?? ""
         token = Keychain.get(Key.token) ?? ""

@@ -25,6 +25,7 @@
 				Core/Models.swift,
 				Core/RunStream.swift,
 				Core/Settings.swift,
+				Core/TabLayout.swift,
 				Design/Components/ApprovalPrompt.swift,
 				Design/Components/MarkdownText.swift,
 				Design/Components/Notices.swift,

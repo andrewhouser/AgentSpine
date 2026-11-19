@@ -127,6 +127,14 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink("Tab bar") { TabBarSettingsView() }
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text("Choose which sections sit in the bar and which fold under More.")
+            }
+
+            Section {
                 NavigationLink("Auto-approval proposals") { ProposalsView() }
                 NavigationLink("Agents") { AgentsView() }
                 NavigationLink("Heads-up") { HeadsupPrefsView() }

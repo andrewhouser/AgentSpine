@@ -7,116 +7,25 @@ import SwiftUI
 /// it is the only work here that is *blocked on you* — everything else is informational, and a
 /// badge on an informational tab is how a badge stops meaning anything.
 struct RootView: View {
-    enum Tab: Hashable {
-        case threads, headsup, tasks, study, schedules, projects, files, clients, search, meetings, builds, activity, settings
-    }
-
     @Environment(AppState.self) private var state
     @Environment(Settings.self) private var settings
     @Environment(PushManager.self) private var push
 
-    @State private var tab: Tab = .threads
+    @State private var tab: AppTab = .threads
     @State private var threadPath: [Int] = []
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: $tab) {
-            NavigationStack(path: $threadPath) {
-                ConversationsView()
-                    .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
+            // The user's order, from Settings → Tab bar. iOS shows the first four and folds the
+            // rest under More, so the order is the whole of the customisation.
+            ForEach(settings.tabs, id: \.self) { item in
+                content(for: item)
+                    .spineScreen()
+                    .tabItem { Label(item.title, systemImage: item.symbol) }
+                    .badge(badge(for: item))
+                    .tag(item)
             }
-            .spineScreen()
-            .tabItem { Label("Threads", systemImage: "bubble.left.and.text.bubble.right") }
-            .badge(state.waitingThreads)
-            .tag(Tab.threads)
-
-            NavigationStack {
-                HeadsupView()
-            }
-            .spineScreen()
-            .tabItem { Label("Heads-up", systemImage: "sparkles") }
-            .badge(state.headsupWaiting)
-            .tag(Tab.headsup)
-
-            NavigationStack {
-                TasksView()
-            }
-            .spineScreen()
-            .tabItem { Label("Tasks", systemImage: "checklist") }
-            .tag(Tab.tasks)
-
-            NavigationStack {
-                StudyView()
-            }
-            .spineScreen()
-            .tabItem { Label("Study", systemImage: "brain.head.profile") }
-            .tag(Tab.study)
-
-            NavigationStack {
-                SchedulesView()
-            }
-            .spineScreen()
-            .tabItem { Label("Schedules", systemImage: "clock") }
-            .tag(Tab.schedules)
-
-            NavigationStack {
-                ProjectsView()
-            }
-            .spineScreen()
-            .tabItem { Label("Projects", systemImage: "folder") }
-            .tag(Tab.projects)
-
-            NavigationStack {
-                FilesView()
-            }
-            .spineScreen()
-            .tabItem { Label("Files", systemImage: "doc.text") }
-            .tag(Tab.files)
-
-            NavigationStack {
-                ClientsView()
-            }
-            .spineScreen()
-            .tabItem { Label("Clients", systemImage: "person.crop.rectangle.stack") }
-            .tag(Tab.clients)
-
-            NavigationStack {
-                SearchView(openThread: { id in
-                    tab = .threads
-                    threadPath = [id]
-                })
-            }
-            .spineScreen()
-            .tabItem { Label("Search", systemImage: "magnifyingglass") }
-            .tag(Tab.search)
-
-            NavigationStack {
-                MeetingsView()
-            }
-            .spineScreen()
-            .tabItem { Label("Meetings", systemImage: "person.2.wave.2") }
-            .tag(Tab.meetings)
-
-            NavigationStack {
-                BuildsView()
-            }
-            .spineScreen()
-            .tabItem { Label("Builds", systemImage: "hammer") }
-            .tag(Tab.builds)
-
-            NavigationStack {
-                ActivityView()
-            }
-            .spineScreen()
-            .tabItem { Label("Activity", systemImage: "list.bullet.rectangle") }
-            .tag(Tab.activity)
-
-            NavigationStack {
-                SettingsView()
-            }
-            .spineScreen()
-            .tabItem { Label("Settings", systemImage: "gearshape") }
-            .tag(Tab.settings)
         }
         .task {
             // A first launch with nothing configured should land on Settings rather than on an
@@ -159,6 +68,42 @@ struct RootView: View {
                 threadPath = [id]
             }
             push.pendingDeepLink = nil
+        }
+    }
+
+    private func badge(for tab: AppTab) -> Int {
+        switch tab {
+        case .threads: return state.waitingThreads
+        case .headsup: return state.headsupWaiting
+        default: return 0
+        }
+    }
+
+    @ViewBuilder private func content(for tab: AppTab) -> some View {
+        switch tab {
+        case .threads:
+            NavigationStack(path: $threadPath) {
+                ConversationsView()
+                    .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
+            }
+        case .headsup: NavigationStack { HeadsupView() }
+        case .tasks: NavigationStack { TasksView() }
+        case .study: NavigationStack { StudyView() }
+        case .schedules: NavigationStack { SchedulesView() }
+        case .projects: NavigationStack { ProjectsView() }
+        case .files: NavigationStack { FilesView() }
+        case .clients: NavigationStack { ClientsView() }
+        case .search:
+            NavigationStack {
+                SearchView(openThread: { id in
+                    self.tab = .threads
+                    threadPath = [id]
+                })
+            }
+        case .meetings: NavigationStack { MeetingsView() }
+        case .builds: NavigationStack { BuildsView() }
+        case .activity: NavigationStack { ActivityView() }
+        case .settings: NavigationStack { SettingsView() }
         }
     }
 }
