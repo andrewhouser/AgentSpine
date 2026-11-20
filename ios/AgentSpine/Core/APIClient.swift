@@ -930,6 +930,12 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/meetings/\(id)/reprocess", method: "POST", body: body))
     }
 
+    /// Delete a meeting and everything derived from it. The server answers 409 while the meeting
+    /// is still recording or being processed, and the error carries its reason.
+    func deleteMeeting(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/meetings/\(id)", method: "DELETE"))
+    }
+
     func deleteMeetingAudio(_ id: Int) async throws {
         try await sendRaw(jsonRequest("/api/meetings/\(id)/audio", method: "DELETE"))
     }

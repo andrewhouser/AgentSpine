@@ -1331,6 +1331,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         }
       }
 
+      // DELETE /api/meetings/:id — remove a meeting and everything derived from it (409 while
+      // it is still being recorded or processed).
+      if (m === "DELETE" && seg.length === 3) {
+        const r = meetings.deleteMeeting(id);
+        if (r.ok) return sendJson(res, 200, { deleted: true, rejectedItems: r.rejectedItems });
+        return sendJson(res, r.reason === "no such meeting" ? 404 : 409, { error: r.reason });
+      }
+
       // DELETE /api/meetings/:id/audio — delete the kept recording now.
       if (m === "DELETE" && seg.length === 4 && seg[3] === "audio") {
         if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });

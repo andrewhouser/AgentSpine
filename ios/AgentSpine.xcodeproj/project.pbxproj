@@ -23,6 +23,8 @@
 				Core/AppState.swift,
 				Core/Keychain.swift,
 				Core/Models.swift,
+				Core/PCMSpooler.swift,
+				Core/PhoneRecorder.swift,
 				Core/ReadAloud.swift,
 				Core/RunStream.swift,
 				Core/Settings.swift,

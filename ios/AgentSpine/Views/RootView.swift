@@ -79,6 +79,18 @@ struct RootView: View {
         }
     }
 
+    /// Tabs folded under More are already hosted in UIKit's own navigation controller, so a
+    /// second `NavigationStack` of our own stacks a second bar and a second back arrow on every
+    /// pushed screen (seen on Settings → Tab bar). Those tabs go in bare; the bar's tabs keep
+    /// their own stack because nothing else supplies one there.
+    @ViewBuilder private func stacked<Content: View>(_ tab: AppTab, @ViewBuilder _ content: () -> Content) -> some View {
+        if TabLayout.more(settings.tabs).contains(tab) {
+            content()
+        } else {
+            NavigationStack { content() }
+        }
+    }
+
     @ViewBuilder private func content(for tab: AppTab) -> some View {
         switch tab {
         case .threads:
@@ -86,24 +98,24 @@ struct RootView: View {
                 ConversationsView()
                     .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
             }
-        case .headsup: NavigationStack { HeadsupView() }
-        case .tasks: NavigationStack { TasksView() }
-        case .study: NavigationStack { StudyView() }
-        case .schedules: NavigationStack { SchedulesView() }
-        case .projects: NavigationStack { ProjectsView() }
-        case .files: NavigationStack { FilesView() }
-        case .clients: NavigationStack { ClientsView() }
+        case .headsup: stacked(tab) { HeadsupView() }
+        case .tasks: stacked(tab) { TasksView() }
+        case .study: stacked(tab) { StudyView() }
+        case .schedules: stacked(tab) { SchedulesView() }
+        case .projects: stacked(tab) { ProjectsView() }
+        case .files: stacked(tab) { FilesView() }
+        case .clients: stacked(tab) { ClientsView() }
         case .search:
-            NavigationStack {
+            stacked(tab) {
                 SearchView(openThread: { id in
                     self.tab = .threads
                     threadPath = [id]
                 })
             }
-        case .meetings: NavigationStack { MeetingsView() }
-        case .builds: NavigationStack { BuildsView() }
-        case .activity: NavigationStack { ActivityView() }
-        case .settings: NavigationStack { SettingsView() }
+        case .meetings: stacked(tab) { MeetingsView() }
+        case .builds: stacked(tab) { BuildsView() }
+        case .activity: stacked(tab) { ActivityView() }
+        case .settings: stacked(tab) { SettingsView() }
         }
     }
 }

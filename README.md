@@ -95,9 +95,17 @@ There are two microphones, and which ones you can use depends on how you reached
 
 A third source is the **AgentSpine Mac app's own microphone**, which records the laptop in front of
 you and sends the audio to the server over Tailscale. It needs the client's name in
-`policy.audio.remoteSources` (the Mac app calls itself `"mac"`), on top of `enabled: true`; the
+`policy.audio.remoteSources` (the Mac app calls itself `"mac"`, the iPhone app `"iphone"`), on top of `enabled: true`; the
 list is empty by default and separate from `devices`, so allowlisting a server microphone never
-allows a client. See [docs/SPEC.md](docs/SPEC.md) §15, "Audio sent by a client".
+allows a client. The iPhone app does the same with the phone's built-in microphone (Meetings, then
+the microphone button, "This iPhone"), and keeps recording with the screen locked. See
+[docs/SPEC.md](docs/SPEC.md) §15, "Audio sent by a client".
+
+**Deleting a meeting** (web: "Delete meeting" on the row; iPhone: swipe, or the ⋯ menu; Mac: right-click
+or the ⋯ menu) removes its transcript, summary, chat, tags, kept audio and the copy filed into its
+project, and rejects any of its work items still waiting in Approvals. Tasks it already added to a
+project stay. It is refused while the meeting is recording or being processed
+(`DELETE /api/meetings/:id`).
 
 The picker only appears when both are actually available. Dictation uses the **accurate**
 Whisper model rather than the fast one: 14 seconds of speech takes about 1.4s, and that is a

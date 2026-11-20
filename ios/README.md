@@ -147,6 +147,13 @@ meetings, approvals from the menu bar (with a notification when one arrives), an
 the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). The window has two tabs. **Server**: **Test connection** only checks what you typed; **Connect** saves it and closes the window. **Assistant**: recipes, auto-approval proposals, agents, Heads-up, memory and policy, the same screens as the phone's Settings. There is no
 App Store step: a development-signed build on each Mac, as with the iPhone.
 
+**Recording a meeting from the iPhone** (Meetings, the microphone button, "This iPhone", which is the
+default): the same path as the Mac below, with the phone's built-in microphone. `policy.json` needs
+`"iphone"` in `audio.remoteSources` (the phone sends that as its source name). Capture continues with
+the screen locked (`UIBackgroundModes: audio`) and survives a dropped connection, because every
+three seconds of audio is written to disk before it is sent. A phone call pauses it and it resumes
+afterwards. The audio spooler is shared with the Mac (`Core/PCMSpooler.swift`).
+
 **Recording a meeting from the Mac** (Meetings, then the microphone button, "Record from this Mac"):
 
 - It sends this Mac's microphone to the server, which transcribes it as it does any meeting. For

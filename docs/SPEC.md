@@ -1083,7 +1083,7 @@ npm run tick | loop    # legacy single-goal heartbeat
 > - **The client buffers on disk while the server is unreachable**, and sends from `next` when it
 >   is back. The server holds no audio for a client that is away.
 > - **Policy: a named remote source, not a bypass of the device allowlist.** `policy.audio.
->   remoteSources` lists the clients allowed to send audio (`"mac"`). It needs `audio.enabled` and
+>   remoteSources` lists the clients allowed to send audio (`"mac"`, `"iphone"`). It needs `audio.enabled` and
 >   it is empty by default, so allowlisting a microphone for the server never allows a client by
 >   accident, and the reverse. A source that is not listed is a 403. The route answers to the
 >   dashboard token like the rest of `/api/meetings`; as with the device route, the person

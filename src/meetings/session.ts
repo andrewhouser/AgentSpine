@@ -45,13 +45,14 @@ import {
   MEETING_REMOTE_IDLE_SECONDS,
 } from "../config.ts";
 import { getEmbedder, toBlob } from "../memory/rag.ts";
+import { getConfirmation, setConfirmation } from "../memory/store.ts";
 import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
 import { checkAudioPolicy, checkRemoteSource, Listener, writeWav } from "../senses/listen.ts";
 import type { Policy } from "../types.ts";
 import { chat, coach } from "./coach.ts";
 import type { CoachAnswer } from "./coach.ts";
-import { decodeRecording, keepAudio, loadAudio, recordedAt } from "./audio.ts";
+import { decodeRecording, deleteAudio, keepAudio, loadAudio, recordedAt } from "./audio.ts";
 import { cardsFor } from "./context.ts";
 import type { ContextCards } from "./context.ts";
 import { findMeetingQuestions } from "../study/meeting-questions.ts";
@@ -676,6 +677,45 @@ export const indexIntoProject = async (meetingId: number, projectId: number): Pr
     files: 1,
   });
   return pieces.length;
+};
+
+export type DeleteResult = { ok: false; reason: string } | { ok: true; rejectedItems: number };
+
+/**
+ * Delete a meeting for good: its transcript, extraction, chat, tags, kept audio, the copy filed
+ * into a project's index, and any work item still waiting in Approvals. Tasks already filed
+ * into a project stay (they are the user's by now).
+ *
+ * Refused while the meeting is being captured, transcribed or extracted: deleting under a
+ * running pipeline would leave it writing rows for a meeting that no longer exists. Order
+ * matters too: the database rows go last, so a failure partway leaves a meeting you can retry.
+ */
+export const deleteMeeting = (meetingId: number): DeleteResult => {
+  const meeting = store.getMeeting(meetingId);
+  if (!meeting) return { ok: false, reason: "no such meeting" };
+  if (active?.meetingId === meetingId || meeting.status === "recording" || meeting.status === "transcribing" || reprocessing.has(meetingId))
+    return { ok: false, reason: "this meeting is still being recorded or processed; stop it first" };
+  if (store.getExtraction(meetingId)?.status === "running")
+    return { ok: false, reason: "extraction is still running on this meeting; try again in a minute" };
+
+  // Work items still waiting for approval would otherwise be approvable after their source is gone.
+  let rejectedItems = 0;
+  for (const w of store.workItems(meetingId)) {
+    if (w.verdict !== "queued" || w.confirmation_id == null) continue;
+    const conf = getConfirmation(w.confirmation_id);
+    if (conf?.state !== "pending") continue;
+    setConfirmation(conf.id, "rejected", "the meeting it came from was deleted");
+    rejectedItems++;
+  }
+
+  // The project index: the transcript chunks are retrievable context, which is the point of this.
+  if (meeting.project_id != null) {
+    const source = projects.listSources(meeting.project_id).find((s) => s.ref === `meeting:${meetingId}`);
+    if (source) projects.removeSource(source.id);
+  }
+  deleteAudio(meetingId);
+  store.deleteMeeting(meetingId);
+  return { ok: true, rejectedItems };
 };
 
 export interface LiveStatus {

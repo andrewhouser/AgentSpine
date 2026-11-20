@@ -176,6 +176,8 @@ export const api = {
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
   deleteConversation: (id: number) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: "DELETE" }),
   deleteHeadsupDate: (id: number) => request<{ ok: boolean }>(`/api/headsups/dates/${id}`, { method: "DELETE" }),
+  /** Delete a meeting and everything derived from it. 409 while it is still recording or processing. */
+  deleteMeeting: (id: number) => request<{ deleted: boolean; rejectedItems: number }>(`/api/meetings/${id}`, { method: "DELETE" }),
   /** Delete a meeting's kept recording now. */
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),

@@ -656,6 +656,43 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
 };
 
 /**
+ * Remove a meeting and every row that hangs off it. Returns false if there was no such meeting.
+ *
+ * One transaction, so a crash halfway cannot leave a meeting with no transcript or a transcript
+ * with no meeting. `study_meeting_questions` is a table of the study module, which may not have
+ * been loaded in this process, hence the guarded delete. Tasks the meeting already filed into a
+ * project are deliberately left alone: they are the user's now, not part of the recording.
+ * Callers (session.deleteMeeting) own the guards and the side effects outside the database.
+ */
+export const deleteMeeting = (id: number): boolean => {
+  if (!getMeeting(id)) return false;
+  rawDb.exec("BEGIN");
+  try {
+    for (const table of [
+      "meeting_segments",
+      "meeting_speakers",
+      "meeting_extractions",
+      "meeting_work_items",
+      "meeting_tags",
+      "meeting_chat",
+    ]) {
+      rawDb.prepare(`DELETE FROM ${table} WHERE meeting_id = ?`).run(id);
+    }
+    try {
+      rawDb.prepare("DELETE FROM study_meeting_questions WHERE meeting_id = ?").run(id);
+    } catch {
+      /* the study module's table does not exist yet: nothing to delete */
+    }
+    rawDb.prepare("DELETE FROM meetings WHERE id = ?").run(id);
+    rawDb.exec("COMMIT");
+  } catch (err) {
+    rawDb.exec("ROLLBACK");
+    throw err;
+  }
+  return true;
+};
+
+/**
  * Capture that outlived the process holding it. A `recording` row with no live process is a
  * meeting whose server was killed mid-session; without this the next boot would refuse to
  * start a new capture forever, because one already claims to be running.

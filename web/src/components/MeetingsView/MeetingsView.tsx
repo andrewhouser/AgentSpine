@@ -366,6 +366,7 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
 type MeetingDialog =
   | { id: number; kind: "dropAudio" }
   | { id: number; kind: "reprocess" }
+  | { kind: "deleteMeeting"; meeting: Meeting }
   | { kind: "rename"; meeting: Meeting }
   | { kind: "speaker"; meetingId: number; name: null | string; speaker: number };
 
@@ -543,6 +544,17 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     reloadMeetings();
   };
 
+  const removeMeeting = async (id: number): Promise<void> => {
+    try {
+      await api.deleteMeeting(id);
+      setProblem(null);
+      if (open === id) setOpen(null);
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : String(err));
+    }
+    reloadMeetings();
+  };
+
   const assign = async (id: number, value: string): Promise<void> => {
     await api.setMeetingProject(id, value === "" ? null : Number(value));
     reloadMeetings();
@@ -594,6 +606,19 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
           submitLabel="Re-make transcript"
           title="Re-make transcript"
           validate={(v) => (v === "" || /^[1-9]\d*$/.test(v) ? null : "Enter a whole number, or leave blank.")}
+        />
+      )}
+      {dialog?.kind === "deleteMeeting" && (
+        <ConfirmDialog
+          confirmLabel="Delete meeting"
+          danger
+          message={
+            `Delete “${dialog.meeting.title ?? `Meeting ${dialog.meeting.id}`}” for good? ` +
+            "Its transcript, summary, chat, kept audio and the copy filed in its project go, and work items still waiting in Approvals are rejected. Tasks already added to a project stay. This can't be undone."
+          }
+          onClose={() => setDialog(null)}
+          onConfirm={() => removeMeeting(dialog.meeting.id)}
+          title="Delete meeting"
         />
       )}
       {dialog?.kind === "dropAudio" && (
@@ -784,6 +809,14 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
             ))}
             <button className={styles.linkButton} onClick={() => setTagging(m)} type="button">
               {(m.tags ?? []).length ? "Edit tags" : "Add tags"}
+            </button>
+            <button
+              className={styles.linkButton}
+              disabled={m.status === "recording" || m.status === "transcribing"}
+              onClick={() => setDialog({ kind: "deleteMeeting", meeting: m })}
+              type="button"
+            >
+              Delete meeting
             </button>
           </div>
 

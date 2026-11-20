@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Meetings: a live strip, the history, and a start button.
 ///
-/// Capture binds to the Mac's microphone device list, which is odd remotely but not wrong:
-/// there is one microphone and one session. Everything here is polled, never streamed.
+/// A meeting is recorded either with this phone's own microphone (`PhoneRecorder`, which sends
+/// audio to the server as it goes) or with one of the server Mac's inputs. There is one
+/// recording at a time either way. Everything here is polled, never streamed.
 struct MeetingsView: View {
     @State private var meetings: [Meeting] = []
     @State private var live: MeetingLiveStatus?
@@ -16,11 +17,25 @@ struct MeetingsView: View {
     /// one tag is already a short enough list to scroll.
     @State private var filterTag: String?
     @State private var tagCounts: [MeetingTagCount] = []
+    @State private var pendingDelete: Meeting?
+    /// Recording from this phone's own microphone; see `PhoneRecorder`.
+    private let phone = PhoneRecorder.shared
 
     var body: some View {
         List {
             if let error {
                 ErrorNotice(message: error) { Task { await load() } }
+            }
+            if let notice = phone.notice {
+                Text(notice)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.warn)
+            }
+            if phone.isRecording, case .buffering(let why) = phone.link {
+                Text("Can't reach the server (\(why)). Audio is kept on this phone and sent when it's back"
+                     + (phone.unsentSeconds > 0 ? " — \(phone.unsentSeconds) s waiting." : "."))
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.warn)
             }
             if let live, live.recording, let id = live.meetingID {
                 Section {
@@ -30,7 +45,7 @@ struct MeetingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Label("Recording", systemImage: "record.circle")
                                 .foregroundStyle(Spine.Palette.danger)
-                            Text("\(live.device ?? "microphone") · "
+                            Text("\(live.device == PhoneRecorder.source ? "this iPhone" : (live.device ?? "microphone")) · "
                                  + Self.clock(live.elapsedMs)
                                  + (live.pendingChunks > 0
                                     ? " · \(live.pendingChunks) chunk(s) behind" : ""))
@@ -41,6 +56,15 @@ struct MeetingsView: View {
                         Task { await stop() }
                     }
                     .disabled(stopping)
+                }
+            } else if phone.isRecording {
+                // Between starting on the phone and the first poll, or while the server is
+                // unreachable: the phone still has a recording to finish.
+                Section {
+                    Label("Recording from this iPhone", systemImage: "record.circle")
+                        .foregroundStyle(Spine.Palette.danger)
+                    Button("Stop recording", role: .destructive) { Task { await stop() } }
+                        .disabled(stopping)
                 }
             }
             Section {
@@ -63,6 +87,12 @@ struct MeetingsView: View {
                                     .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2)).foregroundStyle(Spine.Palette.textDim)
                             }
                         }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { pendingDelete = meeting } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(meeting.isRecording || meeting.status == "transcribing")
                     }
                 }
                 if meetings.isEmpty && !loading && error == nil {
@@ -101,6 +131,17 @@ struct MeetingsView: View {
         }
         .sheet(isPresented: $showStart) {
             StartMeetingSheet { await load() }
+        }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.displayTitle ?? "this meeting")”?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete meeting", role: .destructive) {
+                if let meeting = pendingDelete { Task { await delete(meeting) } }
+            }
+        } message: {
+            Text("Its transcript, summary, chat and kept audio are removed for good, along with the copy in its project. Tasks already added to a project stay.")
         }
         .onChange(of: filterTag) { Task { await load() } }
         .refreshable { await load() }
@@ -144,11 +185,28 @@ struct MeetingsView: View {
         }
     }
 
+    private func delete(_ meeting: Meeting) async {
+        do {
+            try await APIClient.shared.deleteMeeting(meeting.id)
+            meetings.removeAll { $0.id == meeting.id }
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        pendingDelete = nil
+    }
+
     private func stop() async {
         stopping = true
         defer { stopping = false }
         do {
-            try await APIClient.shared.stopMeeting()
+            if phone.isRecording {
+                // The phone has to finish sending what it captured before the server is told
+                // to stop, so this goes through the recorder, not straight to the server.
+                await phone.stop()
+            } else {
+                try await APIClient.shared.stopMeeting()
+            }
             await load()
         } catch {
             self.error = error.localizedDescription
@@ -157,11 +215,18 @@ struct MeetingsView: View {
 }
 
 struct StartMeetingSheet: View {
+    static let phoneChoice = "\u{0}iphone"
     let onStarted: () async -> Void
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
     @State private var devices: AudioDevices?
+    /// `phoneChoice` records with this iPhone's own microphone; anything else is the name of one
+    /// of the server Mac's inputs.
+    #if os(iOS)
+    @State private var device = StartMeetingSheet.phoneChoice
+    #else
     @State private var device = ""
+    #endif
     @State private var title = ""
     @State private var projectID: Int?
     @State private var error: String?
@@ -173,20 +238,23 @@ struct StartMeetingSheet: View {
                 if let error {
                     Text(error).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.danger)
                 }
-                if let devices {
-                    if !devices.enabled {
-                        Text("Audio capture is off in policy.json on the server.")
-                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.warn)
-                    }
-                    Section {
-                        Picker("Microphone", selection: $device) {
-                            ForEach(devices.devices, id: \.name) { d in
-                                Text(d.allowed ? d.name : "\(d.name) (not allowlisted)").tag(d.name)
-                            }
+                if let devices, !devices.enabled {
+                    Text("Audio capture is off in policy.json on the server.")
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.warn)
+                }
+                Section {
+                    Picker("Microphone", selection: $device) {
+                        #if os(iOS)
+                        Text("This iPhone").tag(Self.phoneChoice)
+                        #endif
+                        ForEach(devices?.devices ?? [], id: \.name) { d in
+                            Text(d.allowed ? "Server Mac: \(d.name)" : "Server Mac: \(d.name) (not allowlisted)").tag(d.name)
                         }
-                    } footer: {
-                        Text("These are the Mac's inputs, not the phone's.")
                     }
+                } footer: {
+                    Text(device == Self.phoneChoice
+                         ? "Records with the phone's built-in microphone and sends the audio to your server as it goes. Keep AgentSpine open or let it run in the background. The server's policy.json must list \"\(PhoneRecorder.source)\" under audio.remoteSources."
+                         : "This is one of the server Mac's own inputs, not the phone's.")
                 }
                 Section("Title (optional)") { TextField("Title", text: $title) }
                 Section("Project (optional)") {
@@ -206,13 +274,11 @@ struct StartMeetingSheet: View {
                 }
             }
             .task {
-                do {
-                    let found = try await APIClient.shared.meetingDevices()
-                    devices = found
-                    device = found.devices.first(where: \.allowed)?.name
-                        ?? found.devices.first?.name ?? ""
-                } catch {
-                    self.error = error.localizedDescription
+                // The phone is the default and needs no device list, so a failure here only
+                // costs the Mac's inputs from the picker.
+                devices = try? await APIClient.shared.meetingDevices()
+                if device.isEmpty {
+                    device = devices?.devices.first(where: \.allowed)?.name ?? devices?.devices.first?.name ?? ""
                 }
             }
         }
@@ -222,7 +288,11 @@ struct StartMeetingSheet: View {
         starting = true
         defer { starting = false }
         do {
-            try await APIClient.shared.startMeeting(device: device, projectID: projectID, title: title)
+            if device == Self.phoneChoice {
+                try await PhoneRecorder.shared.start(projectID: projectID, title: title)
+            } else {
+                try await APIClient.shared.startMeeting(device: device, projectID: projectID, title: title)
+            }
             await onStarted()
             dismiss()
         } catch {
@@ -234,6 +304,11 @@ struct StartMeetingSheet: View {
 struct MeetingDetailView: View {
     let meetingID: Int
     @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    /// Called after the meeting is deleted, for a host (the Mac's split view) that has to drop
+    /// its selection: `dismiss` does nothing when this view is the root of its stack.
+    var onDeleted: (() -> Void)?
+    @State private var confirmDelete = false
     @State private var detail: MeetingDetail?
     @State private var cards: ContextCards?
     @State private var error: String?
@@ -295,9 +370,16 @@ struct MeetingDetailView: View {
                                 .disabled(meeting.isRecording || meeting.status == "transcribing")
                             Button("Delete kept audio", role: .destructive) { Task { await dropAudio() } }
                         }
+                        Button("Delete meeting…", role: .destructive) { confirmDelete = true }
+                            .disabled(meeting.isRecording || meeting.status == "transcribing")
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
+        }
+        .confirmationDialog("Delete this meeting?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete meeting", role: .destructive) { Task { await deleteMeeting() } }
+        } message: {
+            Text("Its transcript, summary, chat and kept audio are removed for good, along with the copy in its project. Tasks already added to a project stay.")
         }
         .alert("Rename meeting", isPresented: $renaming) {
             TextField("Title", text: $newTitle)
@@ -581,6 +663,14 @@ struct MeetingDetailView: View {
         do {
             try await APIClient.shared.reprocessMeeting(meetingID, speakers: Int(headCount))
             await load()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func deleteMeeting() async {
+        do {
+            try await APIClient.shared.deleteMeeting(meetingID)
+            onDeleted?()
+            dismiss()
         } catch { self.error = error.localizedDescription }
     }
 

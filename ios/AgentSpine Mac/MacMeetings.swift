@@ -15,6 +15,7 @@ struct MacMeetingsView: View {
     @State private var showStart = false
     @State private var showRecord = false
     @State private var picked = false
+    @State private var pendingDelete: Meeting?
     private let recorder = MacRecorder.shared
 
     var body: some View {
@@ -34,6 +35,17 @@ struct MacMeetingsView: View {
                     .disabled(live?.recording == true || recorder.isRecording)
                     .help("Start a meeting")
             }
+        }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.displayTitle ?? "this meeting")”?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete meeting", role: .destructive) {
+                if let meeting = pendingDelete { Task { await delete(meeting) } }
+            }
+        } message: {
+            Text("Its transcript, summary, chat and kept audio are removed for good, along with the copy in its project. Tasks already added to a project stay.")
         }
         .sheet(isPresented: $showStart) {
             StartMeetingSheet { await load() }
@@ -85,6 +97,10 @@ struct MacMeetingsView: View {
                             .foregroundStyle(Spine.Palette.textDim)
                     }
                     .tag(meeting.id)
+                    .contextMenu {
+                        Button("Delete meeting…", role: .destructive) { pendingDelete = meeting }
+                            .disabled(meeting.isRecording || meeting.status == "transcribing")
+                    }
                 }
                 if meetings.isEmpty && error == nil {
                     Text("No meetings yet.")
@@ -106,7 +122,12 @@ struct MacMeetingsView: View {
                 MacLiveMeeting(meetingID: selected) { await load() }
                     .id(selected)
             } else {
-                NavigationStack { MeetingDetailView(meetingID: selected) }
+                NavigationStack {
+                    MeetingDetailView(meetingID: selected) {
+                        self.selected = nil
+                        Task { await load() }
+                    }
+                }
                     .id(selected)
             }
         } else {
@@ -118,6 +139,18 @@ struct MacMeetingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Spine.Palette.bg)
         }
+    }
+
+    private func delete(_ meeting: Meeting) async {
+        do {
+            try await APIClient.shared.deleteMeeting(meeting.id)
+            if selected == meeting.id { selected = nil }
+            meetings.removeAll { $0.id == meeting.id }
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        pendingDelete = nil
     }
 
     private func load() async {
