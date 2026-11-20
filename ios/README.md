@@ -137,6 +137,11 @@ or build it from the command line:
 xcodebuild -project ios/AgentSpine.xcodeproj -scheme "AgentSpine Mac" -destination 'platform=macOS' build
 ```
 
+To build it and replace the copy in `/Applications` in one step, run `./install-mac.sh` from the
+repo root. It builds Release, quits the running app, swaps the new one in and opens it; the old copy
+is only removed after the new build succeeds. `--no-open` leaves it closed, and
+`INSTALL_DIR=~/Applications ./install-mac.sh` installs somewhere else.
+
 It is for the Mac you work at: a sidebar of sections and threads with an inspector, Heads-up,
 meetings, approvals from the menu bar (with a notification when one arrives), and read-aloud. Like
 the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). The window has two tabs. **Server**: **Test connection** only checks what you typed; **Connect** saves it and closes the window. **Assistant**: recipes, auto-approval proposals, agents, Heads-up, memory and policy, the same screens as the phone's Settings. There is no
