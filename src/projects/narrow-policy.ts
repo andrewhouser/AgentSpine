@@ -53,13 +53,21 @@ const intersect = (base: string[] | undefined, overlay: string[] | undefined): s
  * An empty allowlist means "deny everything" — except for `browser.navigateAllowlist`,
  * where `[]` conventionally means "any domain". Intersecting with that convention would
  * invert it, turning a restriction into a grant, so it is handled explicitly.
+ *
+ * Two non-empty lists that share nothing intersect to `[]`, which the page tools would read
+ * as "any domain". That is the one result `[]` cannot carry, so it is returned as `denyAll`
+ * and the tools test the flag before the list.
  */
-const intersectNavigate = (base: string[] | undefined, overlay: string[] | undefined): string[] => {
+const intersectNavigate = (
+  base: string[] | undefined,
+  overlay: string[] | undefined,
+): { denyAll: boolean; list: string[] } => {
   const b = base ?? [];
-  if (!overlay) return [...b];
-  if (b.length === 0) return [...overlay]; // base allowed anything; the overlay restricts it
-  if (overlay.length === 0) return [...b]; // overlay says "any" — no narrowing offered
-  return b.filter((entry) => overlay.includes(entry));
+  if (!overlay) return { denyAll: false, list: [...b] };
+  if (b.length === 0) return { denyAll: false, list: [...overlay] }; // base allowed anything; the overlay restricts it
+  if (overlay.length === 0) return { denyAll: false, list: [...b] }; // overlay says "any" — no narrowing offered
+  const list = b.filter((entry) => overlay.includes(entry));
+  return { denyAll: list.length === 0, list };
 };
 
 /** True only if both are true. An overlay can switch something off, never on. */
@@ -75,14 +83,22 @@ const tighter = (base: number | undefined, overlay: number | undefined): number 
   return Math.min(b, o);
 };
 
+/**
+ * Budgets, compared as what the broker will actually apply. `capFor` in broker.ts uses a tool's
+ * own cap when it has one and the scope's default otherwise, so a tool cap is not comparable
+ * with the other side's cap for the same tool alone: a base default of 2 with an overlay
+ * `web_search: 100` would otherwise let web_search run 100 times. Each tool therefore gets the
+ * tighter of the two EFFECTIVE caps, and an overlay can never end up above the base.
+ */
 const narrowScope = (
   base: { default?: number; tools?: Record<string, number> } | undefined,
   overlay: { default?: number; tools?: Record<string, number> } | undefined,
 ): { default?: number; tools?: Record<string, number> } | undefined => {
   if (!base && !overlay) return undefined;
+  const effective = (scope: typeof base, tool: string): number | undefined => scope?.tools?.[tool] ?? scope?.default;
   const tools: Record<string, number> = {};
   for (const tool of new Set([...Object.keys(base?.tools ?? {}), ...Object.keys(overlay?.tools ?? {})])) {
-    const value = tighter(base?.tools?.[tool], overlay?.tools?.[tool]);
+    const value = tighter(effective(base, tool), effective(overlay, tool));
     if (value !== undefined) tools[tool] = value;
   }
   const dflt = tighter(base?.default, overlay?.default);
@@ -105,10 +121,15 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
         Boolean(overlay.autoExecute?.irreversibleAlwaysConfirm),
       reversible: and(base.autoExecute?.reversible, overlay.autoExecute?.reversible),
     },
-    browser: {
-      enabled: and(base.browser?.enabled, overlay.browser?.enabled),
-      navigateAllowlist: intersectNavigate(base.browser?.navigateAllowlist, overlay.browser?.navigateAllowlist),
-    },
+    browser: (() => {
+      const nav = intersectNavigate(base.browser?.navigateAllowlist, overlay.browser?.navigateAllowlist);
+      return {
+        // Once denied, always denied: the base may already carry the flag.
+        ...(nav.denyAll || base.browser?.denyAll ? { denyAll: true } : {}),
+        enabled: and(base.browser?.enabled, overlay.browser?.enabled),
+        navigateAllowlist: nav.list,
+      };
+    })(),
     budgets: {
       perDay: narrowScope(base.budgets?.perDay, overlay.budgets?.perDay),
       perRun: narrowScope(base.budgets?.perRun, overlay.budgets?.perRun),

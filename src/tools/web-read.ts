@@ -33,6 +33,7 @@ const classify = (args: Args): ClassifiedAction => ({
 
 const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
   if (!policy.browser?.enabled) return { allowed: false, reason: "browser control is disabled in policy.json" };
+  if (policy.browser.denyAll) return { allowed: false, reason: "no domain is allowed: the project's list shares none with browser.navigateAllowlist" };
   const allow = policy.browser.navigateAllowlist ?? [];
   if (allow.length) {
     const host = hostOf(args?.url ?? "");

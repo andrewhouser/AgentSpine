@@ -26,28 +26,14 @@ management-knowledge review (F6), and my own audit while fixing F2 (F7). Both we
 `PLAN-*.md`), and everything needed from them is here. `npm run check` passed throughout; these are gaps the
 suite does not cover.
 
-I checked each finding against the code on 2026-11-21. **F1 and F5 reproduce** when `narrowPolicy` is run on
-plain objects. **F2, F3 and F4 are fixed** (see the note after F1); the others have no fix or regression test
+I checked each finding against the code on 2026-11-21. **F1 to F5 and F7 are fixed** (see the note after F1); the others have no fix or regression test
 yet. Every reproduction below becomes a test in the same change as its fix, and each new suite is added by hand
 to the `npm test` list in `package.json`.
 
-**Suggested order, and why:** F2, F3, F4 and F7 are done. F1 and F5 matter as soon as a project overlay is used,
-so they come before anyone relies on overlays, but they need no change to what runs today. F6 is decided but
-needs a filing choice on web, Mac and iPhone, and should land before more workplace transcripts are filed. All
-are Code. F6 is also step K0 of section 8.
+**What is left:** F6 only. It is decided but needs a filing choice on web, Mac and iPhone, and should land before
+more workplace transcripts are filed. It is also step K0 of section 8.
 
-**F1. Critical. A project overlay can open the browser to any domain.**
-`intersectNavigate()` in `src/projects/narrow-policy.ts` returns `[]` when the global and project allowlists are
-both non-empty and share nothing. `browser.ts` and `web-read.ts` both read `[]` as "any domain" (`if
-(allow.length)`). Reproduced: global `["allowed.example"]` plus overlay `["different.example"]` gives `[]`, so
-`attacker.example` is allowed. This breaks the module's own contract that an overlay never widens the
-hand-edited policy.
-Fix: represent deny-all separately from the empty-list convention, for example an explicit flag on the narrowed
-`browser` policy (type in `src/types.ts`) that both `checkPolicy` functions test before the list. Tests: two
-disjoint non-empty lists; base empty with overlay set; overlay empty with base set; and the decision through both
-`browser` and `web_read`, not only the pure function.
-
-**F2, F3, F4 and F7: fixed 2026-11-21, numbers kept so the others do not shift.** F2 (meeting transcripts reaching
+**F1, F2, F3, F4, F5 and F7: fixed 2026-11-21, numbers kept so the others do not shift.** F1 (an overlay opening the browser to any domain): two non-empty allowlists that share nothing now set `browser.denyAll`, which `browser` and `web_read` test before the list. F5 (an overlay raising a budget): caps are compared as the broker applies them, so no tool ends above the base's effective cap. Suite: `test/narrow-policy-holes.test.mjs`. F2 (meeting transcripts reaching
 the cloud): a tool can declare `privateOutput` (`src/types.ts`), and once one has run, the agent loop pins every
 later model call in that run, its re-asks and its closing answer, and any subagent in the tree, to
 `sensitivity: "private"` (`src/sensitivity.ts`). `meeting_list` and the study tools on a project-linked topic
@@ -63,16 +49,6 @@ state, and a row left `executing` by a crash ends as `error` on server start and
 `test/confirm-race.test.mjs`. F4 (`state_set` reaching internal `kv` keys): `state_get` and `state_set` store every
 key under `watch:`, so nothing internal is reachable by construction, and a one-time migration copies legacy
 watcher keys so no watcher reports a spurious first observation. Suite: `test/state-namespace.test.mjs`.
-
-**F5. High. A project overlay can raise a tool budget.**
-`narrowScope` in `src/projects/narrow-policy.ts` compares a tool cap only with the base's cap for that same
-tool, and `capFor` in `src/broker.ts` prefers a tool cap over the default. Reproduced: global `perRun.default` 2
-plus overlay `tools.web_search = 100` gives `{ default: 2, tools: { web_search: 100 } }`, so the effective cap
-is 100.
-Fix: for each tool, compute the base's effective cap first (its own cap if present, else the base default), and
-bound the overlay result by it. Tests: every combination of global default, global tool cap, overlay default
-and overlay tool cap, for both `perRun` and `perDay`, asserting the effective cap per tool never exceeds the
-base's.
 
 **F6. Medium. Filed transcripts outlive the transcript retention window.**
 `pruneTranscripts` in `src/meetings/store.ts` deletes a meeting's segments, speakers, chat and quotes after

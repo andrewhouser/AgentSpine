@@ -77,7 +77,16 @@ export interface Policy {
   };
   apps: { allow: string[] };
   web: { searchEnabled: boolean; fetchAllowlist: string[] };
-  browser: { enabled: boolean; navigateAllowlist: string[] };
+  browser: {
+    /**
+     * Set only by narrowPolicy, when a project overlay and the global list share no domain. An
+     * empty `navigateAllowlist` means "any domain", so "nothing is allowed" cannot be written
+     * as an empty list; this says it outright. Both page tools test it before the list.
+     */
+    denyAll?: boolean;
+    enabled: boolean;
+    navigateAllowlist: string[];
+  };
   google: { enabled: boolean; write?: GoogleWritePolicy };
   fs: { readableDirs: string[]; writableDirs?: string[] };
   /**
