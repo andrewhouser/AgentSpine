@@ -23,6 +23,8 @@ struct HeadsupView: View {
     @State private var actionError: String?
     @State private var checking = false
     @State private var note: String?
+    @State private var previewing = false
+    @State private var preview: HeadsupPreview?
 
     /// Research is running in the background for something you said Yes to. Drives the polling.
     private var looking: Bool {
@@ -53,6 +55,32 @@ struct HeadsupView: View {
                     }
                 }
                 .disabled(checking)
+                Button {
+                    Task { await previewNow() }
+                } label: {
+                    if previewing {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("Looking…")
+                        }
+                    } else {
+                        Label("Preview what Check now would send", systemImage: "eye")
+                    }
+                }
+                .disabled(previewing || checking)
+                if let preview {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(Self.previewSummary(preview))
+                        ForEach(preview.offers, id: \.self) { o in
+                            Text("\(o.subject) · \(o.kind.capitalized) · \(Self.previewWhen(o.daysUntil)) · \(Self.previewReason(o.reason))")
+                        }
+                        if !preview.errors.isEmpty {
+                            Text("Couldn't read everything: \(preview.errors.joined(separator: "; "))")
+                        }
+                    }
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.textDim)
+                }
                 if let note {
                     Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                 }
@@ -184,7 +212,46 @@ struct HeadsupView: View {
         }
     }
 
+    private static func previewSummary(_ p: HeadsupPreview) -> String {
+        if !p.offers.isEmpty {
+            return "Check now would offer \(p.offers.count). Nothing was sent or recorded."
+                + (p.deferred > 0 ? " \(p.deferred) more would wait for tomorrow." : "")
+        }
+        if p.deferred > 0 {
+            return "Nothing would go out right now: it's quiet hours or the daily limit is reached. "
+                + "Nothing was sent or recorded."
+        }
+        return "Nothing would be offered right now. Nothing was sent or recorded."
+    }
+
+    private static func previewWhen(_ days: Int) -> String {
+        days == 0 ? "today" : days == 1 ? "tomorrow" : "in \(days) days"
+    }
+
+    private static func previewReason(_ reason: String) -> String {
+        switch reason {
+        case "new": return "first mention"
+        case "reminder": return "reminder"
+        case "snoozed": return "back from snooze"
+        case "changed": return "details changed"
+        default: return reason
+        }
+    }
+
+    private func previewNow() async {
+        previewing = true
+        note = nil
+        defer { previewing = false }
+        do {
+            preview = try await APIClient.shared.previewHeadsups()
+        } catch {
+            preview = nil
+            note = error.localizedDescription
+        }
+    }
+
     private func checkNow() async {
+        preview = nil
         checking = true
         defer { checking = false }
         do {

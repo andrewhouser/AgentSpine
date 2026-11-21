@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { Headsup, HeadsupCard, HeadsupDates } from "../../lib/types.ts";
+import type { Headsup, HeadsupCard, HeadsupDates, HeadsupPreview } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api, authedPath } from "../../lib/api.ts";
@@ -18,6 +18,13 @@ const KIND_LABEL: Record<string, string> = {
   birthday: "Birthday",
   flight: "Flight",
   recurring: "Recurring",
+};
+
+const REASON_LABEL: Record<string, string> = {
+  changed: "details changed",
+  new: "first mention",
+  reminder: "reminder",
+  snoozed: "back from snooze",
 };
 
 /** A date-only value is a calendar day, not an instant: parsing it as UTC shifts it west of Greenwich. */
@@ -69,6 +76,8 @@ export const HeadsupView = () => {
   const [dates, refreshDates] = useResource(() => api.listHeadsupDates(), NO_DATES);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [preview, setPreview] = useState<HeadsupPreview | null>(null);
 
   const answer = async (h: Headsup, a: "later" | "never" | "yes"): Promise<void> => {
     await api.answerHeadsup(h.id, a);
@@ -104,9 +113,24 @@ export const HeadsupView = () => {
     refreshDates();
   };
 
+  /** What Check now would send, without sending or recording anything. */
+  const previewNow = async (): Promise<void> => {
+    setPreviewing(true);
+    setNote("");
+    try {
+      setPreview(await api.previewHeadsups());
+    } catch (err) {
+      setPreview(null);
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const checkNow = async (): Promise<void> => {
     setBusy(true);
     setNote("");
+    setPreview(null);
     try {
       const r = await api.runHeadsups();
       const more = r.deferred ? ` (${r.deferred} more waiting for tomorrow)` : "";
@@ -140,6 +164,9 @@ export const HeadsupView = () => {
         <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => void checkNow()} type="button">
           {busy ? "Checking…" : "Check now"}
         </button>
+        <button className={styles.button} disabled={previewing} onClick={() => void previewNow()} title="Shows what Check now would send. Nothing is sent or recorded." type="button">
+          {previewing ? "Looking…" : "Preview"}
+        </button>
         <label>
           <input
             checked={showAll}
@@ -153,6 +180,26 @@ export const HeadsupView = () => {
         </label>
       </div>
       {note && <div className={styles.snippet}>{note}</div>}
+      {preview && (
+        <div className={styles.snippet}>
+          <div>
+            {preview.offers.length
+              ? `Check now would offer ${preview.offers.length}. Nothing was sent or recorded.`
+              : preview.deferred
+                ? "Nothing would go out right now: it's quiet hours or the daily limit is reached. Nothing was sent or recorded."
+                : "Nothing would be offered right now. Nothing was sent or recorded."}
+            {preview.deferred > 0 && preview.offers.length > 0 ? ` ${preview.deferred} more would wait for tomorrow.` : ""}
+          </div>
+          <ul>
+            {preview.offers.map((o) => (
+              <li key={`${o.kind}:${o.subject}`}>
+                {o.subject} · {KIND_LABEL[o.kind] ?? o.kind} · {o.daysUntil === 0 ? "today" : o.daysUntil === 1 ? "tomorrow" : `in ${o.daysUntil} days`} · {REASON_LABEL[o.reason]}
+              </li>
+            ))}
+          </ul>
+          {preview.errors.length > 0 && <div>Couldn&apos;t read everything: {preview.errors.join("; ")}</div>}
+        </div>
+      )}
 
       {items.length === 0 && <div className={styles.empty}>Nothing coming up that needs a heads-up.</div>}
 

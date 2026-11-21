@@ -175,8 +175,9 @@ with its metric, its off-switch and the standing rule that a number that does no
 report, not tune. It was written before A3 has run, so the per-rung bars (the chat-date false-positive limit
 in particular) are placeholders to fix after your shakedown. **Found while writing it:** the web "Check now"
 button is not a dry run (it records and pushes, via `POST /api/headsups/run`), and the read-only
-`GET /api/headsups/preview` has no button on any client. Rung 0 needs a baseline without pushes, so decide
-whether to add one.
+`GET /api/headsups/preview` had no button. **Added 2026-11-21:** a Preview button on web, and in the shared
+Swift Heads-up view (iPhone and Mac). It lists what Check now would offer and writes and sends nothing.
+Not yet seen rendered on iPhone or Mac.
 
 **D. Lead-time overrides. Built 2026-11-21.** Per kind, an ordered list of 1 to 3 day counts, largest first,
 each 0 to 45, no repeats, validated all or nothing (`validLeadDays` and `updatePrefs` in `prefs.ts`; a list in

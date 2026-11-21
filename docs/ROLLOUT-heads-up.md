@@ -21,8 +21,9 @@ read failures). Every figure is a SQL count or a stored counter, never a model's
 
 A fact that shapes rung 0: the **Check now** button (`POST /api/headsups/run`) is the morning job run
 by hand. It records what it offers and sends the push. It is not a dry run. The dry run is
-`GET /api/headsups/preview`, which reads the calendars and writes nothing, and no client has a
-button for it yet.
+the **Preview** button on the Heads-up screen (web, iPhone and Mac), which calls
+`GET /api/headsups/preview`: it reads the calendars, writes and sends nothing, and works even with
+`HEADSUP_ENABLED=false`.
 
 ---
 
@@ -31,13 +32,9 @@ button for it yet.
 Find out what it would say before it says anything.
 
 In `.env` on the Mini: `HEADSUP_ENABLED=false`, then restart. That stops the morning job and Check
-now (both answer "disabled"). Preview still works, since it only reads.
-
-```
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/headsups/preview
-```
-
-(Use whatever token the clients use. Run it each morning for about a week.)
+now (both answer "disabled"). Preview still works, since it only reads. Press **Preview** on the
+Heads-up screen each morning for about a week. It lists what Check now would offer, with each
+item's kind, how far off it is, and whether it would be a first mention or a reminder.
 
 - [ ] Preview lists real items from the calendars you expect, in the right kinds.
 - [ ] **No item is a paid-for bill or a holiday.** A paid bill or a public holiday showing up means

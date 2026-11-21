@@ -962,6 +962,21 @@ struct HeadsupPrefs: Codable, Hashable {
     let unavailable: HeadsupUnavailable
 }
 
+/// What "Check now" would do, without doing it: nothing is sent or recorded.
+struct HeadsupPreview: Codable {
+    struct Offer: Codable, Hashable {
+        let subject: String
+        let kind: String
+        let daysUntil: Int
+        /// "new", "reminder", "snoozed" or "changed".
+        let reason: String
+    }
+    /// Due but held back by the daily limit or quiet hours.
+    let deferred: Int
+    let errors: [String]
+    let offers: [Offer]
+}
+
 /// What "Check now" reports.
 struct HeadsupRunResult: Codable {
     let status: String

@@ -22,6 +22,7 @@ import type {
   Headsup,
   HeadsupDates,
   HeadsupPrefs,
+  HeadsupPreview,
   HeadsupRun,
   IngestResult,
   LiveStatus,
@@ -345,6 +346,7 @@ export const api = {
 
   policy: () => request<Record<string, unknown>>("/api/policy"),
 
+  previewHeadsups: () => request<HeadsupPreview>("/api/headsups/preview"),
   project: (id: number) =>
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,

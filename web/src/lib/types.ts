@@ -604,6 +604,14 @@ export interface HeadsupDates {
   remembered: { day: number; id: number; month: number; occasion: string; title: string; who: string }[];
 }
 
+/** What a run would offer right now. Reads the calendars, writes and sends nothing. */
+export interface HeadsupPreview {
+  /** Due but held back by the daily cap or quiet hours. */
+  deferred: number;
+  errors: string[];
+  offers: { daysUntil: number; kind: string; reason: "changed" | "new" | "reminder" | "snoozed"; subject: string }[];
+}
+
 export interface HeadsupRun {
   deferred: number;
   errors: string[];

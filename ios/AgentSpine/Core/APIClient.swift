@@ -380,6 +380,11 @@ final class APIClient {
         )
     }
 
+    /// "Preview": what Check now would offer. Reads the calendars; sends and records nothing.
+    func previewHeadsups() async throws -> HeadsupPreview {
+        try await send(request("/api/headsups/preview"), as: HeadsupPreview.self, using: longSession)
+    }
+
     /// "Check now": scan and send today's heads-up immediately, instead of waiting for the morning.
     func runHeadsups() async throws -> HeadsupRunResult {
         try await send(jsonRequest("/api/headsups/run", method: "POST"), as: HeadsupRunResult.self, using: longSession)
