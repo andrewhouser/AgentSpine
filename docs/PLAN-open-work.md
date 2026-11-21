@@ -478,7 +478,9 @@ stability is a measured performance requirement on the local model host.
 without describing unavailable tools; removing a tool from the visible set removes every claim that it can be
 used; the common prefix does not change merely because a run id or project changed.
 
-### S3. Effective capability summary (Code; F1 and F5 are fixed)
+### S3. Effective capability summary (built 2026-11-21)
+
+**Built:** `summarizeCapabilities` in `src/harness.ts` writes the Can and Cannot lines of the envelope from the visible tools and the project-narrowed policy, family by family (web, browser including a project that allows no domain, files, Gmail and Calendar, drafts, schedules, helpers, build commands, dry run), and always lists sending mail, permanent deletion and, for a private run, the cloud. Not done: a per-tool description derived from each tool's own policy check, so the summary reads the same policy fields rather than calling `checkPolicy`; it can therefore drift from a tool whose check gains a new condition. Tests are in `test/harness.test.mjs`. The original design follows.
 
 Generate a compact, human-readable summary from the visible registry and the effective policy *after* project
 narrowing. It should describe operational facts needed for planning, including useful negative capabilities:
@@ -502,7 +504,9 @@ documented a security bug, and F2 before any claim that meeting work is locally 
 model stops proposing email send and permanent-delete paths that do not exist; no capability summary can make a
 broker-denied call execute.
 
-### S4. Read-only `harness_status` tool (Code)
+### S4. Read-only `harness_status` tool (built 2026-11-21)
+
+**Built:** `src/tools/harness-status.ts`. It reads the context the loop registered for the calling run, reports privacy live (a run that has since become private says so, a helper through its root), and lists where the result is kept per mode. Tests in `test/harness.test.mjs`. The original design follows.
 
 Add a local, reversible introspection tool for explicit questions about the harness and for state that may change
 during a long run. It returns a bounded structured result containing the application, version, current mode,
@@ -602,7 +606,7 @@ tool calls as well as final prose, since a fluent correct answer can hide an inc
 
 ### Sequence and decisions
 
-Build order: F1 to F7, S1 and S2 are done; so S3; S4; S5; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
+Build order: F1 to F7, S1 and S2 are done; S3 and S4 are built; next S5; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
 minimum: they make every later feature easier to explain without accumulating prompt folklore.
 
 Open decisions for you:

@@ -16,7 +16,7 @@ import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
 import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts";
-import { harnessContract, pinNotice, registerHarness, releaseHarness, renderEnvelope } from "./harness.ts";
+import { harnessContract, pinNotice, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
 import { frictionDocs } from "./learn/friction.ts";
@@ -504,7 +504,15 @@ const runAgentLoop = async (
   const tier = opts.tier ?? "standard";
   // The loop alone knows which tools this setting lets the run see, so the context is completed here
   // and registered for a subagent to derive its own from.
-  const harness = opts.harness ? { ...opts.harness, tools: Object.keys(tools) } : undefined;
+  const harness = opts.harness
+    ? {
+        ...opts.harness,
+        capabilities: summarizeCapabilities(Object.keys(tools), policy, {
+          cloudPrivateBlocked: Boolean(opts.startPrivate || opts.harness.private),
+        }),
+        tools: Object.keys(tools),
+      }
+    : undefined;
   if (harness) registerHarness(harness);
 
   const messages: Msg[] = [

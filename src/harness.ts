@@ -22,12 +22,21 @@
 import fs from "node:fs";
 import { tierConfig } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
+import type { Policy } from "./types.ts";
 
 export type HarnessMode = "approval" | "chat" | "heartbeat" | "scheduled" | "subagent" | "task";
+
+/** Operational facts for planning, in plain words. Advice only: the broker is what grants or refuses. */
+export interface CapabilitySummary {
+  can: string[];
+  cannot: string[];
+}
 
 export interface HarnessContext {
   /** Where the final result goes: a person's screen, the run ledger, or the run that delegated. */
   audience: "ledger" | "parent" | "person";
+  /** What the visible tools can and cannot do under the effective policy; see summarizeCapabilities. */
+  capabilities: CapabilitySummary;
   app: { name: string; version: string };
   /** The conversation this run belongs to, when it has one. */
   conversationId: null | number;
@@ -41,6 +50,8 @@ export interface HarnessContext {
   preApproved: boolean;
   project: null | { id: number; name: string };
   projectKnowledge: boolean;
+  /** The root of this run's tree: its own id, or the run that started the helper it belongs to. */
+  rootRunId: null | number;
   runId: null | number;
   /** The tier the run was sized to. Where it actually runs can differ; see `private`. */
   tier: Tier;
@@ -96,6 +107,7 @@ export const buildHarnessContext = (input: HarnessInput): HarnessContext => {
   return {
     app: { name: "AgentSpine", version: version() },
     audience: mode === "chat" || mode === "approval" ? "person" : mode === "subagent" ? "parent" : "ledger",
+    capabilities: { can: [], cannot: [] },
     conversationId: input.conversationId ?? null,
     history: input.history ?? false,
     memory: input.memory ?? false,
@@ -104,6 +116,7 @@ export const buildHarnessContext = (input: HarnessInput): HarnessContext => {
     private: input.private ?? false,
     project: input.project ?? null,
     projectKnowledge: input.projectKnowledge ?? false,
+    rootRunId: input.runId,
     runId: input.runId,
     tier: input.tier,
     tools: [...input.tools],
@@ -141,6 +154,52 @@ export const registerHarness = (ctx: HarnessContext): void => {
 export const getHarness = (runId: null | number): HarnessContext | undefined => (runId == null ? undefined : live.get(runId));
 export const releaseHarness = (runId: null | number): void => {
   if (runId != null) live.delete(runId);
+};
+
+/**
+ * What the visible tools can and cannot do under the EFFECTIVE policy, that is, after a project's
+ * overlay has narrowed it. The summary is written from the same policy fields the tools' own
+ * `checkPolicy` reads, family by family, and only mentions a family whose tool is visible (a
+ * restricted helper is not told about capabilities it cannot reach). It never grants anything:
+ * the broker re-decides every call from the policy and the tool, so a mistake here misleads a plan
+ * at worst. Absences that matter are always listed: sending mail, permanent deletion, and the
+ * cloud for private work.
+ */
+export const summarizeCapabilities = (
+  toolNames: string[],
+  policy: Policy,
+  opts: { cloudPrivateBlocked: boolean },
+): CapabilitySummary => {
+  const has = (...names: string[]): boolean => names.some((n) => toolNames.includes(n));
+  const can: string[] = [];
+  const cannot: string[] = [];
+  const say = (visible: boolean, allowed: boolean, yes: string, no: string): void => {
+    if (!visible) return;
+    (allowed ? can : cannot).push(allowed ? yes : no);
+  };
+
+  say(has("web_search"), Boolean(policy.web?.searchEnabled), "search the web", "search the web (switched off)");
+  const browserOn = Boolean(policy.browser?.enabled) && !policy.browser?.denyAll;
+  const domains = policy.browser?.navigateAllowlist?.length ?? 0;
+  say(
+    has("web_read", "browser"),
+    browserOn,
+    domains ? `read web pages and use the browser on ${domains} allowed domain${domains === 1 ? "" : "s"}` : "read web pages and use the browser",
+    policy.browser?.denyAll ? "read web pages or use the browser (this project allows no domain)" : "read web pages or use the browser (switched off)",
+  );
+  say(has("write_file"), (policy.fs?.writableDirs?.length ?? 0) > 0, "save files inside the allowed folders", "save files (no writable folder)");
+  say(has("read_file", "list_dir"), (policy.fs?.readableDirs?.length ?? 0) > 0, "read files inside the allowed folders", "read files (no readable folder)");
+  say(has("gmail_search", "calendar_upcoming"), Boolean(policy.google?.enabled), "read Gmail and Calendar (read only)", "read Gmail or Calendar (switched off)");
+  say(has("draft"), Boolean(policy.drafts?.enabled), "draft text, which waits for the user's approval", "draft text (switched off)");
+  say(has("schedule_create"), policy.schedules?.enabled !== false, "propose schedule changes, which wait for the user's approval", "change schedules (switched off)");
+  say(has("subagent"), Boolean(policy.subagents?.enabled), "hand work to helper units", "start helper units (switched off)");
+  say(has("run_command", "git_write"), Boolean(policy.build?.enabled), "run declared build commands", "run build commands (switched off)");
+  if (has("meeting_list")) can.push("read the user's recorded meetings (kept on the local model)");
+  if (policy.autoExecute?.dryRun) cannot.push("make any change: this run is a dry run, so every call is only reported");
+
+  cannot.push("send email (mail is drafted, never sent)", "permanently delete mail");
+  if (opts.cloudPrivateBlocked) cannot.push("use the cloud for this run (it is private)");
+  return { can, cannot };
 };
 
 /**
@@ -217,7 +276,13 @@ export const renderEnvelope = (ctx: HarnessContext, pinned = false): string => {
   if (ctx.preApproved) {
     lines.push("- Standing approval: this run was set up in advance, so its ordinary irreversible calls do not ask again. Anything that creates or edits standing work, such as a schedule, still queues for the user.");
   }
-  lines.push("- Not available to anyone here: sending email (mail is drafted, never sent) and permanently deleting mail.");
+  const cap = ctx.capabilities;
+  if (cap.can.length) lines.push(`- Can: ${cap.can.join("; ")}.`);
+  lines.push(
+    cap.cannot.length
+      ? `- Cannot: ${cap.cannot.join("; ")}.`
+      : "- Cannot: send email (mail is drafted, never sent); permanently delete mail.",
+  );
   return lines.join("\n");
 };
 

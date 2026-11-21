@@ -64,7 +64,7 @@ console.log("\nTHE ENVELOPE");
   check("names the conversation and project", text.includes("Conversation #7") && text.includes('Project: "Reorg" (#3)'), true);
   check("states where a bare filename is saved", text.includes("saved in /docs/reorg"), true);
   check("lists what it can draw on", text.includes("earlier turns, saved memories, the project's documents"), true);
-  check("says plainly that mail is never sent", text.includes("sending email"), true);
+  check("says plainly that mail is never sent", text.includes("send email (mail is drafted, never sent)"), true);
   check("a normal run is not described as private", text.includes("Privacy: normal"), true);
 
   const priv = h.renderEnvelope({ ...chat, private: true }, false);
@@ -146,6 +146,86 @@ console.log("\nTHE RUNNER BUILDS IT");
   check("a project run's envelope names the project", sent.includes('Project: "Q3 plan"'), true);
   check("and says it is private", sent.includes("Privacy: private"), true);
   check("a chat turn is described as a live chat", sent.includes("a live chat turn"), true);
+}
+
+console.log("\nS3. THE CAPABILITY SUMMARY, FROM THE EFFECTIVE POLICY");
+{
+  const { narrowPolicy } = await import("../src/projects/narrow-policy.ts");
+  const all = ["web_search", "web_read", "browser", "write_file", "read_file", "gmail_search", "draft", "schedule_create", "subagent", "meeting_list"];
+  const open = {
+    autoExecute: { dryRun: false, irreversibleAlwaysConfirm: true, reversible: true },
+    apps: { allow: [] },
+    browser: { enabled: true, navigateAllowlist: ["a.example", "b.example"] },
+    drafts: { enabled: true },
+    fs: { readableDirs: ["/r"], writableDirs: ["/w"] },
+    google: { enabled: true },
+    schedules: { enabled: true },
+    subagents: { enabled: true },
+    version: 1,
+    web: { fetchAllowlist: [], searchEnabled: true },
+  };
+  const on = h.summarizeCapabilities(all, open, { cloudPrivateBlocked: false });
+  check("an enabled policy lists what each family can do", ["search the web", "read Gmail and Calendar (read only)", "save files inside the allowed folders", "propose schedule changes, which wait for the user's approval"].every((x) => on.can.includes(x)), true);
+  check("it counts the allowed domains", on.can.some((x) => x.includes("2 allowed domains")), true);
+  check("meetings are listed as local only", on.can.some((x) => x.includes("recorded meetings (kept on the local model)")), true);
+  check("send and permanent delete are always listed as absent", [on.cannot.some((x) => x.startsWith("send email")), on.cannot.includes("permanently delete mail")], [true, true]);
+
+  const off = h.summarizeCapabilities(all, { ...open, browser: { enabled: false, navigateAllowlist: [] }, drafts: { enabled: false }, google: { enabled: false }, subagents: { enabled: false }, web: { fetchAllowlist: [], searchEnabled: false } }, { cloudPrivateBlocked: false });
+  check("a switched-off family moves to cannot", ["search the web (switched off)", "read Gmail or Calendar (switched off)", "draft text (switched off)"].every((x) => off.cannot.includes(x)), true);
+  check("and is not also claimed as can", off.can.includes("search the web"), false);
+
+  const narrowed = narrowPolicy(open, { browser: { navigateAllowlist: ["elsewhere.example"] } });
+  const proj = h.summarizeCapabilities(all, narrowed, { cloudPrivateBlocked: true });
+  check("a project that shares no domain says the browser is unavailable there", proj.cannot.some((x) => x.includes("this project allows no domain")), true);
+  check("a narrowing only ever removes a capability from can", proj.can.every((x) => on.can.includes(x)), true);
+  check("a private run says the cloud is out", proj.cannot.some((x) => x.includes("cloud")), true);
+
+  const helper = h.summarizeCapabilities(["web_search"], open, { cloudPrivateBlocked: false });
+  check("a helper is told only about the tools it can see", helper.can, ["search the web"]);
+  const dry = h.summarizeCapabilities(["web_search"], { ...open, autoExecute: { ...open.autoExecute, dryRun: true } }, { cloudPrivateBlocked: false });
+  check("a dry run says nothing will change", dry.cannot.some((x) => x.includes("dry run")), true);
+
+  // The summary is advice: the broker still refuses what the policy refuses.
+  const { executeCall } = await import("../src/broker.ts");
+  const denied = await executeCall({ args: { query: "x" }, tool: "web_search" }, { ...loadPolicy(), web: { fetchAllowlist: [], searchEnabled: false } }, null);
+  check("a call the policy denies stays denied whatever any summary says", denied.status, "denied");
+
+  const sent = h.renderEnvelope({ ...h.buildHarnessContext({ kind: "chat", runId: 1, tier: "standard", tools: all }), capabilities: proj }, true);
+  check("the envelope carries both lists", sent.includes("- Can:") && sent.includes("- Cannot:"), true);
+}
+
+console.log("\nS4. harness_status");
+{
+  const { registry } = await import("../src/tools/index.ts");
+  const { pinRun } = await import("../src/sensitivity.ts");
+  const tool = registry.harness_status;
+  check("it is registered, reversible and always permitted", [Boolean(tool), tool.classify({}).reversibility, tool.checkPolicy({}).allowed], [true, "reversible", true]);
+
+  const parent = { ...h.buildHarnessContext({ conversationId: 7, kind: "chat", project: { id: 3, name: "Reorg" }, runId: 700, tier: "deep", tools: ["web_search", "secret_tool", "harness_status"], writeDir: "/docs" }), capabilities: { can: ["search the web"], cannot: ["send email (mail is drafted, never sent)"] } };
+  h.registerHarness(parent);
+  const out = JSON.parse(await tool.run({}, { policy: {}, runId: 700 }));
+  check("it answers from structured state", [out.mode, out.project, out.saveFolder, out.privacy], ["chat", "Reorg", "/docs", "normal"]);
+  check("including whether it can send email", out.cannot[0].startsWith("send email"), true);
+  check("and where the result is kept", out.resultKeptIn.includes("the conversation history"), true);
+  check("a number of approvals waiting is reported", typeof out.approvalsWaiting, "number");
+
+  pinRun(700);
+  check("it notices when the run has since become private", JSON.parse(await tool.run({}, { policy: {}, runId: 700 })).privacy, "private (local model only)");
+
+  const child = h.childHarness(parent, { runId: 701, tier: "fast", tools: ["web_search"] });
+  h.registerHarness(child);
+  const cout = JSON.parse(await tool.run({}, { policy: {}, runId: 701 }));
+  check("a restricted helper sees only its own tools", cout.visibleTools, ["web_search"]);
+  check("and cannot discover a hidden tool through it", JSON.stringify(cout).includes("secret_tool"), false);
+  check("it reports itself as a helper, and still private through its root", [cout.mode, cout.privacy], ["subagent", "private (local model only)"]);
+
+  const text = JSON.stringify(out);
+  check("no secret, raw policy or prompt appears", /token|apikey|password|fetchAllowlist|readableDirs|How AgentSpine works/i.test(text), false);
+  check("with no recorded context it says so rather than guessing", (await tool.run({}, { policy: {}, runId: 999999 })).startsWith("No run context"), true);
+  const { releaseRun } = await import("../src/sensitivity.ts");
+  releaseRun(700);
+  h.releaseHarness(700);
+  h.releaseHarness(701);
 }
 
 model.close();

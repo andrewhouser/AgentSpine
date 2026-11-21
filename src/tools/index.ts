@@ -20,6 +20,7 @@ import { memorySave, memoryRecall } from "./memory.ts";
 import { conversationDetail, findPastOutput, recallOutput } from "./conversation.ts";
 import { notifyTool } from "./notify.ts";
 import { stateGet, stateSet } from "./state.ts";
+import { harnessStatus } from "./harness-status.ts";
 import { scheduleCreate, scheduleDelete, scheduleList, scheduleUpdate } from "./schedule.ts";
 import { weather } from "./weather.ts";
 import { weatherAlerts } from "./weather-alerts.ts";
@@ -107,6 +108,7 @@ export const tools: Tool[] = [
   headsupStatus,
   styleFor,
   styleLearn,
+  harnessStatus,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));
