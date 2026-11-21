@@ -27,15 +27,14 @@ the management-knowledge review (F6). Both were uncommitted working notes (`docs
 suite does not cover.
 
 I checked each finding against the code on 2026-11-21. **F1 and F5 reproduce** when `narrowPolicy` is run on
-plain objects. **F2 is confirmed by reading the code path** but not yet by a running test. **F3 and F4 are
-fixed** (see the note after F2); the others have no fix or regression test yet. Every reproduction below becomes
-a test in the same change as its fix, and each new suite is added by hand to the `npm test` list in
-`package.json`.
+plain objects. **F2, F3 and F4 are fixed** (see the note after F1); the others have no fix or regression test
+yet. Every reproduction below becomes a test in the same change as its fix, and each new suite is added by hand
+to the `npm test` list in `package.json`.
 
-**Suggested order, and why:** F3 and F4 are done. Next F2, which is a privacy promise in `CLAUDE.md`. F1 and
-F5 matter as soon as a project overlay is used, so they come before anyone relies on overlays, but they need no
-change to what runs today. F6 is a small fix once you pick the interim behaviour, and it should land before more
-workplace transcripts are filed. All four are Code. F2 and F6 are also step K0 of section 8.
+**Suggested order, and why:** F2, F3 and F4 are done. F1 and F5 matter as soon as a project overlay is used, so
+they come before anyone relies on overlays, but they need no change to what runs today. F6 is a small fix once
+you pick the interim behaviour, and it should land before more workplace transcripts are filed. F7 is a
+decision first. All are Code. F6 and F7 are also step K0 of section 8.
 
 **F1. Critical. A project overlay can open the browser to any domain.**
 `intersectNavigate()` in `src/projects/narrow-policy.ts` returns `[]` when the global and project allowlists are
@@ -48,19 +47,12 @@ Fix: represent deny-all separately from the empty-list convention, for example a
 disjoint non-empty lists; base empty with overlay set; overlay empty with base set; and the decision through both
 `browser` and `web_read`, not only the pure function.
 
-**F2. High. Meeting transcripts can reach the cloud.**
-`meeting_list` with `transcript: true` (`src/tools/meetings.ts`) returns the full transcript. `src/agent.ts`
-routes each later model call with the loop's tier and no `sensitivity: "private"`, and the tool result is in the
-message history that the next request carries. If task sizing picks `deep` and a cloud key is set, the
-transcript goes to the cloud endpoint. This contradicts "meeting work is local-only" in `CLAUDE.md` and SPEC
-section 15.
-Fix: let a tool declare the sensitivity of its output, and after any private result pin the rest of that run to
-local (`resolveTier` already refuses the cloud for `private`). At minimum, expose the meeting tools only inside
-a private-pinned loop. Then audit the other tools that return material the rules call private (study topics
-linked to a project, project-linked memory); that audit is my addition, not the reviewer's. Test: a fake local
-and a fake cloud endpoint, run a task that reads a transcript, and assert no cloud request ever contains it.
-
-**F3 and F4: fixed 2026-11-21, numbers kept so the others do not shift.** F3 (two approvals running one
+**F2, F3 and F4: fixed 2026-11-21, numbers kept so the others do not shift.** F2 (meeting transcripts reaching
+the cloud): a tool can declare `privateOutput` (`src/types.ts`), and once one has run, the agent loop pins every
+later model call in that run, its re-asks and its closing answer, and any subagent in the tree, to
+`sensitivity: "private"` (`src/sensitivity.ts`). `meeting_list` and the study tools on a project-linked topic
+declare it, and the post-run critique treats them as sensitive. Suite: `test/private-output.test.mjs`, which runs
+a stand-in local and a stand-in cloud server and asserts what the cloud one was sent. F3 (two approvals running one
 action twice): `approveOnly` and `rejectOnly` now claim the row with a conditional update, `executing` is a live
 state, and a row left `executing` by a crash ends as `error` on server start and is never re-run. Suite:
 `test/confirm-race.test.mjs`. F4 (`state_set` reaching internal `kv` keys): `state_get` and `state_set` store every
@@ -89,6 +81,20 @@ is treated as a deliberate retention opt-in and says so where you file. Section 
 retention rules, so pick the interim behaviour now. Test: file a meeting, run the prune past the window, and
 assert no chunk of that transcript remains (or, for the opt-in choice, that the filing screen states it).
 
+
+**F7. Medium. Other private material still travels with the run's tier.** Found while auditing for F2; none of it
+was changed, because each needs a decision.
+(a) A run inside a project is given the project's retrieved documents (`knowledgeFor` in `src/runner.ts`) as a
+user message on whatever tier the task was sized to, so project documents can reach the cloud on a `deep` run.
+This is the same decision as K0's "a project defaults to private". If yes, the fix is to start such runs pinned.
+(b) Mail, calendar, file and browser results (`gmail_search`, `calendar_upcoming`, `read_file`, `list_dir`,
+`browser`, `web_read`, `draft`) are treated as sensitive by the critique pass, but the main loop does not pin
+after them. `CLAUDE.md` does not list them as local-only, so this is your call. With `privateOutput` it is one
+line per tool.
+(c) The next turn of a conversation is given earlier assistant replies as history, so an answer that quoted a
+transcript can reach the cloud on a later `deep` turn. Read from `src/runner.ts`, not tested. Fix: record that a
+conversation touched private material and start its later turns pinned.
+Tests: the same two-server pattern as `test/private-output.test.mjs`, one case per item you decide to close.
 ---
 
 ## 1. Roll out what is already built (You, on the Mini)
@@ -226,7 +232,7 @@ Section 0 is the priority in this area. What is left of the Nod items:
     second Google account question settled first.
   - Known and left as is: the model that writes a draft receives the style note through `style_for`, so on the
     cloud tier a scrubbed note (no names, addresses, links or figures, checked in code) travels with the
-    request. F2's sensitivity work may let this be pinned local; decide then.
+    request. The F2 mechanism (`privateOutput`) now exists, so this can be pinned local; decide.
 
 ### 4a. Leftovers from the reference docs
 
@@ -247,7 +253,7 @@ Section 0 is the priority in this area. What is left of the Nod items:
   project so the sidecar and coach have a corpus; one dashboard Record, Stop, extract run against live speech;
   re-run the Phase 2 numbers against a real multi-person meeting (neither sample so far measures **recall**);
   re-check the "flat ~1.1 s prefill" claim in the coaching table, which did not reproduce. Several may be done
-  by now through use, so check before doing any. F2 touches this area.
+  by now through use, so check before doing any.
 - **Study heartbeat sessions (Code, if wanted).** `docs/STUDY.md` still lists scheduling a study session on the
   heartbeat as not built. The Study screen exists now, so it is buildable. Practice-app generation stays off the
   list.
@@ -345,7 +351,7 @@ cites every important assertion and shows a disagreement instead of silently pic
 **Order.** Adjusted from the review: measurement moves ahead of the big builds, because "better" needs a
 baseline, and the meeting recall number is still unmeasured.
 
-- **K0. Privacy and retention first (Code, plus decisions).** F2 and F6 above. Then make sensitivity a property
+- **K0. Privacy and retention first (Code, plus decisions).** F6 and F7 above. Then make sensitivity a property
   of a stored source and of everything derived from it (embedding, extraction, retrieval, synthesis, reflection
   all stay local for a private source); a project holding workplace material defaults to private, and sending
   any of it to a cloud model needs an explicit decision. Decide backups: the app has none of its own, so either
@@ -436,7 +442,7 @@ from instead).
   judgment.
 - Local-first: `sensitivity: "private"` content never reaches the cloud tier. Meeting work and study topics
   linked to a project are local-only. Milliman and other workplace material never goes to web search, paste
-  services or third-party APIs. F2 and F6 are the known holes in this rule.
+  services or third-party APIs. F6 and F7 are the known holes in this rule.
 - Standing work needs consent: a tool that creates or edits what future unattended runs follow sets
   `confirmWhenUnattended: true` or refuses non-chat runs.
 - Tests first for arithmetic and every boundary; new suites are added by hand to the `npm test` list in

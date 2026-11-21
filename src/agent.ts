@@ -15,6 +15,7 @@ import type { Msg } from "./llm.ts";
 import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
+import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts";
 import { askedForPush } from "./tools/notify.ts";
 import { frictionDocs } from "./learn/friction.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
@@ -437,6 +438,7 @@ const closingAnswer = async (
   conversational: boolean,
   tier: Tier,
   runId: number | null = null,
+  priv = false,
 ): Promise<string> => {
   const material = gathered.slice(-6).map((g) => g.slice(0, 1500)).join("\n\n").slice(0, 8000);
   if (!material) return "";
@@ -453,7 +455,7 @@ const closingAnswer = async (
         },
         { role: "user", content: `Question: ${goal}\n\nInformation gathered:\n${material}` },
       ],
-      { maxTokens: AGENT_STEP_MAX_TOKENS, purpose: "closing", runId, tier },
+      { maxTokens: AGENT_STEP_MAX_TOKENS, purpose: "closing", runId, ...(priv ? { sensitivity: "private" as const } : {}), tier },
     );
     return text.trim();
   } catch {
@@ -469,7 +471,24 @@ const safeJson = (text: string): any | null => {
   }
 };
 
+/**
+ * Run the loop, then drop this run's private pin if it is the root of its tree. A subagent
+ * shares its parent's `budgetRunId`, so it neither owns the pin nor releases it.
+ */
 export const runAgent = async (
+  goal: string,
+  policy: Policy,
+  runId: number | null,
+  opts: AgentOpts = {},
+): Promise<AgentResult> => {
+  try {
+    return await runAgentLoop(goal, policy, runId, opts);
+  } finally {
+    if (opts.budgetRunId == null || opts.budgetRunId === runId) releaseRun(runId);
+  }
+};
+
+const runAgentLoop = async (
   goal: string,
   policy: Policy,
   runId: number | null,
@@ -491,6 +510,12 @@ export const runAgent = async (
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
 
+  // The pin is per root run: a subagent reading a transcript pins its parent, and one started
+  // after the parent read a transcript starts pinned. See src/sensitivity.ts.
+  const rootId = opts.budgetRunId ?? runId;
+  /** `sensitivity` for every model call from here on: private once private material is in the history. */
+  const sens = (): { sensitivity?: "private" } => (isPinned(rootId) ? { sensitivity: "private" } : {});
+
   let tierCorrected = false;
 
   /**
@@ -510,7 +535,7 @@ export const runAgent = async (
    * and only says "nothing came of this" when there is genuinely nothing.
    */
   const concludeStuck = async (steps: number, fallback: string): Promise<AgentResult> => {
-    const summary = undelivered || (await closingAnswer(goal, gathered, conversational, tier, runId)) || fallback;
+    const summary = undelivered || (await closingAnswer(goal, gathered, conversational, tier, runId, isPinned(rootId))) || fallback;
     publish(runId, { steps, summary, type: "final" });
     return { summary, steps, trace: messages };
   };
@@ -526,6 +551,7 @@ export const runAgent = async (
       runId,
       step: step + 1,
       tier,
+      ...sens(),
     });
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
@@ -544,6 +570,7 @@ export const runAgent = async (
         runId,
         step: step + 1,
         ...(tier === "deep" ? { prefer: "cloud" as const } : { tier: escalate(tier) }),
+        ...sens(),
       }));
     }
 
@@ -657,6 +684,9 @@ export const runAgent = async (
         projectId: opts.projectId ?? null,
       });
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
+      // From here the output is in `messages`, which every later request carries. Pin before
+      // the next one is built, not after.
+      if (result.status === "executed" && outputIsPrivate(call.tool, call.args, opts.projectId ?? null)) pinRun(rootId);
 
       /**
        * A notification refused in a live chat is not an obstacle to route around. It is the

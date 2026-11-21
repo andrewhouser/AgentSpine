@@ -629,6 +629,20 @@ const studyResources: Tool = {
   }),
 };
 
+/**
+ * A topic linked to a project is drawn from that project's documents, so what these tools
+ * return (the map, the questions, the explanations, the cards) is that material and stays
+ * local, like every model call the study module makes (`priv` in src/study/roles.ts). A topic
+ * that is not linked is the user's own learning and may be answered from any tier. The
+ * listing names the projects topics are linked to, so it counts as soon as any topic is.
+ */
+const projectLinked = (a: any, ctx: { projectId: null | number }): boolean => {
+  if (ctx.projectId != null) return true;
+  const ref = a?.topic ?? a?.name;
+  if (ref == null || String(ref).trim() === "") return listTopics().some((t) => t.project_id != null);
+  return findTopic(ref)?.project_id != null;
+};
+
 export const studyTools: Tool[] = [
   studyTopic,
   studyInterview,
@@ -642,4 +656,4 @@ export const studyTools: Tool[] = [
   studySpar,
   studyCards,
   studyResources,
-];
+].map((t) => ({ ...t, privateOutput: projectLinked }));

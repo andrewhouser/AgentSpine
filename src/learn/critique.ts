@@ -18,6 +18,7 @@
  * Never throws: it runs after the result is persisted, and a critique that failed is worth
  * strictly less than the run it was critiquing.
  */
+import { privateOutputTools } from "../sensitivity.ts";
 import { LESSON_MEMORY_MAX, LESSON_SAMPLE_RATE } from "../config.ts";
 import { judge } from "../judge.ts";
 import { countMemories, pruneMemories, remember } from "./../memory/rag.ts";
@@ -34,8 +35,10 @@ export const LESSON_KIND = "lesson";
 const SENSITIVE_TOOLS = new Set(["gmail_search", "calendar_upcoming", "read_file", "list_dir", "browser", "web_read", "draft"]);
 
 /** True if any call this run made was to a sensitive tool. Read from the audit log. */
-const touchedSensitive = (runId: number): boolean =>
-  store.listActions(runId).some((a: { tool?: string }) => a.tool && SENSITIVE_TOOLS.has(a.tool));
+const touchedSensitive = (runId: number): boolean => {
+  const priv = new Set(privateOutputTools());
+  return store.listActions(runId).some((a: { tool?: string }) => a.tool && (SENSITIVE_TOOLS.has(a.tool) || priv.has(a.tool)));
+};
 
 /** Flatten a trace to a compact transcript for the judge. The tail holds the outcome. */
 const renderTrace = (trace: Msg[]): string => {

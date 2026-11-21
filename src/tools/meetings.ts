@@ -45,6 +45,9 @@ export const meetingList: Tool = {
     '{ "tags"?: string[], "since"?: number | string, "limit"?: number, "id"?: number, "transcript"?: boolean }',
   classify: classify("Read meetings"),
   checkPolicy: allow,
+  // Transcripts, summaries and decisions are meeting work, which is local-only (SPEC section
+  // 15). The loop pins the rest of the run to the local model once this has returned.
+  privateOutput: true,
   run: async (a: any) => {
     if (a?.id !== undefined) {
       const m = getMeeting(Number(a.id));

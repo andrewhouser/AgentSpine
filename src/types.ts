@@ -311,6 +311,15 @@ export interface Tool {
    * schedule writes. It doesn't loosen anything: without it, a call is treated as before.
    */
   confirmWhenUnattended?: boolean;
+  /**
+   * What this tool returns must never reach the cloud tier: meeting transcripts and
+   * summaries, study material drawn from a project's documents. `true` is every call; a
+   * function decides per call from the arguments and the project the run is inside.
+   * Once such a call has run, the agent loop pins the rest of that run, and any subagent it
+   * starts, to `sensitivity: "private"` (see src/sensitivity.ts), because the output now
+   * sits in the message history that the next model request carries.
+   */
+  privateOutput?: boolean | ((args: any, ctx: { projectId: null | number }) => boolean);
   run(args: any, ctx: ToolContext): Promise<string>;
 }
 
