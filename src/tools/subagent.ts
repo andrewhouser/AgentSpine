@@ -153,12 +153,18 @@ export const subagent: Tool = {
     // pretending the relationship isn't circular — a subagent genuinely is the loop
     // calling itself.
     const { runAgent } = await import("../agent.ts");
+    const { childHarness, getHarness } = await import("../harness.ts");
+    // Its own context, derived from its caller's: it reports to the caller, sees only its own tools,
+    // and inherits what stays true for it (the project, standing approval, privacy).
+    const parentHarness = getHarness(callerRunId);
+    const harness = parentHarness ? childHarness(parentHarness, { runId: childRunId, tier: def.tier, tools }) : undefined;
 
     try {
       const { summary, steps, trace } = await runAgent(task, ctx.policy, childRunId, {
         // Constraint 4: the ROOT run's id, so one allowance is shared by the whole tree.
         budgetRunId,
         context: def.instructions ? [def.instructions] : [],
+        harness,
         maxSteps: def.maxSteps,
         // A helper inside a scheduled run is part of the job the user already approved.
         preApproved: ctx.run?.preApproved ?? false,

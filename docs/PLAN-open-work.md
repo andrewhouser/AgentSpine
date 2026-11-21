@@ -9,7 +9,7 @@ this file in the same commit. When you start something new, add it here rather t
 management knowledge system, which is the main direction: the highest return is making AgentSpine very good at
 remembering, connecting, citing and updating workplace knowledge. Live Activities, richer travel integrations,
 buying or booking actions and most new proactive behaviour are deprioritized until section 8 has a reliable
-foundation (they are marked in section 3). Section 9 (harness awareness, added 2026-11-21) has no place in this order yet; S1 and S2 are its useful minimum.
+foundation (they are marked in section 3). Section 9 (harness awareness, added 2026-11-21) is being built in order, S1 and S2 first (done).
 Sections 1 to 7 are the rest, mostly verification that needs you.
 
 Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8 and 9 are new,
@@ -417,7 +417,9 @@ The design has two prompt layers:
 Code owns both layers. Tool descriptions and human-written prose must not become parallel sources of truth for
 permissions. External and retrieved content never enters either layer.
 
-### S1. One typed harness context (Code)
+### S1. One typed harness context (built 2026-11-21)
+
+**Built:** `src/harness.ts` holds `HarnessContext`, built in `runner.ts`, completed and registered by the loop (which alone knows the visible tools), rendered as a short envelope straight after the stable prompt and kept in the trace. A subagent derives its own with `childHarness`. Not done: sharing a base type with the tool-facing `RunContext`, which still carries `conversational`, `projectId` and `preApproved` separately. Suite: `test/harness.test.mjs`. The original design follows.
 
 Add a dependency-free `HarnessContext` type (its privacy field reads the run's pin from `src/sensitivity.ts`, which exists) and build it in `runner.ts` after project policy narrowing and task
 sizing. Pass it to `runAgent`; subagents derive a child context rather than silently inheriting claims that are
@@ -448,7 +450,9 @@ so “chat” and “scheduled” cannot acquire different meanings in two type 
 capability summary in the restrictive direction; a restricted subagent sees only its own mode and visible tool
 set; no secret-bearing policy field is present.
 
-### S2. Consolidate the static harness contract (Code)
+### S2. Consolidate the static harness contract (built 2026-11-21)
+
+**Built:** `harnessContract` renders the application description from the visible tools and the mode only; the broker, QUEUED and untrusted-text rules moved out of `Rules:` into it, so they have one owner. `appDocs`, `chatDocs` and `jobDocs` remain as mode and tool specific finishing advice (the scheduler paragraph, chat finishing, draft versus notify); folding them in is not done. The contract is byte-identical across runs (tested). The original design follows.
 
 Replace the scattered application-semantics prose in `appDocs`, `chatDocs` and `jobDocs` with a deliberately
 structured contract renderer. Mode-specific finishing instructions may stay separate, but the following truths
@@ -598,7 +602,7 @@ tool calls as well as final prose, since a fluent correct answer can hide an inc
 
 ### Sequence and decisions
 
-Build order: F1, F2, F3, F5 and F7 are done; so S1; S2; S3; S4; S5; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
+Build order: F1 to F7, S1 and S2 are done; so S3; S4; S5; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
 minimum: they make every later feature easier to explain without accumulating prompt folklore.
 
 Open decisions for you:

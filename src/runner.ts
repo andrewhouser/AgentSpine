@@ -49,6 +49,7 @@ import { reflect } from "./reflect.ts";
 import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
 import { watchPin } from "./sensitivity.ts";
+import { buildHarnessContext } from "./harness.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
@@ -490,8 +491,23 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       watchPin(runId, () => {
         if (conversationId != null) store.setConversationLocalOnly(conversationId);
       });
+      const harness = buildHarnessContext({
+        conversationId,
+        history: history.length > 0,
+        kind,
+        memory: !opts.noMemory,
+        preApproved: isUnattended(kind),
+        private: startPrivate,
+        project: project ? { id: project.id, name: project.name } : null,
+        projectKnowledge: Boolean(projectKnowledge),
+        runId,
+        tier: sizing.tier,
+        tools: [], // filled in by the loop, which alone knows what this setting lets the run see
+        writeDir: opts.noMemory ? null : writeDefaultDir(),
+      });
       const { summary, steps, trace } = await runAgent(task, policy, runId, {
         budgetRunId: runId,
+        harness,
         // A chat turn ends on someone's screen and must end in an answer; every other kind
         // ends in the ledger and should end in an account of what happened.
         conversational: isConversational(kind),
