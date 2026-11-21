@@ -41,6 +41,7 @@ import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { checkWorkspaceFile } from "./projects/workspace.ts";
+import { searchKnowledge } from "./projects/search.ts";
 import {
   readAttachment,
   removeAttachment,
@@ -919,6 +920,23 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (m === "DELETE" && seg[1] === "memories" && seg.length === 3) {
       const removed = deleteMemory(Number(seg[2]));
       return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+    }
+
+    // /api/knowledge/search?q=&project=&kind=&since=&until=&k= — hybrid full-text and vector search over every
+    // indexed document and filed meeting (src/projects/search.ts). Omit project to search the whole base.
+    if (m === "GET" && seg[1] === "knowledge" && seg[2] === "search" && seg.length === 3) {
+      const query = (url.searchParams.get("q") ?? "").trim();
+      if (!query) return sendJson(res, 400, { error: "q is required" });
+      const project = url.searchParams.get("project");
+      const kinds = (url.searchParams.get("kind") ?? "").split(",").filter(Boolean);
+      const hits = await searchKnowledge(query, {
+        k: Math.min(50, Math.max(1, Number(url.searchParams.get("k") ?? 10) || 10)),
+        kinds: kinds.length ? kinds : undefined,
+        projectId: project ? Number(project) : undefined,
+        since: url.searchParams.get("since") ?? undefined,
+        until: url.searchParams.get("until") ?? undefined,
+      });
+      return sendJson(res, 200, hits);
     }
 
     // /api/data-events — the deletion and retention audit trail (ids, names and counts, never content).

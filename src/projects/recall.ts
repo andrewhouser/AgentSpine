@@ -22,6 +22,7 @@
 import { tagUntrusted } from "../audit.ts";
 import { cosine, fromBlob, getEmbedder } from "../memory/rag.ts";
 import * as projects from "./store.ts";
+import { searchKnowledge } from "./search.ts";
 
 export interface Retrieved {
   /** `path` for an indexed file, `meeting` for a transcript. */
@@ -78,9 +79,12 @@ export const scoreChunks = async (
     .sort((a, b) => b.score - a.score);
 };
 
-/** The k chunks most relevant to a task. Falls back to keyword matching with no embedder. */
+/**
+ * The k chunks most relevant to a task, by full-text and vector search fused (src/projects/search.ts), at
+ * most two from any one source. With no embedder the full-text path alone still finds exact terms.
+ */
 export const recallChunks = async (projectId: number, query: string, k = 6): Promise<Retrieved[]> =>
-  (await scoreChunks(projectId, query)).slice(0, k);
+  (await searchKnowledge(query, { k, projectId })).map((h) => ({ kind: h.kind, path: h.path, score: h.score, text: h.text }));
 
 /**
  * The knowledge block for a run, already UNTRUSTED-tagged and ready to be passed as

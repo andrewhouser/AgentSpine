@@ -14,7 +14,7 @@
  * standing context; a chunk is verbatim text out of a file, injected UNTRUSTED. Sharing a
  * table would make it one query away from sharing an injection path.
  */
-import { logDataEvent, rawDb } from "../memory/store.ts";
+import { kvGet, kvSet, logDataEvent, rawDb } from "../memory/store.ts";
 import type { PolicyOverlay } from "./narrow-policy.ts";
 
 rawDb.exec(`
@@ -50,6 +50,29 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_chunks_project ON chunks (project_id);
   CREATE INDEX IF NOT EXISTS idx_sources_project ON project_sources (project_id);
 `);
+
+// Full-text index over chunk text (SQLite FTS5, built into node:sqlite, so no dependency). External
+// content: the index holds only terms, the text stays in `chunks`, and triggers keep the two in step.
+// It exists so exact names, acronyms, ticket numbers and quoted phrases are found by what they SAY,
+// which a vector search is bad at (src/projects/search.ts fuses the two).
+rawDb.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text, content='chunks', content_rowid='id', tokenize='porter unicode61');
+  CREATE TRIGGER IF NOT EXISTS chunks_fts_ai AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+  END;
+  CREATE TRIGGER IF NOT EXISTS chunks_fts_ad AFTER DELETE ON chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES ('delete', old.id, old.text);
+  END;
+  CREATE TRIGGER IF NOT EXISTS chunks_fts_au AFTER UPDATE OF text ON chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES ('delete', old.id, old.text);
+    INSERT INTO chunks_fts(rowid, text) VALUES (new.id, new.text);
+  END;
+`);
+// Chunks that existed before the index did are added once.
+if (!kvGet("migrate:chunks_fts")) {
+  rawDb.exec("INSERT INTO chunks_fts(chunks_fts) VALUES ('rebuild')");
+  kvSet("migrate:chunks_fts", "1");
+}
 
 // The one file the owner vouches for as trusted instructions (src/projects/workspace.ts).
 try {

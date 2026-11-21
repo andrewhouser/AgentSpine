@@ -342,13 +342,17 @@ baseline, and the meeting recall number is still unmeasured.
   evidence". Track retrieval recall, citation correctness, stale-answer rate and extraction acceptance rate.
   Kept outside the repo and out of git, because it is workplace material; the harness runs on local models only.
   Take the baseline before K2 changes retrieval. This also finally measures meeting recall (section 4a).
-- **K2. Hybrid global retrieval (Code).** Keep project filtering but make a project one view over the whole base.
-  Three paths: FTS5 for exact names, acronyms, ticket numbers and quoted phrases; the existing vector search;
-  structured lookup for people, decisions, dates, owners and status. Merge with reciprocal-rank fusion or
-  another inspectable method, with per-source quotas so several chunks of one meeting cannot crowd out a PDF.
-  Filters: project, person, team, topic, source type, date range and "as of" date, reviewed against
-  machine-extracted, current against superseded. Keep the property that meeting cards and document cards are
-  scored together and then split (`src/meetings/context.ts`). Done when K1 shows an improvement.
+- **K2. Hybrid global retrieval (built 2026-11-21, structured lookup waits for K4).** `src/projects/search.ts`:
+  an FTS5 index over `chunks` (kept in step by triggers, built into `node:sqlite`, no dependency) and the existing
+  vector search, fused by reciprocal-rank fusion with the path that found each hit recorded, a per-source quota
+  (two by default) so one meeting cannot crowd out a document, and filters for project (or the whole base), source
+  kind and a date range. Run-level project recall (`recallChunks`, `knowledgeFor`) uses it, so an exact name or
+  ticket number is now found without an embedding; the live meeting cards keep their cosine path because they
+  threshold on it. `GET /api/knowledge/search` exposes it. Suite: `test/knowledge-search.test.mjs`. The vector
+  floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. Not built: the structured path (people,
+  decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
+  a person and team filter, a UI for global search, and an agent tool for it (it would need `privateOutput`).
+  Done when K1 shows an improvement: that measurement is still to be taken.
 - **K3. Knowledge Inbox (Code, with a decision on OCR).** A first-class intake that accepts dragged or uploaded
   PDF, Word, Markdown and text; pasted chat or email threads with optional speaker and timestamp parsing; meeting
   recordings and transcripts; screenshots and scans through local OCR; notes dictated or typed on the phone; and
