@@ -4,13 +4,13 @@ import SwiftUI
 /// the phone's sections, grouped by what they are for. Search is not a section here: ⌘K does it
 /// from anywhere, and Settings is the ⌘, scene.
 enum MacSection: String, CaseIterable, Hashable {
-    case threads, headsup, tasks, study, schedules, projects, files, inbox, clients, meetings
+    case threads, headsup, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
     case builds, activity, memory, proposals, agents
 
     /// The rows the design shows in the sidebar, in its order. Threads is not one of them: the
     /// threads themselves are listed below the sections, so `.threads` is the state of having a
     /// thread (or the new-thread screen) open rather than a row.
-    static let primary: [MacSection] = [.headsup, .tasks, .schedules, .meetings, .projects, .files, .inbox, .builds]
+    static let primary: [MacSection] = [.headsup, .tasks, .schedules, .meetings, .projects, .files, .inbox, .knowledge, .builds]
 
     /// Everything else, folded under "More" so it does not push the threads off the screen.
     static let more: [MacSection] = [.study, .clients, .activity, .memory, .proposals, .agents]
@@ -25,6 +25,7 @@ enum MacSection: String, CaseIterable, Hashable {
         case .projects: return "Projects"
         case .files: return "Files"
         case .inbox: return "Inbox"
+        case .knowledge: return "Knowledge"
         case .clients: return "Clients"
         case .meetings: return "Meetings"
         case .builds: return "Builds"
@@ -45,6 +46,7 @@ enum MacSection: String, CaseIterable, Hashable {
         case .projects: return "folder"
         case .files: return "doc.text"
         case .inbox: return "tray.and.arrow.down"
+        case .knowledge: return "books.vertical"
         case .clients: return "person.crop.rectangle.stack"
         case .meetings: return "person.2.wave.2"
         case .builds: return "hammer"
@@ -71,6 +73,7 @@ struct MacSectionContent: View {
             case .projects: ProjectsView()
             case .files: FilesView()
             case .inbox: InboxView()
+            case .knowledge: KnowledgeView()
             case .clients: ClientsView()
             case .meetings: MacMeetingsView()
             case .builds: MacBuildsView()

@@ -911,3 +911,32 @@ export interface KnowledgeHit {
   text: string;
   via: string[];
 }
+
+/** A cited decision, commitment, risk, question or fact in the knowledge store. */
+export interface KnowledgeClaim {
+  at_ms: null | number;
+  due: null | string;
+  /** reviewed, machine-extracted, inferred, conflicting, superseded or retracted. */
+  evidence: string;
+  id: number;
+  kind: string;
+  method: string;
+  ownerName?: null | string;
+  passage: string;
+  project_id: null | number;
+  review_state: "proposed" | "rejected" | "reviewed";
+  said_on: null | string;
+  source_kind: string;
+  source_ref: string;
+  source_state: "available" | "expired";
+  speaker: null | string;
+  status: "active" | "resolved" | "retracted" | "superseded";
+  text: string;
+  topic: null | string;
+}
+
+export interface KnowledgeConflict {
+  claims: KnowledgeClaim[];
+  kind: string;
+  topic: string;
+}

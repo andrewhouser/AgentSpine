@@ -22,6 +22,7 @@ const VIEW_PATHS: Record<Exclude<View, "chat" | "project">, string> = {
   files: "/files",
   headsup: "/headsup",
   inbox: "/inbox",
+  knowledge: "/knowledge",
   meetings: "/meetings",
   overview: "/overview",
   schedules: "/schedules",

@@ -587,6 +587,37 @@ final class APIClient {
         )
     }
 
+    // MARK: - Knowledge store
+
+    func knowledgeClaims(query: [String: String] = [:]) async throws -> [KnowledgeClaim] {
+        try await send(request("/api/knowledge/claims", query: query), as: [KnowledgeClaim].self)
+    }
+
+    func knowledgeConflicts() async throws -> [KnowledgeConflict] {
+        try await send(request("/api/knowledge/conflicts"), as: [KnowledgeConflict].self)
+    }
+
+    /// Accept (optionally corrected) or reject a proposed claim, or change its status.
+    func knowledgeReview(_ id: Int, review: String? = nil, text: String? = nil, status: String? = nil) async throws {
+        var body: [String: Any] = [:]
+        if let review { body["review"] = review }
+        if let text { body["text"] = text }
+        if let status { body["status"] = status }
+        try await sendRaw(jsonRequest("/api/knowledge/claims/\(id)", method: "PATCH", body: body))
+    }
+
+    /// The newer claim replaces the older one. Only a person does this.
+    func knowledgeSupersede(older: Int, by newer: Int) async throws {
+        try await sendRaw(jsonRequest("/api/knowledge/claims/\(older)/supersede", method: "POST", body: ["by": newer]))
+    }
+
+    /// A brief assembled from reviewed claims, as Markdown with each citation.
+    func knowledgeBrief(kind: String, subject: String, query: [String: String] = [:]) async throws -> String {
+        var q = query
+        q["format"] = "md"
+        return try await send(request("/api/knowledge/briefs/\(kind)/\(subject)", query: q), as: KnowledgeBrief.self).markdown
+    }
+
     // MARK: - Knowledge Inbox
 
     func inboxItems() async throws -> [InboxItem] {

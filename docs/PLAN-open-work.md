@@ -403,11 +403,18 @@ baseline, and the meeting recall number is still unmeasured.
   close-out screens (K5), model extraction on ingest by default (it runs on request, to spare the model host),
   records for goals and measures beyond the `goal` kind, topic entities in use, relationships between people and
   teams, and the "evidence level" in retrieval results (K2 will carry it once there is something reviewed to rank).
-- **K5. Post-meeting close-out (Code, web, iPhone and Mac).** Expand the review screen: confirm participants and
-  speaker names, assign projects or topics, review decisions, commitments with owners and dates, risks and open
-  questions, mark statements that supersede earlier ones, accept or reject suggested links, and preview how
-  briefs will change. Favour quick accept and correct over editing. A correction teaches a deterministic alias
-  for a speaker, acronym or project name.
+- **K5. Review and close-out screens (built 2026-11-21; not seen rendered on the native apps).** A Knowledge
+  screen on web (sidebar), iPhone (a tab, under More by default) and Mac (sidebar): claims waiting for review with
+  their cited words and source, Accept (web also lets you correct the text first), Reject, and after accepting a
+  decision or status, "Does this replace an earlier one?" with the earlier reviewed claims of the same kind and
+  project, so supersession is always a person's act; conflicting information with "This one is wrong"; and a brief
+  reader (a project brief, or one of the six operations). It reads the API in K4 and K6. As elsewhere,
+  `KnowledgeView` sits at the bottom of `ProjectsView.swift` until Target Membership can be ticked for a new file.
+  **Not built:** the close-out as one flow at the end of a meeting (confirm participants and speaker names, assign
+  projects or topics, preview how briefs will change) rather than a review list; a correction that teaches a
+  deterministic alias for a speaker, acronym or project name from the screen (the store merges aliases; no screen
+  calls it); and running model extraction on an inbox item from a button (the API `POST /api/inbox/:id/extract`
+  exists).
 - **K6. Briefs and synthesis operations (backend built 2026-11-21; the screens are not).** `src/knowledge/briefs.ts`:
   briefs are ASSEMBLED from reviewed claims by code, with a fixed recipe and output shape per operation, never written
   freehand by a model, so every line is a claim with its id, source, exact cited words and evidence level, and an

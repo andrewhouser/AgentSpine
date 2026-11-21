@@ -1361,3 +1361,50 @@ struct InboxAddResult: Codable, Hashable {
     let duplicate: Bool
     let item: InboxItem
 }
+
+
+// MARK: - Knowledge store
+
+/// A cited decision, commitment, risk, question or fact. `reviewState` is "proposed" until a person accepts it.
+struct KnowledgeClaim: Codable, Identifiable, Hashable {
+    let due: String?
+    /// reviewed, machine-extracted, inferred, conflicting, superseded or retracted.
+    let evidence: String
+    let id: Int
+    let kind: String
+    let ownerName: String?
+    let passage: String
+    let projectID: Int?
+    let reviewState: String
+    let saidOn: String?
+    let sourceKind: String
+    let sourceRef: String
+    let sourceState: String
+    let speaker: String?
+    let status: String
+    let text: String
+    let topic: String?
+
+    enum CodingKeys: String, CodingKey {
+        case due, evidence, id, kind, ownerName, passage, speaker, status, text, topic
+        case projectID = "project_id"
+        case reviewState = "review_state"
+        case saidOn = "said_on"
+        case sourceKind = "source_kind"
+        case sourceRef = "source_ref"
+        case sourceState = "source_state"
+    }
+
+    /// Where it came from, in words. An expired source says its evidence has aged out.
+    var sourceText: String { "\(sourceKind) \(sourceRef)" + (sourceState == "expired" ? " (the source has aged out)" : "") }
+}
+
+struct KnowledgeConflict: Codable, Hashable {
+    let claims: [KnowledgeClaim]
+    let kind: String
+    let topic: String
+}
+
+struct KnowledgeBrief: Codable, Hashable {
+    let markdown: String
+}

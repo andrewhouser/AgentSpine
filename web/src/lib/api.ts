@@ -27,6 +27,8 @@ import type {
   InboxItem,
   InboxStatus,
   IngestResult,
+  KnowledgeClaim,
+  KnowledgeConflict,
   KnowledgeHit,
   LiveStatus,
   Meeting,
@@ -243,10 +245,6 @@ export const api = {
     });
   },
 
-  /**
-   * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
-   * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
-   */
   /** Add a file, screenshot or scan to the Knowledge Inbox. The same bytes again return the existing item. */
   inboxAddFile: (file: Blob, name: string) =>
     request<{ duplicate: boolean; item: InboxItem }>(`/api/inbox/files?${new URLSearchParams({ name })}`, {
@@ -268,6 +266,26 @@ export const api = {
   inboxReprocess: (id: number) => request<InboxItem>(`/api/inbox/${id}/reprocess`, { method: "POST" }),
 
   inboxStatus: () => request<InboxStatus>("/api/inbox/status"),
+
+  /**
+   * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
+   * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
+   */
+  /** A brief assembled from reviewed claims, as Markdown with each citation. kind: project | person | op | trace. */
+  knowledgeBrief: (kind: "op" | "person" | "project" | "trace", subject: string, params: Record<string, string> = {}) =>
+    request<{ markdown: string }>(`/api/knowledge/briefs/${kind}/${encodeURIComponent(subject)}?${new URLSearchParams({ ...params, format: "md" })}`),
+
+  knowledgeClaims: (params: Record<string, string> = {}) => request<KnowledgeClaim[]>(`/api/knowledge/claims?${new URLSearchParams(params)}`),
+
+  knowledgeConflicts: () => request<KnowledgeConflict[]>("/api/knowledge/conflicts"),
+
+  /** Accept (optionally corrected) or reject a proposed claim, or change its status. */
+  knowledgeReview: (id: number, body: { due?: null | string; owner?: null | string; review?: "accept" | "reject"; status?: string; text?: string }) =>
+    request<KnowledgeClaim>(`/api/knowledge/claims/${id}`, { body: JSON.stringify(body), method: "PATCH" }),
+
+  /** The newer claim replaces the older one. Only a person does this. */
+  knowledgeSupersede: (older: number, newer: number) =>
+    request<KnowledgeClaim>(`/api/knowledge/claims/${older}/supersede`, { body: JSON.stringify({ by: newer }), method: "POST" }),
 
   listAgents: () => request<Agent[]>("/api/agents"),
 

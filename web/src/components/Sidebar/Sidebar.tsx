@@ -16,6 +16,7 @@ export type View =
   | "files"
   | "headsup"
   | "inbox"
+  | "knowledge"
   | "meetings"
   | "overview"
   | "project"
@@ -48,6 +49,7 @@ const NAV: { key: View; label: string }[] = [
   { key: "search", label: "Search" },
   { key: "headsup", label: "Heads-up" },
   { key: "inbox", label: "Inbox" },
+  { key: "knowledge", label: "Knowledge" },
   { key: "tasks", label: "Tasks" },
   { key: "study", label: "Study" },
   { key: "files", label: "Files" },
