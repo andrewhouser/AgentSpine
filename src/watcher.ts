@@ -159,7 +159,7 @@ const usage = (): void => {
 
   npm run watcher list              show installed watchers and available starters
   npm run watcher add <starter-id>  install a starter watcher
-  npm run watcher remove <id>       delete a schedule by id
+  npm run watcher remove <id|starter-id>  delete a schedule by id, or a starter by name (inbox-cleanup)
   npm run watcher state             show stored watcher state (the kv table)
   npm run watcher reset-window [key]  forget which messages a Gmail watcher has reviewed (default key
                                       inbox-cleanup), so its next run starts over on the whole inbox
@@ -168,7 +168,7 @@ const usage = (): void => {
 };
 
 /** Watcher schedules are just schedules; we recognise them by their state: keys/task shape. */
-const isWatcher = (task: string): boolean => /state_get/i.test(task);
+const isWatcher = (task: string): boolean => /state_get/i.test(task) || /sinceKey/i.test(task) || STARTERS.some((st) => st.task === task);
 
 const cmdList = (): void => {
   const all = store.listSchedules();
@@ -213,10 +213,12 @@ Or let the scheduler pick it up (the dashboard must be running).`);
 };
 
 const cmdRemove = (idArg: string): number => {
-  const id = Number(idArg);
-  const s = store.getSchedule(id);
+  // Accept a schedule id, or a starter id such as inbox-cleanup (matched by the starter's name).
+  const starter = STARTERS.find((st) => st.id === idArg);
+  const s = starter ? store.listSchedules().find((x) => x.name === starter.name) : store.getSchedule(Number(idArg));
+  const id = s?.id ?? Number(idArg);
   if (!s) {
-    console.error(`no schedule #${idArg}.`);
+    console.error(starter ? `"${starter.name}" is not installed.` : `no schedule #${idArg}.`);
     return 1;
   }
   store.deleteSchedule(id);
