@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { homeDir } from "../config.ts";
+import { resolveStyle } from "../styles/store.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
 export type DraftKind = "email_reply" | "email" | "event" | "text";
@@ -35,6 +36,8 @@ interface Args {
   /** Event kinds: how long ("45 minutes", "1h"). */
   duration?: string;
   location?: string;
+  /** The writing style it was written in (style_for). Shown on the card; code checks it against the recipient. */
+  style?: string;
   /** Why this draft exists — which email prompted it, what it's responding to. */
   reason?: string;
 }
@@ -55,6 +58,19 @@ const label = (a: Args): string => {
 };
 
 /**
+ * Which style the draft says it used, and whether that is what the rules would have picked. A wrong
+ * choice should be visible on the card before you send: code, not the model, knows the rule.
+ */
+const styleLine = (a: Args): string => {
+  const used = String(a?.style ?? "").trim();
+  const rule = resolveStyle(a?.to);
+  if (!used && !rule) return "";
+  if (!used) return `Style:   none given (the rules would have used ${rule!.name}, ${rule!.why})`;
+  if (rule && rule.name !== used) return `Style:   ${used}. NOTE: the rules for this recipient pick ${rule.name} (${rule.why}).`;
+  return `Style:   ${used}${rule ? ` (${rule.why})` : ""}`;
+};
+
+/**
  * The draft as reviewable text. This lands in the confirmation summary, which is what you
  * actually read before deciding — so it has to carry the whole thing, not a description of
  * it. A summary you can't judge from is a rubber stamp with extra steps.
@@ -66,6 +82,8 @@ export const renderDraft = (a: Args): string => {
   if (k === "email_reply" || k === "email") {
     lines.push(`To:      ${a?.to ?? "(unspecified)"}`);
     lines.push(`Subject: ${a?.subject ?? "(none)"}`);
+    const s = styleLine(a);
+    if (s) lines.push(s);
   } else if (k === "event") {
     lines.push(`Title:    ${a?.subject ?? "(untitled)"}`);
     if (a?.start) lines.push(`Start:    ${a.start}`);
@@ -103,10 +121,11 @@ export const draft: Tool = {
     "queued for approval is a question with nothing being asked. Deliver information in your " +
     "reply or summary (or, from an unattended run, with notify). Write the full finished " +
     "text, in the user's voice, ready to send as-is — a draft they have to rewrite is worse " +
-    "than none. Set `reason` to say what prompted it.",
+    "than none. For an email, call style_for with the recipient first, write in the style it gives, and pass that name " +
+    "as `style`. Set `reason` to say what prompted it.",
   argsSchema:
     '{ "kind": "email_reply"|"email"|"event"|"text", "to"?: string, "subject"?: string, ' +
-    '"body": string, "start"?: string, "duration"?: string, "location"?: string, "reason"?: string }',
+    '"body": string, "style"?: string, "start"?: string, "duration"?: string, "location"?: string, "reason"?: string }',
 
   classify: (a: Args): ClassifiedAction => ({
     // Irreversible so the broker queues it. Not because writing text is dangerous — it

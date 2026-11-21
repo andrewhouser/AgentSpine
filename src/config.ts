@@ -378,6 +378,15 @@ export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";
 export const DEFAULT_LOCATION = env.DEFAULT_LOCATION ?? "";
 
 /**
+ * Writing styles (src/styles, docs/archive/PLAN-nod-learnings.md N4). Code owns these numbers: below the
+ * minimum the learner refuses and says how many messages it found, rather than inventing a voice from three
+ * emails. The maximum is how many sent messages one learning pass reads, which is also the local model's
+ * prompt size.
+ */
+export const STYLE_MIN_SAMPLES = 8;
+export const STYLE_MAX_SAMPLES = 40;
+
+/**
  * Heads-up calendar scope (docs/archive/PLAN-heads-up.md). The scanner reads every calendar the account
  * can read except holidays and sports, which are noise for "what's coming up in my life".
  * Both lists are comma-separated and match a calendar's id or its exact name, case-insensitively.

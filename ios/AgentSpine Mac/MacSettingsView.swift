@@ -21,6 +21,7 @@ struct MacAssistantSettings: View {
         NavigationStack {
             List {
                 NavigationLink("Recipes") { RecipesView() }
+                NavigationLink("Styles") { StylesView() }
                 NavigationLink("Auto-approval proposals") { ProposalsView() }
                 NavigationLink("Agents") { AgentsView() }
                 NavigationLink("Heads-up") { HeadsupPrefsView() }

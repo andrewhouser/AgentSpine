@@ -20,6 +20,7 @@ import { HeadsupPrefsPanel } from "../HeadsupPrefsPanel/HeadsupPrefsPanel.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PolicyProposals } from "../PolicyProposals/PolicyProposals.tsx";
 import { RecipesPanel } from "../RecipesPanel/RecipesPanel.tsx";
+import { StylesPanel } from "../StylesPanel/StylesPanel.tsx";
 import { WeeklyReviewPanel } from "../WeeklyReviewPanel/WeeklyReviewPanel.tsx";
 import styles from "./SettingsView.module.css";
 
@@ -410,6 +411,8 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
       </section>
 
       <RecipesPanel />
+
+      <StylesPanel />
         </>
       )}
 

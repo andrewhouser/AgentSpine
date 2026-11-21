@@ -221,3 +221,50 @@ export const searchMessages = async (query = "is:unread in:inbox", max = 10): Pr
   }
   return out;
 };
+
+export interface SentMessage {
+  date: string;
+  id: string;
+  subject: string;
+  /** The text/plain body, undecoded from base64url and nothing else done to it. Quoted replies are still in it. */
+  text: string;
+  to: string;
+}
+
+/** The first text/plain part of a Gmail payload, depth first. Exported so a test can feed it a fixture. */
+export const plainTextOf = (payload: any): string => {
+  if (!payload) return "";
+  if (String(payload.mimeType ?? "").toLowerCase() === "text/plain" && payload.body?.data)
+    return Buffer.from(String(payload.body.data), "base64url").toString("utf8");
+  for (const part of payload.parts ?? []) {
+    const t = plainTextOf(part);
+    if (t) return t;
+  }
+  return "";
+};
+
+/**
+ * Full bodies of YOUR OWN sent mail, for learning a writing style (src/styles). This is the one place
+ * a body is read, and it is narrower than the rule it relaxes (searchMessages: "never the full body"):
+ *
+ * - the search is forced to `in:sent`, and every message that comes back is checked for the SENT label
+ *   too, because a query like `x OR in:inbox` could otherwise widen it;
+ * - the token is the same read-only one, so nothing is sent, changed or deleted;
+ * - nobody but src/styles/learn.ts calls it, and what it reads goes only to the local model.
+ *
+ * Sent mail is not free of hostile text (a forwarded message is someone else's), so the caller still
+ * strips quoted blocks and wraps what is left with tagUntrusted.
+ */
+export const sentMessages = async (query = "", max = 40): Promise<SentMessage[]> => {
+  const params = new URLSearchParams({ q: `in:sent ${query}`.trim(), maxResults: String(Math.min(100, Math.max(1, max))) });
+  const list = await apiGet(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`);
+  const out: SentMessage[] = [];
+  for (const m of list.messages ?? []) {
+    const msg = await apiGet(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`);
+    if (!(msg.labelIds ?? []).includes("SENT")) continue;
+    const headers = Object.fromEntries((msg.payload?.headers ?? []).map((h: any) => [String(h.name).toLowerCase(), h.value]));
+    const text = plainTextOf(msg.payload);
+    if (text.trim()) out.push({ date: headers.date ?? "", id: m.id, subject: headers.subject ?? "", text, to: headers.to ?? "" });
+  }
+  return out;
+};

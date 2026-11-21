@@ -196,3 +196,198 @@ struct RecipeEditView: View {
         }
     }
 }
+
+// MARK: - Styles
+//
+// Lives in this file only because it is already part of both Xcode targets; a new file would need a project
+// edit. It is a sibling of Recipes: standing text a person approves.
+
+/// Settings → Styles: how you write to different recipients, learned from your sent mail.
+///
+/// The assistant can only propose a style: it builds one locally and never shows the note to the chat. You read
+/// the whole note here and press Accept, which no tool can do. Code picks the style for a draft (an exact address,
+/// then a domain, then the default); the model never chooses.
+struct StylesView: View {
+    @State private var state: StylesState?
+    @State private var loading = false
+    @State private var error: String?
+    @State private var deleting: WritingStyle?
+
+    private func rule(_ a: StyleAppliesTo) -> String {
+        let parts = a.addresses + a.domains.map { "@\($0)" }
+        return parts.isEmpty ? "No rule: used only as the default, or when you name it" : "Applies to \(parts.joined(separator: ", "))"
+    }
+
+    var body: some View {
+        List {
+            if let error {
+                ErrorNotice(message: error) { Task { await load() } }
+            }
+            if let state {
+                ForEach(state.proposals) { p in
+                    Section {
+                        if p.replaces {
+                            Text("Accepting this REPLACES the style “\(p.name)” you have now.")
+                                .foregroundStyle(Spine.Palette.danger)
+                        }
+                        Text(p.note)
+                        Text("\(rule(p.appliesTo)) · built from \(p.sampled) sent messages")
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                        Button("Accept") { Task { await act { try await APIClient.shared.acceptStyleProposal(p.name) } } }
+                        Button("Discard", role: .destructive) { Task { await act { try await APIClient.shared.rejectStyleProposal(p.name) } } }
+                    } header: {
+                        Text("Waiting: \(p.name)")
+                    }
+                }
+                if !state.styles.isEmpty {
+                    Section {
+                        Picker("Default", selection: Binding(
+                            get: { state.styles.contains { $0.name == state.defaultStyle } ? state.defaultStyle : "" },
+                            set: { name in Task { await act { try await APIClient.shared.setDefaultStyle(name) } } }
+                        )) {
+                            if !state.styles.contains(where: { $0.name == state.defaultStyle }) {
+                                Text("\(state.defaultStyle) (not saved yet)").tag("")
+                            }
+                            ForEach(state.styles) { Text($0.name).tag($0.name) }
+                        }
+                    } footer: {
+                        Text("Used when no address or domain rule matches the recipient.")
+                    }
+                }
+                Section {
+                    ForEach(state.styles) { style in
+                        NavigationLink(value: style) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(style.name + (style.name == state.defaultStyle ? " (default)" : ""))
+                                    .font(SpineFont.mono(Spine.TypeSize.body, relativeTo: .body))
+                                Text(style.note).lineLimit(3)
+                                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                                    .foregroundStyle(Spine.Palette.textDim)
+                                Text(rule(style.appliesTo))
+                                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                    .foregroundStyle(Spine.Palette.textFaint)
+                            }
+                        }
+                        .swipeActions { Button("Delete", role: .destructive) { deleting = style } }
+                        .contextMenu { Button("Delete", role: .destructive) { deleting = style } }
+                    }
+                } footer: {
+                    Text("In a chat, say “learn my casual style” or “learn how I write to @example.com”. It is built "
+                         + "on the local model and waits here for you to read and accept; the chat never sees it.")
+                }
+                if state.styles.isEmpty && state.proposals.isEmpty {
+                    Text("No styles yet.").foregroundStyle(Spine.Palette.textDim)
+                }
+            }
+        }
+        .navigationTitle("Styles")
+        .spineInlineTitle()
+        .navigationDestination(for: WritingStyle.self) { style in
+            StyleEditView(style: style) { Task { await load() } }
+        }
+        .refreshable { await load() }
+        .task { await load() }
+        .overlay { if loading && state == nil { ProgressView() } }
+        .confirmationDialog(
+            "Delete the style “\(deleting?.name ?? "")”?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete style", role: .destructive) {
+                if let s = deleting { Task { await act { try await APIClient.shared.deleteStyle(s.name) } } }
+            }
+        } message: {
+            Text("Drafts to its recipients fall back to the default.")
+        }
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            state = try await APIClient.shared.styles()
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func act(_ change: () async throws -> Void) async {
+        do {
+            try await change()
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// One style as a form: the note, and which addresses and domains it applies to (comma separated).
+private struct StyleEditView: View {
+    let style: WritingStyle
+    var onChanged: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var note: String
+    @State private var addresses: String
+    @State private var domains: String
+    @State private var saving = false
+    @State private var error: String?
+
+    init(style: WritingStyle, onChanged: @escaping () -> Void) {
+        self.style = style
+        self.onChanged = onChanged
+        _note = State(initialValue: style.note)
+        _addresses = State(initialValue: style.appliesTo.addresses.joined(separator: ", "))
+        _domains = State(initialValue: style.appliesTo.domains.joined(separator: ", "))
+    }
+
+    private func split(_ s: String) -> [String] {
+        s.split(whereSeparator: { $0 == "," || $0 == " " || $0 == ";" }).map(String.init)
+    }
+
+    var body: some View {
+        Form {
+            Section("Note") {
+                TextEditor(text: $note)
+                    .frame(minHeight: 140)
+                    .accessibilityLabel("Note")
+            }
+            Section {
+                TextField("Addresses, comma separated", text: $addresses, axis: .vertical)
+                    .spineNoAutocapitalization()
+                    .autocorrectionDisabled()
+                TextField("Domains, comma separated", text: $domains, axis: .vertical)
+                    .spineNoAutocapitalization()
+                    .autocorrectionDisabled()
+            } header: {
+                Text("Applies to")
+            } footer: {
+                Text("A domain includes its subdomains. An exact address wins over a domain.")
+            }
+            if let error {
+                Section { Text(error).foregroundStyle(Spine.Palette.danger) }
+            }
+            Section {
+                Button("Save") { Task { await save() } }
+                    .disabled(saving || note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(style.name)
+        .spineInlineTitle()
+    }
+
+    private func save() async {
+        saving = true
+        defer { saving = false }
+        do {
+            try await APIClient.shared.saveStyle(style.name, note: note, addresses: split(addresses), domains: split(domains))
+            onChanged()
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}

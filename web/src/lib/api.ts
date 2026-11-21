@@ -46,12 +46,15 @@ import type {
   StudyDueCard,
   StudyOverview,
   StudyReview,
+  StyleAppliesTo,
+  StylesState,
   Task,
   Thread,
   TimeSummary,
   VisionStatus,
   VoiceStatus,
   WakeResult,
+  WritingStyle,
 } from "./types.ts";
 
 const TOKEN_KEY = "as_token";
@@ -133,6 +136,7 @@ export const api = {
   /** Turn a meeting question into a study card, with your edits if you made any. */
   acceptMeetingQuestion: (id: number, edits: { answer?: string; question?: string }) =>
     post<{ cardId: null | number; topic: string }>(`/api/study/questions/${id}/accept`, edits),
+  acceptStyleProposal: (name: string) => request<{ ok: WritingStyle; replaced: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}/accept`, { method: "POST" }),
   addProjectSource: (projectId: number, path: string) =>
     post<{ result: IngestResult; source: ProjectSource }>(
       `/api/projects/${projectId}/sources`,
@@ -194,6 +198,7 @@ export const api = {
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
 
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
+  deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
   /**
@@ -257,14 +262,12 @@ export const api = {
 
   listConversations: () => request<Conversation[]>("/api/conversations"),
 
-  /** One utterance said to an assistant that is already listening. */
   listenForTurn: (audio: Blob, wake: string, aliases: string[], sounds: boolean) =>
     request<{ text: string }>(voiceListenPath("turn", wake, aliases, sounds), {
       body: audio,
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
-
   /**
    * One stretch of speech heard while idle: was it the wake word, and what followed?
    * Audio goes as the raw body, like `dictate`; the wake word and its spellings ride in the
@@ -276,10 +279,10 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
+
   listFiles: () => request<SavedFile[]>("/api/files"),
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
-
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
 
@@ -290,11 +293,14 @@ export const api = {
 
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
-  listRecipes: () => request<Recipe[]>("/api/recipes"),
 
+  listRecipes: () => request<Recipe[]>("/api/recipes"),
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
+
   listSchedules: () => request<Schedule[]>("/api/schedules"),
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
+  /** One utterance said to an assistant that is already listening. */
+  listStyles: () => request<StylesState>("/api/styles"),
 
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
@@ -358,6 +364,7 @@ export const api = {
   rejectConfirmation: (id: number, reason: string) =>
     post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/reject`, { reason }),
 
+  rejectStyleProposal: (name: string) => request<{ name: string; removed: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}`, { method: "DELETE" }),
   removeProjectSource: (projectId: number, sourceId: number) =>
     request<{ ok: boolean }>(`/api/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
 
@@ -384,6 +391,8 @@ export const api = {
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
     post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
 
+  saveStyle: (name: string, body: { appliesTo: StyleAppliesTo; note: string }) =>
+    request<WritingStyle>(`/api/styles/${encodeURIComponent(name)}`, { body: JSON.stringify(body), method: "PUT" }),
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
 
   sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
@@ -398,6 +407,7 @@ export const api = {
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
 
+  setDefaultStyle: (name: string) => request<{ defaultStyle: string }>("/api/style-default", { body: JSON.stringify({ name }), method: "PUT" }),
   setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
 
   /** File a finished meeting under a project — this is what indexes its transcript. */

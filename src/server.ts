@@ -101,6 +101,7 @@ import { rawDb } from "./memory/store.ts";
 import { dedupeMemories, deleteMemory, listMemories, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
+import * as styleStore from "./styles/store.ts";
 import { overview } from "./overview.ts";
 import { acceptQuestion, dismissQuestion, findMeetingQuestions, listQuestions } from "./study/meeting-questions.ts";
 import { dueForScreen, reviewWithRecall, studyOverview } from "./study/review.ts";
@@ -979,6 +980,41 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (m === "DELETE" && seg.length === 3) {
         const removed = deleteRecipe(Number(seg[2]));
         return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+      }
+    }
+
+    // /api/styles — writing styles (src/styles). A style is written here by a person (a hand edit, or
+    // Accept on a proposal the learner built from sent mail). No tool reaches any of this: style_learn
+    // can only park a proposal, and never sees or returns the note.
+    if (seg[1] === "styles" && seg.length === 2 && m === "GET")
+      return sendJson(res, 200, {
+        defaultStyle: styleStore.getDefaultStyle(),
+        proposals: styleStore.listProposals().map((p) => ({ ...p, replaces: !!styleStore.getStyle(p.name) })),
+        styles: styleStore.listStyles(),
+      });
+    if (seg[1] === "styles" && seg.length === 3) {
+      if (m === "PUT") {
+        const b = await readBody(req);
+        const r = styleStore.saveStyle(seg[2], String(b?.note ?? ""), styleStore.normaliseAppliesTo(b?.appliesTo), Number(b?.sampled ?? 0));
+        return "error" in r ? sendJson(res, 400, r) : sendJson(res, 200, r.ok);
+      }
+      if (m === "DELETE") {
+        const removed = styleStore.deleteStyle(seg[2]);
+        return sendJson(res, removed ? 200 : 404, { name: seg[2], removed });
+      }
+    }
+    if (seg[1] === "style-default" && seg.length === 2 && m === "PUT") {
+      const r = styleStore.setDefaultStyle(String((await readBody(req))?.name ?? ""));
+      return "error" in r ? sendJson(res, 400, r) : sendJson(res, 200, { defaultStyle: r.ok });
+    }
+    if (seg[1] === "style-proposals" && seg.length >= 3) {
+      if (m === "POST" && seg[3] === "accept") {
+        const r = styleStore.acceptProposal(seg[2]);
+        return "error" in r ? sendJson(res, 404, r) : sendJson(res, 200, r);
+      }
+      if (m === "DELETE" && seg.length === 3) {
+        const removed = styleStore.rejectProposal(seg[2]);
+        return sendJson(res, removed ? 200 : 404, { name: seg[2], removed });
       }
     }
 

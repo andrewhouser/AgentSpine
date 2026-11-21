@@ -137,6 +137,7 @@ struct SettingsView: View {
             Section {
                 NavigationLink("Auto-approval proposals") { ProposalsView() }
                 NavigationLink("Recipes") { RecipesView() }
+                NavigationLink("Styles") { StylesView() }
                 NavigationLink("Agents") { AgentsView() }
                 NavigationLink("Heads-up") { HeadsupPrefsView() }
                 NavigationLink("Memory") { MemoryView() }

@@ -671,6 +671,17 @@ after the first accepted passes. If acceptance is low, raise the similarity thre
 
 ---
 
+## Writing styles (N4)
+
+Not a learner in the sense of the phases above: nothing here runs on its own. `style_learn` (live chat only,
+read-only Google token, local model only) builds a note from your sent mail and parks it in `style_proposals`.
+A person accepts it in Settings; only then does it enter `styles`, which is never pruned and never recalled by
+similarity. `src/styles/store.ts` holds the tables and the resolver (address, domain, default); `src/styles/learn.ts`
+holds the stripping, the sample minimum and the note check. Invariants: no tool can write `styles` (a test
+reads `src/tools/styles.ts` for the writers), the note never goes back to the chat model, and the model is never
+asked which style fits. Tests: `test/styles.test.mjs`. Design record and the reason approval moved from a card to
+Settings: `docs/SPEC.md` section 5, amendment of 2026-11-21.
+
 ## New surfaces this introduces
 
 **Memory kinds** — existing: `note`, `reflection`, `preference`.

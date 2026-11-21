@@ -220,10 +220,10 @@ HERE free tier, a static-speed provider, or flights only; whether to want G at a
 
 ## 4. Security hardening and learning (`docs/archive/PLAN-nod-learnings.md`, from n8n's Nod)
 
-N5, N1, N3 and the offline half of N2 are built (2026-11-21). N4 and the live half of N2 are not (checked
-2026-11-21: no styles table, no `eval:injection`). The write token raised the value of N2,
+N5, N1, N3, the offline half of N2 and the core of N4 are built (2026-11-21). The live half of N2 is not (no
+`eval:injection`). The write token raised the value of N2,
 since a hostile email is now worth more to an attacker.
-**Order: N4; the live half of N2 whenever the model host is free.** The offline half is done, so the
+**Order: the live half of N2 whenever the model host is free.** The offline half is done, so the
 inbox cleanup can run unattended as far as code guards go; the live half is what measures the model.
 
 - **N5 Architecture test. Built 2026-11-21: `test/architecture.test.mjs`.** Reads the source with the
@@ -295,9 +295,20 @@ inbox cleanup can run unattended as far as code guards go; the live half is what
   (`CloudUsageView` in `MemoryView.swift`) from `GET /api/cloud-usage`. There is no form to raise a cap, on
   purpose: the numbers are `.env`, and a control that raised the limit would sit within reach of the loop it stops.
   The cap push is a `run` message, so the weekly review lists it only when it has a schedule's name (it has none).
-- **N4 Writing styles for drafts (defer).** Named styles, several at once, built from Sent mail via the
-  unchanged read token. Largest item and independent of everything above. The full design is in the archived
-  plan.
+- **N4 Writing styles for drafts. Core built 2026-11-21, never run against real mail.** `src/styles/store.ts`
+  (tables `styles` and `style_proposals`, the resolver), `src/styles/learn.ts` (stripping quoted and forwarded text,
+  the sample minimum `STYLE_MIN_SAMPLES` = 8 in `config.ts`, the note check), `src/tools/styles.ts`
+  (`style_learn`, chat only, reversible because it only proposes; `style_for`), a `style` argument on `draft` whose
+  card line says which style was used and flags one the rules would not have picked, `sentMessages` in
+  `src/google/client.ts` (your own sent mail only, same read token), `/api/styles` routes, and a Styles screen
+  on web (Settings, Memory tab), iPhone and Mac. **Decided with you 2026-11-21:** default style `casual`; matching
+  on address and domain only; approval is in Settings, not a confirmation card, so the learned note never passes
+  through the chat model (SPEC section 5 amendment). Tests: `test/styles.test.mjs` (65 checks). **Not done:** project
+  and client matching (`applies_to.projects`), and with it anything for Crew Front Desk, which also needs the
+  question of a second Google account settled first; the real-mail before and after of a few drafts per style that
+  the plan asks for (needs the Mini and a real token); the iPhone and Mac Styles screens have not been seen rendered.
+  Left as is: the model that writes a draft receives the style note through `style_for`, so on the cloud tier a
+  scrubbed note (no names, addresses, links or figures, checked in code) would travel with the draft request.
 
 ---
 

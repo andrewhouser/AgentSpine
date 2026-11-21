@@ -43,6 +43,7 @@ import { profileTools } from "./profile.ts";
 import { dateRemember } from "./date-remember.ts";
 import { headsupStatus } from "./headsup.ts";
 import { headsupKindSet } from "./headsup-kind-set.ts";
+import { styleFor, styleLearn } from "./styles.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -104,6 +105,8 @@ export const tools: Tool[] = [
   dateRemember,
   headsupKindSet,
   headsupStatus,
+  styleFor,
+  styleLearn,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

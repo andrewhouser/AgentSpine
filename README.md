@@ -1970,6 +1970,21 @@ npm run confirm reject 2 never commit to a renewal on my behalf, always ask me f
 
 `drafts/` is gitignored — approved drafts are unsent correspondence.
 
+### Writing styles
+
+Drafts can sound like you. Say *"learn my casual style"*, or *"learn how I write to @clientx.com"*, in a chat.
+`style_learn` reads your **sent mail only** (the read-only Google token, `in:sent`), strips quoted replies and
+forwarded blocks, and asks the **local** model for a short note: greeting, sign-off, length, formality, phrases.
+It needs at least 8 usable messages (`STYLE_MIN_SAMPLES`) and refuses below that. A note containing an address, a
+link, an amount, a long number, a secret-shaped string or the name of anyone you wrote to is thrown away by code.
+
+The result is **not saved**. It waits in **Settings → Memory → Styles** (web) or **Settings → Styles** (iPhone and
+Mac), where you read the whole note and press Accept; the chat never sees it and no tool can accept it. Each
+style can name addresses and domains it applies to. For a draft, code picks the style, never the model: an exact
+address, then a domain (subdomains included), then your default, which is `casual` until you change it. The draft
+card shows `Style: casual (the rule for …)`, and says so when the style used is not the one the rules would pick.
+Drafts are unchanged otherwise: nothing is sent.
+
 > **The scopes stay read-only.** That was decided explicitly, and it's recorded in
 > `profile.md` and SPEC §5 so it stays decided. Widening them needs a new decision, not a
 > convenience argument.

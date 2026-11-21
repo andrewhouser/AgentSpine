@@ -433,10 +433,23 @@ is to keep it.
 > - Tiers: archive and label are reversible; trash and spam are irreversible, so they queue in a chat and run
 >   unattended in a schedule Andrew set up. Calendar writes are reversible and limited to one named calendar.
 > - Not carried over from the cloud task: unsubscribing through a browser. The cleanup lists senders worth
->   unsubscribing from instead. Reading remains headers and snippet only, never a full body.
+>   unsubscribing from instead. Reading remains headers and snippet only, never a full body (the one exception, your own sent mail for writing styles, is the amendment below).
 > - Off unless both `policy.google.write.enabled` is true and the write token exists.
 
 ---
+
+> ### Amendment — 2026-11-21: full bodies of your own sent mail, for writing styles
+>
+> `searchMessages` stays headers and snippets only, and `gmail_search` still never returns a body. One
+> new read, `sentMessages` in `src/google/client.ts`, returns full bodies of **your own sent mail**, for
+> learning a writing style (N4, `src/styles`). It is narrower than the rule it relaxes: the search is forced
+> to `in:sent` and every message returned is checked for the SENT label (so `x OR in:inbox` cannot widen it),
+> the token is the same read-only one, and only `src/styles/learn.ts` calls it. Quoted replies and forwarded
+> blocks are stripped before anything is read by a model, the text is wrapped with `tagUntrusted`, and the model
+> is the local one only (`sensitivity: "private"`). **A style is approved in Settings, not through the
+> confirmation queue:** the archived plan had an approval card carry the learned note, which would have passed
+> sent-mail-derived text through the chat model, possibly the cloud tier. Instead `style_learn` parks a proposal
+> and returns only that one is waiting; you read the note in full and press Accept, which no tool can reach.
 
 ## 6. Cross-cutting — earn trust as it acts more  ✅ **BUILT**
 

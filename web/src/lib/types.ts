@@ -529,6 +529,38 @@ export interface HeadsupCard {
   url: string;
 }
 
+/** Which recipients a writing style applies to. Exact addresses, and domains (which include subdomains). */
+export interface StyleAppliesTo {
+  addresses: string[];
+  domains: string[];
+}
+
+/** A writing style in force. */
+export interface WritingStyle {
+  applies_to: StyleAppliesTo;
+  name: string;
+  note: string;
+  sampled: number;
+  updated: string;
+}
+
+/** A style built from your sent mail, waiting for you to read and accept it. */
+export interface StyleProposal {
+  applies_to: StyleAppliesTo;
+  created: string;
+  name: string;
+  note: string;
+  /** True if accepting it would overwrite a style you have now. */
+  replaces: boolean;
+  sampled: number;
+}
+
+export interface StylesState {
+  defaultStyle: string;
+  proposals: StyleProposal[];
+  styles: WritingStyle[];
+}
+
 /** What became of one kind of heads-up over the last 90 days. `tier` says what the learning has done about it. */
 export interface HeadsupKindLearning {
   counted: number;

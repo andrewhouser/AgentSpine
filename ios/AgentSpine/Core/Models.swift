@@ -717,6 +717,49 @@ struct ReviewWishResult: Codable {
 
 /// A named recipe from `GET /api/recipes`: a procedure you approved in chat, which a later run
 /// follows when you ask for it by name.
+/// Which recipients a writing style applies to: exact addresses, and domains (which include subdomains).
+struct StyleAppliesTo: Codable, Hashable {
+    var addresses: [String]
+    var domains: [String]
+}
+
+/// A writing style in force, learned from your sent mail or written by hand.
+struct WritingStyle: Codable, Identifiable, Hashable {
+    var id: String { name }
+    let name: String
+    let note: String
+    let appliesTo: StyleAppliesTo
+    let sampled: Int
+    let updated: String
+
+    enum CodingKeys: String, CodingKey {
+        case name, note, sampled, updated
+        case appliesTo = "applies_to"
+    }
+}
+
+/// A style built from your sent mail, waiting for you to read and accept it. `replaces` is true when
+/// accepting it would overwrite a style you have now.
+struct StyleProposal: Codable, Identifiable, Hashable {
+    var id: String { name }
+    let name: String
+    let note: String
+    let appliesTo: StyleAppliesTo
+    let sampled: Int
+    let replaces: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case name, note, sampled, replaces
+        case appliesTo = "applies_to"
+    }
+}
+
+struct StylesState: Codable {
+    let defaultStyle: String
+    let proposals: [StyleProposal]
+    let styles: [WritingStyle]
+}
+
 struct Recipe: Codable, Identifiable, Hashable {
     let created: String
     let id: Int

@@ -686,6 +686,35 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/recipes/\(id)", method: "DELETE"))
     }
 
+    // MARK: - Writing styles
+
+    func styles() async throws -> StylesState {
+        try await send(request("/api/styles"), as: StylesState.self)
+    }
+
+    /// Create or replace a style by hand. The server validates the note and the name.
+    func saveStyle(_ name: String, note: String, addresses: [String], domains: [String]) async throws {
+        try await sendRaw(jsonRequest("/api/styles/\(name)", method: "PUT",
+                                      body: ["note": note, "appliesTo": ["addresses": addresses, "domains": domains]]))
+    }
+
+    func deleteStyle(_ name: String) async throws {
+        try await sendRaw(jsonRequest("/api/styles/\(name)", method: "DELETE"))
+    }
+
+    func setDefaultStyle(_ name: String) async throws {
+        try await sendRaw(jsonRequest("/api/style-default", method: "PUT", body: ["name": name]))
+    }
+
+    /// Accepting is the only way a proposal becomes a style, and no tool can do it.
+    func acceptStyleProposal(_ name: String) async throws {
+        try await sendRaw(jsonRequest("/api/style-proposals/\(name)/accept", method: "POST"))
+    }
+
+    func rejectStyleProposal(_ name: String) async throws {
+        try await sendRaw(jsonRequest("/api/style-proposals/\(name)", method: "DELETE"))
+    }
+
     func forgetMemory(_ id: Int) async throws {
         try await sendRaw(jsonRequest("/api/memories/\(id)", method: "DELETE"))
     }
