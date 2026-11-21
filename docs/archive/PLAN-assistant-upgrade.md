@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # Personal-assistant upgrade — plan
 
 Written 2026-11-08. Goal: turn AgentSpine from "a chat that asks permission for everything"

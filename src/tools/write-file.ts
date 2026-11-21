@@ -103,7 +103,7 @@ const WEB_EXTENSIONS = [
 ];
 
 /**
- * Program source, for the languages a build loop actually works in (docs/PLAN-build-loop.md
+ * Program source, for the languages a build loop actually works in (docs/archive/PLAN-build-loop.md
  * Phase 4). Without these, "improve my Rust project" could not start: `run_command` could
  * build and test it, and nothing could write the change.
  *

@@ -1,5 +1,5 @@
 /**
- * Which calendars the heads-up scanner reads (docs/PLAN-heads-up.md).
+ * Which calendars the heads-up scanner reads (docs/archive/PLAN-heads-up.md).
  *
  * Everything the account can read, except holidays and sports. Those two are the usual noise:
  * a holiday calendar is thirty "events" a year that are not things happening in your life, and

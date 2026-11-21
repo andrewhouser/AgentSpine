@@ -2,7 +2,7 @@
 
 A local-first personal agent: a TypeScript server (`src/`) with a capability broker, a React web
 client (`web/`), and a SwiftUI iPhone app (`ios/`). `README.md` is the user guide; the design
-records live in `docs/`. Read the relevant one before changing an area:
+records live in `docs/`; finished plans are in `docs/archive/` (history, not a to-do list). Read the relevant one before changing an area:
 
 | Area | Read first |
 |---|---|
@@ -11,12 +11,12 @@ records live in `docs/`. Read the relevant one before changing an area:
 | Study tools | `docs/STUDY.md` |
 | Model host, tiers, vision server | `docs/MODELS.md` |
 | Voice / TTS, image generation, watchers | `docs/VOICE.md`, `docs/IMAGE_GENERATION.md`, `docs/WATCHERS.md` |
-| Build loop (`run_command`, `git_write`, builder) | `docs/PLAN-build-loop.md` |
+| Build loop (`run_command`, `git_write`, builder) | `docs/archive/PLAN-build-loop.md` (design record; all phases shipped) |
 | MCP client (remote MCP server tools) | `docs/MCP.md` |
-| Open plan | `docs/PLAN-video-ideas.md` |
-| Native Mac app, shared Swift package, UI refresh (the "spine" identity) | `docs/PLAN-native-apps-and-ui-refresh.md` (phase 1 done: Mac target shares eight files; next is the SwiftUI components, see its "Where this stands" section) |
-| Notifications: quiet hours, caps, weekly "what I sent you" review | `docs/PLAN-outbox.md` (proposed, nothing built; note the interruption budget in `src/learn/interrupt.ts` is not wired to any caller yet) |
-| Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (what is built: phases 0-5 plus tab badge, brief line and preferences; the iOS Swift is uncompiled and the flight and routing integrations are unverified against live keys) and `docs/PLAN-heads-up-next.md` (what is left, in order) |
+| **What is left to do** (the only plan doc) | `docs/PLAN-open-work.md`. Update it in the same change as any work it lists. Do not start another PLAN doc |
+| Native Mac app, design system, the "spine" identity | `docs/archive/PLAN-native-apps-and-ui-refresh.md` (design record; built, leftovers are in `PLAN-open-work.md` section 5) |
+| Notifications: quiet hours, caps, weekly "what I sent you" review | `docs/archive/PLAN-outbox.md` (design record; phases 0-2 built, log-only until `OUTBOX_ENFORCE`; remaining phases in `PLAN-open-work.md` section 2. The interruption budget in `src/learn/interrupt.ts` is not wired to any caller yet) |
+| Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/archive/PLAN-heads-up.md` and `docs/archive/PLAN-heads-up-next.md` (design records; phases 0-5, E and F built; the iOS Swift is uncompiled and the flight and routing integrations are unverified against live keys; what is left is in `PLAN-open-work.md` section 3) |
 
 ## Machines
 

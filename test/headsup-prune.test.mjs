@@ -1,5 +1,5 @@
 /**
- * Heads-up retention (docs/PLAN-heads-up-next.md workstream E). Run with `node test/headsup-prune.test.mjs`.
+ * Heads-up retention (docs/archive/PLAN-heads-up-next.md workstream E). Run with `node test/headsup-prune.test.mjs`.
  *
  * Seeds rows and files of different ages, prunes, and proves exactly the documented set was removed,
  * that nothing newer or still active was touched, and that a mute from two years ago still holds.

@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import Observation
 
-// Recording a meeting from this Mac's own microphone (docs/PLAN-native-apps-and-ui-refresh.md,
+// Recording a meeting from this Mac's own microphone (docs/archive/PLAN-native-apps-and-ui-refresh.md,
 // phase 5; the server half is SPEC 15, "Audio sent by a client").
 //
 // The path is: microphone -> AVAudioEngine tap -> 16 kHz mono s16le -> a file on disk every

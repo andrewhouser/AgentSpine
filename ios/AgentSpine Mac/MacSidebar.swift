@@ -7,7 +7,7 @@ enum MacSidebarItem: Hashable {
     case thread(Int)
 }
 
-/// The Mac sidebar from `docs/PLAN-native-apps-and-ui-refresh.md` ("Mac layout"): a new-thread
+/// The Mac sidebar from `docs/archive/PLAN-native-apps-and-ui-refresh.md` ("Mac layout"): a new-thread
 /// button, search, the sections, recent threads, and the connection status at the foot.
 struct MacSidebar: View {
     @Binding var selection: MacSidebarItem?

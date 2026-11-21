@@ -1,5 +1,5 @@
 /**
- * Heads-up telemetry (docs/PLAN-heads-up-next.md workstream F): the numbers that say whether
+ * Heads-up telemetry (docs/archive/PLAN-heads-up-next.md workstream F): the numbers that say whether
  * this feature helps, printed in `npm run digest`.
  *
  * Like the rest of the digest, every figure is a SQL count or a stored counter. No model is

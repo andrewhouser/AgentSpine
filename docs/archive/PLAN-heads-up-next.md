@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # Plan: Heads-up, what comes next
 
 Written 2026-11-18, against `main` at `e72b6f1`. Status: **E and F built (2026-11-21); the rest proposed.**

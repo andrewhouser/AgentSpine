@@ -1,5 +1,5 @@
 /**
- * Retention for Heads-up (docs/PLAN-heads-up-next.md workstream E).
+ * Retention for Heads-up (docs/archive/PLAN-heads-up-next.md workstream E).
  *
  * Research results were never cleaned up: `replaceCards` removes a heads-up's photos only when it
  * is researched AGAIN, so finished items kept up to six photos of up to 1.5 MB each forever.

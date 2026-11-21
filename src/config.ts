@@ -378,7 +378,7 @@ export const CHAT_AUTO_TITLE = (env.CHAT_AUTO_TITLE ?? "true") !== "false";
 export const DEFAULT_LOCATION = env.DEFAULT_LOCATION ?? "";
 
 /**
- * Heads-up calendar scope (docs/PLAN-heads-up.md). The scanner reads every calendar the account
+ * Heads-up calendar scope (docs/archive/PLAN-heads-up.md). The scanner reads every calendar the account
  * can read except holidays and sports, which are noise for "what's coming up in my life".
  * Both lists are comma-separated and match a calendar's id or its exact name, case-insensitively.
  * HEADSUP_INCLUDE_CALENDARS wins over every exclusion, including the built-in ones.
@@ -551,7 +551,7 @@ export const DASHBOARD_PUBLIC_URL = (env.DASHBOARD_PUBLIC_URL ?? "").replace(/\/
 export const NOTIFY_ON_CONFIRMATION = (env.NOTIFY_ON_CONFIRMATION ?? "true") !== "false";
 export const NOTIFY_ON_FAILURE = (env.NOTIFY_ON_FAILURE ?? "true") !== "false";
 export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true";
-// The outbox (docs/PLAN-outbox.md) always RECORDS every notification. With this off, the default,
+// The outbox (docs/archive/PLAN-outbox.md) always RECORDS every notification. With this off, the default,
 // it only records what it would have done (quiet hours, repeats, the daily cap) and delivers
 // everything as before. Turn it on after a week of `npm run digest` shows the numbers are right.
 export const OUTBOX_ENFORCE = (env.OUTBOX_ENFORCE ?? "false") === "true";
@@ -1044,7 +1044,7 @@ export const loadGoogleCreds = (): { clientId: string; clientSecret: string } | 
   return null;
 };
 
-// --- The build loop (docs/PLAN-build-loop.md) ---
+// --- The build loop (docs/archive/PLAN-build-loop.md) ---
 // Default wall-clock cap for a declared command. Two minutes covers a type check, a lint and
 // most test suites; a `cargo build` from cold or an `xcodebuild` wants its own timeoutMs in
 // policy.json rather than a bigger default here, because the cap is also what stops a hung

@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # Plan: what to take from n8n's Nod
 
 Source: the Nod repo (github.com/n8n-io/nod), its trust/approvals/principles/architecture docs

@@ -87,7 +87,7 @@ export interface Policy {
    */
   weather?: { enabled: boolean };
   /**
-   * Heads-up's time-sensitive watches (docs/PLAN-heads-up.md, Phase 5). Both default to denied.
+   * Heads-up's time-sensitive watches (docs/archive/PLAN-heads-up.md, Phase 5). Both default to denied.
    *
    * `flights` lets it look up a flight's status with a third-party API, which learns the flight
    * number and date. `travel` lets it ask a routing API how long a drive will take, which learns
@@ -97,7 +97,7 @@ export interface Policy {
   headsup?: { flights?: boolean; travel?: boolean };
   git?: { repoDirs: string[] };
   /**
-   * The build loop (docs/PLAN-build-loop.md). Absent = denied, like every other optional
+   * The build loop (docs/archive/PLAN-build-loop.md). Absent = denied, like every other optional
    * surface: `run_command`, `commands_list` and `git_write` are all unreachable without it.
    *
    * `repos` is a map and not a boolean because declaring a command for a repo is a statement

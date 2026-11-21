@@ -205,7 +205,7 @@ export const parseTap = (r: CommandResult): null | string => {
  * which hands back the same facts as JSON. That is a declaration change and a subprocess,
  * and it is NOT implemented here: this sandbox blocks the XPC CoreSimulator needs and
  * refuses the result-bundle write, so it could not be verified on this machine. Left for
- * whoever can run a real build — see docs/PLAN-build-loop.md.
+ * whoever can run a real build — see docs/archive/PLAN-build-loop.md.
  */
 const XC_NOISE = [
   /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+ \w+\[\d+:\d+\]/,

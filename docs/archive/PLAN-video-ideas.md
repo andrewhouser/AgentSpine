@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # Plan: ideas from two videos (AI learning roles, "AI operating system")
 
 Source transcripts: *My AI Setup Feels Like Cheating* (ten AI learning roles, spaced repetition)

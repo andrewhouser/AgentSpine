@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The Mac window: a sidebar (new thread, search, sections, the threads, connection status) and
-/// one detail pane beside it, as in `docs/PLAN-native-apps-and-ui-refresh.md`.
+/// one detail pane beside it, as in `docs/archive/PLAN-native-apps-and-ui-refresh.md`.
 ///
 /// A thread opens in the detail pane; every other section is the phone's screen in a navigation
 /// stack, which already knows how to push its own detail.

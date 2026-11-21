@@ -11,13 +11,13 @@ This is a handoff: it assumes you know the project but not this particular stret
 
 > **Added 2026-11-19:** the **Mac app** (scheme `AgentSpine Mac`, sharing the Core, Design and many
 > Views with this target) is built through phase 5 and most of phase 6 of
-> [docs/PLAN-native-apps-and-ui-refresh.md](../docs/PLAN-native-apps-and-ui-refresh.md), including
+> [docs/archive/PLAN-native-apps-and-ui-refresh.md](../docs/archive/PLAN-native-apps-and-ui-refresh.md), including
 > recording a meeting from the Mac's own microphone. That plan is its record. Not yet done there:
 > real push to a Mac (`src/push/apns.ts` still uses one global `apns-topic`), the Builds badge, and
 > the web restyle (phase 7).
 
 > **Added 2026-11-09:** a **Builds** tab (`Views/BuildsView.swift`), for the build loop in
-> docs/PLAN-build-loop.md — `GET /api/builds` and `/api/builds/:id/diff`. It was written
+> docs/archive/PLAN-build-loop.md — `GET /api/builds` and `/api/builds/:id/diff`. It was written
 > without Xcode: this sandbox blocks `swift-plugin-server`, so SwiftUI macros cannot expand
 > and the module cannot be type-checked. Every file parses (`swiftc -parse`, clean), and that
 > is all that has been proved — **press ⌘R before trusting it**.

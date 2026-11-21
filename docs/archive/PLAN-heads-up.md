@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # Plan: Heads-up (proactive suggestions)
 
 Written 2026-11-18. Status: **Phases 0, 1, 2, 2b, 3, 4 and 5 built** (Phase 4's Swift is written but has never been compiled: see "Phase 4" below) (calendar reader, scanner, rules, ledger, planner, the morning heads-up, the API and the web page). Phase 6 onward is proposed. Prompted by Duet noticing a flight and
@@ -20,7 +22,7 @@ in your life and offers to help, without being asked.
 | Bills marked paid | Any calendar event with `PAID` in it is ignored. |
 | Acting on an offer | Read-only research runs on a "yes". Anything irreversible (buy, book, email) still goes to the confirmation queue. |
 | Paid marker | The word `PAID` in the event title (decided 2026-11-18). Description is also checked, harmlessly. |
-| Quiet hours | No pushes 9 pm to 7 am, except a cancellation or a large delay on something within a few hours. At most three offered items per morning. |
+| Quiet hours | No pushes 9 pm to 6 am, except a cancellation or a large delay on something within a few hours. At most three offered items per morning. |
 | Flight status API | No preference from the user, so the choice is mine: start with one provider behind a small interface (`FlightStatusSource`), so swapping is a one-file change. Verify free-tier limits before committing to one. |
 | Travel time API | A **free** provider is preferred. Default plan: **TomTom Routing API** free tier (reported as 2,500 requests/day, with live traffic), behind a `TravelTimeSource` interface and the same `policy.json` gate as `weather`. Verify the current limit on TomTom's pricing page before Phase 5. Fallback if that falls through: HERE's free tier, or OpenRouteService (free, but static road speeds, no live traffic). Google Routes is not the default: its traffic-aware requests are in a paid tier. |
 | Retailer fallback | If Amazon product pages are blocked, use any retailer whose page we can read, and fall back to a **Google Shopping search link** built from the anonymized query. The link carries no price or image. |

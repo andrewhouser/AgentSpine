@@ -1,5 +1,5 @@
 /**
- * Heads-up telemetry (docs/PLAN-heads-up-next.md workstream F). Run with `node test/headsup-telemetry.test.mjs`.
+ * Heads-up telemetry (docs/archive/PLAN-heads-up-next.md workstream F). Run with `node test/headsup-telemetry.test.mjs`.
  * Fixture rows in, exact numbers out. No model, no network.
  */
 import fs from "node:fs";

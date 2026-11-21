@@ -13,7 +13,7 @@
  * argv as an array, so a filename containing `;` is an argument and nothing else.
  *
  * A general `shell(cmd: string)` tool was the alternative and was rejected in
- * docs/PLAN-build-loop.md: it cannot be allowlisted, cannot be classified honestly, and
+ * docs/archive/PLAN-build-loop.md: it cannot be allowlisted, cannot be classified honestly, and
  * would make every other gate in broker.ts decorative.
  *
  * ## Why this is REVERSIBLE, which is the decision everything rests on

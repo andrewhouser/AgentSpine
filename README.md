@@ -1780,7 +1780,7 @@ my unread inbox and save anything urgent to memory"* work.
 
 ## The personal-assistant layer
 
-Written 2026-11-08 (plan: [docs/PLAN-assistant-upgrade.md](docs/PLAN-assistant-upgrade.md)).
+Written 2026-11-08 (plan: [docs/archive/PLAN-assistant-upgrade.md](docs/archive/PLAN-assistant-upgrade.md)).
 
 **Less asking, more undo.** Overwriting or editing a file backs the old one up to `backups/`
 and just runs. `policy.trust.chatAutoTools` (default: `schedule_create/update/delete`, `draft`)

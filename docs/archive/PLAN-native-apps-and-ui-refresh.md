@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # The native Mac app, and a UI refresh across every client
 
 Written 2026-11-18, updated the same day after `main` gained Heads-up (phases 0 to 5) and
@@ -634,7 +636,7 @@ Nothing in this plan is implemented. Phase 1 starts only when the user says so.
 ## Where this stands (handoff, 2026-11-19)
 
 Branch: `claude/zen-hamilton-8iyawg`, merged with `main` and pushed. A new session should start by
-reading this file, `design/tokens.json`, and `docs/PLAN-heads-up-next.md` (it overlaps, see
+reading this file, `design/tokens.json`, and `docs/archive/PLAN-heads-up-next.md` (it overlaps, see
 "Interaction with the Heads-up work").
 
 ### Done and verified
@@ -688,7 +690,7 @@ reading this file, `design/tokens.json`, and `docs/PLAN-heads-up-next.md` (it ov
 - **Heads-up overlaps.** Its Live Activity needs a second Xcode target, so do it after the Mac target
   exists (now true). Its new Settings screens will be restyled by phases 2 and 7. The iOS Heads-up
   Swift was written uncompiled; the user's build of this branch is the first evidence it compiles.
-- **Untracked file not ours:** `docs/PLAN-nod-learnings.md`. Leave it alone.
+- **Untracked file not ours:** `docs/archive/PLAN-nod-learnings.md`. Leave it alone.
 - **How the user likes to work.** Ask clarifying questions, plain language, no em dashes, no emoji.
   Gate implementation on approval. Commit with the `Co-Authored-By` and `Claude-Session` trailers from
   the session, and push to this branch after each commit. Do not open a pull request unless asked.

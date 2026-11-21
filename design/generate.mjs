@@ -124,7 +124,7 @@ export const renderCss = (tokens) => {
  * \`npm test\` regenerates this in memory and fails if the committed file differs.
  *
  * Imported by global.css, which defines no palette of its own: retheming the web client is an
- * edit to tokens.json and a regeneration (phase 7 of docs/PLAN-native-apps-and-ui-refresh.md).
+ * edit to tokens.json and a regeneration (phase 7 of docs/archive/PLAN-native-apps-and-ui-refresh.md).
  */
 
 :root,

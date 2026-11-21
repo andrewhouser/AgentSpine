@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # The build loop — iterative software work
 
 Written 2026-11-09. The goal: use AgentSpine the way you'd use Claude Code — point it at a
@@ -10,10 +12,10 @@ each is useful alone and none waits on one that hasn't shipped.
 ## Status
 
 **All seven phases shipped 2026-11-09.** `run_command` + `commands_list`
-([src/tools/run-command.ts](../src/tools/run-command.ts)), the output reducers
-([src/tools/command-output.ts](../src/tools/command-output.ts)), `git_write`
-([src/tools/git-write.ts](../src/tools/git-write.ts)) and the `builder` unit
-([agents/builder.md](../agents/builder.md)). 123 assertions across
+([src/tools/run-command.ts](../../src/tools/run-command.ts)), the output reducers
+([src/tools/command-output.ts](../../src/tools/command-output.ts)), `git_write`
+([src/tools/git-write.ts](../../src/tools/git-write.ts)) and the `builder` unit
+([agents/builder.md](../../agents/builder.md)). 123 assertions across
 `test/run-command.test.mjs` and `test/git-write.test.mjs`.
 
 Three things landed differently from the design below, and the design below is the one that
@@ -94,7 +96,7 @@ content parts. The rule now lives in one exported function, `fallbacksFor`, whic
 so runs where `test/router-retry.test.mjs` cannot.
 
 Phase 7 closed it out: `GET /api/builds` and `/api/builds/:runId/diff`
-([src/builds.ts](../src/builds.ts)), a Builds page in the dashboard, and a Builds tab in the
+([src/builds.ts](../../src/builds.ts)), a Builds page in the dashboard, and a Builds tab in the
 iOS app.
 
 **No builds table, and that was the main design call.** Every fact on the page was already in
@@ -371,7 +373,7 @@ So do not pretend the allowlist holds here. Split the surface instead.
 
 > **Superseded by what shipped.** The per-repo flag below was not built — see Status above.
 > A manifest always queues, with no opt-out, and the list of what counts as one lives in
-> `MANIFEST_BASENAMES` in [src/tools/write-file.ts](../src/tools/write-file.ts).
+> `MANIFEST_BASENAMES` in [src/tools/write-file.ts](../../src/tools/write-file.ts).
 
 ```jsonc
 "repos": {

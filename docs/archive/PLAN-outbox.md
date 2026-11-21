@@ -1,3 +1,5 @@
+> **Archived 2026-11-21.** History and design record, not a to-do list. Open work from this plan was moved to [PLAN-open-work.md](../PLAN-open-work.md); trust that file over the status text below.
+
 # Plan: The outbox — one place every message to you passes through
 
 Written 2026-11-21, against `main` at `9e98f0f`. Status: **Phases 0 and 1 built, enforcement off by default.**
@@ -242,18 +244,17 @@ Server changes need a dashboard restart. Web changes need `npm run web:build`.
 - **Nothing silent.** Held and de-duplicated messages are visible in the review. A cap that drops
   messages without a trace would look exactly like a quiet day.
 
-## Open decisions
+## Decisions (2026-11-21)
 
-1. **Shared or separate quiet hours?** Recommended: shared with Heads-up, one setting. The cost is that
-   a Heads-up setting now governs watchers too, so the label in Settings should say "Quiet hours".
-2. **The hard backstop number** for `perDay.tools.notify`. It only counts the `notify` tool, so something
-   like 20 catches a looping run without affecting normal use. Your call, because it is `policy.json`
-   and no tool may write that file.
-3. **Should the cap include Heads-up pushes?** Recommended yes, so "six a day" means six a day. The
-   alternative leaves Heads-up on its own cap and risks two budgets adding up to too many.
-4. **iPhone reporting.** Phase 2's APNs signal needs a Swift change that cannot be compiled where this
-   is written. If you would rather not take that, Phase 3 still works from the review screen alone,
-   with no automatic "ignored" signal.
+1. **Quiet hours: shared with Heads-up, one setting.** Default 9 pm to 6 am Eastern (the host runs on
+   Eastern time and quiet hours use its local clock). The Heads-up default moved from 7 am to 6 am to
+   match. The Settings label should say "Quiet hours".
+2. **Hard backstop: `policy.budgets.perDay.tools.notify` is 20.** Set in `policy.json` by the owner.
+   It only counts the `notify` tool, so it catches a looping run without affecting normal use.
+3. **The cap includes Heads-up pushes.** "Six a day" means six a day (`COUNTED_SOURCES`).
+4. **iPhone reporting: still open.** Phase 2's APNs signal needs a Swift change that cannot be compiled
+   where this is written. If it is not taken, Phase 3 still works from the review screen alone, with no
+   automatic "ignored" signal.
 
 ## Not in this plan
 
