@@ -15,6 +15,15 @@
 import { registry } from "./tools/index.ts";
 
 const pinned = new Set<number>();
+/** Called once when a root run becomes pinned. The runner uses it to mark the conversation local-only. */
+const watchers = new Map<number, () => void>();
+
+/** Run `fn` when `rootRunId` is (or already was) pinned. Dropped by releaseRun. */
+export const watchPin = (rootRunId: null | number, fn: () => void): void => {
+  if (rootRunId == null) return;
+  watchers.set(rootRunId, fn);
+  if (pinned.has(rootRunId)) fn();
+};
 
 /** Whether a call to `tool` returns material that must stay local. Unknown tools are not private. */
 export const outputIsPrivate = (tool: string, args: unknown, projectId: null | number): boolean => {
@@ -39,10 +48,19 @@ export const privateOutputTools = (): string[] =>
     .map((t) => t.name);
 
 export const pinRun = (rootRunId: null | number): void => {
-  if (rootRunId != null) pinned.add(rootRunId);
+  if (rootRunId == null || pinned.has(rootRunId)) return;
+  pinned.add(rootRunId);
+  try {
+    watchers.get(rootRunId)?.();
+  } catch (err) {
+    // Bookkeeping must never undo the pin: the run is already local.
+    console.warn(`[sensitivity] pin watcher failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 };
 export const isPinned = (rootRunId: null | number): boolean => rootRunId != null && pinned.has(rootRunId);
 /** Called when the root run ends, so the set does not grow for the life of the server. */
 export const releaseRun = (rootRunId: null | number): void => {
-  if (rootRunId != null) pinned.delete(rootRunId);
+  if (rootRunId == null) return;
+  pinned.delete(rootRunId);
+  watchers.delete(rootRunId);
 };

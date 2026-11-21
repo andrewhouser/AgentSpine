@@ -81,6 +81,8 @@ export interface Conversation {
   attention?: number;
   created: string;
   id: number;
+  /** 1 once the thread has touched private material: every turn runs on the local model only. */
+  local_only?: null | number;
   project_id: null | number;
   /** A pinned tier for this thread, or null to size each turn automatically. */
   tier: null | string;

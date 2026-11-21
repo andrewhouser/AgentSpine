@@ -182,6 +182,66 @@ console.log("\nWHICH TOOLS DECLARE PRIVATE OUTPUT");
   check("the study listing counts once any topic is linked", outputIsPrivate("study_topic", { action: "list" }, null), true);
 }
 
+const { runTask } = await import("../src/runner.ts");
+const projects = await import("../src/projects/store.ts");
+
+console.log("\nF7a. A RUN INSIDE A PROJECT STARTS LOCAL");
+{
+  const pid = projects.createProject("Workplace", "");
+  const src = projects.addSource(pid, "/tmp/plan.md", "path");
+  projects.insertChunk(pid, src, "plan.md", 0, new Date().toISOString(), `The quarterly plan is ${CANARY}.`, null);
+
+  reset();
+  nextCall = null;
+  await runTask("what does the quarterly plan say", { projectId: pid, tier: "deep" });
+  check("no request reached the cloud", cloudLog.length, 0);
+  check("the run went to the local model", localLog.length >= 1, true);
+  check("and the project document was in what it was sent", has(localLog) >= 1, true);
+
+  const cid = store.createConversation("in a project", pid);
+  reset();
+  await runTask("what does the quarterly plan say", { conversationId: cid, tier: "deep" });
+  check("a thread in a project is marked local-only", store.getConversation(cid).local_only, 1);
+  check("and still sent nothing to the cloud", cloudLog.length, 0);
+
+  reset();
+  await runTask("what is two plus two", { tier: "deep" });
+  check("control: the same loop outside a project uses the cloud", cloudLog.length >= 1, true);
+}
+
+console.log("\nF7b. MAIL, CALENDAR AND FILE TOOLS PIN THE RUN; PUBLIC PAGES DO NOT");
+{
+  for (const t of ["gmail_search", "gmail_triage", "calendar_upcoming", "calendar_find", "read_file", "list_dir", "draft", "source_read"]) {
+    check(`${t} is private`, outputIsPrivate(t, {}, null), true);
+  }
+  check("browser is not", outputIsPrivate("browser", {}, null), false);
+  check("web_read is not", outputIsPrivate("web_read", {}, null), false);
+  check("web_search is not", outputIsPrivate("web_search", {}, null), false);
+}
+
+console.log("\nF7c. A THREAD THAT TOUCHED PRIVATE MATERIAL STAYS LOCAL");
+{
+  const c1 = store.createConversation("reads a meeting", null);
+  reset();
+  nextCall = { action: "tool", args: { id: mid, transcript: true }, tool: "meeting_list" };
+  await runTask("read the budget review", { conversationId: c1, tier: "deep" });
+  check("the turn that read it marks the thread", store.getConversation(c1).local_only, 1);
+  check("and nothing it was sent reached the cloud", has(cloudLog), 0);
+
+  reset();
+  nextCall = null;
+  await runTask("and what else should I do", { conversationId: c1, tier: "deep" });
+  check("the next turn sent nothing to the cloud", cloudLog.length, 0);
+  check("it ran on the local model", localLog.length >= 1, true);
+
+  const c2 = store.createConversation("plain", null);
+  reset();
+  await runTask("what is two plus two", { conversationId: c2, tier: "deep" });
+  await runTask("and three plus three", { conversationId: c2, tier: "deep" });
+  check("control: a thread that touched nothing private uses the cloud", cloudLog.length >= 2, true);
+  check("and is not marked", store.getConversation(c2).local_only ?? 0, 0);
+}
+
 for (const s of [localServer, cloudServer]) s.close();
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

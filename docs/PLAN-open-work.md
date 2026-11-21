@@ -21,8 +21,8 @@ means it can be done in the repo and tested there. **Both** means code first, th
 
 ## 0. Fix first: findings from the outside review (2026-11-21)
 
-Source: an outside review of the working tree against the project's stated security guarantees (F1 to F5), and
-the management-knowledge review (F6). Both were uncommitted working notes (`docs/*` is ignored except
+Source: an outside review of the working tree against the project's stated security guarantees (F1 to F5), the
+management-knowledge review (F6), and my own audit while fixing F2 (F7). Both were uncommitted working notes (`docs/*` is ignored except
 `PLAN-*.md`), and everything needed from them is here. `npm run check` passed throughout; these are gaps the
 suite does not cover.
 
@@ -31,10 +31,10 @@ plain objects. **F2, F3 and F4 are fixed** (see the note after F1); the others h
 yet. Every reproduction below becomes a test in the same change as its fix, and each new suite is added by hand
 to the `npm test` list in `package.json`.
 
-**Suggested order, and why:** F2, F3 and F4 are done. F1 and F5 matter as soon as a project overlay is used, so
-they come before anyone relies on overlays, but they need no change to what runs today. F7 is decided and ready
-to build, and is the smaller job. F6 is decided but needs a filing choice on web, Mac and iPhone, and should land
-before more workplace transcripts are filed. All are Code. F6 and F7 are also step K0 of section 8.
+**Suggested order, and why:** F2, F3, F4 and F7 are done. F1 and F5 matter as soon as a project overlay is used,
+so they come before anyone relies on overlays, but they need no change to what runs today. F6 is decided but
+needs a filing choice on web, Mac and iPhone, and should land before more workplace transcripts are filed. All
+are Code. F6 is also step K0 of section 8.
 
 **F1. Critical. A project overlay can open the browser to any domain.**
 `intersectNavigate()` in `src/projects/narrow-policy.ts` returns `[]` when the global and project allowlists are
@@ -47,12 +47,17 @@ Fix: represent deny-all separately from the empty-list convention, for example a
 disjoint non-empty lists; base empty with overlay set; overlay empty with base set; and the decision through both
 `browser` and `web_read`, not only the pure function.
 
-**F2, F3 and F4: fixed 2026-11-21, numbers kept so the others do not shift.** F2 (meeting transcripts reaching
+**F2, F3, F4 and F7: fixed 2026-11-21, numbers kept so the others do not shift.** F2 (meeting transcripts reaching
 the cloud): a tool can declare `privateOutput` (`src/types.ts`), and once one has run, the agent loop pins every
 later model call in that run, its re-asks and its closing answer, and any subagent in the tree, to
 `sensitivity: "private"` (`src/sensitivity.ts`). `meeting_list` and the study tools on a project-linked topic
 declare it, and the post-run critique treats them as sensitive. Suite: `test/private-output.test.mjs`, which runs
-a stand-in local and a stand-in cloud server and asserts what the cloud one was sent. F3 (two approvals running one
+a stand-in local and a stand-in cloud server and asserts what the cloud one was sent. F7 (other private material travelling with the run's tier), as decided: a run inside a project, or in a thread that
+has touched private material, starts pinned local (`AgentOpts.startPrivate`); `gmail_search`, `gmail_triage`,
+`calendar_upcoming`, `calendar_find`, `read_file`, `list_dir`, `draft` and `source_read` declare `privateOutput`
+(`browser` and `web_read` do not); and the runner marks the conversation `local_only` the moment a run pins, so
+every later turn starts local and web, Mac and iPhone show a "Local only" note on the thread. A new chat is the
+way out. Suite: the F7 sections of `test/private-output.test.mjs`, run through the real `runTask`. F3 (two approvals running one
 action twice): `approveOnly` and `rejectOnly` now claim the row with a conditional update, `executing` is a live
 state, and a row left `executing` by a crash ends as `error` on server start and is never re-run. Suite:
 `test/confirm-race.test.mjs`. F4 (`state_set` reaching internal `kv` keys): `state_get` and `state_set` store every
@@ -85,22 +90,6 @@ longer-term rules. Tests: file a meeting each way, run the prune past the window
 assert that no chunk of the summary-only one remains, that the kept one does and is labelled, and that the filing
 screen on each client shows the choice.
 
-
-**F7. Medium. Other private material still travels with the run's tier.** Found while auditing for F2.
-**Decided 2026-11-21**, not yet built:
-(a) A run inside a project starts pinned to the local model, so project documents never reach the cloud. This is
-also K0's "a project is private by default", now settled. The documents are retrieved by `knowledgeFor` in
-`src/runner.ts` and enter as a user message on the run's tier today. Cost to accept: no deep tier inside a project.
-(b) After `gmail_search`, `calendar_upcoming`, `read_file`, `list_dir` or `draft` has run, the rest of that run is
-pinned local, by declaring `privateOutput` on each (the F2 mechanism). `browser` and `web_read` are not pinned:
-public pages gain nothing from it, and pinning them would take the deep tier from any run that browses.
-(c) A conversation that has touched private material stays local for good: record it on the conversation and
-start every later turn pinned, because earlier assistant replies are carried as history (read from
-`src/runner.ts`, not yet tested). Open detail: show a "Local only" badge on the thread, and whether a new chat
-is the way out (proposed: yes, it is).
-Tests: the two-server pattern in `test/private-output.test.mjs`, one case each: a project run, one tool from the
-(b) list, and a second turn after a private first turn. Also update `CLAUDE.md`'s local-first line to name what
-is now local-only, in the same change.
 ---
 
 ## 1. Roll out what is already built (You, on the Mini)
@@ -375,9 +364,9 @@ cites every important assertion and shows a disagreement instead of silently pic
 **Order.** Adjusted from the review: measurement moves ahead of the big builds, because "better" needs a
 baseline, and the meeting recall number is still unmeasured.
 
-- **K0. Privacy and retention first (Code, plus decisions).** F6 and F7 above. Then make sensitivity a property
+- **K0. Privacy and retention first (Code, plus decisions).** F6 above (F2 and F7 are done). Then make sensitivity a property
   of a stored source and of everything derived from it (embedding, extraction, retrieval, synthesis, reflection
-  all stay local for a private source); a project holding workplace material defaults to private, and sending
+  all stay local for a private source); a project is already private by default (F7, built), and sending
   any of it to a cloud model needs an explicit decision. Decide backups: the app has none of its own, so either
   rely on FileVault plus an encrypted Time Machine volume on the Mini and write that down, or build an encrypted
   export. Make deletion and export leave an audit row.
@@ -466,7 +455,7 @@ from instead).
   judgment.
 - Local-first: `sensitivity: "private"` content never reaches the cloud tier. Meeting work and study topics
   linked to a project are local-only. Milliman and other workplace material never goes to web search, paste
-  services or third-party APIs. F6 and F7 are the known holes in this rule.
+  services or third-party APIs. F6 is the known hole in this rule.
 - Standing work needs consent: a tool that creates or edits what future unattended runs follow sets
   `confirmWhenUnattended: true` or refuses non-chat runs.
 - Tests first for arithmetic and every boundary; new suites are added by hand to the `npm test` list in

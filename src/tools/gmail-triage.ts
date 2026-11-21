@@ -136,6 +136,8 @@ export const triageOne = async (
 
 export const gmailTriage: Tool = {
   name: "gmail_triage",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description:
     "Change Gmail messages found with gmail_search (use the Id line): action archive (out of the inbox), " +
     "label or unlabel (needs label), trash (recoverable for 30 days, the only removal there is) or spam. " +

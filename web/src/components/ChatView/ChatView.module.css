@@ -5,6 +5,26 @@
   min-height: 0;
 }
 
+/* A thread that has touched private material never leaves the local model. Said once, quietly, at
+   the top: it is a standing fact about the thread, not an alert. */
+.localNote {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-faint);
+  flex: none;
+  font-size: 0.8125rem;
+  margin: 6px auto 0;
+  max-width: 46rem;
+  padding: 6px 12px;
+  width: calc(100% - 48px);
+}
+
+.localNote strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .scroll {
   flex: 1;
   overflow-y: auto;

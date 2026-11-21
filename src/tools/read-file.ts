@@ -20,6 +20,8 @@ const gate = (policy: Policy, p: string): PolicyDecision => readableGate(policy,
 
 export const readFile: Tool = {
   name: "read_file",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description: "Read the text of a file inside an allowlisted directory. Also reads Word (.doc/.docx), RTF, HTML and PDF files as text.",
   argsSchema: '{ "path": string }',
   classify: (a): ClassifiedAction => ({ reversibility: "reversible", target: expand(a?.path ?? ""), summary: `Read file ${a?.path ?? ""}` }),
@@ -50,6 +52,8 @@ export const readFile: Tool = {
 
 export const listDir: Tool = {
   name: "list_dir",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description: "List the entries of a directory inside an allowlisted directory.",
   argsSchema: '{ "path": string }',
   classify: (a): ClassifiedAction => ({ reversibility: "reversible", target: expand(a?.path ?? ""), summary: `List dir ${a?.path ?? ""}` }),

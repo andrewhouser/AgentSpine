@@ -30,6 +30,29 @@ struct ErrorNotice: View {
     }
 }
 
+/// Said once, quietly, at the top of a thread that has touched private material: every reply in
+/// it runs on the local model, and a new chat is the way back to the cloud tier. A standing fact
+/// about the thread rather than an alert, so it uses the neutral inset colours, not the warning ones.
+struct LocalOnlyNotice: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label("Local only", systemImage: "lock.fill")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                .foregroundStyle(Spine.Palette.text)
+            Text("This thread has touched private material, so every reply runs on the local model. Start a new chat to use the cloud tier.")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spine.Space.md)
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+        .overlay(RoundedRectangle(cornerRadius: Spine.Radius.md).strokeBorder(Spine.Palette.border, lineWidth: 0.5))
+        .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct EmptyNotice: View {
     let symbol: String
     let title: String

@@ -45,6 +45,7 @@ struct ThreadView: View {
                     if let error = loadError {
                         ErrorNotice(message: error) { Task { await load() } }
                     }
+                    if thread?.conversation.isLocalOnly == true { LocalOnlyNotice() }
 
                     ForEach(ledgerTurns) { turn in
                         TurnView(

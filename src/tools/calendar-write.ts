@@ -49,6 +49,8 @@ export const findCalendar = async (name: string, list: () => Promise<CalendarInf
 
 export const calendarFind: Tool = {
   name: "calendar_find",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description:
     'List events on one named calendar between two dates (YYYY-MM-DD), optionally only those whose title contains "query". ' +
     "Read-only. Use it to check whether a bill is already on the Bills calendar before creating it.",

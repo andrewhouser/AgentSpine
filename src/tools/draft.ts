@@ -109,6 +109,8 @@ const draftsDir = (policy: Policy): string => expand(policy.drafts?.dir || "./dr
 
 export const draft: Tool = {
   name: "draft",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description:
     "Write a proposed email reply, new email, calendar event, or note for the user to review. " +
     "NOTHING IS SENT OR CREATED — you are composing text, and the user decides whether to use " +

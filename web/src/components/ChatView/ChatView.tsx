@@ -225,6 +225,12 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
           </button>
         ))}
       </div>
+      {thread?.conversation.local_only === 1 && (
+        <p className={styles.localNote} role="note">
+          <strong>Local only.</strong> This thread has touched private material, so every reply runs on the local
+          model. Start a new chat to use the cloud tier.
+        </p>
+      )}
       <div className={styles.scroll}>
         {tab === "trace" && (
           <div className={styles.column}>

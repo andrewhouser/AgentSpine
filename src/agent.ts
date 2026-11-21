@@ -340,6 +340,12 @@ export interface AgentOpts {
    * Undefined means the whole registry.
    */
   tools?: string[];
+  /**
+   * Pin the whole run to the local model from the first request. Set for a run inside a
+   * project (its documents are workplace material) and for a thread that has touched private
+   * material, where earlier replies travel as history. See src/sensitivity.ts.
+   */
+  startPrivate?: boolean;
 }
 
 /** One tier up, for the retry after a malformed reply. `deep` has nowhere further to go. */
@@ -515,6 +521,9 @@ const runAgentLoop = async (
   const rootId = opts.budgetRunId ?? runId;
   /** `sensitivity` for every model call from here on: private once private material is in the history. */
   const sens = (): { sensitivity?: "private" } => (isPinned(rootId) ? { sensitivity: "private" } : {});
+  // A run that starts inside a project, or in a thread that has already touched private
+  // material, is local from its first request, not only after a tool has run.
+  if (opts.startPrivate) pinRun(rootId);
 
   let tierCorrected = false;
 

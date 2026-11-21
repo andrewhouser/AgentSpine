@@ -18,6 +18,9 @@ struct Conversation: Codable, Identifiable, Hashable {
     let attention: Int?
     let created: String
     let id: Int
+    /// 1 once the thread has touched private material: every turn runs on the local model only.
+    /// Absent from older servers.
+    let localOnly: Int?
     let projectID: Int?
     let tier: String?
     let title: String?
@@ -27,8 +30,12 @@ struct Conversation: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case archived, attention, created, id, tier, title, unread, updated
+        case localOnly = "local_only"
         case projectID = "project_id"
     }
+
+    /// Replies here run on the local model only.
+    var isLocalOnly: Bool { (localOnly ?? 0) > 0 }
 
     /// A question here is waiting on your answer.
     var isWaiting: Bool { (attention ?? 0) > 0 }

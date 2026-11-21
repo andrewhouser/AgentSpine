@@ -48,6 +48,7 @@ import { queueStandingIntent } from "./learn/propose.ts";
 import { reflect } from "./reflect.ts";
 import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
+import { watchPin } from "./sensitivity.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
@@ -482,6 +483,13 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     setFrame({ budgetRunId: runId, depth: 0, parentRunId: runId, parentTools: [] });
 
     try {
+      // Local-only from the first request when the run is in a project or its thread has already
+      // touched private material. Either way, once the run is pinned the thread is marked, so a
+      // later turn starts pinned too (earlier replies are history and may quote what was read).
+      const startPrivate = project != null || (conversationId != null && store.getConversation(conversationId)?.local_only === 1);
+      watchPin(runId, () => {
+        if (conversationId != null) store.setConversationLocalOnly(conversationId);
+      });
       const { summary, steps, trace } = await runAgent(task, policy, runId, {
         budgetRunId: runId,
         // A chat turn ends on someone's screen and must end in an answer; every other kind
@@ -498,6 +506,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         imagesAvailable: conversationHasImages || attachmentIds.length > 0,
         knowledge,
         projectId: project?.id ?? null,
+        startPrivate,
         tier: sizing.tier,
       });
       store.saveTrace(runId, trace);

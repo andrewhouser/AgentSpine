@@ -37,6 +37,9 @@ const SENSITIVE_TOOLS = new Set(["gmail_search", "calendar_upcoming", "read_file
 /** True if any call this run made was to a sensitive tool. Read from the audit log. */
 const touchedSensitive = (runId: number): boolean => {
   const priv = new Set(privateOutputTools());
+  // A thread marked local-only has touched private material, and this run's trace carries it.
+  const cid = store.getRun(runId)?.conversation_id;
+  if (cid != null && store.getConversation(cid)?.local_only === 1) return true;
   return store.listActions(runId).some((a: { tool?: string }) => a.tool && (SENSITIVE_TOOLS.has(a.tool) || priv.has(a.tool)));
 };
 

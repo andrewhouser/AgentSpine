@@ -27,6 +27,8 @@ export const sourcesList: Tool = {
 
 export const sourceRead: Tool = {
   name: "source_read",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description: "Read a page you fetched earlier, by its source #id, in windows (pass offset to continue).",
   argsSchema: '{ "id": number, "offset"?: number }',
   classify: classify("Read a stored source"),

@@ -13,6 +13,8 @@ interface Args {
 
 export const calendarUpcoming: Tool = {
   name: "calendar_upcoming",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description: "List upcoming Google Calendar events (read-only).",
   argsSchema: '{ "hours"?: number, "max"?: number }',
   classify: (a: Args): ClassifiedAction => ({

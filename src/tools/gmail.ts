@@ -37,6 +37,8 @@ export const sinceClause = (key: string, now: number = Date.now()): string => {
 
 export const gmailSearch: Tool = {
   name: "gmail_search",
+  // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
+  privateOutput: true,
   description: "Read Gmail message headers + snippets for a query, e.g. 'is:unread in:inbox' (read-only).",
   argsSchema: '{ "query"?: string, "max"?: number, "sinceKey"?: string }',
   classify: (a: Args): ClassifiedAction => ({

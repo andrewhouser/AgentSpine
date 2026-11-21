@@ -39,6 +39,7 @@ struct MacThreadDetail: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spine.Space.lg) {
+                        if thread?.conversation.isLocalOnly == true { LocalOnlyNotice() }
                         if let loadError {
                             ErrorNotice(message: loadError) { Task { await load() } }
                         } else if let thread {

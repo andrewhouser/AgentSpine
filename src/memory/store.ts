@@ -202,6 +202,11 @@ addColumn("confirmations", "reported", "INTEGER");
 // run after it. Kept on the server, not per client, so reading a reply on the phone clears
 // the dot on the dashboard too.
 addColumn("conversations", "seen_run", "INTEGER");
+// 1 once any turn in the thread has touched private material (meetings, mail, calendar, files, a
+// project's documents). Every later turn then runs pinned to the local model, because earlier
+// replies travel as history and may quote that material. Set by the runner, never cleared: the
+// way out is a new chat. See src/sensitivity.ts.
+addColumn("conversations", "local_only", "INTEGER");
 
 // A conversation's thread is "its runs, in order", read on every thread load.
 db.exec("CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs (conversation_id, id)");
@@ -236,7 +241,13 @@ export interface ConversationRow {
   attention?: number;
   /** 1 when a reply finished after the user last looked at this thread. listConversations only. */
   unread?: number;
+  /** 1 once the thread has touched private material: its turns run on the local model only. */
+  local_only?: null | number;
 }
+
+export const setConversationLocalOnly = (id: number): void => {
+  db.prepare("UPDATE conversations SET local_only = 1 WHERE id = ? AND local_only IS NOT 1").run(id);
+};
 
 export const createConversation = (title: string | null = null, projectId: number | null = null): number => {
   const ts = now();
