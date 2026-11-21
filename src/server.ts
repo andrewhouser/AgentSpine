@@ -921,6 +921,11 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
     }
 
+    // /api/data-events — the deletion and retention audit trail (ids, names and counts, never content).
+    if (m === "GET" && seg[1] === "data-events" && seg.length === 2) {
+      return sendJson(res, 200, store.listDataEvents(Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 100) || 100)), url.searchParams.get("kind") ?? undefined));
+    }
+
     // /api/overview — everything installed, read-only, with the prune list (src/overview.ts).
     if (m === "GET" && seg[1] === "overview" && seg.length === 2) return sendJson(res, 200, overview());
 
@@ -1421,7 +1426,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       // DELETE /api/meetings/:id/audio — delete the kept recording now.
       if (m === "DELETE" && seg.length === 4 && seg[3] === "audio") {
         if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
-        return sendJson(res, 200, { deleted: deleteAudio(id) });
+        const deleted = deleteAudio(id);
+        if (deleted) store.logDataEvent("meeting_audio_deleted", `meeting #${id}`, "the kept recording was deleted on request");
+        return sendJson(res, 200, { deleted });
       }
 
       // PATCH /api/meetings/:id/speakers — name a speaker ("Speaker 2" → "Priya"). An empty

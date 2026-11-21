@@ -10,7 +10,7 @@
  * install stays lean and vulnerability-free. Enable it with:
  *     npm i @huggingface/transformers
  */
-import { rawDb } from "./store.ts";
+import { logDataEvent, rawDb } from "./store.ts";
 import { EMBEDDINGS_URL, EMBEDDINGS_MODEL, EMBEDDINGS_API_KEY, MEMORY_DEDUPE_THRESHOLD } from "../config.ts";
 
 rawDb.exec(`
@@ -409,8 +409,11 @@ export const recallOfKind = async (kind: string, query: string, k = 3, minScore 
  * model-generated memory without hand-editing the database.
  */
 export const deleteMemory = (id: number): boolean => {
+  const kind = (rawDb.prepare("SELECT kind FROM memories WHERE id = ?").get(id) as undefined | { kind: string })?.kind;
   const res = rawDb.prepare("DELETE FROM memories WHERE id = ?").run(id);
-  return Number(res.changes ?? 0) > 0;
+  const removed = Number(res.changes ?? 0) > 0;
+  if (removed) logDataEvent("memory_deleted", `memory #${id}`, `kind ${kind ?? "unknown"}`);
+  return removed;
 };
 
 /** How many memories are stored, optionally of one kind. */

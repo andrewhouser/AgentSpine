@@ -45,7 +45,7 @@ import {
   MEETING_REMOTE_IDLE_SECONDS,
 } from "../config.ts";
 import { getEmbedder, toBlob } from "../memory/rag.ts";
-import { getConfirmation, setConfirmation } from "../memory/store.ts";
+import { getConfirmation, logDataEvent, setConfirmation } from "../memory/store.ts";
 import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
 import { checkAudioPolicy, checkRemoteSource, Listener, writeWav } from "../senses/listen.ts";
@@ -751,6 +751,7 @@ export const deleteMeeting = (meetingId: number): DeleteResult => {
   }
   deleteAudio(meetingId);
   store.deleteMeeting(meetingId);
+  logDataEvent("meeting_deleted", `meeting #${meetingId}`, "transcript, extraction, chat, audio and any project copy removed");
   return { ok: true, rejectedItems };
 };
 

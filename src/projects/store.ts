@@ -14,7 +14,7 @@
  * standing context; a chunk is verbatim text out of a file, injected UNTRUSTED. Sharing a
  * table would make it one query away from sharing an injection path.
  */
-import { rawDb } from "../memory/store.ts";
+import { logDataEvent, rawDb } from "../memory/store.ts";
 import type { PolicyOverlay } from "./narrow-policy.ts";
 
 rawDb.exec(`
@@ -127,6 +127,8 @@ export const updateProject = (id: number, fields: ProjectFields): void => {
  * record of what the assistant did is not something a tidy-up should erase.
  */
 export const deleteProject = (id: number): void => {
+  const was = rawDb.prepare("SELECT name FROM projects WHERE id = ?").get(id) as undefined | { name: string };
+  if (was) logDataEvent("project_deleted", `project #${id}`, `${was.name}; its sources and indexed chunks were removed`);
   rawDb.prepare("DELETE FROM chunks WHERE project_id = ?").run(id);
   rawDb.prepare("DELETE FROM project_sources WHERE project_id = ?").run(id);
   rawDb.prepare("DELETE FROM projects WHERE id = ?").run(id);
@@ -170,6 +172,8 @@ export const setSourceStatus = (
 };
 
 export const removeSource = (id: number): void => {
+  const src = rawDb.prepare("SELECT ref, kind, project_id FROM project_sources WHERE id = ?").get(id) as undefined | { kind: string; project_id: number; ref: string };
+  if (src) logDataEvent("project_source_removed", `${src.kind} source ${src.ref}`, `from project #${src.project_id}; its indexed chunks were removed`);
   rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(id);
   rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(id);
 };

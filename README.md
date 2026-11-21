@@ -1868,6 +1868,25 @@ something run later without you choosing to run it". Creating a new file just ha
 existing one — the old version is copied to `backups/` first. To save something it wrote earlier it
 passes `from_run` with that turn's #id, so the stored text is written exactly rather than retyped.
 
+## Where your data lives, and how it is protected
+
+Everything AgentSpine keeps (conversations, memories, meeting transcripts and recordings, project
+indexes, the confirmation queue) is on the Mac Mini that runs it: one SQLite file (`SPINE_DB_PATH`) and a few
+folders beside it. Nothing is uploaded anywhere except what a run sends to a model, and private material (see
+`CLAUDE.md`, local-first) never goes to the cloud tier.
+
+**Protection is FileVault** (decided 2026-11-21). Turn it on for the Mini's startup disk and for any external
+volume the repository or database lives on, and keep the Mini's login protected. AgentSpine builds no
+encryption or backup of its own, on purpose: a second, half-managed copy of workplace material is a bigger
+risk than one disk that is encrypted at rest. If you take backups, make them to an **encrypted** volume (a Time
+Machine disk with "Encrypt backup disk" ticked), because a backup of the database holds every transcript that
+is still inside the retention window. Deleting something in the app removes it from the live database and,
+for a meeting, its kept audio; it cannot reach into a backup, so a backup keeps what it held until you delete
+the backup.
+
+What was deleted or expired is recorded, without its content, in `data_events` (`GET /api/data-events`): ids,
+counts and project names only.
+
 ## Updating & restarting the service
 
 `./update.sh` does all of it: pull, install, build the web client and the EventKit helper,

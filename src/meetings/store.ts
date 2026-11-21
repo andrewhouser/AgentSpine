@@ -39,7 +39,7 @@
  * disk precisely because the model found them notable. So `pruneTranscripts` blanks quotes
  * along with the segments they came from, and everything else in the extraction stays.
  */
-import { rawDb } from "../memory/store.ts";
+import { logDataEvent, rawDb } from "../memory/store.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS meetings (
@@ -656,6 +656,7 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
     rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(src.id);
     rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(src.id);
   }
+  logDataEvent("transcript_expired", `transcripts older than ${days} days`, `${n} segment(s) removed by the retention window`);
   // Speaker names go with the words they labelled.
   rawDb
     .prepare("DELETE FROM meeting_speakers WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")

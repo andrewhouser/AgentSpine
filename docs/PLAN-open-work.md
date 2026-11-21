@@ -327,12 +327,15 @@ cites every important assertion and shows a disagreement instead of silently pic
 **Order.** Adjusted from the review: measurement moves ahead of the big builds, because "better" needs a
 baseline, and the meeting recall number is still unmeasured.
 
-- **K0. Privacy and retention first (Code, plus decisions).** F2, F6 and F7 are done. Make sensitivity a property
-  of a stored source and of everything derived from it (embedding, extraction, retrieval, synthesis, reflection
-  all stay local for a private source); a project is already private by default (F7, built), and sending
-  any of it to a cloud model needs an explicit decision. Decide backups: the app has none of its own, so either
-  rely on FileVault plus an encrypted Time Machine volume on the Mini and write that down, or build an encrypted
-  export. Make deletion and export leave an audit row.
+- **K0. Privacy and retention first (built 2026-11-21).** F2, F6 and F7 are done. Backups rely on FileVault
+  and an encrypted backup disk, written down in the README ("Where your data lives, and how it is protected").
+  Deletion and retention now leave an audit row (`data_events`, `GET /api/data-events`): a conversation, a
+  memory, a meeting, a kept recording, a project, an indexed source, and the transcript retention prune; ids,
+  counts and project names only, never content or a title, and not pruned with the run ledger. Suite:
+  `test/data-audit.test.mjs`. Not built: a per-source sensitivity flag. A project is private by default, which
+  covers everything filed in one; the gap is an item with no project, so K3 makes every Inbox item private until
+  a person says otherwise, and K2 and K4 inherit the source's sensitivity for everything derived from it. There
+  is no export path today; when K3 or K6 add one it must call `logDataEvent("export", ...)`.
 - **K1. Evaluation set (You write the questions, Code builds the harness).** 30 to 50 questions you actually
   care about, each with its known supporting sources, expected project, person and date filters, required
   citations, some with changed or contradictory information, and some whose right answer is "not enough

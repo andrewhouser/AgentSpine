@@ -311,7 +311,48 @@ export const touchConversation = (id: number): void => {
  * `conversation_id`: they carry the audit trail, and this project does not delete the
  * record of what it did because someone tidied up a chat list.
  */
+// --- the data audit trail ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS data_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    target TEXT NOT NULL,
+    detail TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_data_events_ts ON data_events (ts);
+`);
+
+/**
+ * Record that something the user keeps was deleted, expired by retention, or exported. Ids, counts and project
+ * names only: never the content or a title, because this table is the one place that must be safe to read after the
+ * content is gone. It is not pruned with the run ledger; a deletion record that expires after a month is
+ * not an audit. Never throws: an audit row failing must not turn a deletion into an error.
+ */
+export const logDataEvent = (kind: string, target: string, detail = ""): void => {
+  try {
+    db.prepare("INSERT INTO data_events (ts, kind, target, detail) VALUES (?,?,?,?)").run(now(), kind, target.slice(0, 200), detail.slice(0, 500));
+  } catch (err) {
+    console.warn(`[audit] could not record ${kind}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+export interface DataEventRow {
+  detail: null | string;
+  id: number;
+  kind: string;
+  target: string;
+  ts: string;
+}
+
+export const listDataEvents = (limit = 100, kind?: string): DataEventRow[] =>
+  (kind
+    ? db.prepare("SELECT * FROM data_events WHERE kind = ? ORDER BY id DESC LIMIT ?").all(kind, limit)
+    : db.prepare("SELECT * FROM data_events ORDER BY id DESC LIMIT ?").all(limit)) as unknown as DataEventRow[];
+
 export const deleteConversation = (id: number): void => {
+  const runs = (db.prepare("SELECT COUNT(*) AS n FROM runs WHERE conversation_id = ?").get(id) as { n: number }).n;
+  logDataEvent("conversation_deleted", `conversation #${id}`, `${runs} run(s) kept in the ledger`);
   // A question asked in a thread is withdrawn with the thread, as closing a chat cancels
   // what it was waiting on. Expired, not rejected: the user did not decide against it, so
   // nothing is learned from it (see sweepConfirmations for the same distinction).
