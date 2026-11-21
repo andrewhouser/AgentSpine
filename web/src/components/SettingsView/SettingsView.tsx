@@ -47,10 +47,36 @@ const ORIGIN_LABELS: Record<string, string> = {
 /** Origin is set by code, never by the model. A row with none predates provenance; it is not guessed at. */
 const originLabel = (m: Memory): string => (m.origin === null ? "before provenance" : (ORIGIN_LABELS[m.origin] ?? m.origin));
 
+const TABS = [
+  { id: "general", label: "General" },
+  { id: "memory", label: "Memory" },
+  { id: "headsup", label: "Heads-up" },
+  { id: "system", label: "Cloud and policy" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+/** The tab named in the address (?tab=memory), so a refresh or a link keeps your place. */
+const tabFromUrl = (): TabId => {
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return TABS.find((x) => x.id === t)?.id ?? "general";
+};
+
 export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void }) => {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [policy, setPolicy] = useState<null | Record<string, unknown>>(null);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<TabId>(tabFromUrl);
+
+  const pickTab = (t: TabId): void => {
+    setTab(t);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", t);
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* the tab still switches; it just will not survive a refresh */
+    }
+  };
   // Read once, on mount. These live in localStorage rather than on the server because they
   // describe the screen you are reading on, not the assistant — see lib/preferences.ts.
   const [prefs, setPrefs] = useState(readPreferences);
@@ -131,6 +157,24 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
     <div className={styles.page}>
       <PageHeader title="Settings" />
 
+      <div aria-label="Settings sections" className={styles.tabs} role="tablist">
+        {TABS.map((t) => (
+          <button
+            aria-selected={tab === t.id}
+            className={styles.tab}
+            key={t.id}
+            onClick={() => pickTab(t.id)}
+            role="tab"
+            type="button"
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.panel} role="tabpanel">
+      {tab === "general" && (
+        <>
       <section>
         <h2 className={styles.subhead}>Appearance</h2>
         <p className={styles.note}>
@@ -310,6 +354,11 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
         {!voiceStatus && <div className={styles.empty}>Voice status unavailable.</div>}
       </section>
 
+        </>
+      )}
+
+      {tab === "memory" && (
+        <>
       <section>
         <h2 className={styles.subhead}>Memory</h2>
         <p className={styles.note}>
@@ -360,13 +409,21 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
         ))}
       </section>
 
+      <RecipesPanel />
+        </>
+      )}
+
+      {tab === "headsup" && (
+        <>
       <HeadsupPrefsPanel />
 
       <WeeklyReviewPanel />
+        </>
+      )}
 
+      {tab === "system" && (
+        <>
       <CloudUsagePanel />
-
-      <RecipesPanel />
 
       <section>
         <h2 className={styles.subhead}>Policy</h2>
@@ -382,6 +439,9 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
 
         <pre className={styles.policy}>{policy ? JSON.stringify(policy, null, 2) : "Loading…"}</pre>
       </section>
+        </>
+      )}
+      </div>
     </div>
   );
 };
