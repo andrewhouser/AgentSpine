@@ -136,33 +136,59 @@ check("a delete action does not exist", cgate({ action: "delete", calendar: "Bil
 check("denied without google.write", cgate(create, { google: { enabled: true } }), false);
 check("calendar_find is read-only", cal.calendarFind.classify({ calendar: "Bills" }).reversibility, "reversible");
 
-console.log("\nGMAIL_SEARCH: THE WINDOW IS CODE");
-const NOW = Date.UTC(2026, 10, 21, 12, 0, 0);
-const first = gmail.sinceClause("inbox-cleanup", NOW);
-check("first run looks back 7 days", first, `after:${Math.floor((NOW - 7 * 86_400_000) / 1000)}`);
-check("asking does not move the window", gmail.sinceClause("inbox-cleanup", NOW + 3_600_000), `after:${Math.floor((NOW + 3_600_000 - 7 * 86_400_000) / 1000)}`);
-gmail.markSince("inbox-cleanup", NOW);
-const second = gmail.sinceClause("inbox-cleanup", NOW + 8 * 3_600_000);
-check("after a successful search the next run starts 20 minutes before it", second, `after:${Math.floor((NOW - 20 * 60_000) / 1000)}`);
-rawDb.prepare("UPDATE kv SET value = ? WHERE key = 'gmail:since:inbox-cleanup'").run(String(NOW - 20 * 86_400_000));
-check("a very long gap is clamped to 7 days, not weeks of old mail", gmail.sinceClause("inbox-cleanup", NOW), `after:${Math.floor((NOW - 7 * 86_400_000) / 1000)}`);
-rawDb.prepare("UPDATE kv SET value = ? WHERE key = 'gmail:since:inbox-cleanup'").run(String(NOW - 3 * 86_400_000));
-check("a three day gap is covered in full (a missed weekend is not lost)", gmail.sinceClause("inbox-cleanup", NOW), `after:${Math.floor((NOW - 3 * 86_400_000 - 20 * 60_000) / 1000)}`);
-// A failed search must not consume the window: the tool stamps only after the search returns.
-const { gmailSearch } = gmail;
-const realFetch = globalThis.fetch;
-globalThis.fetch = async (url, init) => {
-  if (String(url).includes("/gmail/v1/users/me/messages?")) throw new Error("network down");
-  return realFetch(url, init);
-};
-const out = await gmailSearch.run({ query: "in:inbox", sinceKey: "failcase" });
-globalThis.fetch = realFetch;
-check("a search that fails reports the error", /ERROR|NOT CONFIGURED/.test(out), true);
-check("and leaves the window where it was", rawDb.prepare("SELECT value FROM kv WHERE key = 'gmail:since:failcase'").get(), undefined);
-const ok = await gmailSearch.run({ query: "in:inbox", sinceKey: "failcase" });
-check("a search that succeeds with nothing says what it covered and that the inbox is not necessarily clean", [/Searched mail received after/.test(ok), /does not mean the inbox is empty or clean/.test(ok)], [true, true]);
-check("and only now is the window moved", rawDb.prepare("SELECT value FROM kv WHERE key = 'gmail:since:failcase'").get() !== undefined, true);
-check("a key is stripped to safe characters", /gmail:since:abc/.test("gmail:since:" + "a b!c".replace(/[^a-z0-9_-]/gi, "")), true);
+console.log("\nGMAIL_SEARCH: WORKS THROUGH THE INBOX AS IT STANDS");
+{
+  const { gmailSearch } = gmail;
+  const realFetch = globalThis.fetch;
+  const inbox = Array.from({ length: 7 }, (_, i) => `m${i + 1}`); // newest first
+  let down = false;
+  let lastListUrl = "";
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes("/gmail/v1/users/me/messages?")) {
+      if (down) throw new Error("network down");
+      lastListUrl = u;
+      return Response.json({ messages: inbox.map((id) => ({ id })) });
+    }
+    const m = /messages\/(m\d+)\?/.exec(u);
+    if (m) return Response.json({ labelIds: ["INBOX"], payload: { headers: [{ name: "From", value: "A <a@x.com>" }, { name: "Subject", value: `subject of ${m[1]}` }, { name: "Date", value: "Mon" }] }, snippet: "s" });
+    return realFetch(url, init);
+  };
+  const ids = (out) => [...out.matchAll(/^Id: (m\d+)$/gm)].map((x) => x[1]);
+  const q = { max: 3, query: "in:inbox", sinceKey: "cleanup-test" };
+
+  const one = await gmailSearch.run(q);
+  check("the first call takes the newest three unreviewed messages", ids(one), ["m1", "m2", "m3"]);
+  check("and says more are waiting, so the job can call again", /4 more unreviewed/.test(one), true);
+  check("no date window is applied: the query is just the inbox", /q=in%3Ainbox(&|$)/.test(lastListUrl) && !/after/.test(lastListUrl), true);
+  const two = await gmailSearch.run(q);
+  check("the next call continues with the following three, however old", ids(two), ["m4", "m5", "m6"]);
+  check("and says three were already reviewed", /3 already-reviewed message\(s\) skipped/.test(two), true);
+  const three = await gmailSearch.run(q);
+  check("the last call takes the remainder", ids(three), ["m7"]);
+  const four = await gmailSearch.run(q);
+  check("when everything is reviewed it says so, and does not claim the inbox is clean", [ids(four), /every matching message has already been reviewed/.test(four), /\bclean\b/.test(four)], [[], true, false]);
+
+  console.log("\nA FAILED SEARCH REVIEWS NOTHING");
+  down = true;
+  const failed = await gmailSearch.run({ ...q, sinceKey: "failcase" });
+  down = false;
+  check("it reports the error", /ERROR|NOT CONFIGURED/.test(failed), true);
+  check("so the same mail is still there on the retry", ids(await gmailSearch.run({ ...q, sinceKey: "failcase" })), ["m1", "m2", "m3"]);
+
+  console.log("\nA KEY KEEPS ITS OWN LIST, AND REVIEWS EXPIRE");
+  check("another key starts fresh", ids(await gmailSearch.run({ ...q, sinceKey: "another-job" })), ["m1", "m2", "m3"]);
+  check("a call with no key reviews and remembers nothing", [ids(await gmailSearch.run({ max: 2, query: "in:inbox" })), ids(await gmailSearch.run({ max: 2, query: "in:inbox" }))], [["m1", "m2"], ["m1", "m2"]]);
+  const WEEK = 7 * 86_400_000;
+  const t0 = Date.now();
+  gmail.markReviewed("ttl", ["m1"], t0 - WEEK - 1000);
+  gmail.markReviewed("ttl", ["m2"], t0 - WEEK + 60_000);
+  check("a review older than a week is forgotten, a recent one is kept", [...gmail.reviewedIds("ttl", t0)].sort(), ["m2"]);
+  gmail.markReviewed("cap", Array.from({ length: 3200 }, (_, i) => `x${i}`), t0);
+  check("the remembered set is capped", gmail.reviewedIds("cap", t0).size <= 3000, true);
+  globalThis.fetch = realFetch;
+  check("a key is stripped to safe characters", /gmail:since:abc/.test("gmail:since:" + "a b!c".replace(/[^a-z0-9_-]/gi, "")), true);
+}
 
 console.log("\nTHE STARTER");
 const { execFileSync } = await import("node:child_process");

@@ -22,30 +22,45 @@ interface Args {
   sinceKey?: string;
 }
 
-const OVERLAP_MS = 20 * 60_000;
-// The first run, and any run after a long gap (the Mini asleep, the schedule off for a weekend), looks back this far.
-// It used to be 14 hours and 24 hours, which meant a backlog older than a day was never reviewed and a missed day
-// was lost for good. A week bounds the work, and the watcher's own cap on changes per run bounds the effect.
-const FIRST_WINDOW_MS = 7 * 86_400_000;
-const MAX_WINDOW_MS = 7 * 86_400_000;
+/**
+ * What a cleanup has already looked at. `sinceKey` used to mean "only mail newer than my last run", which is wrong for
+ * a job whose point is to work through the inbox as it stands: mail older than the window was never reviewed, a window
+ * lost to a failed run hid mail for good, and mail the job deliberately left alone had no second chance. It now means
+ * "remember which messages I have reviewed". Each call takes the matching mail it has NOT reviewed, whatever its age,
+ * and records the ones it returns, so a backlog is worked through over successive calls and the same mail is not
+ * re-read every run. An id is forgotten after REVIEW_TTL_MS, so mail left alone, or skipped because a run crashed
+ * after the search, is looked at again within a week.
+ */
+const REVIEW_TTL_MS = 7 * 86_400_000;
+const MAX_REMEMBERED = 3000;
 
-const sinceKeyOf = (key: string): string => `gmail:since:${key.replace(/[^a-z0-9_-]/gi, "").slice(0, 40)}`;
+const seenKeyOf = (key: string): string => `gmail:reviewed:${key.replace(/[^a-z0-9_-]/gi, "").slice(0, 40)}`;
 
-/** Gmail's `after:` takes epoch seconds. Reads the last-run stamp but does NOT move it: see `markSince`. */
-export const sinceClause = (key: string, now: number = Date.now()): string => {
-  const last = Number(kvGet(sinceKeyOf(key))?.value);
-  const from = Number.isFinite(last) && last > 0 ? last - OVERLAP_MS : now - FIRST_WINDOW_MS;
-  return `after:${Math.floor(Math.max(from, now - MAX_WINDOW_MS) / 1000)}`;
+/** The ids reviewed within the last week, for this key. */
+export const reviewedIds = (key: string, now: number = Date.now()): Set<string> => {
+  try {
+    const m = JSON.parse(kvGet(seenKeyOf(key))?.value ?? "{}") as Record<string, number>;
+    return new Set(Object.keys(m).filter((id) => now - m[id] < REVIEW_TTL_MS));
+  } catch {
+    return new Set();
+  }
 };
 
 /**
- * Record that a search covering up to `now` succeeded. Only called after the search returned: stamping before it
- * meant a search that failed (a token problem, a timeout) still consumed the window, and every later run then saw
- * only mail newer than the failure, so a whole stretch of the inbox was silently never reviewed. A run that crashes
- * after the search repeats its window next time, which is harmless because what is done to a message is idempotent.
+ * Record ids as reviewed. Called only after the search returned them, so a search that failed reviews nothing and a
+ * retry sees the same mail. Expired entries are dropped here, and the set is capped so it cannot grow without bound.
  */
-export const markSince = (key: string, now: number = Date.now()): void => {
-  kvSet(sinceKeyOf(key), String(now));
+export const markReviewed = (key: string, ids: string[], now: number = Date.now()): void => {
+  let m: Record<string, number> = {};
+  try {
+    m = JSON.parse(kvGet(seenKeyOf(key))?.value ?? "{}");
+  } catch {
+    m = {};
+  }
+  for (const id of Object.keys(m)) if (now - m[id] >= REVIEW_TTL_MS) delete m[id];
+  for (const id of ids) m[id] = now;
+  const keep = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, MAX_REMEMBERED);
+  kvSet(seenKeyOf(key), JSON.stringify(Object.fromEntries(keep)));
 };
 
 export const gmailSearch: Tool = {
@@ -66,17 +81,16 @@ export const gmailSearch: Tool = {
   run: async (a: Args) => {
     try {
       const base = String(a?.query ?? "is:unread in:inbox");
-      const searchedAt = Date.now();
-      const clause = a?.sinceKey ? sinceClause(String(a.sinceKey), searchedAt) : "";
-      const query = clause ? `${base} ${clause}` : base;
-      const msgs = await searchMessages(query, Math.min(100, Number(a?.max ?? 10)));
-      if (a?.sinceKey) markSince(String(a.sinceKey), searchedAt);
-      // Say what was searched. "No matching messages" for a window read as "the inbox is clean", which it is not:
-      // it only means nothing arrived in that window.
-      const scope = clause ? `Searched mail received after ${new Date(Number(clause.slice(6)) * 1000).toLocaleString()} only; older mail in the inbox was not looked at. ` : "";
-      if (!msgs.length) return `${scope}No matching messages${clause ? " in that window. This does not mean the inbox is empty or clean." : "."}`;
-      // The Id is what gmail_triage acts on. "Mailing list: yes" means a List-Unsubscribe header,
-      // which is how bulk mail tells on itself; a person's mail does not have one.
+      const now = Date.now();
+      const skip = a?.sinceKey ? reviewedIds(String(a.sinceKey), now) : new Set<string>();
+      const msgs = await searchMessages(base, Math.min(100, Number(a?.max ?? 10)), skip);
+      if (a?.sinceKey) markReviewed(String(a.sinceKey), msgs.map((m) => m.id).filter(Boolean) as string[], now);
+      // Say what was covered, so a summary can state it rather than guess. An empty result means nothing UNREVIEWED
+      // matched, which is not the same as the inbox being empty.
+      const scope = a?.sinceKey
+        ? `Reviewing only mail not yet reviewed in the last 7 days (${msgs.skipped ?? 0} already-reviewed message(s) skipped${msgs.more ? `, ${msgs.more} more unreviewed after these; call again for the next batch` : ""}). `
+        : "";
+      if (!msgs.length) return `${scope}No matching messages${a?.sinceKey ? ": every matching message has already been reviewed" : ""}.`;
       const body = msgs
         .map((m) => `${m.id ? `Id: ${m.id}\n` : ""}From: ${m.from}\nSubject: ${m.subject}\nDate: ${m.date}${m.listUnsubscribe ? "\nMailing list: yes" : ""}\n${m.snippet}`)
         .join("\n\n");

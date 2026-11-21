@@ -195,10 +195,17 @@ export interface MailHeader {
  * deliberately NEVER the full body — a full body is the richest prompt-injection surface,
  * and a snippet is enough to triage what needs your attention.
  */
-export const searchMessages = async (query = "is:unread in:inbox", max = 10): Promise<MailHeader[]> => {
-  const params = new URLSearchParams({ q: query, maxResults: String(max) });
+export const searchMessages = async (
+  query = "is:unread in:inbox",
+  max = 10,
+  /** Message ids to leave out (already reviewed). The list is over-fetched so skipping them still fills `max`. */
+  skip: ReadonlySet<string> = new Set(),
+): Promise<MailHeader[] & { more?: number; skipped?: number }> => {
+  const params = new URLSearchParams({ q: query, maxResults: String(Math.min(500, max + skip.size)) });
   const list = await apiGet(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`);
-  const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
+  const listed: string[] = (list.messages ?? []).map((m: any) => m.id);
+  const unreviewed = listed.filter((id) => !skip.has(id));
+  const ids = unreviewed.slice(0, max);
 
   const out: MailHeader[] = [];
   for (const id of ids) {
@@ -219,7 +226,8 @@ export const searchMessages = async (query = "is:unread in:inbox", max = 10): Pr
       snippet: (msg.snippet ?? "").slice(0, 300),
     });
   }
-  return out;
+  // `skipped`: matches left out because they were already reviewed. `more`: unreviewed ones beyond `max`, for the next call.
+  return Object.assign(out, { more: unreviewed.length - ids.length, skipped: listed.length - unreviewed.length });
 };
 
 export interface SentMessage {
