@@ -23,16 +23,29 @@ interface Args {
 }
 
 const OVERLAP_MS = 20 * 60_000;
-const FIRST_WINDOW_MS = 14 * 3_600_000;
-const MAX_WINDOW_MS = 24 * 3_600_000;
+// The first run, and any run after a long gap (the Mini asleep, the schedule off for a weekend), looks back this far.
+// It used to be 14 hours and 24 hours, which meant a backlog older than a day was never reviewed and a missed day
+// was lost for good. A week bounds the work, and the watcher's own cap on changes per run bounds the effect.
+const FIRST_WINDOW_MS = 7 * 86_400_000;
+const MAX_WINDOW_MS = 7 * 86_400_000;
 
-/** Gmail's `after:` takes epoch seconds. Stamps the key as it reads it, so a crash cannot make a window repeat forever. */
+const sinceKeyOf = (key: string): string => `gmail:since:${key.replace(/[^a-z0-9_-]/gi, "").slice(0, 40)}`;
+
+/** Gmail's `after:` takes epoch seconds. Reads the last-run stamp but does NOT move it: see `markSince`. */
 export const sinceClause = (key: string, now: number = Date.now()): string => {
-  const k = `gmail:since:${key.replace(/[^a-z0-9_-]/gi, "").slice(0, 40)}`;
-  const last = Number(kvGet(k)?.value);
+  const last = Number(kvGet(sinceKeyOf(key))?.value);
   const from = Number.isFinite(last) && last > 0 ? last - OVERLAP_MS : now - FIRST_WINDOW_MS;
-  kvSet(k, String(now));
   return `after:${Math.floor(Math.max(from, now - MAX_WINDOW_MS) / 1000)}`;
+};
+
+/**
+ * Record that a search covering up to `now` succeeded. Only called after the search returned: stamping before it
+ * meant a search that failed (a token problem, a timeout) still consumed the window, and every later run then saw
+ * only mail newer than the failure, so a whole stretch of the inbox was silently never reviewed. A run that crashes
+ * after the search repeats its window next time, which is harmless because what is done to a message is idempotent.
+ */
+export const markSince = (key: string, now: number = Date.now()): void => {
+  kvSet(sinceKeyOf(key), String(now));
 };
 
 export const gmailSearch: Tool = {
@@ -53,15 +66,21 @@ export const gmailSearch: Tool = {
   run: async (a: Args) => {
     try {
       const base = String(a?.query ?? "is:unread in:inbox");
-      const query = a?.sinceKey ? `${base} ${sinceClause(String(a.sinceKey))}` : base;
+      const searchedAt = Date.now();
+      const clause = a?.sinceKey ? sinceClause(String(a.sinceKey), searchedAt) : "";
+      const query = clause ? `${base} ${clause}` : base;
       const msgs = await searchMessages(query, Math.min(100, Number(a?.max ?? 10)));
-      if (!msgs.length) return "No matching messages.";
+      if (a?.sinceKey) markSince(String(a.sinceKey), searchedAt);
+      // Say what was searched. "No matching messages" for a window read as "the inbox is clean", which it is not:
+      // it only means nothing arrived in that window.
+      const scope = clause ? `Searched mail received after ${new Date(Number(clause.slice(6)) * 1000).toLocaleString()} only; older mail in the inbox was not looked at. ` : "";
+      if (!msgs.length) return `${scope}No matching messages${clause ? " in that window. This does not mean the inbox is empty or clean." : "."}`;
       // The Id is what gmail_triage acts on. "Mailing list: yes" means a List-Unsubscribe header,
       // which is how bulk mail tells on itself; a person's mail does not have one.
       const body = msgs
         .map((m) => `${m.id ? `Id: ${m.id}\n` : ""}From: ${m.from}\nSubject: ${m.subject}\nDate: ${m.date}${m.listUnsubscribe ? "\nMailing list: yes" : ""}\n${m.snippet}`)
         .join("\n\n");
-      return tagUntrusted("gmail", body);
+      return tagUntrusted("gmail", scope ? `${scope}\n\n${body}` : body);
     } catch (err) {
       if (err instanceof GoogleAuthError) return `NOT CONFIGURED: ${err.message}`;
       return `ERROR: ${err instanceof Error ? err.message : String(err)}`;

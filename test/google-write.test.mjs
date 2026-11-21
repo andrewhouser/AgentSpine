@@ -139,11 +139,29 @@ check("calendar_find is read-only", cal.calendarFind.classify({ calendar: "Bills
 console.log("\nGMAIL_SEARCH: THE WINDOW IS CODE");
 const NOW = Date.UTC(2026, 10, 21, 12, 0, 0);
 const first = gmail.sinceClause("inbox-cleanup", NOW);
-check("first run looks back 14 hours", first, `after:${Math.floor((NOW - 14 * 3_600_000) / 1000)}`);
+check("first run looks back 7 days", first, `after:${Math.floor((NOW - 7 * 86_400_000) / 1000)}`);
+check("asking does not move the window", gmail.sinceClause("inbox-cleanup", NOW + 3_600_000), `after:${Math.floor((NOW + 3_600_000 - 7 * 86_400_000) / 1000)}`);
+gmail.markSince("inbox-cleanup", NOW);
 const second = gmail.sinceClause("inbox-cleanup", NOW + 8 * 3_600_000);
-check("next run starts 20 minutes before the last one", second, `after:${Math.floor((NOW - 20 * 60_000) / 1000)}`);
-rawDb.prepare("UPDATE kv SET value = ? WHERE key = 'gmail:since:inbox-cleanup'").run(String(NOW - 5 * 86_400_000));
-check("a long gap is clamped to 24 hours, not days of old mail", gmail.sinceClause("inbox-cleanup", NOW), `after:${Math.floor((NOW - 24 * 3_600_000) / 1000)}`);
+check("after a successful search the next run starts 20 minutes before it", second, `after:${Math.floor((NOW - 20 * 60_000) / 1000)}`);
+rawDb.prepare("UPDATE kv SET value = ? WHERE key = 'gmail:since:inbox-cleanup'").run(String(NOW - 20 * 86_400_000));
+check("a very long gap is clamped to 7 days, not weeks of old mail", gmail.sinceClause("inbox-cleanup", NOW), `after:${Math.floor((NOW - 7 * 86_400_000) / 1000)}`);
+rawDb.prepare("UPDATE kv SET value = ? WHERE key = 'gmail:since:inbox-cleanup'").run(String(NOW - 3 * 86_400_000));
+check("a three day gap is covered in full (a missed weekend is not lost)", gmail.sinceClause("inbox-cleanup", NOW), `after:${Math.floor((NOW - 3 * 86_400_000 - 20 * 60_000) / 1000)}`);
+// A failed search must not consume the window: the tool stamps only after the search returns.
+const { gmailSearch } = gmail;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  if (String(url).includes("/gmail/v1/users/me/messages?")) throw new Error("network down");
+  return realFetch(url, init);
+};
+const out = await gmailSearch.run({ query: "in:inbox", sinceKey: "failcase" });
+globalThis.fetch = realFetch;
+check("a search that fails reports the error", /ERROR|NOT CONFIGURED/.test(out), true);
+check("and leaves the window where it was", rawDb.prepare("SELECT value FROM kv WHERE key = 'gmail:since:failcase'").get(), undefined);
+const ok = await gmailSearch.run({ query: "in:inbox", sinceKey: "failcase" });
+check("a search that succeeds with nothing says what it covered and that the inbox is not necessarily clean", [/Searched mail received after/.test(ok), /does not mean the inbox is empty or clean/.test(ok)], [true, true]);
+check("and only now is the window moved", rawDb.prepare("SELECT value FROM kv WHERE key = 'gmail:since:failcase'").get() !== undefined, true);
 check("a key is stripped to safe characters", /gmail:since:abc/.test("gmail:since:" + "a b!c".replace(/[^a-z0-9_-]/gi, "")), true);
 
 console.log("\nTHE STARTER");

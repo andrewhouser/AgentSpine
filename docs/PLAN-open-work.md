@@ -60,7 +60,7 @@ Nothing below has run against real systems yet. F3 and F4 from section 0 are fix
    and Calendar tools.
 2. DONE (you ran it): run `npm run auth -- write` and approve in the browser. This creates the write token, which does not exist
    yet.
-3. ADDED (you ran `npm run watcher add inbox-cleanup`); still to do: run it once by hand, and **read its summary before trusting it**. It
+3. ADDED (you ran `npm run watcher add inbox-cleanup`). **First run found a defect (2026-11-21):** it reported "0 new messages, inbox is clean" with 18 unread in the inbox, because `gmail_search` stamped its last-run time before the search succeeded and capped the window at 24 hours. Fixed: the stamp moves only after a successful search, the first run and long gaps look back 7 days, the result states the window searched, and the starter's summary may not call the inbox clean. On the Mini: `git pull`, `./update.sh`, remove and re-add the watcher so it takes the new wording (`npm run watcher remove <id>`, `npm run watcher add inbox-cleanup`), then `npm run watcher reset-window` and run it once more. Still to do: run it once by hand, and **read its summary before trusting it**. It
    runs every 8 hours after that. Protections are code: inbox mail only, never mail from anyone you have
    emailed, never starred or sent mail, 60 changes per run. Trash and spam are irreversible-tier.
    `policy.json` `google.write.trashOverrideSenders` holds `afs.ameriprise.com`.
