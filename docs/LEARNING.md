@@ -23,7 +23,15 @@ that is the answer, not a thing to design around.
 1. **The model never widens its own permissions.** `tools/schedule.ts` already states it:
    "a run that could widen its own permissions would make deny-by-default a suggestion."
    Learners may *propose* a policy change. The write happens in the server, from a human
-   click, and never from a tool call.
+   click, and never from a tool call. `test/architecture.test.mjs` holds this mechanically
+   (it reads the source, runs nothing): only `learn/promote.ts` can write `policy.json`, only
+   `server.ts` reaches it, `profile.md`, `goals.md` and `agents/` are only ever read, and the set
+   of tools that write a file or run a command is pinned, so a new one fails the test until a
+   person has looked at what it can reach. The same test holds the Google write-token rule
+   (SPEC section 5): `google/write.ts` is imported only by `gmail-triage.ts` and
+   `calendar-write.ts`, and it has no send or permanent-delete call. It is a tripwire, not a
+   proof: a shell command that redirects into a file is gated by the broker, which the test
+   cannot see.
 2. **Nothing derived from UNTRUSTED content becomes standing context without a human
    reading it.** `reflect.ts` gets this right — its prompt treats the trace as hostile and
    its output is constrained to short third-person statements. Every new learner inherits

@@ -1,0 +1,157 @@
+/**
+ * The architecture test. Run with `node test/architecture.test.mjs`.
+ *
+ * It reads the source, runs nothing, and needs no network or database. It asserts the structural
+ * promises that the rest of the system leans on, in one place, so that breaking one is a failing test
+ * and not something a reviewer has to notice:
+ *
+ *   1. No tool can write AgentSpine's own control files (policy.json, profile.md, goals.md, agents/*.md).
+ *      docs/LEARNING.md invariant 1: the write happens in the server, from a person's click, never from
+ *      a tool. test/write-file.test.mjs proves the behaviour of the file tool; this proves nothing else
+ *      has found a way round it.
+ *   2. The Google write token (docs/SPEC.md section 5, amendment of 2026-11-21) is held by src/google/write.ts
+ *      alone, that module is reached only by the two tools built for it, and it has no way to send mail
+ *      or delete anything permanently.
+ *
+ * These are tripwires, not proofs. A static scan cannot see a shell command that redirects into a file,
+ * so the set of tools that can run commands is pinned too: adding one fails this test until a person
+ * has looked at what it can reach. When a list below has to change, change it on purpose and say why in
+ * the commit.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
+
+const ROOT = path.join(import.meta.dirname, "..");
+const SRC = path.join(ROOT, "src");
+
+let passed = 0;
+let failed = 0;
+const check = (label, actual, expected) => {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  ok ? passed++ : failed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label.padEnd(66)} ${ok ? "" : `${JSON.stringify(actual)} (expected ${JSON.stringify(expected)})`}`);
+};
+
+// ---- Reading the source ---------------------------------------------------------------------
+
+/** Remove comments, so prose that names a file is not read as code. The TypeScript compiler does this,
+ * not a regex, because a regex cannot tell a `/*` inside a line comment (as in "src/google/*") or a `//`
+ * inside a string from the real thing. Imports are kept even when unused, so an unused import of
+ * write.ts still counts as reaching it. */
+const stripComments = (text) =>
+  ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.ESNext, removeComments: true, target: ts.ScriptTarget.ESNext, verbatimModuleSyntax: true } }).outputText;
+
+const sources = {};
+const walk = (dir) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full);
+    else if (full.endsWith(".ts")) sources[path.relative(ROOT, full).split(path.sep).join("/")] = stripComments(fs.readFileSync(full, "utf8"));
+  }
+};
+walk(SRC);
+
+/** The repo-relative paths of every source file whose code matches `re`, sorted. */
+const filesMatching = (re) => Object.keys(sources).filter((f) => re.test(sources[f])).sort();
+
+// A file-writing call of any kind: the fs module's writers, deleters and renamers.
+const FS_WRITE = /\b(writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|createWriteStream|unlinkSync|unlink|rmSync|rm|truncateSync|truncate|openSync)\s*\(/;
+const FS_WRITE_STRICT = /\bfs\.(promises\.)?(writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|createWriteStream|unlinkSync|unlink|rmSync|rm|truncateSync|truncate|openSync)\s*\(/;
+
+// ---- The scanner has to be able to fail -----------------------------------------------------
+// Without this, a typo in a regex above would turn every check below into a pass that proves nothing.
+
+console.log("\nTHE SCANNER CAN SEE A VIOLATION");
+check("a comment that contains /* does not swallow the code after it", /const k = 1/.test(stripComments("// see src/google/*.\nconst k = 1;")), true);
+const stripped = stripComments('// POLICY_PATH\nconst u = "https://x.test"; /* GOALS_PATH */');
+check("comments are stripped, https:// in a string is not", [stripped.includes('const u = "https://x.test"'), /POLICY_PATH|GOALS_PATH/.test(stripped)], [true, false]);
+check("a write to the policy path is detected", FS_WRITE_STRICT.test("fs.writeFileSync(POLICY_PATH, x)"), true);
+check("a read of the policy path is not a write", FS_WRITE_STRICT.test("fs.readFileSync(POLICY_PATH, 'utf8')"), false);
+check("the source set is not empty", Object.keys(sources).length > 50, true);
+check("the control-file constants are found where they are defined", filesMatching(/\bPOLICY_PATH\b/).includes("src/config.ts"), true);
+
+// ---- 1. Control files -----------------------------------------------------------------------
+
+console.log("\nCONTROL FILES: WHO CAN NAME THEM");
+// The path constants for policy.json, goals.md, agents/ and profile.md. Each may be named only by config
+// (which defines it) and by the one module that has a reason to. The three readers must never write.
+const HOLDERS = {
+  AGENTS_DIR: ["src/agents.ts", "src/config.ts"],
+  GOALS_PATH: ["src/config.ts", "src/spine.ts"],
+  POLICY_PATH: ["src/config.ts", "src/learn/promote.ts"],
+  PROFILE_PATH: ["src/config.ts", "src/memory/profile.ts"],
+};
+for (const [name, expected] of Object.entries(HOLDERS)) {
+  check(`${name} is named only by ${expected.map((f) => path.basename(f)).join(" and ")}`, filesMatching(new RegExp(`\\b${name}\\b`)), expected);
+}
+
+console.log("\nCONTROL FILES: THE READERS NEVER WRITE");
+for (const file of ["src/agents.ts", "src/spine.ts", "src/memory/profile.ts"]) {
+  check(`${file} makes no file-writing call`, FS_WRITE.test(sources[file]), false);
+}
+
+console.log("\nCONTROL FILES: POLICY IS CHANGED ONLY BY A PERSON'S CLICK");
+// applyProposal is the one function that writes policy from a proposal. It lives in learn/promote.ts and
+// is reachable only from server.ts, from the single authenticated mutating route.
+check("applyProposal is named only by promote.ts and server.ts", filesMatching(/\bapplyProposal\b/), ["src/learn/promote.ts", "src/server.ts"]);
+check("server.ts calls applyProposal from exactly one place", (sources["src/server.ts"].match(/\bapplyProposal\s*\(/g) ?? []).length, 1);
+check("promote.ts writes policy in exactly one place", (sources["src/learn/promote.ts"].match(new RegExp(FS_WRITE_STRICT.source, "g")) ?? []).length, 1);
+check("no tool names applyProposal or promote.ts", filesMatching(/\bapplyProposal\b|learn\/promote/).filter((f) => f.startsWith("src/tools/")), []);
+
+console.log("\nCONTROL FILES: THE TOOLS THAT TOUCH THE DISK, AND THE ONES THAT RUN COMMANDS");
+// Every tool that writes a file. write_file and scaffold_ios take a path from the model, so both must go
+// through textTargetGate (which refuses control files: see test/write-file.test.mjs). draft and
+// generate_image build their own file names inside a fixed directory.
+check("the tools with a file-writing call are exactly these four", filesMatching(FS_WRITE_STRICT).filter((f) => f.startsWith("src/tools/")), [
+  "src/tools/draft.ts",
+  "src/tools/generate-image.ts",
+  "src/tools/scaffold-ios.ts",
+  "src/tools/write-file.ts",
+]);
+for (const file of ["src/tools/write-file.ts", "src/tools/scaffold-ios.ts"]) {
+  check(`${path.basename(file)} takes a model-supplied path through textTargetGate`, /\btextTargetGate\s*\(/.test(sources[file]), true);
+}
+check("write-file.ts refuses control files in its gate", /\bisControlFile\s*\(/.test(sources["src/tools/write-file.ts"]), true);
+// A shell can redirect into any file, which no scan of the tools can see. The broker is what gates these;
+// this list only makes sure a new command-running tool is noticed.
+check("the tools that can run a command are exactly these six", filesMatching(/from\s+"(node:)?child_process"/).filter((f) => f.startsWith("src/tools/")), [
+  "src/tools/apple.ts",
+  "src/tools/git-status.ts",
+  "src/tools/git-write.ts",
+  "src/tools/mac-control.ts",
+  "src/tools/run-command.ts",
+  "src/tools/scaffold-ios.ts",
+]);
+
+// ---- 2. The Google write token --------------------------------------------------------------
+
+console.log("\nTHE GOOGLE WRITE TOKEN: WHO CAN NAME IT");
+check("only config, auth and write.ts name GOOGLE_WRITE_TOKEN_PATH", filesMatching(/\bGOOGLE_WRITE_TOKEN_PATH\b/), ["src/config.ts", "src/google/auth.ts", "src/google/write.ts"]);
+check("the token's file name appears only where config sets it", filesMatching(/google-write-token/), ["src/config.ts"]);
+check("only config and auth name the write scopes", filesMatching(/\bGOOGLE_WRITE_SCOPES\b/), ["src/config.ts", "src/google/auth.ts"]);
+
+console.log("\nTHE GOOGLE WRITE TOKEN: WHO CAN REACH THE MODULE THAT HOLDS IT");
+check("only the two tools built for it import src/google/write.ts", filesMatching(/from\s+"[^"]*google\/write(\.ts)?"/), ["src/tools/calendar-write.ts", "src/tools/gmail-triage.ts"]);
+check("nothing imports it dynamically", filesMatching(/import\s*\(\s*["'`][^"'`]*google\/write/), []);
+
+console.log("\nTHE GOOGLE WRITE TOKEN: WHAT THE MODULE CANNOT DO");
+const writeTs = sources["src/google/write.ts"];
+check("it has no send endpoint", /\/send\b|messages\/send|drafts/.test(writeTs), false);
+check("it has no permanent delete or empty-trash call", /batchDelete|trash\/empty|emptyTrash|["'`]DELETE["'`]/.test(writeTs), false);
+// The type annotation is gone from the stripped text, so the signature is read from the raw file, and the
+// methods actually used are read from the stripped code.
+const writeRaw = fs.readFileSync(path.join(ROOT, "src/google/write.ts"), "utf8");
+check("its request helper is typed to GET, PATCH and POST only", /call\s*=\s*async\s*\(\s*method:\s*"GET"\s*\|\s*"PATCH"\s*\|\s*"POST"\s*,/.test(writeRaw), true);
+check("every call it makes uses GET, PATCH or POST", [...new Set([...writeTs.matchAll(/\bcall\(\s*"([A-Z]+)"/g)].map((m) => m[1]))].filter((m) => !["GET", "PATCH", "POST"].includes(m)), []);
+check("it makes at least one call, so the line above is not vacuous", [...writeTs.matchAll(/\bcall\(\s*"[A-Z]+"/g)].length > 0, true);
+check("it never calls the calendar's delete or the mail's delete", /\bcall\(\s*"DELETE"/.test(writeTs), false);
+check("it names no export that sends, deletes or purges", [...writeTs.matchAll(/export const (\w+)/g)].map((m) => m[1]).filter((n) => /send|delete|empty|purge|remove(Message|Event)/i.test(n)), []);
+
+console.log("\nTHE GOOGLE READ PATH STAYS READ-ONLY");
+const clientTs = sources["src/google/client.ts"];
+check("client.ts has no mail or calendar write endpoint", /\/modify\b|\/trash\b|\/untrash\b|\/batchModify|\/send\b|\/insert\b|["'`](PATCH|PUT|DELETE)["'`]/.test(clientTs), false);
+check("the Gmail and Calendar APIs are called only from src/google and config", filesMatching(/(gmail|www)\.googleapis\.com\/(gmail|calendar)/), ["src/google/client.ts", "src/google/write.ts"]);
+
+console.log(`\n${passed} passed, ${failed} failed\n`);
+process.exit(failed ? 1 : 0);

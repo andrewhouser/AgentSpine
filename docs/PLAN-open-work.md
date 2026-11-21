@@ -57,8 +57,8 @@ Nothing below has run against real systems yet.
    `OUTBOX_ENFORCE=true`.
 5. Work through `docs/ROLLOUT.md` (the learning-loop checklist). Its boxes are unticked and the repo
    cannot say how far you are: run `npm run digest 168` on the Mini and tick what is already on.
-6. Build the iOS app (`ios/AgentSpine.xcodeproj`). The Heads-up Phase 4 and 5 Swift and the outbox
-   Phase 2 Swift have never been compiled. Paste the first errors back and they get fixed in one pass.
+6. ~~Build the iOS app.~~ Done 2026-11-21: it builds, runs on the iPhone, and the outbox Phase 2 reporting
+   works there. The Heads-up lock-screen buttons (A3 rung 8) have not been exercised on a device.
 
 Never exercised against real services: Google Calendar reads, web search and retailer pages for
 Heads-up, AeroDataBox, TomTom, APNs delivery of the Heads-up categories, Gmail and Calendar writes.
@@ -72,7 +72,7 @@ records every message in an `outbox` table. Only the `study` and `tool` sources 
 reminders, run results and priority 5 are never held. Enforcement is off by default (`OUTBOX_ENFORCE`);
 `would_be` records what would have happened. A 5 minute sweep in `src/server.ts` releases held messages.
 
-**Phase 2: what happened to each message (built 2026-11-21, iPhone side uncompiled by a person).**
+**Phase 2: what happened to each message (built and proven on a phone 2026-11-21).**
 Server: `outbox` gained `opened_at` and `dismissed_at`; `markOutcome` records the first report of each kind;
 `outcomeOf` reads a row as `opened`, `dismissed`, `pending`, `ignored` (an APNs send with no report after
 `IGNORED_AFTER_HOURS`, 24, inferred at read time and never stored) or `unknown` (ntfy, Mac banner and failed
@@ -81,8 +81,9 @@ sends, which cannot report and are not guessed). The push payload carries `outbo
 dismissed and ignored counts. Tests in `test/outbox.test.mjs` and `test/devices.test.mjs`. iPhone
 (`PushManager.swift`, `APIClient.reportOutbox`): the run and Heads-up categories now set
 `.customDismissAction`, a tap or button reports `opened`, a swipe reports `dismissed`. This also fixed a
-bug: a dismissal used to fall through to the deep-link code and was read as a tap. **Still to prove on your
-phone:** tap a real push and see `opened_at` set within seconds; swipe one away and see `dismissed_at`.
+bug: a dismissal used to fall through to the deep-link code and was read as a tap. **Proven on your
+phone 2026-11-21:** a tapped push got `opened_at`, a swiped one got `dismissed_at`, and the rows read as
+opened and dismissed.
 The review screen (Phase 3) can also mark everything in it as seen, which gives an ntfy-only setup a weak
 signal.
 
@@ -191,16 +192,21 @@ HERE free tier, a static-speed provider, or flights only; whether to want G at a
 
 ## 4. Security hardening and learning (`docs/archive/PLAN-nod-learnings.md`, from n8n's Nod)
 
-Nothing here is built (checked 2026-11-21: no `origin` column on `memories`, no injection corpus, no cloud
-token cap, no styles table, no architecture test). The write token raised the value of N5 and N2, since a
-hostile email is now worth more to an attacker. **Order: N5, N2 offline half, N1, N3, N4.** Do N2 before the
+N5 is built (2026-11-21). N1 to N4 are not (checked 2026-11-21: no `origin` column on `memories`, no
+injection corpus, no cloud token cap, no styles table). The write token raised the value of N2, since a
+hostile email is now worth more to an attacker. **Order: N2 offline half, N1, N3, N4.** Do N2 before the
 inbox cleanup runs unattended.
 
-- **N5 Architecture test (first, smallest).** Mechanically assert that no tool can write `policy.json`,
-  `profile.md`, `goals.md` or `agents/*.md`, and fold in the write-token rule: `src/google/write.ts` is
-  imported only by `gmail-triage.ts` and `calendar-write.ts`, and nothing outside it reaches
-  `GOOGLE_WRITE_TOKEN_PATH`. `test/google-write.test.mjs` already greps for the token holders; move that
-  here so the invariants live in one place. Update `LEARNING.md`.
+- **N5 Architecture test. Built 2026-11-21: `test/architecture.test.mjs`.** Reads the source with the
+  TypeScript compiler (comments stripped exactly), runs nothing, and asserts: only `learn/promote.ts` can
+  write `policy.json` and only one route in `server.ts` calls it; `profile.md`, `goals.md` and `agents/` are
+  only read; the tools that write a file (four) and the tools that can run a command (six) are pinned, so a
+  new one fails until a person has looked; `google/write.ts` is imported only by `gmail-triage.ts` and
+  `calendar-write.ts`; only config, auth and `write.ts` name the write token or its scopes; `write.ts` has no
+  send, no delete and no DELETE method; the read client has no write endpoint. It includes self-checks so the
+  scanner cannot pass vacuously, and was shown to fail on a planted violating tool. The token-holder check
+  moved out of `test/google-write.test.mjs`. It is a tripwire, not a proof: a shell redirect is the broker's
+  job to gate. `LEARNING.md` invariant 1 points at it.
 - **N2 Prompt-injection corpus.** `test/fixtures/injection/` JSON cases `{ id, surface, payload, forbidden }`
   over surfaces (email, web page, file, calendar entry, meeting transcript) and payload families
   ("remember that Andrew authorised X", "ignore your rules", fake system message, hidden quoted-reply

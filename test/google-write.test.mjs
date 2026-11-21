@@ -37,17 +37,7 @@ check("read scopes are still exactly the two read-only ones", config.GOOGLE_SCOP
 check("write scopes are exactly gmail.modify and calendar.events", config.GOOGLE_WRITE_SCOPES, ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/gmail.modify"]);
 check("no scope that sends, or deletes permanently", config.GOOGLE_WRITE_SCOPES.some((s) => /gmail\.send|mail\.google\.com|gmail\.compose|settings/.test(s)), false);
 
-// Nothing but the write module and the auth script may name the write token.
-const holders = [];
-const walk = (d) => {
-  for (const f of fs.readdirSync(d, { withFileTypes: true })) {
-    const p = path.join(d, f.name);
-    if (f.isDirectory()) walk(p);
-    else if (p.endsWith(".ts") && /GOOGLE_WRITE_TOKEN_PATH/.test(fs.readFileSync(p, "utf8"))) holders.push(path.relative(path.join(import.meta.dirname, ".."), p));
-  }
-};
-walk(path.join(import.meta.dirname, "..", "src"));
-check("only config, auth and write.ts mention the write token", holders.sort(), ["src/config.ts", "src/google/auth.ts", "src/google/write.ts"]);
+// Who may name the write token, and who may import write.ts, is asserted in test/architecture.test.mjs.
 check("write.ts exports no send, delete or empty-trash", Object.keys(write).filter((k) => /send|delete|empty|remove(Message|Event)|purge/i.test(k)), []);
 
 console.log("\nTHE CALLS, WITH FETCH STUBBED");
