@@ -21,6 +21,7 @@ import { extractText, INDEXABLE_EXTENSIONS } from "../projects/extract.ts";
 import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
 import { ocrAvailable, ocrFile } from "./ocr.ts";
+import { deleteClaimsFromSource } from "../knowledge/store.ts";
 import * as items from "./store.ts";
 import { parseThread } from "./thread.ts";
 
@@ -217,8 +218,9 @@ export const deleteItem = (id: number): boolean => {
   if (!it) return false;
   for (const s of projects.listSourcesAnyProject(`inbox:${id}`)) projects.removeSource(s.id, false);
   if (it.stored_path) fs.rmSync(it.stored_path, { force: true });
+  const claims = deleteClaimsFromSource("inbox", `inbox:${id}`);
   items.deleteItemRow(id);
-  logDataEvent("inbox_item_deleted", `inbox item #${id}`, `${it.kind}; original, extracted text and index removed`);
+  logDataEvent("inbox_item_deleted", `inbox item #${id}`, `${it.kind}; original, extracted text and index removed${claims ? `; ${claims} knowledge claim(s) cited to it removed` : ""}`);
   return true;
 };
 

@@ -44,6 +44,8 @@ import { checkWorkspaceFile } from "./projects/workspace.ts";
 import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
+import * as knowledge from "./knowledge/store.ts";
+import { extractClaims, inboxItemText, normalizeMeeting } from "./knowledge/extract.ts";
 import { ocrAvailable } from "./inbox/ocr.ts";
 import {
   readAttachment,
@@ -970,6 +972,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           const item = inboxStore.getItem(itemId);
           if (!item) return sendJson(res, 404, { error: "no such inbox item" });
           if (m === "GET" && seg.length === 3) return sendJson(res, 200, withProject(item));
+          // POST /api/inbox/:id/extract: ask the local model for cited claims. They arrive `proposed`.
+          if (m === "POST" && seg[3] === "extract") {
+            const text = inboxItemText(itemId);
+            if (!text) return sendJson(res, 409, { error: "this item has no readable text to extract from" });
+            const r = await extractClaims({ projectId: item.project_id, saidOn: item.doc_date, sourceKind: "inbox", sourceRef: `inbox:${itemId}`, text });
+            return sendJson(res, 200, r);
+          }
           if (m === "POST" && seg[3] === "reprocess") return sendJson(res, 200, withProject(await reprocessInboxItem(itemId)));
           if (m === "DELETE" && seg.length === 3) return sendJson(res, 200, { deleted: deleteInboxItem(itemId) });
           if (m === "PATCH" && seg.length === 3) {
@@ -989,6 +998,61 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         }
       } catch (err) {
         if (err instanceof TooLargeError) return sendJson(res, 413, { error: (err as Error).message });
+        return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    /**
+     * /api/knowledge/claims and friends: the knowledge store (src/knowledge/). Cited decisions, commitments, risks and
+     * facts, `proposed` until a person reviews them. Supersession is only ever marked here, by a person.
+     */
+    if (seg[1] === "knowledge" && seg[2] !== "search") {
+      try {
+        const num = (k: string): number | undefined => (url.searchParams.get(k) ? Number(url.searchParams.get(k)) : undefined);
+        const str = (k: string): string | undefined => url.searchParams.get(k) ?? undefined;
+        if (m === "GET" && seg[2] === "entities" && seg.length === 3) return sendJson(res, 200, knowledge.listEntities());
+        if (m === "GET" && seg[2] === "conflicts" && seg.length === 3) return sendJson(res, 200, knowledge.findConflicts());
+        if (m === "GET" && seg[2] === "summary" && seg.length === 3) return sendJson(res, 200, knowledge.counts());
+        if (seg[2] === "claims") {
+          const present = (c: knowledge.Claim) => ({ ...c, evidence: knowledge.evidenceLevel(c) });
+          if (m === "GET" && seg.length === 3) {
+            return sendJson(res, 200, knowledge.listClaims({
+              asOf: str("asOf"), kind: str("kind") as knowledge.ClaimKind | undefined, limit: num("limit"), ownerId: num("owner"),
+              projectId: num("project"), reviewState: str("review") as knowledge.ReviewState | undefined, since: str("since"),
+              sourceKind: str("sourceKind"), sourceRef: str("sourceRef"), status: str("status") as knowledge.ClaimStatus | undefined,
+            }).map(present));
+          }
+          // POST /api/knowledge/claims: a claim entered by hand. A person entering it is the review.
+          if (m === "POST" && seg.length === 3) {
+            const b = await readBody(req);
+            const id = knowledge.addClaim({
+              due: b.due, kind: b.kind, method: "manual", owner: b.owner, passage: String(b.passage ?? ""), projectId: b.project ?? null,
+              reviewState: "reviewed", saidOn: b.saidOn, sourceKind: String(b.sourceKind ?? "note"), sourceRef: String(b.sourceRef ?? "typed"),
+              speaker: b.speaker, text: String(b.text ?? ""), topic: b.topic,
+            });
+            return sendJson(res, 201, present(knowledge.getClaim(id) as knowledge.Claim));
+          }
+          const claimId = Number(seg[3]);
+          if (Number.isInteger(claimId) && seg.length >= 4) {
+            const claim = knowledge.getClaim(claimId);
+            if (!claim) return sendJson(res, 404, { error: "no such claim" });
+            if (m === "GET" && seg.length === 4) return sendJson(res, 200, { ...present(claim), chain: knowledge.chain(claimId), links: knowledge.linksOf(claimId) });
+            if (m === "POST" && seg[4] === "supersede") {
+              const b = await readBody(req);
+              knowledge.supersede(claimId, Number(b.by));
+              return sendJson(res, 200, present(knowledge.getClaim(claimId) as knowledge.Claim));
+            }
+            if (m === "PATCH" && seg.length === 4) {
+              const b = await readBody(req);
+              if (b.review === "accept" || b.review === "reject") knowledge.reviewClaim(claimId, b.review, { due: b.due, owner: b.owner, text: b.text, topic: b.topic });
+              if (b.status) knowledge.setClaimStatus(claimId, b.status);
+              return sendJson(res, 200, present(knowledge.getClaim(claimId) as knowledge.Claim));
+            }
+          }
+        }
+        // POST /api/knowledge/meetings/:id: carry a meeting's extraction into the store (idempotent).
+        if (m === "POST" && seg[2] === "meetings" && seg.length === 4) return sendJson(res, 200, { claims: normalizeMeeting(Number(seg[3])) });
+      } catch (err) {
         return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
       }
     }

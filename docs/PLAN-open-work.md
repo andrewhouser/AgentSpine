@@ -382,15 +382,27 @@ baseline, and the meeting recall number is still unmeasured.
   was not on screen), not by eye. **Not built:** the iPhone share sheet and dictated notes; adopting the existing Milliman
   knowledge-folder loader as one source of the Inbox; people and tag suggestions beyond a project; "document date"
   inference from a PDF's own metadata.
-- **K4. Knowledge store (Code, needs a schema decision).** A layer separate from semantic memory, so retrieved
-  chunks are not promoted into trusted memories. Records for people and teams, projects, decisions with
-  rationale, commitments with owner and due date, risks and blockers, open questions, goals and measures, claims,
-  topics and relationships. Each carries a citation to the source and exact passage or meeting timestamp, when
-  the statement was made, the period it applies to, the speaker, the extraction method and review state, a
-  status of `active`, `resolved`, `retracted` or `superseded`, and links to related records. Flow: source
-  artifact, passages, extracted claims, reviewed current knowledge. Generalize the existing meeting extraction
-  to every source type and normalize accepted results into it. Do not call it a ledger: the Heads-up code already
-  uses that word for something else.
+- **K4. Knowledge store (backend built 2026-11-21; screens are K5).** `src/knowledge/`: a layer separate from
+  semantic memory. Records are `kn_claims` (kinds `decision`, `commitment`, `risk`, `question`, `goal`, `status`,
+  `claim`), `kn_entities` (people, teams, topics, with aliases that merge two spellings into one) and `kn_links`.
+  Every claim must carry its source and the exact passage (and a meeting timestamp where there is one) or it is
+  refused; it also records when it was said, the period it applies to, its speaker, owner, due date, how it was
+  found (`manual`, `meeting-extraction`, `model`, `inferred`), a review state (`proposed`, `reviewed`, `rejected`)
+  and a status (`active`, `resolved`, `retracted`, `superseded`). Nothing is trusted until a person reviews it;
+  only a person marks supersession (`supersede`), which keeps the trail (`chain`) and makes "as of a date"
+  queries answer from what was current then. `findConflicts` reports reviewed, active claims that say different
+  things about one topic, and `evidenceLevel` labels a claim reviewed, machine-extracted, inferred, conflicting,
+  superseded or retracted (section 9, S7). Meeting decisions and work items are NORMALIZED into claims (a false
+  positive is not carried over, a filed work item is already reviewed), not extracted twice; other sources go
+  through a local, `private`-pinned model whose every claim must quote the source word for word, and a quote that
+  is not in the text is dropped, so a small model cannot invent a decision and cite it. Deleting a meeting or an
+  inbox item removes the claims cited to it and the audit row says how many. API: `GET/POST /api/knowledge/claims`,
+  `GET/PATCH .../claims/:id` (review, correct, resolve, retract), `POST .../claims/:id/supersede`,
+  `GET /api/knowledge/conflicts`, `/entities`, `/summary`, `POST /api/inbox/:id/extract`, and
+  `POST /api/knowledge/meetings/:id`. Suite: `test/knowledge-store.test.mjs`. **Not built:** the review and
+  close-out screens (K5), model extraction on ingest by default (it runs on request, to spare the model host),
+  records for goals and measures beyond the `goal` kind, topic entities in use, relationships between people and
+  teams, and the "evidence level" in retrieval results (K2 will carry it once there is something reviewed to rank).
 - **K5. Post-meeting close-out (Code, web, iPhone and Mac).** Expand the review screen: confirm participants and
   speaker names, assign projects or topics, review decisions, commitments with owners and dates, risks and open
   questions, mark statements that supersede earlier ones, accept or reject suggested links, and preview how
@@ -639,7 +651,7 @@ tool calls as well as final prose, since a fluent correct answer can hide an inc
 
 ### Sequence and decisions
 
-Build order: F1 to F7, S1 and S2 are done; S3 to S6 and S8 are built; S7 waits for K4; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
+Build order: F1 to F7, S1 and S2 are done; S3 to S6 and S8 are built; S7's data model is in K4, and its answer contract waits for K6; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
 minimum: they make every later feature easier to explain without accumulating prompt folklore.
 
 Open decisions for you:

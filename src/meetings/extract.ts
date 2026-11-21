@@ -39,6 +39,7 @@
  * words, recorded in a room they were in; the decision not to send it anywhere is not one
  * that should depend on a config file being right.
  */
+import { normalizeMeeting } from "../knowledge/extract.ts";
 import {
   MEETING_EXTRACT_BASE_URL,
   MEETING_EXTRACT_MAX_ITEMS,
@@ -580,5 +581,6 @@ export const fileQueuedItems = (meetingId: number, projectId: number): number =>
     store.setWorkItemVerdict(w.id, "filed", `added to the project's tasks (#${taskId})`);
     moved++;
   }
+  if (moved) normalizeMeeting(meetingId);
   return moved;
 };

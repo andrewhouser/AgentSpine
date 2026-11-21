@@ -46,6 +46,8 @@ import {
 } from "../config.ts";
 import { getEmbedder, toBlob } from "../memory/rag.ts";
 import { getConfirmation, logDataEvent, setConfirmation } from "../memory/store.ts";
+import { normalizeMeeting } from "../knowledge/extract.ts";
+import { deleteClaimsFromSource } from "../knowledge/store.ts";
 import { chunkText } from "../projects/ingest.ts";
 import * as projects from "../projects/store.ts";
 import { checkAudioPolicy, checkRemoteSource, Listener, writeWav } from "../senses/listen.ts";
@@ -623,6 +625,8 @@ export const runExtraction = async (meetingId: number): Promise<void> => {
       ? `${result.decisions} decisions, ${result.queued} work items for review, ${result.rejected} rejected`
       : (store.getExtraction(meetingId)?.note ?? "nothing to extract");
     emit({ kind: "extraction", meetingId, note: done });
+    // What the extraction found becomes cited, reviewable claims in the knowledge store (K4).
+    normalizeMeeting(meetingId);
     // A meeting filed "summary only" has nothing in the project until its extraction exists.
     const filed = store.getMeeting(meetingId);
     if (filed?.project_id != null && filed.keep_transcript === 0) await indexIntoProject(meetingId, filed.project_id);
@@ -750,8 +754,10 @@ export const deleteMeeting = (meetingId: number): DeleteResult => {
     }
   }
   deleteAudio(meetingId);
+  // Claims cited to this meeting go with it: a citation to a deleted source would point at nothing.
+  const claims = deleteClaimsFromSource("meeting", `meeting:${meetingId}`);
   store.deleteMeeting(meetingId);
-  logDataEvent("meeting_deleted", `meeting #${meetingId}`, "transcript, extraction, chat, audio and any project copy removed");
+  logDataEvent("meeting_deleted", `meeting #${meetingId}`, `transcript, extraction, chat, audio and any project copy removed${claims ? `; ${claims} knowledge claim(s) cited to it removed` : ""}`);
   return { ok: true, rejectedItems };
 };
 
