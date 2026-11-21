@@ -16,7 +16,7 @@ import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
 import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts";
-import { harnessContract, pinNotice, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
+import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
 import { frictionDocs } from "./learn/friction.ts";
@@ -766,6 +766,7 @@ const runAgentLoop = async (
         role: "user",
         content:
           `tool result [${result.status}]:\n${result.output}` +
+          renderResultEnvelope(describeResult(call.tool, result.status, result.output, result.confirmationId)) +
           pinMessage +
           // One warning first, on the second identical call, so a model that can take the
           // hint gets to finish properly rather than being cut off.

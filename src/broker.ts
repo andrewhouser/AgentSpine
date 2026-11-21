@@ -210,6 +210,8 @@ export const executeCall = async (
             `Continue with other work; do not claim this action is done.`,
     );
 
+    result.confirmationId = cid;
+
     // A separate event from the tool_result above, because it renders as a different
     // thing: not a record of what the agent tried, but a question waiting on you. This is
     // what puts an Approve/Reject card inline in the thread instead of behind a tab.

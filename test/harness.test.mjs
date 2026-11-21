@@ -17,13 +17,16 @@ process.env.SPINE_DB_PATH = path.join(root, "t.db");
 process.env.EMBEDDINGS_URL = "";
 
 const bodies = [];
+/** Replies to give, in order, before falling back to a plain final answer. */
+const script = [];
 const model = http.createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
     bodies.push(body);
+    const content = script.shift() ?? '{"action":"final","summary":"done"}';
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: '{"action":"final","summary":"done"}', role: "assistant" } }], usage: { total_tokens: 1 } }));
+    res.end(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content, role: "assistant" } }], usage: { total_tokens: 1 } }));
   });
 });
 await new Promise((r) => model.listen(0, "127.0.0.1", r));
@@ -226,6 +229,42 @@ console.log("\nS4. harness_status");
   releaseRun(700);
   h.releaseHarness(700);
   h.releaseHarness(701);
+}
+
+console.log("\nS5. WHAT A TOOL RESULT MEANS");
+{
+  const d = h.describeResult;
+  check("executed read: observed", [d("web_search", "executed", "x").effect, d("web_search", "executed", "x").nextStep], ["observed", "use what it returned"]);
+  check("executed write: applied", d("write_file", "executed", "saved").effect, "applied");
+  const q = d("schedule_create", "queued", "QUEUED", 42);
+  check("queued: no effect, carries the confirmation id, says approval is pending", [q.effect, q.confirmationId, /approval is pending/.test(q.nextStep), q.retryable], ["none", 42, true, false]);
+  check("dry-run: no effect, not done", [d("x", "dry-run", "").effect, /do not claim it is done/.test(d("x", "dry-run", "").nextStep)], ["none", true]);
+  check("denied: no effect, do not repeat", [d("x", "denied", "").effect, d("x", "denied", "").retryable, /do not repeat/.test(d("x", "denied", "").nextStep)], ["none", false, true]);
+  check("an error is unknown, and a timeout may be retried", [d("x", "error", "bad").effect, d("x", "error", "bad").retryable, d("x", "error", "request timed out").retryable], ["unknown", false, true]);
+  check("only a successful run is ever `applied`", ["queued", "dry-run", "denied", "error"].some((st) => d("write_file", st, "").effect === "applied"), false);
+
+  const { registry } = await import("../src/tools/index.ts");
+  const missing = [...h.READ_ONLY_TOOLS].filter((n) => !registry[n]);
+  check("every name in the read-only set is a real tool", missing, []);
+
+  // End to end: the model is sent the envelope beside the prose.
+  registry.env_probe = { argsSchema: "{}", checkPolicy: () => ({ allowed: true, reason: "test" }), classify: () => ({ reversibility: "irreversible", summary: "probe the thing", target: "probe" }), description: "test only", name: "env_probe", run: async () => "probed" };
+  const policy = loadPolicy();
+  const go = async (call) => {
+    bodies.length = 0;
+    script.push(JSON.stringify({ action: "tool", args: call.args ?? {}, tool: call.tool }));
+    const runId = store.startRun({});
+    store.beginRun(runId);
+    await runAgent("do it", policy, runId, { budgetRunId: runId, conversational: true, tier: "standard" });
+    return JSON.parse(bodies[1]).messages.map((m) => m.content).join("\n");
+  };
+  const readSent = await go({ args: { key: "watch:x" }, tool: "state_get" });
+  check("a read arrives marked observed", /\[result \{[^}]*"effect":"observed"/.test(readSent), true);
+  const queuedSent = await go({ tool: "env_probe" });
+  check("a queued action arrives with effect none and its confirmation id", /"status":"queued"[^}]*"effect":"none"/.test(queuedSent) || /"effect":"none"[^}]*"confirmationId":\d+/.test(queuedSent), true);
+  check("and the prose still says it has not run", queuedSent.includes("It has NOT run"), true);
+  const deniedSent = await go({ tool: "no_such_tool_at_all" });
+  check("a call to an unavailable tool is not retryable", deniedSent.includes("is not available to you"), true);
 }
 
 model.close();

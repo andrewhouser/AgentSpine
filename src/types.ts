@@ -340,6 +340,8 @@ export interface ToolCall {
 export type BrokerStatus = "executed" | "queued" | "denied" | "error" | "dry-run";
 
 export interface BrokerResult {
+  /** The confirmation id, when the call was queued for approval. */
+  confirmationId?: number;
   status: BrokerStatus;
   /** What the agent sees as the tool's output. */
   output: string;

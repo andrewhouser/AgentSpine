@@ -9,7 +9,7 @@ this file in the same commit. When you start something new, add it here rather t
 management knowledge system, which is the main direction: the highest return is making AgentSpine very good at
 remembering, connecting, citing and updating workplace knowledge. Live Activities, richer travel integrations,
 buying or booking actions and most new proactive behaviour are deprioritized until section 8 has a reliable
-foundation (they are marked in section 3). Section 9 (harness awareness, added 2026-11-21) is being built in order, S1 and S2 first (done).
+foundation (they are marked in section 3). Section 9 (harness awareness, added 2026-11-21, its three open questions settled by the proposed defaults) is being built in order, S1 and S2 first (done).
 Sections 1 to 7 are the rest, mostly verification that needs you.
 
 Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8 and 9 are new,
@@ -56,11 +56,11 @@ watcher keys so no watcher reports a spurious first observation. Suite: `test/st
 
 Nothing below has run against real systems yet. F3 and F4 from section 0 are fixed, so steps 3 and 5 no longer wait on them.
 
-1. Run `update.sh` (pulls, installs, builds, restarts). This deploys the outbox in log-only mode and the Gmail
+1. DONE (you ran it on the Mini): run `update.sh` (pulls, installs, builds, restarts). This deploys the outbox in log-only mode and the Gmail
    and Calendar tools.
-2. Run `npm run auth -- write` and approve in the browser. This creates the write token, which does not exist
+2. DONE (you ran it): run `npm run auth -- write` and approve in the browser. This creates the write token, which does not exist
    yet.
-3. Run `npm run watcher add inbox-cleanup`, run it once by hand, and **read its summary before trusting it**. It
+3. ADDED (you ran `npm run watcher add inbox-cleanup`); still to do: run it once by hand, and **read its summary before trusting it**. It
    runs every 8 hours after that. Protections are code: inbox mail only, never mail from anyone you have
    emailed, never starred or sent mail, 60 changes per run. Trash and spam are irreversible-tier.
    `policy.json` `google.write.trashOverrideSenders` holds `afs.ameriprise.com`.
@@ -385,8 +385,9 @@ baseline, and the meeting recall number is still unmeasured.
   citation showing the evidence has aged out. K0's interim choice for F6 is replaced by this.
 - **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
 
-Open decisions for you: OCR approach (K3); how backups are protected (K0); the schema for supersession and who
-marks it (K4, proposed: you, in the close-out). Settled 2026-11-21: a project is private by default (F7a), and
+Settled 2026-11-21: OCR is a small macOS Vision helper (K3, chosen for speed; no new dependency); backups rely on
+FileVault, with nothing built and a line written down (K0); supersession is marked by you in the close-out (K4).
+Still open: only the schema detail for supersession, decided when K4 is built. Also settled: a project is private by default (F7a), and
 filing a meeting asks whether to keep the full transcript (F6).
 
 ---
@@ -522,7 +523,9 @@ runtime envelope already supplies the initial facts.
 state; a test proves a restricted subagent cannot discover a hidden tool through this endpoint; output is safe to
 show in the trace.
 
-### S5. Standard tool-result semantics (Code, incremental)
+### S5. Standard tool-result semantics (built 2026-11-21)
+
+**Built:** `describeResult` in `src/harness.ts` gives every model-facing tool result one extra line, `[result {tool, status, effect, retryable, nextStep, confirmationId?}]`, beside the unchanged prose, so cards on web, Mac and iPhone are untouched. `effect` is `none` for denied, queued and dry-run, `unknown` for an error, `applied` only after a successful write and `observed` for a successful read (a named set, `READ_ONLY_TOOLS`, with a test that every name is a real tool). The broker now returns the confirmation id of a queued call. Not done: giving the `executing` approval state its own model-facing meaning (it never reaches a run today; approval results return as a later turn). Tests in `test/harness.test.mjs`. The original design follows.
 
 The broker already returns `executed`, `queued`, `denied`, `dry-run` and `error`, but the next-step meaning is
 embedded in differing prose. Add a structured envelope for model-facing results while preserving human-readable
@@ -606,7 +609,7 @@ tool calls as well as final prose, since a fluent correct answer can hide an inc
 
 ### Sequence and decisions
 
-Build order: F1 to F7, S1 and S2 are done; S3 and S4 are built; next S5; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
+Build order: F1 to F7, S1 and S2 are done; S3 to S5 are built; next S6; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
 minimum: they make every later feature easier to explain without accumulating prompt folklore.
 
 Open decisions for you:

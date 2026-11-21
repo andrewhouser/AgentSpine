@@ -289,3 +289,74 @@ export const renderEnvelope = (ctx: HarnessContext, pinned = false): string => {
 /** What a run is told the moment it first reads private material. */
 export const pinNotice = (): string =>
   "Harness notice: this run now holds private material, so the rest of it, and any helper it starts, runs on the local model only.";
+
+// --- S5: what a tool result MEANS, owned by code ---
+
+export type ResultEffect = "applied" | "none" | "observed" | "unknown";
+
+export interface ResultEnvelope {
+  confirmationId?: number;
+  effect: ResultEffect;
+  nextStep: string;
+  retryable: boolean;
+  status: string;
+  tool: string;
+}
+
+/**
+ * Tools that only look. An executed call to one of these is `observed`, not `applied`: it did not
+ * change the world, and a model should not narrate it as if it had. A name set rather than a flag on
+ * every tool, because the set is small and a test checks each name still exists.
+ */
+export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  "calendar_find", "calendar_upcoming", "client_list", "task_list", "time_report", "digest", "conversation_detail", "find_past_output", "gmail_search",
+  "harness_status", "headsup_status", "list_dir", "look_at_file", "look_at_image", "meeting_list", "memory_recall",
+  "read_file", "read_more", "recall_output", "schedule_list", "source_read", "sources_list", "state_get", "weather",
+  "web_read", "web_search",
+]);
+
+const TRANSIENT = /timed? ?out|timeout|econn|temporar|rate.?limit|try again|\b50[234]\b|unavailable/i;
+
+/**
+ * The meaning of one broker outcome. `effect` says what happened to the world, which only code
+ * knows: nothing for a refusal, a queued action or a dry run; `applied` only after a successful
+ * run; `observed` for a read. The model-facing prose stays as it was, and this rides beside it.
+ */
+export const describeResult = (tool: string, status: string, output: string, confirmationId?: number): ResultEnvelope => {
+  const base = { status, tool };
+  switch (status) {
+    case "executed": {
+      const read = READ_ONLY_TOOLS.has(tool);
+      return {
+        ...base,
+        effect: read ? "observed" : "applied",
+        nextStep: read ? "use what it returned" : "the change is made; report it exactly as it happened",
+        retryable: false,
+      };
+    }
+    case "queued":
+      return {
+        ...base,
+        ...(confirmationId != null ? { confirmationId } : {}),
+        effect: "none",
+        nextStep: "finish independent work and state that approval is pending; do not say it happened",
+        retryable: false,
+      };
+    case "dry-run":
+      return { ...base, effect: "none", nextStep: "nothing changed; keep planning, but do not claim it is done", retryable: false };
+    case "denied":
+      return { ...base, effect: "none", nextStep: "do not repeat this call; use another way or say it is not permitted here", retryable: false };
+    default: {
+      const retryable = TRANSIENT.test(output);
+      return {
+        ...base,
+        effect: "unknown",
+        nextStep: retryable ? "a retry may help; try once more, then say it failed" : "do not repeat the same call; change the arguments or say it failed",
+        retryable,
+      };
+    }
+  }
+};
+
+/** One line appended to the model-facing result, so the meaning does not depend on the prose. */
+export const renderResultEnvelope = (env: ResultEnvelope): string => `\n[result ${JSON.stringify(env)}]`;
