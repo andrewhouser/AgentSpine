@@ -17,6 +17,7 @@
  *
  * `vision` is the exception, and `fallbacksFor` below is where it is made.
  */
+import { CloudCapError, guardCloudCall } from "./cloud-cap.ts";
 import { LLM_RETRIES, LLM_RETRY_BASE_MS } from "./config.ts";
 import { chatReply, clientFor, LLMError } from "./llm.ts";
 import type { ChatOpts, Msg } from "./llm.ts";
@@ -61,6 +62,11 @@ export interface RouteResult {
 }
 
 const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promise<RouteResult> => {
+  // The cloud token cap (src/cloud-cap.ts). Here rather than in route() because this is the one
+  // place every cloud request passes through, fallback legs included, so a cap cannot be
+  // skipped by a call that reached `deep` as somebody's second choice. Throws before anything
+  // is sent; local tiers never reach it.
+  if (config.tier === "deep") guardCloudCall(opts.runId);
   // `tier` is stamped here rather than by the caller because this is the first point that
   // knows which tier is actually being asked. On a fallback the caller's answer is stale,
   // and a timing row blaming `fast` for a call that `standard` served would make the one
@@ -151,6 +157,11 @@ export const route = async (messages: Msg[], opts: RouteOpts = {}): Promise<Rout
   try {
     return await sendWithRetry(chosen, messages, chatOpts);
   } catch (err) {
+    // A cloud cap is a decision, not an outage, so it is not routed around. If the cloud was
+    // the first choice the person (or the schedule's owner) is told and decides; quietly
+    // answering from a local tier would run an unattended loop on a model nobody picked for it.
+    // Reached as a fallback leg below, it is only one more tier that could not answer.
+    if (err instanceof CloudCapError) throw err;
     // The chosen tier could not answer — down, or unable to finish inside its window. Try
     // standard, then — only if this isn't private — deep. Each fallback tier gets its own retry budget for the same reason: the
     // fallback is worth nothing if a single blip on it fails the run too.

@@ -192,10 +192,10 @@ HERE free tier, a static-speed provider, or flights only; whether to want G at a
 
 ## 4. Security hardening and learning (`docs/archive/PLAN-nod-learnings.md`, from n8n's Nod)
 
-N5, N1 and the offline half of N2 are built (2026-11-21). N3, N4 and the live half of N2 are not (checked
-2026-11-21: no cloud token cap, no styles table, no `eval:injection`). The write token raised the value of N2,
+N5, N1, N3 and the offline half of N2 are built (2026-11-21). N4 and the live half of N2 are not (checked
+2026-11-21: no styles table, no `eval:injection`). The write token raised the value of N2,
 since a hostile email is now worth more to an attacker.
-**Order: N3, N4; the live half of N2 whenever the model host is free.** The offline half is done, so the
+**Order: N4; the live half of N2 whenever the model host is free.** The offline half is done, so the
 inbox cleanup can run unattended as far as code guards go; the live half is what measures the model.
 
 - **N5 Architecture test. Built 2026-11-21: `test/architecture.test.mjs`.** Reads the source with the
@@ -251,11 +251,20 @@ inbox cleanup can run unattended as far as code guards go; the live half is what
   with no single run (a conversation summary, a dismissal, a pattern of silent rejections) record an origin and
   no run. `LEARNING.md` has a paragraph. Not done: a run id on friction rows (the broker's error path has one,
   `recordFriction` does not take it), and nothing uses `origin` to change recall or pruning, by design.
-- **N3 Cloud token cap (lower priority).** Cap tokens, not dollars: `CLOUD_TOKENS_PER_DAY`,
-  `CLOUD_TOKENS_PER_MONTH`, `CLOUD_TOKENS_PER_RUN`, counted from `llm_calls`, enforced in the router before
-  the call, cloud calls only. Chat gets an error offering to continue locally; unattended runs stop, log, and
-  push once through the outbox. Digest line. Refuse to start with `AUDIT_RETENTION_DAYS` under 31 when a
-  monthly cap is set. Mail and study are local-only, so the cleanup adds no cloud tokens.
+- **N3 Cloud token cap. Built 2026-11-21.** `CLOUD_TOKENS_PER_DAY`, `_PER_MONTH` and `_PER_RUN`, counted from
+  `llm_calls` rows with `tier = 'deep'`, checked in `send()` in `src/router.ts` before every cloud request
+  (`src/cloud-cap.ts`). A cap breach is not routed around: if the cloud was the first choice the call fails with
+  a message that names the cap and the way out, and as someone's fallback leg it is one more tier that could not
+  answer. Each breach is a row in `cloud_cap_events` (a table of its own, because `actions` feeds the denial and
+  error learners); the first one per cap and period pushes for a run nobody is reading (not `chat`, `approval`
+  or `do`), through `notify` with source `run`, and the runner skips its own failure push for a cap stop.
+  The server refuses to boot with a cap and `LLM_TIMING=false`, a typo in a value, or a monthly cap with
+  `AUDIT_RETENTION_DAYS` or `RUN_RETENTION_DAYS` of 1 to 30. `npm run digest` has a line. Tests:
+  `test/cloud-cap.test.mjs`, including an end-to-end run through `route()` against a stand-in cloud.
+  Known limits, all in the README: one request can overshoot by its own size, a call that died before the
+  server answered is not counted, and deleting a conversation lowers the count. Not done: `.env.example` has no
+  entry for the three settings (the sandbox blocks edits to it, so add them by hand), and the cap is not shown
+  in the web, Mac or iPhone Settings. The notification is not yet a "weekly review" item (outbox Phase 3).
 - **N4 Writing styles for drafts (defer).** Named styles, several at once, built from Sent mail via the
   unchanged read token. Largest item and independent of everything above. The full design is in the archived
   plan.
@@ -291,9 +300,6 @@ These were open items inside docs that otherwise describe built things, so they 
 - **Study.** `STUDY.md` lists heartbeat-scheduled study sessions as not built, and said to wait until the
   Study screen existed. It does now, so this is buildable if wanted. Practice-app generation stays off the
   list (the Study screen covers it).
-- **Model host.** `CLAUDE.md` says the model host is `192.168.0.145`; the code, `MODELS.md` and `SPEC.md` say
-  `.150`, static since 2026-09-08 (it went `.145` to `.134` to `.150`). `CLAUDE.md` was left as is because
-  only you know which is true today. Fix whichever is wrong.
 
 ---
 
@@ -344,7 +350,7 @@ the overview page, the profile interview, the repo `CLAUDE.md`, the private plug
   session after you have done the job by hand twice.
 - **B4 Stale auto-mode environment, on each Mac.** `~/.claude/settings.json` `autoMode.environment` may still
   call CueForge the trusted repo. It should list AgentSpine and CueForge as trusted, mark
-  `~/Developer/Milliman` confidential (never to a public paste), and name the model host `192.168.0.145` as
+  `~/Developer/Milliman` confidential (never to a public paste), and name the model host `192.168.0.150` as
   trusted internal. The Claude sandbox cannot edit settings.json, so this is yours. Unverified.
 - **B6 "Claude needs you" alerts.** Do not install claudespeak (unvetted code that sends session text to a
   cloud TTS). On the MacBook a `Notification`/`Stop` hook can speak through local Kokoro; on the Mini the

@@ -17,9 +17,11 @@ import { promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify } from "./notify.ts";
 import { tallyBySource } from "./outbox.ts";
 import { headsupSection } from "./headsup/telemetry.ts";
-import { OUTBOX_ENFORCE } from "./config.ts";
+import { anyCapSet, CAPS, cloudCapLine } from "./cloud-cap.ts";
+import { CLOUD_ENABLED, OUTBOX_ENFORCE } from "./config.ts";
 
 const sinceIso = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
+const daysAgoIso = (days: number): string => sinceIso(days * 24);
 
 const plural = (n: number, one: string, many = one + "s"): string => `${n} ${n === 1 ? one : many}`;
 
@@ -243,6 +245,12 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
       out.push(`    Would auto-run these and nothing else: #${p.wouldHaveAutoRun.join(", #")}.`);
       out.push(`    ${proposalDiff(p)}`);
     }
+  }
+
+  // --- cloud token cap (Nod N3) ---
+  // Silent on a machine that never touches the cloud: a line that always says "0" is noise.
+  if (CLOUD_ENABLED || anyCapSet(CAPS) || store.cloudTokensSince(daysAgoIso(31)) > 0) {
+    out.push(`\n${cloudCapLine()}`);
   }
 
   // --- heads-up (docs/archive/PLAN-heads-up-next.md F) ---

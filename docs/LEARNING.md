@@ -337,7 +337,7 @@ Stored as kind `recipe`, recalled by task similarity in `buildContext`, injected
 ```
 You have done something like this before. Your own notes on how:
   when: checking whether the LAN model host is healthy
-  1. web_read http://192.168.0.145:8080/v1/models
+  1. web_read http://192.168.0.150:8080/v1/models
   2. if it returns a model list, it is up; the tier is the endpoint, not the name
 ```
 

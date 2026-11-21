@@ -614,6 +614,19 @@ export const CONFIRM_SWEEP_MS = 5 * 60_000;
  */
 export const LLM_TIMING = (env.LLM_TIMING ?? "true") !== "false";
 
+/**
+ * Cloud token caps (Nod N3, docs/PLAN-open-work.md section 4). Tokens, not dollars: a price
+ * lives on someone else's page and changes, while a token count is measured on every call.
+ * Counted from `llm_calls`, enforced in the router before a `deep`-tier call, local calls
+ * never count. 0 or unset means unlimited, like the tool budgets. The raw strings are kept so
+ * `src/cloud-cap.ts` can refuse a typo ("1M", "-5") at boot instead of reading it as unlimited.
+ */
+export const CLOUD_TOKENS_RAW = {
+  day: env.CLOUD_TOKENS_PER_DAY,
+  month: env.CLOUD_TOKENS_PER_MONTH,
+  run: env.CLOUD_TOKENS_PER_RUN,
+} as const;
+
 // --- Meetings (live transcription) ---
 /**
  * Two Whisper models, two jobs, because one model cannot do both well.

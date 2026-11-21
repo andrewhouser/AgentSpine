@@ -1974,6 +1974,19 @@ npm run confirm reject 2 never commit to a renewal on my behalf, always ask me f
 
 - Cloud is **off** unless `OPENAI_API_KEY` is set. Route private context with
   `sensitivity:"private"` to guarantee it stays on the local model.
+- **Cloud token caps.** When the cloud is on, a stuck unattended loop is the one thing that costs
+  real money, so you can cap it in tokens (not dollars: a price changes, a token count is measured):
+  `CLOUD_TOKENS_PER_DAY`, `CLOUD_TOKENS_PER_MONTH` and `CLOUD_TOKENS_PER_RUN` (the local day and
+  month; 0 or unset means no cap). They count cloud calls only, from the `llm_calls` rows
+  `npm run timing` reads, and are checked in the router before every cloud request, so a call over
+  the cap is refused before anything is sent. A chat turn gets an error that names the cap and says
+  how to continue on a local tier; a schedule or heartbeat stops, and you get one push per cap per
+  period, not one per attempt. The check runs before the call and the count lands after it, so one
+  request can overshoot by its own size, and a call that died before the server answered is not
+  counted. `npm run digest` shows cloud tokens today and this month against the caps. The server
+  refuses to start with a cap set and `LLM_TIMING=false`, with a typo in a value, or, for a monthly
+  cap, with `AUDIT_RETENTION_DAYS` or `RUN_RETENTION_DAYS` between 1 and 30, because the rows the
+  count is made of would not exist. Deleting a conversation deletes its runs and so lowers the count.
 - The audit log in the `actions` table records every broker decision, kept for
   `RETENTION_DAYS` (default 90). Set `AUDIT_RETENTION_DAYS=0` to keep it indefinitely.
 - Move any credential files (e.g. `client_secret_*.json`) out of this directory; they are

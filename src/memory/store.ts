@@ -132,6 +132,19 @@ db.exec(`
     ok INTEGER NOT NULL DEFAULT 1,
     purpose TEXT
   );
+  -- One row per cloud-token-cap breach that was announced (src/cloud-cap.ts). A table of its own
+  -- rather than rows in \`actions\`: those feed the denial and error learners, and a cap hit is
+  -- neither a tool denial nor a tool error. \`period\` is the local day, month or run the cap
+  -- covers, so "push once" is a lookup on (cap, period) and survives a restart.
+  CREATE TABLE IF NOT EXISTS cloud_cap_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    cap TEXT NOT NULL,
+    period TEXT NOT NULL,
+    run_id INTEGER,
+    used INTEGER NOT NULL,
+    cap_limit INTEGER NOT NULL
+  );
 `);
 
 // Best-effort migrations for DBs created before these columns existed.
@@ -1209,6 +1222,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
     // separate knob would be a third retention setting to keep consistent for no gain.
     result.llmCalls = count("SELECT COUNT(*) AS n FROM llm_calls WHERE ts < ?", before);
     if (!opts.dryRun) db.prepare("DELETE FROM llm_calls WHERE ts < ?").run(before);
+    if (!opts.dryRun) db.prepare("DELETE FROM cloud_cap_events WHERE ts < ?").run(before);
   }
 
   if (opts.runDays > 0) {
@@ -1502,6 +1516,53 @@ export const llmCallsSince = (sinceIso: string): LlmCallRow[] =>
 
 export const llmCallsForRun = (runId: number): LlmCallRow[] =>
   db.prepare("SELECT * FROM llm_calls WHERE run_id = ? ORDER BY id").all(runId) as unknown as LlmCallRow[];
+
+/**
+ * Cloud tokens spent since `sinceIso`, prompt plus completion, from the same rows the timing
+ * report reads. Only the `deep` tier counts: it is the one that bills. A call that failed
+ * before the server answered has null token counts and adds nothing, which under-counts a
+ * request the provider may still have charged for. That is the price of counting from a
+ * measurement instead of keeping a second tally that could drift from it.
+ */
+export const cloudTokensSince = (sinceIso: string): number =>
+  (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0) AS n
+           FROM llm_calls WHERE tier = 'deep' AND ts >= ?`,
+      )
+      .get(sinceIso) as { n: number }
+  ).n;
+
+export const cloudTokensInRun = (runId: number): number =>
+  (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0) AS n
+           FROM llm_calls WHERE tier = 'deep' AND run_id = ?`,
+      )
+      .get(runId) as { n: number }
+  ).n;
+
+/**
+ * Record a cap breach, and say whether it is the first for this (cap, period). The caller
+ * pushes only on `true`, so a schedule that retries all night produces one notification.
+ */
+export const noteCloudCapBreach = (b: {
+  cap: string;
+  limit: number;
+  period: string;
+  runId: null | number;
+  used: number;
+}): boolean => {
+  const seen = db
+    .prepare("SELECT COUNT(*) AS n FROM cloud_cap_events WHERE cap = ? AND period = ?")
+    .get(b.cap, b.period) as { n: number };
+  db.prepare(
+    "INSERT INTO cloud_cap_events (ts, cap, period, run_id, used, cap_limit) VALUES (?,?,?,?,?,?)",
+  ).run(now(), b.cap, b.period, b.runId, b.used, b.limit);
+  return seen.n === 0;
+};
 
 export const rawDb = db;
 

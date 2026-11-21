@@ -46,7 +46,8 @@ stripping — no build step**; run `.ts` directly. Deps: `openai`, `playwright-c
 **Runtime**
 - Chat model: local **MLX-LM** server, OpenAI-spec, `http://192.168.0.150:8080/v1`
   (`LOCAL_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit-DWQ` since 2026-09-08; the host address is
-  static as of the same date, after two DHCP moves from `.145`). It is a *reasoning* model,
+  static as of the same date, after two DHCP moves from `.145`; the owner confirmed `.150`
+  on 2026-11-21 when `CLAUDE.md` still said `.145`). It is a *reasoning* model,
   so every local request carries `chat_template_kwargs.enable_thinking: false` — see
   `chat()` in src/llm.ts and MODELS.md.
 - Cloud fallback: OpenAI, used only when local fails or `prefer:"cloud"`; disabled unless

@@ -53,6 +53,7 @@ import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
 import { setFrame } from "./tools/subagent.ts";
 import { projectWriteDir, setWriteDefault, writeDefaultDir } from "./tools/write-file.ts";
+import { CloudCapError } from "./cloud-cap.ts";
 import { notify } from "./notify.ts";
 import * as store from "./memory/store.ts";
 import type { Policy } from "./types.ts";
@@ -580,7 +581,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // A run nobody was watching, or one whose caller explicitly asked to be told how it
       // went — "tell me when it finishes" has to include "tell me that it didn't", or the
       // silence after a failure reads exactly like a job still running.
-      if (NOTIFY_ON_FAILURE && (isUnattended(kind) || opts.notifyOnFinish)) {
+      // Except a cloud-cap stop: guardCloudCall already pushed once for that cap and period, and
+      // a schedule that retries every few minutes would otherwise push once per attempt.
+      if (NOTIFY_ON_FAILURE && (isUnattended(kind) || opts.notifyOnFinish) && !(err instanceof CloudCapError)) {
         void notify(`Run failed: ${task.slice(0, 60)}`, msg.slice(0, 500), {
           priority: 4,
           source: "run",

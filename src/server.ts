@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
+import { capsProblem } from "./cloud-cap.ts";
 import { loadPolicy } from "./config.ts";
 import { syncMcpTools } from "./mcp/register.ts";
 import { probeModelHost } from "./model-probe.ts";
@@ -1852,6 +1853,13 @@ if (!IS_LOCAL && !TOKEN) {
       "The API can run the agent, approve actions, and read your mail/calendar traces, and has no\n" +
       "other authentication. Set DASHBOARD_TOKEN in .env, or bind to 127.0.0.1 and use an SSH tunnel.",
   );
+  process.exit(1);
+}
+// A cloud token cap that would silently count nothing (LLM_TIMING off, retention under a month,
+// a typo read as unlimited) is worse than no cap, so refuse to start. See src/cloud-cap.ts.
+const capProblem = capsProblem();
+if (capProblem) {
+  console.error(`Refusing to start: ${capProblem}`);
   process.exit(1);
 }
 const interrupted = store.markInterruptedRuns();
