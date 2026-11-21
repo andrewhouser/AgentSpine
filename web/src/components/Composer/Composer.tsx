@@ -267,8 +267,8 @@ export const Composer = ({
             onChange={(e) => voice.setSource(e.target.value as "browser" | "server")}
             value={voice.source}
           >
-            <option value="browser">This browser</option>
-            <option value="server">Server mic</option>
+            <option value="browser">This browser (your machine)</option>
+            <option value="server">Server mic (machine running AgentSpine)</option>
           </select>
         )}
         {onTierChange && <TierPicker onChange={onTierChange} value={tier} />}

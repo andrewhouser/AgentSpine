@@ -63,8 +63,12 @@
 
   "mcp": {
     "//": "Remote MCP servers (Streamable HTTP) whose tools the agent may call; see docs/MCP.md. Off until enabled. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
-    "enabled": false,
-    "servers": {}
+    "enabled": true,
+    "servers": {
+      "archive": {
+        "url": "http://localhost:8081/mcp"
+      }
+    }
   },
 
   "weather": {
@@ -124,9 +128,10 @@
   },
 
   "audio": {
-    "//": "Microphone capture for meeting transcription. NOTE the inverted convention: devices is an allowlist and [] means NO device, not any device — an empty list is a safe default for reading web pages and an unsafe one for a microphone. List avfoundation input names exactly as `npm run listen devices` prints them. announce speaks a line out loud when capture starts, for a room where the people being recorded would not otherwise know; it is off unless set to exactly true, since the usual case is capturing your own meeting on your own Mac. macOS will also prompt for microphone permission the first time — a second enforcement layer the OS owns.",
+    "//": "Microphone capture for meeting transcription. NOTE the inverted convention: devices is an allowlist and [] means NO device, not any device — an empty list is a safe default for reading web pages and an unsafe one for a microphone. List avfoundation input names exactly as `npm run listen devices` prints them. announce speaks a line out loud when capture starts, for a room where the people being recorded would not otherwise know; it is off unless set to exactly true, since the usual case is capturing your own meeting on your own Mac. macOS will also prompt for microphone permission the first time — a second enforcement layer the OS owns. remoteSources names clients allowed to send their own captured audio (the Mac app), same inversion: absent or [] means none.",
     "enabled": true,
     "devices": ["MacBook Pro Microphone", "USB PnP Sound Device"],
-    "announce": false
+    "announce": false,
+    "remoteSources": ["mac", "iphone"]
   }
 }
