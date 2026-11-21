@@ -57,6 +57,8 @@
 				Views/FilesView.swift,
 				Views/HeadsupPrefsView.swift,
 				Views/HeadsupView.swift,
+				Views/InboxView.swift,
+				Views/KnowledgeView.swift,
 				Views/MeetingsView.swift,
 				Views/MemoryView.swift,
 				Views/ProjectsView.swift,
