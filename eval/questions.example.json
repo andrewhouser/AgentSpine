@@ -1,0 +1,37 @@
+{
+  "_readme": "A TEMPLATE with invented data. Copy it OUTSIDE the repository (for example ~/knowledge-eval/questions.json), replace every entry with a real question, and run: npm run eval:knowledge -- ~/knowledge-eval/questions.json. Do not commit real questions: they are workplace material. See docs/PLAN-open-work.md K1.",
+  "questions": [
+    {
+      "id": "decide-01",
+      "question": "What did we decide about the billing migration cutover date?",
+      "project": "Billing migration",
+      "expectSources": ["meeting:12", "cutover-plan.md"]
+    },
+    {
+      "id": "exact-01",
+      "question": "What is the status of PLAT-4421?",
+      "project": null,
+      "expectSources": ["PLAT-4421"]
+    },
+    {
+      "id": "person-01",
+      "question": "What has Priya raised about on-call load in the last three months?",
+      "project": null,
+      "since": "2026-08-21",
+      "expectSources": ["meeting:7", "meeting:19"]
+    },
+    {
+      "id": "changed-01",
+      "question": "When is the launch?",
+      "project": "Mobile launch",
+      "expectSources": ["meeting:31"],
+      "forbidSources": ["old-roadmap.md"]
+    },
+    {
+      "id": "none-01",
+      "question": "What was the outcome of the vendor security audit?",
+      "project": null,
+      "expectNone": true
+    }
+  ]
+}

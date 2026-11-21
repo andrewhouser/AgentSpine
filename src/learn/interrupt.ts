@@ -13,7 +13,8 @@
  * learnable, or the feature dies of irritation and gets switched off. Its caller is the weekly
  * review's *Skip this kind* (src/outbox-review.ts).
  */
-import { remember } from "./../memory/rag.ts";
+import { deleteMemory, remember } from "./../memory/rag.ts";
+import { rawDb } from "../memory/store.ts";
 import { PREFERENCE_KIND } from "../confirmations.ts";
 
 /**
@@ -23,12 +24,38 @@ import { PREFERENCE_KIND } from "../confirmations.ts";
  * dismissed; keep it stable across dismissals of the same kind so recall can group them.
  * Never throws.
  */
+/** The exact sentence a dismissal is stored as, so the same code can find it again to retire it. */
+const dismissalText = (t: string): string =>
+  `The user dismissed a proactive notification about "${t}". Do not interrupt them about this again unless it is materially more important.`;
+
+/**
+ * Take back a "Skip this kind": delete the dismissal memory for `topic`. Used when you later answer Useful about a
+ * message of that kind, which is you saying the kind is worth hearing about after all. Returns whether one was
+ * removed. Matches the exact stored sentence of an interrupt-origin preference, so it can never delete a memory
+ * you wrote yourself. Never throws.
+ */
+export const retireDismissal = (topic: string): boolean => {
+  try {
+    const t = String(topic ?? "").trim().slice(0, 200);
+    if (!t) return false;
+    const rows = rawDb
+      .prepare("SELECT id FROM memories WHERE kind = ? AND origin = 'interrupt' AND text = ?")
+      .all(PREFERENCE_KIND, dismissalText(t)) as { id: number }[];
+    let removed = false;
+    for (const r of rows) removed = deleteMemory(r.id) || removed;
+    return removed;
+  } catch (err) {
+    console.warn(`[interrupt] dismissal not retired: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+};
+
 export const recordDismissal = async (topic: string): Promise<boolean> => {
   try {
     const t = String(topic ?? "").trim().slice(0, 200);
     if (!t) return false;
     return await remember(
-      `The user dismissed a proactive notification about "${t}". Do not interrupt them about this again unless it is materially more important.`,
+      dismissalText(t),
       PREFERENCE_KIND,
       { origin: "interrupt" },
     );

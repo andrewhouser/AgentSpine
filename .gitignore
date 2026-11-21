@@ -24,6 +24,9 @@ drafts/
 attachments/
 # The Knowledge Inbox: private originals and the compiled OCR helper. Never committed.
 /inbox/
+# Real knowledge-evaluation questions are workplace material: only the invented example is tracked.
+/eval/*.json
+!/eval/questions.example.json
 # Generated images from the generate_image tool. Machine-generated output served at
 # /images/, regenerated on demand — not source, and potentially large.
 images/

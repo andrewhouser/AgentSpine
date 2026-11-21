@@ -93,9 +93,9 @@ check("nor a reminder's, nor a missing id", [await review.answerMessage(reminder
 check("nor a run you asked to be told about", await review.answerMessage(runAsked, "skip", SUNDAY_EVENING, spy), null);
 check("nothing was filed for those", dismissed.length, 0);
 const useful = await review.answerMessage(b1, "useful", SUNDAY_EVENING, spy);
-check("useful records the answer and files no memory", [useful, dismissed.length, rawDb.prepare("SELECT feedback FROM outbox WHERE id = ?").get(b1).feedback], [{ remembered: false, topic: "heads-up: birthday" }, 0, "useful"]);
+check("useful records the answer and files no memory", [useful, dismissed.length, rawDb.prepare("SELECT feedback FROM outbox WHERE id = ?").get(b1).feedback], [{ remembered: false, retired: false, topic: "heads-up: birthday" }, 0, "useful"]);
 const skip = await review.answerMessage(b2, "skip", SUNDAY_EVENING, spy);
-check("skip files a dismissal under the topic", [skip, dismissed], [{ remembered: true, topic: "heads-up: birthday" }, ["heads-up: birthday"]]);
+check("skip files a dismissal under the topic", [skip, dismissed], [{ remembered: true, retired: false, topic: "heads-up: birthday" }, ["heads-up: birthday"]]);
 await review.answerMessage(b2, "skip", SUNDAY_EVENING, spy);
 check("skipping the same message again files nothing more", dismissed.length, 1);
 check("the answer shows up in the review", review.reviewItems(SUNDAY_EVENING).find((i) => i.id === b2).feedback, "skip");
@@ -106,6 +106,20 @@ const mem = rawDb.prepare("SELECT kind, origin, text FROM memories WHERE text LI
 check("one preference memory, origin interrupt, naming the watcher", [real.remembered, mem?.kind, mem?.origin, mem?.text.includes("alerts from watchers and scheduled briefs: Weather watch")], [true, "preference", "interrupt", true]);
 await review.answerMessage(watcher, "skip", SUNDAY_EVENING);
 check("a repeat does not make a second one", rawDb.prepare("SELECT COUNT(*) AS n FROM memories WHERE text LIKE '%Weather watch%'").get().n, 1);
+
+console.log("\nUSEFUL TAKES BACK AN EARLIER SKIP");
+{
+  const before = rawDb.prepare("SELECT COUNT(*) AS n FROM memories WHERE text LIKE '%Weather watch%'").get().n;
+  const mine = await review.recordWish("weather watch things, a note I wrote myself about Weather watch");
+  const retiredRes = await review.answerMessage(watcher, "useful", SUNDAY_EVENING);
+  check("answering Useful about a skipped kind retires its dismissal memory", [before, retiredRes.retired, rawDb.prepare("SELECT COUNT(*) AS n FROM memories WHERE origin = 'interrupt' AND text LIKE '%Weather watch%'").get().n], [1, true, 0]);
+  check("it did not touch a memory the user wrote about the same words", mine === false || rawDb.prepare("SELECT COUNT(*) AS n FROM memories WHERE text LIKE '%I wrote myself%'").get().n === 1, true);
+  const again = await review.answerMessage(watcher, "useful", SUNDAY_EVENING);
+  check("a second Useful has nothing to retire", again.retired, false);
+  check("Useful on a kind that was never skipped retires nothing", (await review.answerMessage(study, "useful", SUNDAY_EVENING)).retired, false);
+  await review.answerMessage(watcher, "skip", SUNDAY_EVENING);
+  check("and the kind can be skipped again afterwards", rawDb.prepare("SELECT COUNT(*) AS n FROM memories WHERE origin = 'interrupt' AND text LIKE '%Weather watch%'").get().n, 1);
+}
 
 console.log("\nA WISH IS A PREFERENCE MEMORY");
 check("an empty wish is refused", [await review.recordWish(""), await review.recordWish("   "), await review.recordWish(undefined)], [false, false, false]);

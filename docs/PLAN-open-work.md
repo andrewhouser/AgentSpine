@@ -83,8 +83,10 @@ reports) is proven on a phone. What is left is verification and data.
 that yields exactly one `preference` memory which recall picks up the next day.
 - Code: a deep link from the Sunday push to the review screen. A tap only opens the app today, and the iOS
   `screen` handler knows `study` and `headsup` only.
-- Code or decision: a skipped kind is not undone by answering Useful later. The only way back is to forget the
-  note under Memory. Decide whether Useful should retire the note.
+- Decided and built 2026-11-21: answering Useful about a message of a kind you skipped retires that kind's
+  "Skip this kind" note (it deletes only the exact interrupt-origin dismissal memory, never one you wrote), and the
+  kind can be skipped again afterwards. Tested in `test/outbox-review.test.mjs`. The screens do not yet say so
+  next to the Useful button.
 - You: the push has never gone to a phone, and the three review screens (web `WeeklyReviewPanel`, iPhone and Mac
   `WeeklyReviewView`) have not been seen rendered.
 

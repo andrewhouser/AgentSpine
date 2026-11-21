@@ -16,7 +16,7 @@
  * name, a Heads-up kind) and never from a message title, which changes every time.
  */
 import { PREFERENCE_KIND } from "./confirmations.ts";
-import { recordDismissal } from "./learn/interrupt.ts";
+import { recordDismissal, retireDismissal } from "./learn/interrupt.ts";
 import { isQuietNow } from "./headsup/prefs.ts";
 import { rawDb } from "./memory/store.ts";
 import { remember } from "./memory/rag.ts";
@@ -128,6 +128,8 @@ export const buildReview = (now: Date = new Date(), opts: { markSeen?: boolean }
 export interface AnswerResult {
   /** Set when a "skip" filed a new preference memory. False when one like it already existed. */
   remembered: boolean;
+  /** Set when a "useful" retired an earlier "Skip this kind" for the same topic. */
+  retired: boolean;
   topic: string;
 }
 
@@ -135,7 +137,9 @@ export interface AnswerResult {
  * Record your answer to one message. Returns null for an id that is not a reviewable message, so the
  * route can say 404 and a forged id cannot touch an approval or a reminder.
  *
- * "useful" sets the answer and nothing else: it is a signal for the numbers, not a rule.
+ * "useful" sets the answer, and also retires an earlier "Skip this kind" for the same topic: you have said the kind is
+ * worth hearing about after all, and a skip that can only ever be undone by finding and forgetting a memory by hand is a
+ * trap (decided 2026-11-21). It deletes only that exact dismissal memory, never one you wrote.
  * "skip" also files a dismissal memory under the message's topic, which auto-recall reads next time.
  * `dismiss` is a seam for tests.
  */
@@ -144,6 +148,7 @@ export const answerMessage = async (
   answer: ReviewAnswer,
   now: Date = new Date(),
   dismiss: (topic: string) => Promise<boolean> = recordDismissal,
+  retire: (topic: string) => boolean = retireDismissal,
 ): Promise<AnswerResult | null> => {
   const sources = reviewedList();
   const row = rawDb
@@ -158,7 +163,8 @@ export const answerMessage = async (
   // A second "skip" on the same message does not file a second memory. `remember` would refuse a
   // near-duplicate anyway; not calling it saves an embedding.
   const remembered = answer === "skip" && row.feedback !== "skip" ? await dismiss(topic) : false;
-  return { remembered, topic };
+  const retired = answer === "useful" ? retire(topic) : false;
+  return { remembered, retired, topic };
 };
 
 /** The sentence a wish is stored as. Built by code around your words, so the memory is always phrased the same way. */
