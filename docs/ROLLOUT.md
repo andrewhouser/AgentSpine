@@ -127,11 +127,9 @@ Set the **hard rail first** — it needs no model call. In `policy.json`:
 (20 is what is set as of 2026-11-21: a backstop that catches a looping run, not a way to tune
 volume. The outbox, 4d below, is what governs how much a normal day sends.)
 
-> **The rest of 4b is inert today.** `JUDGE_INTERRUPTIONS_PROACTIVE` and the dismissal learning
-> path live in `src/learn/interrupt.ts`, but `notifyProactive` has no callers and
-> `recordDismissal` is only called by a test. Setting the flag changes nothing and dismissals do
-> not become memories. Leave it off until the weekly review (`docs/PLAN-open-work.md` section 2)
-> wires them in.
+> The soft model gate (`JUDGE_INTERRUPTIONS_PROACTIVE`) was removed 2026-11-21; it had no callers. If
+> your `.env` still sets it, delete the line. Dismissals are learned through the weekly review's
+> *Skip this kind* (`recordDismissal`), which needs nothing switched on.
 
 - [x] Hard `notify` per-day cap set in `policy.json` (20).
 - [ ] ~~Soft gate~~ and ~~dismissals becoming `preference` memories~~: not wired, skip.

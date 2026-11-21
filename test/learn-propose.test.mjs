@@ -18,7 +18,6 @@ const dbPath = path.join(os.tmpdir(), `agentspine-propose-${process.pid}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.EMBEDDINGS_URL = "";
 process.env.PROPOSE_MIN_RECURRENCE = "3";
-process.env.JUDGE_INTERRUPTIONS_PROACTIVE = "false"; // gate off → passthrough
 
 const store = await import("../src/memory/store.ts");
 const { rawDb } = store;

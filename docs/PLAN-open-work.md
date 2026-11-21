@@ -123,9 +123,8 @@ review push. It is never repeated for 90 days in any state; a reason-less reject
 thresholds against real answers (all guesses, set them from the first month of review data), and an
 approval actually switching a schedule off on the Mini.
 
-**Note on `src/learn/interrupt.ts`:** the Phase 4.5 interruption budget exists but is unwired
-(`notifyProactive` has no callers). Phase 3 gives `recordDismissal` its first caller; wire the rest or
-delete it.
+**Note on `src/learn/interrupt.ts`:** only `recordDismissal` is left, called by the weekly review's *Skip this
+kind*. The unused model gate (`notifyProactive`, `JUDGE_INTERRUPTIONS_PROACTIVE`) was deleted 2026-11-21.
 
 ---
 
@@ -338,8 +337,6 @@ These were open items inside docs that otherwise describe built things, so they 
   `npm run propose`) or `runRewriter` (`npm run rewrite`) except their own command lines, so they run only
   when you run them. Decide whether a weekly trigger is wanted before turning on anything that depends on
   them (ROLLOUT Steps 3 and 5).
-- **Interruption budget wiring.** `notifyProactive` and `recordDismissal` in `src/learn/interrupt.ts` are
-  unwired (see section 2). Either the weekly review wires them or they are deleted.
 - **Meetings, `SPEC.md` section 15 note of 2026-07-30.** Items it listed as still to do, not rechecked: index
   something into a project so the sidecar and coach have a corpus; one dashboard Record, Stop, extract run
   against live speech; re-run the Phase 2 numbers against a real multi-person meeting (neither sample so far

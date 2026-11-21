@@ -307,13 +307,6 @@ export const PROPOSE_MIN_RECURRENCE = Number(env.PROPOSE_MIN_RECURRENCE ?? "3");
 // earlier. 0 disables the horizon helper.
 export const HORIZON_HOURS = Number(env.HORIZON_HOURS ?? "2");
 
-// The interruption budget's soft gate (Phase 4.5). When true, a notify that originated from
-// a PROACTIVE job (a watcher, the horizon, a proposer) must clear a judge() "is this worth
-// interrupting for?" check before it pushes. The hard rail is policy.budgets.perDay.tools.notify;
-// this is the judgment layer on top of it. Off by default — it costs a model round-trip per
-// proactive push, and only earns that once the agent runs unattended enough to matter.
-export const JUDGE_INTERRUPTIONS_PROACTIVE = (env.JUDGE_INTERRUPTIONS_PROACTIVE ?? "false") === "true";
-
 // Retire goals.md: when true, the heartbeat stops running a static goal and instead runs the
 // watcher shape against your own horizon — calendar, pending confirmations, stale watchers,
 // open proposals — acting only on a difference and staying silent otherwise (Phase 4.6). The

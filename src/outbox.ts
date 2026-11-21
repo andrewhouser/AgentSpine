@@ -5,8 +5,8 @@
  *
  * Why it exists: quiet hours, a daily cap and "ignored" tracking lived only inside Heads-up,
  * while watchers, the study sweep and scheduled briefs called `notify` directly and could
- * wake you at 3am. The interruption budget in learn/interrupt.ts was written but nothing
- * called it. This is the single choke point, and it logs first.
+ * wake you at 3am. The model-judged interruption gate that
+ * once lived in learn/interrupt.ts was never called (removed 2026-11-21). This is the single choke point, and it logs first.
  *
  * Phase 0 (OUTBOX_ENFORCE off, the default) changes nothing about delivery. It records every
  * message and, in `would_be`, what enforcement WOULD have done, so a week of real traffic can

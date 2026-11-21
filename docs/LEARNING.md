@@ -387,9 +387,9 @@ the sampling decision has to look at the run's audit rows first. When in doubt, 
 > - **4.4 Act quietly** — proposals land in the confirmation queue, not a push; the horizon
 >   task is quiet-by-default and only interrupts for something time-sensitive.
 > - **4.5 The interruption budget** — the hard rail is `policy.budgets.perDay.tools.notify`
->   (already enforced by the broker); the soft gate and learning path are `src/learn/interrupt.ts`
->   — `notifyProactive()` runs a `judge()` check when `JUDGE_INTERRUPTIONS_PROACTIVE` is on, and
->   `recordDismissal()` turns a dismissed push into a `preference`, same as a rejected proposal.
+>   (already enforced by the broker); the learning path is `src/learn/interrupt.ts`:
+>   `recordDismissal()` turns a dismissed push into a `preference`, same as a rejected proposal. The
+>   soft `judge()` gate (`notifyProactive`) was removed 2026-11-21; the outbox does its job.
 > - **4.6 Retire goals.md** — `HEARTBEAT_HORIZON` switches the heartbeat from reading a static
 >   goal to running the watcher shape against your own near future. Off by default.
 >
@@ -451,21 +451,17 @@ ask the model to be.
 
 - **A hard rail:** `policy.budgets.perDay.tools.notify`. The mechanism is already in
   `overBudget` in `broker.ts` and needs nothing but a number in `policy.json`. Set it low.
-- **A soft gate:** `judge()` on "is this worth interrupting for?" — the exact example its
-  own doc comment cites — before any `notify` that originated from a proactive job rather
-  than from something you asked for.
+- **A soft gate (dropped):** `judge()` on "is this worth interrupting for?" before any proactive `notify`.
+  Built as `notifyProactive`, never called, and removed 2026-11-21: the outbox's quiet hours, daily cap,
+  de-duplication and skip-rate proposals do it with numbers in code, with no model call per push.
 - **A learning path:** a dismissed notification must feed `preference` memory, same as a
   rejected confirmation. "Don't tell me about this again" has to be learnable, or the
   feature dies of irritation inside a week and you turn the whole thing off.
 
-> **Status check, 2026-11-21: only the hard rail is live.** `src/learn/interrupt.ts` has the soft
-> gate (`JUDGE_INTERRUPTIONS_PROACTIVE`) and the learning path (`recordDismissal`), but
-> `notifyProactive` has no callers and `recordDismissal` is called only by its test, so the setting
-> does nothing and no dismissal becomes a memory today. The hard rail works, and
-> `policy.budgets.perDay.tools.notify` is 20 (set 2026-11-21). Quiet hours, a daily cap and a
-> repeat filter now live in the outbox (`docs/archive/PLAN-outbox.md`, built log-only), and its
-> weekly review is what will finally give `recordDismissal` a caller: open work, in
-> `docs/PLAN-open-work.md` section 2.
+> **Status, 2026-11-21:** the hard rail is live (`policy.budgets.perDay.tools.notify` is 20) and the
+> outbox governs volume (`docs/archive/PLAN-outbox.md`). The learning path is live too: the weekly
+> review's *Skip this kind* calls `recordDismissal`, which files a `preference` memory. The soft gate
+> was deleted along with its `JUDGE_INTERRUPTIONS_PROACTIVE` setting.
 
 ### 4.6 Retire `goals.md` as a static file
 
@@ -702,7 +698,7 @@ proposal, so a job the user never approves leaves no trace.*
 `DENIAL_PROMPT_MAX`, `DENIAL_PROPOSE_MIN`, `FRICTION_MEMORY_MAX`, `REJECT_PROMOTE_AFTER`
 (Phase 1); `PROMOTE_MIN_APPROVALS`, `PROMOTE_MIN_DAYS` (Phase 2); `RECIPE_ENABLED`,
 `RECIPE_MEMORY_MAX`, `LESSON_SAMPLE_RATE`, `LESSON_MEMORY_MAX` (Phase 3);
-`PROPOSE_MIN_RECURRENCE`, `HORIZON_HOURS`, `JUDGE_INTERRUPTIONS_PROACTIVE`,
+`PROPOSE_MIN_RECURRENCE`, `HORIZON_HOURS`,
 `HEARTBEAT_HORIZON` (Phase 4); `WATCHER_CALL_BUDGET`, `REWRITE_MIN_OVER_BUDGET`,
 `REWRITE_ENABLED` (Phase 5).
 
