@@ -255,3 +255,25 @@ hand once), and passes on `main`.
 Each item updates the doc that records its area in the same change (`LEARNING.md` for N1, N4, N5;
 `SPEC.md` or `MODELS.md` for N2; README for N3 and N4). New tests are added to the `test` script
 in `package.json`. `npm run check` must pass before any item is called done.
+
+## Review, 2026-11-21: what changed since this was written
+
+Nothing here has been built (checked: no `origin` column on memories, no injection corpus, no cloud
+token cap, no styles table, no architecture test). Two things happened since 2026-11-18 that change the
+order, and none of the five items is obsolete.
+
+1. **AgentSpine can now change mail and calendar** (SPEC section 5, amendment of 2026-11-21: a separate
+   write token for the inbox cleanup). That makes a hostile email worth more to an attacker than it was
+   when every Google call was a read. It raises N2 and N5 and leaves the rest where they were.
+2. **The outbox exists** (`PLAN-outbox.md`). It does not overlap any of N1 to N5, but N3's monthly cap
+   notice and N2's live-eval failures should go through it, not straight to `notify`.
+
+Recommended order now: **N5, N2 (offline half), N1, N3, N4.**
+
+| Item | Verdict | Why now |
+|---|---|---|
+| N5 architecture test | Do first, smallest | It should also assert the new rule: `src/google/write.ts` is imported only by `gmail-triage.ts`, `calendar-write.ts`, and nothing reaches `GOOGLE_WRITE_TOKEN_PATH` elsewhere. `test/google-write.test.mjs` already greps for the token holders; fold that into this test so the invariants live in one place. |
+| N2 injection corpus | Do second, and before the cleanup runs unattended | Add cases aimed at the new tools: an email that says to trash everything, to archive a "protected" message, to write a calendar event, to label something to hide it. The pass condition is the plan's own: broker and tool-guard bypass must be zero. The guards in `gmail-triage.ts` (never mail you have emailed, never starred, never outside the inbox, per-run cap) are exactly what this corpus should try to defeat. |
+| N1 memory provenance | Third | The cleanup reads a lot of hostile text and reflection runs after it. Knowing which memories came from an email-reading run is the cheap defence against a poisoned memory. |
+| N3 cloud token cap | Keep, lower priority | Mail and study topics are local-only, so the cleanup adds no cloud tokens. Worth doing when cloud use grows. |
+| N4 writing styles | Keep, defer | Largest and independent. Reads Sent mail with the read token, which is unchanged. Not on the path of anything above. |
