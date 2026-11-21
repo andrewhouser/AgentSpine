@@ -133,7 +133,7 @@ page, iOS, flights and drives), the tab badge, brief line and preferences, **E r
 |---|---|---|---|
 | A | Verify what has only run against fixtures | S | **You** |
 | B | Learn from dismissals | M | **Built**, unproven: needs weeks of real answers (A3 first) |
-| C | `docs/ROLLOUT-heads-up.md` rollout checklist | S | Not started; needs A |
+| C | `docs/ROLLOUT-heads-up.md` rollout checklist | S | **Written** 2026-11-21; rung metrics firm up after A |
 | D | Lead-time overrides in Settings | M | **Built** 2026-11-21, not yet seen rendered |
 | G | Live Activity for a flight | L | Not started; needs A1 and A3 rung 6 first |
 | H | Small and conditional items | S each | Not started |
@@ -169,12 +169,14 @@ covers every boundary (5 and 5 ignored, 6 with 4 ignored, 10 with 9, exactly 0.7
 before the numbers mean anything, and the thresholds are still the plan's starting values (open decision
 below). Never penalised by subject, never counts `later`, never disables without asking, never touches watches.
 
-**C. Rollout checklist.** `docs/ROLLOUT-heads-up.md`, same format as `ROLLOUT.md`. Ladder: 0 baseline (Check
-now for a week, no push); 1 morning push, no research; 2 chat dates (watch false positives); 3 research on
-(card quality counts from A3); 4 watches, flights first (notifications per flight); 5 drives (leave-by
-accuracy); 6 learning from dismissals after B. Each rung states its metric, its off-switch (`HEADSUP_ENABLED`,
-a kind toggle, a policy flag) and the standing rule: if the number does not move as predicted, switch it
-off and report, do not tune.
+**C. Rollout checklist. Written 2026-11-21:** `docs/ROLLOUT-heads-up.md`, same format as `ROLLOUT.md`, rungs 0 to
+7 (baseline, morning push, chat dates, research, flights, drives, learning from dismissals, lock screen), each
+with its metric, its off-switch and the standing rule that a number that does not move means switch off and
+report, not tune. It was written before A3 has run, so the per-rung bars (the chat-date false-positive limit
+in particular) are placeholders to fix after your shakedown. **Found while writing it:** the web "Check now"
+button is not a dry run (it records and pushes, via `POST /api/headsups/run`), and the read-only
+`GET /api/headsups/preview` has no button on any client. Rung 0 needs a baseline without pushes, so decide
+whether to add one.
 
 **D. Lead-time overrides. Built 2026-11-21.** Per kind, an ordered list of 1 to 3 day counts, largest first,
 each 0 to 45, no repeats, validated all or nothing (`validLeadDays` and `updatePrefs` in `prefs.ts`; a list in
