@@ -137,6 +137,11 @@ const loadEmbedder = async (): Promise<Embedder | null> => {
 export const getEmbedder = (): Promise<Embedder | null> => (embedderPromise ??= loadEmbedder());
 export type { Embedder };
 
+/** Test hook: replace the embedder with a deterministic one, so retrieval can be tested without a model. */
+export const __setEmbedderForTests = (fn: Embedder | null): void => {
+  embedderPromise = Promise.resolve(fn);
+};
+
 export const toBlob = (v: Float32Array): Buffer => Buffer.from(v.buffer, v.byteOffset, v.byteLength);
 export const fromBlob = (b: Buffer): Float32Array =>
   new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4);

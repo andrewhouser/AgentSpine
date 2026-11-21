@@ -57,10 +57,16 @@ const CANDIDATES = 50;
 export const VECTOR_MIN_SIMILARITY = 0.25;
 
 /**
- * A user's words as an FTS5 query. Terms are OR-ed, so a long question still matches on its few distinctive
- * words and bm25 ranks the passages that hold most of them. A quoted phrase stays a phrase, and any token
+ * A user's words as an FTS5 query. Filler words are dropped and the rest are OR-ed, so a long question still
+ * matches on its few distinctive words and bm25 ranks the passages that hold most of them. A quoted phrase stays a phrase, and any token
  * with a digit or a hyphen (ABC-123, Q3, 2026-04) is quoted, because FTS5 would otherwise split it.
  */
+const STOPWORDS = new Set(
+  ("a an and are as at be been but by can could did do does for from had has have how i if in into is it its me my of on or our so " +
+    "than that the their them then there these they this to us was we were what when where which who whom why will with would you your about " +
+    "any all some much many more most not no yes out up down over just also tell show give find get got let make").split(" "),
+);
+
 export const ftsQuery = (text: string): string => {
   const parts: string[] = [];
   const rest = text.replace(/"([^"]{2,})"/g, (_m, phrase: string) => {
@@ -69,6 +75,8 @@ export const ftsQuery = (text: string): string => {
   });
   for (const tok of rest.match(/[\p{L}\p{N}][\p{L}\p{N}_.-]*[\p{L}\p{N}]|[\p{L}\p{N}]/gu) ?? []) {
     if (tok.length < 2) continue;
+    // Filler words match nearly every passage, so an OR-ed question would otherwise rank on "we" and "how".
+    if (STOPWORDS.has(tok.toLowerCase())) continue;
     parts.push(/[\d_.-]/.test(tok) ? `"${tok}"` : tok);
   }
   return [...new Set(parts)].slice(0, 24).join(" OR ");

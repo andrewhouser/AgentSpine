@@ -38,8 +38,10 @@ const ids = (hits) => hits.map((h) => h.text.slice(0, 12));
 console.log("\nBUILDING THE QUERY");
 {
   check("words are OR-ed", ftsQuery("migration plan owner"), "migration OR plan OR owner");
-  check("a ticket number is quoted so it is not split", ftsQuery("what about PLAT-4421?"), 'what OR about OR "PLAT-4421"');
-  check("a quoted phrase stays a phrase", ftsQuery('the "rollback window" for it'), '"rollback window" OR the OR for OR it');
+  check("filler words are dropped", ftsQuery("how much can we spend on the migration"), "spend OR migration");
+  check("a ticket number is quoted so it is not split", ftsQuery("what about PLAT-4421?"), '"PLAT-4421"');
+  check("a quoted phrase stays a phrase", ftsQuery('the "rollback window" for it'), '"rollback window"');
+  check("a question made only of filler searches nothing by text", ftsQuery("who is it?"), "");
   check("nothing searchable gives an empty query", ftsQuery("?! ..."), "");
   check("junk that FTS5 would reject is still a safe string", /^[^()*]*$/.test(ftsQuery("AND OR ( * NEAR")), true);
 }

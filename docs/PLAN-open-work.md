@@ -336,12 +336,18 @@ baseline, and the meeting recall number is still unmeasured.
   covers everything filed in one; the gap is an item with no project, so K3 makes every Inbox item private until
   a person says otherwise, and K2 and K4 inherit the source's sensitivity for everything derived from it. There
   is no export path today; when K3 or K6 add one it must call `logDataEvent("export", ...)`.
-- **K1. Evaluation set (You write the questions, Code builds the harness).** 30 to 50 questions you actually
-  care about, each with its known supporting sources, expected project, person and date filters, required
-  citations, some with changed or contradictory information, and some whose right answer is "not enough
-  evidence". Track retrieval recall, citation correctness, stale-answer rate and extraction acceptance rate.
-  Kept outside the repo and out of git, because it is workplace material; the harness runs on local models only.
-  Take the baseline before K2 changes retrieval. This also finally measures meeting recall (section 4a).
+- **K1. Evaluation set (harness built 2026-11-21; You write the questions).** `npm run eval:knowledge -- /path/to/questions.json [k]`
+  (`src/eval/knowledge.ts`) runs your questions through four retrieval modes against the live database:
+  `baseline` (the old cosine-only recall), `fts`, `vector` and `hybrid`, and prints recall@k, mean reciprocal
+  rank and the leak rate (a forbidden source appearing), with ids and numbers only, never question text or
+  passages. Question format: `id`, `question`, `project`, `expectSources` (path or ticket-like text),
+  `forbidSources`, `kinds`, `since`, and `expectNone` (reports the best score so a no-evidence threshold can be
+  chosen from real data). Keep the file outside the repository. **You: write 30 to 50 questions** you actually
+  care about (some with changed information, some whose right answer is "not enough evidence"), then run it on
+  the Mini before changing retrieval again; `VECTOR_MIN_SIMILARITY` is set from the result. Suite:
+  `test/knowledge-eval.test.mjs`, which shows each path winning its own kind of question and the fused mode
+  winning both. Not built: citation correctness, stale-answer rate and extraction acceptance rate (they need
+  K4's records and K6's answers). This also still measures meeting recall (section 4a) once questions exist.
 - **K2. Hybrid global retrieval (built 2026-11-21, structured lookup waits for K4).** `src/projects/search.ts`:
   an FTS5 index over `chunks` (kept in step by triggers, built into `node:sqlite`, no dependency) and the existing
   vector search, fused by reciprocal-rank fusion with the path that found each hit recorded, a per-source quota
