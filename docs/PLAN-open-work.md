@@ -27,16 +27,15 @@ the management-knowledge review (F6). Both were uncommitted working notes (`docs
 suite does not cover.
 
 I checked each finding against the code on 2026-11-21. **F1 and F5 reproduce** when `narrowPolicy` is run on
-plain objects. **F2, F3 and F4 are confirmed by reading the code path** but not yet by a running test. None has
-a fix or a regression test yet. Every reproduction below becomes a test in the same change as its fix, and each
-new suite is added by hand to the `npm test` list in `package.json`.
+plain objects. **F2 is confirmed by reading the code path** but not yet by a running test. **F3 and F4 are
+fixed** (see the note after F2); the others have no fix or regression test yet. Every reproduction below becomes
+a test in the same change as its fix, and each new suite is added by hand to the `npm test` list in
+`package.json`.
 
-**Suggested order, and why:** F3 and F4 first, because they are reachable by the unattended runs that the
-rollout (section 1, steps 3 and 5) is about to switch on, and one of those runs reads hostile mail. Then F2,
-which is a privacy promise in `CLAUDE.md`. F1 and F5 matter as soon as a project overlay is used, so they come
-before anyone relies on overlays, but they need no change to what runs today. F6 is a small fix once you pick
-the interim behaviour, and it should land before more workplace transcripts are filed. All six are Code.
-F2 and F6 are also step K0 of section 8.
+**Suggested order, and why:** F3 and F4 are done. Next F2, which is a privacy promise in `CLAUDE.md`. F1 and
+F5 matter as soon as a project overlay is used, so they come before anyone relies on overlays, but they need no
+change to what runs today. F6 is a small fix once you pick the interim behaviour, and it should land before more
+workplace transcripts are filed. All four are Code. F2 and F6 are also step K0 of section 8.
 
 **F1. Critical. A project overlay can open the browser to any domain.**
 `intersectNavigate()` in `src/projects/narrow-policy.ts` returns `[]` when the global and project allowlists are
@@ -61,28 +60,12 @@ a private-pinned loop. Then audit the other tools that return material the rules
 linked to a project, project-linked memory); that audit is my addition, not the reviewer's. Test: a fake local
 and a fake cloud endpoint, run a task that reads a transcript, and assert no cloud request ever contains it.
 
-**F3. High. Two simultaneous approvals can run one action twice.**
-`approveOnly()` in `src/confirmations.ts` reads the row, checks `pending`, awaits `enqueue(() => tool.run())`,
-and only then writes `done`. Two callers can both pass the check before either writes. The queue serialises the
-runs but does not stop the second one. `rejectOnly()` has the same read-then-write shape.
-Fix: claim the row atomically before running, with a conditional update such as `UPDATE confirmations SET state =
-'executing' WHERE id = ? AND state = 'pending'`; only the caller that changed one row runs the tool, then
-records `done` or `error`. Decisions to make while doing it: the expiry sweep and the pending lists must treat
-`executing` as live, and a row left `executing` by a crash must end as `error` on the next boot and never be
-re-run. Tests: approval against approval, and approval against rejection, each asserting the irreversible tool
-ran once.
-
-**F4. High. `state_set` bypasses approval-gated settings.**
-`state_set` (`src/tools/state.ts`) is reversible, always permitted, and takes any key. The `kv` table also holds
-internal state, so an unattended call could write `headsup:prefs` and change quiet hours and which kinds are on,
-which `headsup_kind_set` deliberately queues for approval (`confirmWhenUnattended`). Other internal keys in the
-table can be read or overwritten the same way: the silent-rejection tallies in `confirmations.ts`, the Heads-up
-run, error and telemetry keys, the watch budget keys and cache in `src/headsup/watch/`, the default writing
-style in `src/styles/store.ts`, and the Gmail rate key in `src/tools/gmail.ts`.
-Fix: give watcher state its own table, or enforce a reserved namespace such as `watcher:<schedule-id>:`, and
-deny every internally owned prefix in both `state_get` and `state_set`. Decide the migration first: existing
-watchers store under keys the model chose, so a rename means each one sees a "first observation" once, which
-the tool already tells it not to report. Tests: one assertion per internally owned key prefix, read and write.
+**F3 and F4: fixed 2026-11-21, numbers kept so the others do not shift.** F3 (two approvals running one
+action twice): `approveOnly` and `rejectOnly` now claim the row with a conditional update, `executing` is a live
+state, and a row left `executing` by a crash ends as `error` on server start and is never re-run. Suite:
+`test/confirm-race.test.mjs`. F4 (`state_set` reaching internal `kv` keys): `state_get` and `state_set` store every
+key under `watch:`, so nothing internal is reachable by construction, and a one-time migration copies legacy
+watcher keys so no watcher reports a spurious first observation. Suite: `test/state-namespace.test.mjs`.
 
 **F5. High. A project overlay can raise a tool budget.**
 `narrowScope` in `src/projects/narrow-policy.ts` compares a tool cap only with the base's cap for that same
@@ -110,7 +93,7 @@ assert no chunk of that transcript remains (or, for the opt-in choice, that the 
 
 ## 1. Roll out what is already built (You, on the Mini)
 
-Nothing below has run against real systems yet. Do F3 and F4 from section 0 before steps 3 and 5.
+Nothing below has run against real systems yet. F3 and F4 from section 0 are fixed, so steps 3 and 5 no longer wait on them.
 
 1. Run `update.sh` (pulls, installs, builds, restarts). This deploys the outbox in log-only mode and the Gmail
    and Calendar tools.
@@ -292,8 +275,7 @@ check that sections 2, 3 and 4 ask for, in one pass.
 - **iPhone offline cache (Code, not started).** A read-only mirror of threads, tasks, files and recent run
   results (SwiftData or SQLite), shown marked as cached when the server is unreachable. Writes are not queued.
   Approvals are never replayed: an offline phone shows the question and says it can only be answered once
-  reconnected, because a stale approval is a security problem. F3 is about approvals racing, so settle F3
-  before this.
+  reconnected, because a stale approval is a security problem.
 
 **Open decisions:** how many tabs the iPhone bar should allow now that Heads-up sits second (the mock shows four
 plus More); whether to cut a Swift package once there is a compiler to check the `public` changes.
@@ -456,7 +438,7 @@ from instead).
   linked to a project are local-only. Milliman and other workplace material never goes to web search, paste
   services or third-party APIs. F2 and F6 are the known holes in this rule.
 - Standing work needs consent: a tool that creates or edits what future unattended runs follow sets
-  `confirmWhenUnattended: true` or refuses non-chat runs. F4 is the known hole in this rule.
+  `confirmWhenUnattended: true` or refuses non-chat runs.
 - Tests first for arithmetic and every boundary; new suites are added by hand to the `npm test` list in
   `package.json`, and the chain stops at the first failing suite.
 - Run `npm run check` (outside the Claude sandbox, which blocks the local ports the tests bind) before calling

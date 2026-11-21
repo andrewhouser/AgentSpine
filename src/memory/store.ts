@@ -1118,6 +1118,76 @@ export const checkApprovalToken = (id: number, provided: string): boolean => {
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
+/**
+ * Take a pending question for execution, atomically. Returns true only for the one caller
+ * whose UPDATE changed the row; everyone else (a second tap, the dashboard racing a
+ * lock-screen button, the CLI in another process) gets false and must not act.
+ *
+ * This is what makes "approve" at-most-once. The old shape read the row, checked 'pending',
+ * awaited the tool and only then wrote 'done', so two callers could both pass the check
+ * before either wrote and an irreversible action ran twice. The conditional UPDATE moves the
+ * check and the write into one statement, which SQLite serialises even across processes.
+ * The token is burned here, not after the run, so a replayed push button is inert from the
+ * moment the first approval lands.
+ */
+export const claimConfirmation = (id: number): boolean =>
+  Number(
+    db
+      .prepare(
+        "UPDATE confirmations SET state = 'executing', token = NULL, resolved = COALESCE(resolved, ?) " +
+          "WHERE id = ? AND state = 'pending'",
+      )
+      .run(now(), id).changes,
+  ) === 1;
+
+/**
+ * Close a question that is still 'pending' (a rejection, an expiry, a policy refusal).
+ * Same single-statement rule as claimConfirmation: returns false if someone else got there
+ * first, so a rejection can never overwrite an approval that is already running or done.
+ */
+export const closePendingConfirmation = (id: number, state: string, result = ""): boolean =>
+  Number(
+    db
+      .prepare(
+        "UPDATE confirmations SET state = ?, result = ?, token = NULL, resolved = COALESCE(resolved, ?) " +
+          "WHERE id = ? AND state = 'pending'",
+      )
+      .run(state, result.slice(0, 4000), now(), id).changes,
+  ) === 1;
+
+/**
+ * End every row a dead process left 'executing'. Call on server startup only, never on
+ * import: the `confirm` CLI shares this database and would otherwise mark a live run in the
+ * dashboard as dead.
+ *
+ * It ends as 'error' and is never re-run. We cannot tell whether the tool finished before
+ * the process died, and these are the irreversible actions, so the safe reading is "may or
+ * may not have happened, check, and ask again if it did not".
+ */
+export const recoverInterruptedConfirmations = (): number =>
+  Number(
+    db
+      .prepare(
+        "UPDATE confirmations SET state = 'error', token = NULL, " +
+          "result = 'interrupted: the server stopped while this was running. It may or may not have completed, " +
+          "and it was not re-run. Check the result by hand, and ask again if it did not happen.' " +
+          "WHERE state = 'executing'",
+      )
+      .run().changes,
+  );
+
+/** Questions in a thread that are still unanswered or being acted on. Gates resuming it. */
+export const openConfirmationCountForConversation = (conversationId: number): number =>
+  Number(
+    (
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM confirmations WHERE conversation_id = ? AND state IN ('pending','executing')",
+        )
+        .get(conversationId) as { n: number }
+    ).n,
+  );
+
 export const setConfirmation = (id: number, state: string, result = ""): void => {
   // Burn the token alongside the state change — this is what makes approval single-use.
   // Stamp `resolved` with the moment the question leaves 'pending', so approval latency
@@ -1188,7 +1258,7 @@ const prunableRuns = (before: string): number[] =>
         `SELECT id FROM runs
           WHERE finished IS NOT NULL AND finished < ?
             AND status NOT IN ('running','queued')
-            AND id NOT IN (SELECT run_id FROM confirmations WHERE state = 'pending' AND run_id IS NOT NULL)`,
+            AND id NOT IN (SELECT run_id FROM confirmations WHERE state IN ('pending','executing') AND run_id IS NOT NULL)`,
       )
       .all(before) as unknown as { id: number }[]
   ).map((r) => r.id);
@@ -1248,7 +1318,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
     // A thread with a question still open is not empty: the inbox has no runs at all, and
     // pruning it would take an unanswered approval down with it.
     const stillAsking =
-      "NOT EXISTS (SELECT 1 FROM confirmations f WHERE f.conversation_id = c.id AND f.state = 'pending')";
+      "NOT EXISTS (SELECT 1 FROM confirmations f WHERE f.conversation_id = c.id AND f.state IN ('pending','executing'))";
     const emptySql =
       `SELECT COUNT(*) AS n FROM conversations c WHERE NOT EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id) AND ${stillAsking}`;
     if (opts.dryRun) {
@@ -1710,3 +1780,44 @@ const backfillSeenRuns = (): void => {
   }
 };
 backfillSeenRuns();
+
+/**
+ * Where a watcher's own state lives. `state_get` and `state_set` are open to every run, and
+ * the model picks the key, so they must only ever reach keys under this prefix. The `kv`
+ * table also holds internal state (Heads-up preferences and budgets, silent-rejection
+ * tallies, the default writing style, the Gmail rate stamp), and one of those, `headsup:prefs`,
+ * is changed through a tool that queues for approval. A tool that could name any key would
+ * bypass that. Namespacing by construction, rather than denying a list of internal prefixes,
+ * means a prefix added later is protected without anyone remembering to list it.
+ */
+export const WATCHER_PREFIX = "watch:";
+
+/** The kv key a watcher-chosen name is stored under. Already-prefixed names are not doubled. */
+export const watcherKey = (name: string): string => (name.startsWith(WATCHER_PREFIX) ? name : `${WATCHER_PREFIX}${name}`);
+
+/** Prefixes the code itself writes to kv. Used only by the one-time migration below. */
+const INTERNAL_KV_PREFIXES = ["gmail:", "headsup:", "inbox:", "migrate:", "reject:", "style:"];
+
+/**
+ * One time only: before state_set was namespaced, a watcher could store under any key it
+ * liked ("fedex-status"), and the starters all use `watch:` already. Copy every row that is
+ * neither internal nor already namespaced to its `watch:` name, so a watcher that follows the
+ * old name keeps its last observation and does not report a spurious "first observation".
+ * Copy, not move: if an internal key were ever missed from the list above, the original is
+ * still where the code expects it. INSERT OR IGNORE so a watcher that has already written
+ * the new name wins. A kv flag so it runs once, however many processes import the store.
+ */
+export const namespaceWatcherState = (): void => {
+  try {
+    if (kvGet("migrate:watcher_ns")) return;
+    const rows = db.prepare("SELECT key, value, updated FROM kv").all() as unknown as KvRow[];
+    for (const r of rows) {
+      if (r.key.startsWith(WATCHER_PREFIX) || INTERNAL_KV_PREFIXES.some((p) => r.key.startsWith(p))) continue;
+      db.prepare("INSERT OR IGNORE INTO kv (key, value, updated) VALUES (?,?,?)").run(watcherKey(r.key), r.value, r.updated);
+    }
+    kvSet("migrate:watcher_ns", "1");
+  } catch (err) {
+    console.warn(`[store] watcher state namespacing skipped: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+namespaceWatcherState();

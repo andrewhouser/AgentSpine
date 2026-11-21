@@ -26,6 +26,11 @@ making at 3am. It cries wolf on a reworded headline and sleeps through a version
 `state_get` / `state_set` are **exact**: a string in a SQLite `kv` row, compared literally.
 No embedding, no ranking, no interpretation. That's what a watcher needs.
 
+Every key is stored under `watch:` (a bare name like `fedex-status` becomes `watch:fedex-status`, and
+`watch:` is not doubled). These two tools are open to every run, including unattended ones that have just read
+a hostile page, and the `kv` table also holds internal settings, so the tools can reach nothing outside that
+namespace. `npm run watcher state` lists what a watcher has stored.
+
 ## The template
 
 `npm run watcher template` prints this. Every clause earns its place:

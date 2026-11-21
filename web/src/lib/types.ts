@@ -45,7 +45,7 @@ export interface Confirmation {
   result: null | string;
   run_id: null | number;
   /** `expired`: the watchdog closed it unanswered past its window. Nothing ran. */
-  state: "done" | "error" | "expired" | "pending" | "rejected";
+  state: "done" | "error" | "executing" | "expired" | "pending" | "rejected";
   summary: string;
   tool: string;
   ts: string;

@@ -69,6 +69,13 @@ const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
   if (!row) return { ok: false, message: `No confirmation #${id}.` };
   if (row.state !== "pending") return { ok: false, message: `#${id} is already '${row.state}'.` };
 
+  // Every early exit below closes the row with a conditional update, not setConfirmation, so
+  // it can never overwrite a decision another caller made between our read and our write.
+  const lost = (): ConfirmOutcome => ({
+    message: `#${id} is already '${store.getConfirmation(id)?.state ?? "gone"}'.`,
+    ok: false,
+  });
+
   // Expire at approval time as well as in the sweep, because the sweep is not guaranteed to
   // have run: the watchdog lives in the dashboard and the heartbeat, and `npm run confirm`
   // works with neither of them up. A row old enough to expire must not execute merely
@@ -76,7 +83,7 @@ const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
   // property of the process uptime instead of a property of the question.
   const stale = expiredAt(row.ts);
   if (stale) {
-    store.setConfirmation(id, "expired", stale);
+    if (!store.closePendingConfirmation(id, "expired", stale)) return lost();
     return { ok: false, message: `#${id} ${stale}` };
   }
 
@@ -89,9 +96,15 @@ const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
   // Re-check the allowlist at approval time — policy may have changed since it was queued.
   const decision = tool.checkPolicy(policy, args);
   if (!decision.allowed) {
-    store.setConfirmation(id, "rejected", `policy now denies it: ${decision.reason}`);
+    if (!store.closePendingConfirmation(id, "rejected", `policy now denies it: ${decision.reason}`)) return lost();
     return { ok: false, message: `#${id} denied by current policy: ${decision.reason}` };
   }
+
+  // Claim it before anything runs. Only the caller whose UPDATE changed the row goes on; a
+  // second approval, or a rejection that arrived in the same instant, gets "already ..." and
+  // the irreversible action runs once. The queue serialises runs but never stopped the
+  // second one, so the claim is what carries the guarantee.
+  if (!store.claimConfirmation(id)) return lost();
 
   try {
     const output = await enqueue(() => tool.run(args, { policy }));
@@ -129,7 +142,11 @@ const rejectOnly = async (id: number, reason = ""): Promise<ConfirmOutcome> => {
   if (row.state !== "pending") return { ok: false, message: `#${id} is already '${row.state}'.` };
 
   const why = reason.trim().slice(0, 300);
-  store.setConfirmation(id, "rejected", why ? `rejected by user: ${why}` : "rejected by user");
+  // Conditional, so a rejection can never overwrite an approval that is already running or
+  // done. If we lose the race the action went ahead, and saying "rejected" would be a lie.
+  if (!store.closePendingConfirmation(id, "rejected", why ? `rejected by user: ${why}` : "rejected by user")) {
+    return { ok: false, message: `#${id} is already '${store.getConfirmation(id)?.state ?? "gone"}'.` };
+  }
 
   if (why) {
     try {
@@ -183,7 +200,7 @@ export const resumeConversation = async (
   try {
     if (conversationId == null || !store.getConversation(conversationId)) return null;
     if (store.isInbox(conversationId)) return null;
-    if (store.pendingConfirmationsForConversation(conversationId).length) return null;
+    if (store.openConfirmationCountForConversation(conversationId)) return null;
     const decisions = store.takeUnreportedDecisions(conversationId);
     const worth = decisions.some(
       (d) => d.state === "done" || d.state === "error" || (d.state === "rejected" && /^rejected by user: /.test(d.result ?? "")),
@@ -362,7 +379,8 @@ export const sweepConfirmations = async (
 
       const stale = expiredAt(row.ts, nowMs);
       if (stale) {
-        store.setConfirmation(row.id, "expired", stale);
+        // Conditional: a row an approver claimed since we listed it is theirs, not ours to expire.
+        if (!store.closePendingConfirmation(row.id, "expired", stale)) continue;
         result.expired++;
         // Say so. An action that quietly stopped existing is the failure this whole module
         // was written against, and closing the question silently would reproduce it.

@@ -8,7 +8,7 @@
  * goes through a string comparison against a key in the `kv` table.
  *
  * Both tools are reversible and always permitted: they touch nothing but AgentSpine's own
- * local database. The `memory_*` tools are the fuzzy counterpart — use those for "what do
+ * local database, and within it only keys under `watch:` (see `slot`). The `memory_*` tools are the fuzzy counterpart — use those for "what do
  * I know about X", these for "is this byte-for-byte what I saw last time".
  */
 import * as store from "../memory/store.ts";
@@ -20,6 +20,15 @@ const MAX_VALUE = 8000;
 const always = (_p: Policy): PolicyDecision => ({ allowed: true, reason: "local state access" });
 
 const cleanKey = (k: unknown): string => String(k ?? "").trim().slice(0, MAX_KEY);
+
+/**
+ * The row a key lives in. Every key the model names is stored under `watch:`, so these two
+ * tools can reach watcher state and nothing else in the `kv` table. See WATCHER_PREFIX for
+ * why this is a namespace and not a deny-list. The model keeps using its own name; the
+ * prefix is added here, so `state_get("headsup:prefs")` reads `watch:headsup:prefs`, which
+ * is simply unset.
+ */
+const slot = (key: string): string => store.watcherKey(key);
 
 export const stateGet: Tool = {
   name: "state_get",
@@ -38,7 +47,7 @@ export const stateGet: Tool = {
   run: async (a) => {
     const key = cleanKey(a?.key);
     if (!key) return "ERROR: state_get needs a key.";
-    const row = store.kvGet(key);
+    const row = store.kvGet(slot(key));
     if (!row) {
       return (
         `(unset) — "${key}" has no stored value. This is the FIRST observation: store the ` +
@@ -81,8 +90,8 @@ export const stateSet: Tool = {
         `identifying fingerprint (version, title, date, count) rather than the whole source.`
       );
     }
-    const prev = store.kvGet(key);
-    store.kvSet(key, value);
+    const prev = store.kvGet(slot(key));
+    store.kvSet(slot(key), value);
     return prev ? `updated "${key}" (previous value replaced).` : `stored "${key}" for the first time.`;
   },
 };

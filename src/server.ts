@@ -1932,6 +1932,10 @@ if (capProblem) {
 }
 const interrupted = store.markInterruptedRuns();
 if (interrupted) console.log(`marked ${interrupted} interrupted run(s) as failed`);
+// An approval that was mid-run when the process died is ended as an error and never re-run:
+// whether the irreversible tool finished is unknowable, and running it again could double it.
+const stuckApprovals = store.recoverInterruptedConfirmations();
+if (stuckApprovals) console.log(`marked ${stuckApprovals} interrupted approval(s) as error (not re-run)`);
 // A `recording` row can outlive the process that owned it. Left alone it would block every
 // future capture, because one already claims the microphone.
 const orphaned = meetingStore.reapOrphans();
