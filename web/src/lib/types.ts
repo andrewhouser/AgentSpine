@@ -121,6 +121,8 @@ export interface ReviewItem {
 export interface OutboxReview {
   days: number;
   items: ReviewItem[];
+  /** Kinds you mostly skip over 90 days. `off` ones may have a proposal to switch the schedule off waiting in Approvals. */
+  quiet: { counted: number; kind: string; rate: number; sent: number; skipped: number; source: string; tier: "off" | "quiet"; topic: string }[];
   tally: {
     deduped: number;
     dismissed: number;

@@ -699,9 +699,22 @@ struct ReviewTally: Codable, Hashable {
     let source: String
 }
 
+/// A kind you mostly skip, over 90 days (`quiet` in `GET /api/outbox/review`).
+struct SkippedKind: Codable, Hashable {
+    let counted: Int
+    let kind: String
+    let rate: Double
+    let skipped: Int
+    let source: String
+    let tier: String
+    let topic: String
+}
+
 struct OutboxReview: Codable {
     let days: Int
     var items: [ReviewItem]
+    /// Absent from a server older than Phase 4.
+    let quiet: [SkippedKind]?
     let tally: [ReviewTally]
 }
 

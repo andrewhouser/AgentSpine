@@ -119,6 +119,21 @@ struct WeeklyReviewView: View {
                          + "under Memory. Looking at this list marks it as seen.")
                 }
 
+                if let quiet = review.quiet, !quiet.isEmpty {
+                    Section {
+                        ForEach(quiet, id: \.self) { q in
+                            Text("\(q.topic): skipped \(q.skipped) of \(q.counted) (\(Int((q.rate * 100).rounded()))%)")
+                                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                                .foregroundStyle(Spine.Palette.textDim)
+                        }
+                    } header: {
+                        Text("Kinds you mostly skip")
+                    } footer: {
+                        Text("Over the last 90 days. Nothing is switched off. For a scheduled job at the top of the list, "
+                             + "a proposal to turn it off waits in Approvals.")
+                    }
+                }
+
                 Section("Something I wish I'd been told") {
                     TextField("For example: a snow day notice", text: $wish, axis: .vertical)
                     Button("Save") { Task { await sendWish() } }

@@ -72,6 +72,7 @@ import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./c
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
+import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
@@ -1994,7 +1995,12 @@ setInterval(() => void sweepDueTasks(), 60_000).unref();
 const sweepOutbox = (): Promise<number> => releaseHeld((t, b, o) => notify(t, b, o));
 setInterval(() => void sweepOutbox(), 5 * 60_000).unref();
 // Sunday evening: one push saying the week's review is ready (src/outbox-review.ts).
-const sweepReview = (): Promise<boolean> => sendWeeklyReview((t, b, o) => notify(t, b, o));
+// The same tick queues (never applies) a proposal to switch off a schedule you almost always skip; it asks
+// at most once per schedule per 90 days, so running it every few minutes costs one query.
+const sweepReview = (): Promise<boolean> => {
+  proposeSchedulesOff();
+  return sendWeeklyReview((t, b, o) => notify(t, b, o));
+};
 setInterval(() => void sweepReview(), 5 * 60_000).unref();
 // The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
 void sweepHeadsup();

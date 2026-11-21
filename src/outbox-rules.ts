@@ -83,3 +83,43 @@ export const REVIEW_MIN_ROWS = 1;
 
 /** A wish or a note is clipped to this many characters before it becomes a memory. */
 export const WISH_MAX = 300;
+
+/**
+ * Phase 4: which kinds you keep skipping. Mirrors Heads-up B (src/headsup/rules.ts) so there is one
+ * pattern, with its thresholds. The numbers are guesses until the weekly review has real answers.
+ *
+ * A message is "skipped" when you pressed Skip this kind, dismissed the push, or left it for
+ * IGNORED_AFTER_HOURS; "Useful" cancels the other two. The rate is over messages whose outcome is known,
+ * because a push that ntfy could not report on says nothing either way.
+ */
+export const SKIP_WINDOW_DAYS = OUTBOX_RETENTION_DAYS;
+/** Fewer known outcomes than this and a kind earns nothing: eight is enough to tell a habit from a bad week. */
+export const SKIP_MIN_COUNTED = 8;
+/** List the kind in the weekly review as one you mostly skip. */
+export const SKIP_QUIETEN_RATE = 0.7;
+/** Propose switching the schedule behind it off, through the confirmation queue. */
+export const SKIP_PROPOSE_RATE = 0.85;
+/** After a proposal for a schedule, in any state, wait this long before proposing again. */
+export const SKIP_SUPPRESS_DAYS = 90;
+/**
+ * Only these sources can be proposed off: their `kind` is a schedule's name, so there is something to
+ * switch off. A Heads-up kind has its own proposal, and a digest or a study reminder has no schedule
+ * of its own to name; those are only listed.
+ */
+export const PROPOSABLE_SOURCES: ReadonlySet<OutboxSource> = new Set(["run", "tool"]);
+
+/** What each reviewed source is called in a sentence. A source not listed here is not reviewed. */
+const SOURCE_NOUN: Record<string, string> = {
+  digest: "the daily digest",
+  headsup: "heads-up",
+  run: "scheduled job results",
+  study: "study reminders",
+  tool: "alerts from watchers and scheduled briefs",
+};
+
+/** The stable name for a kind of message, e.g. "heads-up: birthday". Same input, same string, every week. */
+export const topicOf = (source: string, kind: null | string | undefined): string => {
+  const noun = SOURCE_NOUN[source] ?? source;
+  const k = String(kind ?? "").trim();
+  return k ? `${noun}: ${k}` : noun;
+};

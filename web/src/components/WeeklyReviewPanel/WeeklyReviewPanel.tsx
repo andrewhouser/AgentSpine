@@ -99,6 +99,22 @@ export const WeeklyReviewPanel = () => {
         </ul>
       )}
 
+      {(review.quiet ?? []).length > 0 && (
+        <>
+          <p className={styles.note}>
+            Kinds you mostly skip, over the last 90 days. Nothing is switched off. For a scheduled job at the top of
+            the list, a proposal to turn it off waits in Approvals.
+          </p>
+          <ul className={styles.counts}>
+            {review.quiet.map((q) => (
+              <li key={`${q.source}:${q.kind}`}>
+                {q.topic}: skipped {q.skipped} of {q.counted} ({Math.round(q.rate * 100)}%)
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <div className={styles.wish}>
         <input
           aria-label="Something I wish I'd been told"

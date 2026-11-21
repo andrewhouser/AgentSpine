@@ -23,7 +23,9 @@ import { remember } from "./memory/rag.ts";
 import type { NotifyOpts } from "./notify.ts";
 import { outcomeOf, tallyBySource } from "./outbox.ts";
 import type { OutboxOutcome, OutboxTally } from "./outbox.ts";
-import { REVIEW_DAYS, REVIEW_HOUR, REVIEW_MIN_ROWS, REVIEW_WEEKDAY, REVIEWED_SOURCES, WISH_MAX } from "./outbox-rules.ts";
+import { REVIEW_DAYS, REVIEW_HOUR, REVIEW_MIN_ROWS, REVIEW_WEEKDAY, REVIEWED_SOURCES, topicOf, WISH_MAX } from "./outbox-rules.ts";
+import { mostlySkipped } from "./outbox-learn.ts";
+import type { SkipStats, SkipTier } from "./outbox-learn.ts";
 
 export type ReviewAnswer = "skip" | "useful";
 
@@ -44,25 +46,13 @@ export interface ReviewItem {
 export interface Review {
   days: number;
   items: ReviewItem[];
+  /** Kinds you mostly skip over the last 90 days (Phase 4). `off` ones may also have a proposal waiting. */
+  quiet: (SkipStats & { tier: SkipTier })[];
   /** Per-source counts for the same window, reviewed sources only. */
   tally: OutboxTally[];
 }
 
-/** What each reviewed source is called in a sentence. A source not listed here is not reviewed. */
-const SOURCE_NOUN: Record<string, string> = {
-  digest: "the daily digest",
-  headsup: "heads-up",
-  run: "scheduled job results",
-  study: "study reminders",
-  tool: "alerts from watchers and scheduled briefs",
-};
-
-/** The stable name for a kind of message, e.g. "heads-up: birthday". Same input, same string, every week. */
-export const topicOf = (source: string, kind: null | string | undefined): string => {
-  const noun = SOURCE_NOUN[source] ?? source;
-  const k = String(kind ?? "").trim();
-  return k ? `${noun}: ${k}` : noun;
-};
+export { topicOf };
 
 interface Row {
   body: string;
@@ -112,6 +102,15 @@ export const reviewItems = (now: Date = new Date(), days: number = REVIEW_DAYS):
  * "weak signal" for a setup with only ntfy, which cannot report an open: you looked at the list that
  * contained it. Stored for Phase 4 and shown nowhere as a verdict, because looking is not liking.
  */
+/** A failed count must not fail the review screen. */
+const safeQuiet = (now: Date): Review["quiet"] => {
+  try {
+    return mostlySkipped(now);
+  } catch {
+    return [];
+  }
+};
+
 export const buildReview = (now: Date = new Date(), opts: { markSeen?: boolean } = {}): Review => {
   const items = reviewItems(now);
   if (opts.markSeen !== false && items.length) {
@@ -123,7 +122,7 @@ export const buildReview = (now: Date = new Date(), opts: { markSeen?: boolean }
     }
   }
   const wanted = new Set(reviewedList());
-  return { days: REVIEW_DAYS, items, tally: tallyBySource(REVIEW_DAYS, now).filter((t) => wanted.has(t.source as never)) };
+  return { days: REVIEW_DAYS, items, quiet: safeQuiet(now), tally: tallyBySource(REVIEW_DAYS, now).filter((t) => wanted.has(t.source as never)) };
 };
 
 export interface AnswerResult {
@@ -213,7 +212,9 @@ export const sendWeeklyReview = async (
     const { count, due } = reviewDue(now);
     if (!due) return false;
     const title = "Your weekly review is ready";
-    const body = `${count === 1 ? "1 message" : `${count} messages`} from the last week. Open Settings, then Weekly review, to say which were useful and which to skip.`;
+    let body = `${count === 1 ? "1 message" : `${count} messages`} from the last week. Open Settings, then Weekly review, to say which were useful and which to skip.`;
+    const skipped = safeQuiet(now).length;
+    if (skipped) body += ` ${skipped === 1 ? "1 kind" : `${skipped} kinds`} you mostly skip ${skipped === 1 ? "is" : "are"} listed there too.`;
     return (await send(title, body, { priority: 3, source: "review" })).ok;
   } catch (err) {
     console.warn(`[review] could not send the weekly push: ${err instanceof Error ? err.message : String(err)}`);

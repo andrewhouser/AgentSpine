@@ -109,12 +109,19 @@ screens has been looked at rendered, and a skipped kind is not undone by answeri
 note under Memory). "Done when" is still a week of real use: a real review, and one *Skip this kind*
 producing one `preference` memory that recall picks up the next day.
 
-**Phase 4: offer to switch off what you keep ignoring.** Mirrors Heads-up B so there is one pattern.
-Per `source` + `kind` over 90 days, `skipRate = (skipped + ignored + dismissed) / sent` over rows with a
-known outcome. Thresholds go in `outbox-rules.ts` set from real Phase 0 and 2 numbers (propose `MIN_SENT`
-8). Over the quieten rate: list it in the review. Over the propose-off rate: one proposal in the
-confirmation queue through `noteSilentRejection`, suppressed for 90 days if rejected. Nothing turns itself
-off silently. Done when 10 skipped rows from one watcher produce exactly one proposal.
+**Phase 4: offer to switch off what you keep ignoring. Built 2026-11-21, never run on real traffic.**
+`src/outbox-learn.ts`, thresholds in `outbox-rules.ts` (`SKIP_*`), `test/outbox-learn.test.mjs`. Mirrors
+Heads-up B. Per `source` + `kind` over 90 days, `skipRate = skipped / counted`, where counted is a message
+whose outcome is known (opened, dismissed, ignored, or answered in the review), skipped is *Skip this kind*,
+a dismissal or 24 hours of silence, and *Useful* cancels the last two. Fewer than 8 counted earns nothing.
+At 0.7 the kind is listed in the weekly review (web, iPhone and Mac) and the Sunday push says how many.
+At 0.85, and only for a `run` or `tool` kind that is the name of exactly one enabled schedule, one
+`schedule_update` (enabled=false) is queued in the confirmation queue by the same tick that sends the
+review push. It is never repeated for 90 days in any state; a reason-less rejection is also tallied by
+`noteSilentRejection`. Heads-up kinds keep their own proposal, and digest and study kinds are listed only
+(no schedule to name). Nothing turns itself off. Not verified: the three review screens rendered, the
+thresholds against real answers (all guesses, set them from the first month of review data), and an
+approval actually switching a schedule off on the Mini.
 
 **Note on `src/learn/interrupt.ts`:** the Phase 4.5 interruption budget exists but is unwired
 (`notifyProactive` has no callers). Phase 3 gives `recordDismissal` its first caller; wire the rest or
