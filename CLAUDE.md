@@ -15,6 +15,7 @@ records live in `docs/`. Read the relevant one before changing an area:
 | MCP client (remote MCP server tools) | `docs/MCP.md` |
 | Open plan | `docs/PLAN-video-ideas.md` |
 | Native Mac app, shared Swift package, UI refresh (the "spine" identity) | `docs/PLAN-native-apps-and-ui-refresh.md` (phase 1 done: Mac target shares eight files; next is the SwiftUI components, see its "Where this stands" section) |
+| Notifications: quiet hours, caps, weekly "what I sent you" review | `docs/PLAN-outbox.md` (proposed, nothing built; note the interruption budget in `src/learn/interrupt.ts` is not wired to any caller yet) |
 | Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/PLAN-heads-up.md` (what is built: phases 0-5 plus tab badge, brief line and preferences; the iOS Swift is uncompiled and the flight and routing integrations are unverified against live keys) and `docs/PLAN-heads-up-next.md` (what is left, in order) |
 
 ## Machines
