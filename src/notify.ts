@@ -34,6 +34,7 @@ import {
   DASHBOARD_PUBLIC_URL,
 } from "./config.ts";
 import { sendPush, type PushAlert } from "./push/apns.ts";
+import type { OutboxSource } from "./outbox-rules.ts";
 
 const run = promisify(execFile);
 
@@ -67,9 +68,18 @@ export interface NotifyOpts {
   push?: PushAlert;
   /** ntfy only: the page a tap on the notification opens (an absolute URL). */
   click?: string;
+  /**
+   * Who is sending, for the outbox (docs/PLAN-outbox.md). Optional so an untagged caller still
+   * works; it is recorded as `unknown` and never held, so forgetting this fails open.
+   */
+  source?: OutboxSource;
+  /** What makes two messages "the same" for de-duplication. Defaults to the title. */
+  dedupeKey?: string;
 }
 
 export interface NotifyResult {
+  /** True when the outbox held or de-duplicated it: nothing was pushed, and `detail` says why. */
+  held?: boolean;
   ok: boolean;
   via: "apns" | "ntfy" | "mac" | "none";
   detail: string;
@@ -169,6 +179,28 @@ export const notify = async (
   title: string,
   body: string,
   opts: NotifyOpts = {},
+): Promise<NotifyResult> => {
+  // The outbox is loaded on demand and fails open: it opens the database, and a bug or a locked
+  // file there must never stop an approval request reaching you.
+  let outbox: typeof import("./outbox.ts") | null = null;
+  let rowId: null | number = null;
+  try {
+    outbox = await import("./outbox.ts");
+    const a = outbox.admit({ body, dedupeKey: opts.dedupeKey, priority: opts.priority, source: opts.source, title });
+    rowId = a.id;
+    if (a.decision !== "sent") return { detail: a.reason, held: true, ok: true, via: "none" };
+  } catch (err) {
+    console.warn(`[notify] outbox unavailable, sending anyway: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const result = await deliver(title, body, opts);
+  outbox?.complete(rowId, result);
+  return result;
+};
+
+const deliver = async (
+  title: string,
+  body: string,
+  opts: NotifyOpts,
 ): Promise<NotifyResult> => {
   const attempts: Promise<NotifyResult>[] = [];
   if (APNS_ENABLED) attempts.push(apnsPublish(title, body, opts));

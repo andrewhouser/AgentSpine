@@ -366,6 +366,7 @@ export const sweepConfirmations = async (
         // was written against, and closing the question silently would reproduce it.
         if (NOTIFY_ON_CONFIRMATION) {
           await push(`Approval expired (#${row.id})`, `${row.summary}\n\nWaited ${describeWait(age)}. Nothing ran.`, {
+            source: "confirmation",
             priority: 3,
             tags: ["hourglass"],
           });

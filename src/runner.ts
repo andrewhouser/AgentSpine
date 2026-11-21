@@ -545,7 +545,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // Off by default: a watcher polling every few minutes should be silent unless it
       // found something, and a brief that wants to reach you can call the notify tool.
       if (NOTIFY_ON_SCHEDULE && kind === "schedule") {
-        void notify(`Scheduled job finished`, summary.slice(0, 500), { priority: 2 });
+        void notify(`Scheduled job finished`, summary.slice(0, 500), { priority: 2, source: "run" });
       }
 
       // Asked for by the client that started this and then stopped watching. Priority 3:
@@ -559,6 +559,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
           summary.slice(0, 500) || "Done, with nothing to report.",
           {
             priority: 3,
+            source: "run",
             tags: ["white_check_mark"],
             push: {
               category: "RUN",
@@ -582,6 +583,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       if (NOTIFY_ON_FAILURE && (isUnattended(kind) || opts.notifyOnFinish)) {
         void notify(`Run failed: ${task.slice(0, 60)}`, msg.slice(0, 500), {
           priority: 4,
+          source: "run",
           tags: ["rotating_light"],
           push: {
             category: "RUN",

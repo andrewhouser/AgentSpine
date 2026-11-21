@@ -551,6 +551,10 @@ export const DASHBOARD_PUBLIC_URL = (env.DASHBOARD_PUBLIC_URL ?? "").replace(/\/
 export const NOTIFY_ON_CONFIRMATION = (env.NOTIFY_ON_CONFIRMATION ?? "true") !== "false";
 export const NOTIFY_ON_FAILURE = (env.NOTIFY_ON_FAILURE ?? "true") !== "false";
 export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true";
+// The outbox (docs/PLAN-outbox.md) always RECORDS every notification. With this off, the default,
+// it only records what it would have done (quiet hours, repeats, the daily cap) and delivers
+// everything as before. Turn it on after a week of `npm run digest` shows the numbers are right.
+export const OUTBOX_ENFORCE = (env.OUTBOX_ENFORCE ?? "false") === "true";
 
 /**
  * The confirmation watchdog — the clock on the approval queue.

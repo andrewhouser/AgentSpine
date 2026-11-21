@@ -15,6 +15,8 @@ import * as store from "./memory/store.ts";
 import { deniedProposals } from "./learn/denials.ts";
 import { promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify } from "./notify.ts";
+import { tallyBySource } from "./outbox.ts";
+import { OUTBOX_ENFORCE } from "./config.ts";
 
 const sinceIso = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 
@@ -242,6 +244,24 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
     }
   }
 
+  // --- what I sent you (docs/PLAN-outbox.md) ---
+  // Counted from the outbox table, like everything here. In log-only mode the last column says
+  // how many messages enforcement WOULD have held or collapsed, which is the number the quiet
+  // hours and the cap get tuned against.
+  const sent = tallyBySource(hours / 24);
+  if (sent.length) {
+    const total = sent.reduce((n, r) => n + r.sent, 0);
+    out.push(`\nWhat I sent you (${plural(total, "message")}${OUTBOX_ENFORCE ? "" : ", outbox log-only"}):`);
+    for (const r of sent) {
+      const extra = OUTBOX_ENFORCE
+        ? [r.held ? `${r.held} held` : "", r.deduped ? `${r.deduped} repeats collapsed` : ""].filter(Boolean)
+        : r.wouldChange
+          ? [`${r.wouldChange} would be held or collapsed`]
+          : [];
+      out.push(`  ${r.source.padEnd(13)} ${String(r.sent).padStart(3)} sent${extra.length ? ` — ${extra.join(", ")}` : ""}`);
+    }
+  }
+
   // --- what needs you --- (last, because it's the part that needs action)
   if (pending.length) {
     out.push(`\nWAITING ON YOU (${pending.length}):`);
@@ -268,6 +288,7 @@ if (import.meta.filename === process.argv[1]) {
   if (push) {
     const r = await notify("AgentSpine digest", text.slice(0, 3500), {
       priority: store.listConfirmations("pending").length ? 4 : 3,
+      source: "digest",
     });
     console.log(`\npush: ${r.ok ? r.detail : `FAILED — ${r.detail}`}`);
   }

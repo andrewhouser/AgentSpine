@@ -69,7 +69,8 @@ import type { RunEvent } from "./events.ts";
 import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
-import { pushConfigured, remoteApprovalConfigured } from "./notify.ts";
+import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
+import { pruneOutbox, releaseHeld } from "./outbox.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
@@ -1754,6 +1755,8 @@ const prune = async (): Promise<void> => {
           (r.withheld ? ` (${r.withheld} kept — pending or unfinished)` : ""),
       );
     }
+    const outbox = pruneOutbox();
+    if (outbox) console.log(`pruned: ${outbox} outbox rows`);
     // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.
     const dropped = pruneSources(60);
     if (dropped) console.log(`pruned: ${dropped} fetched sources older than 60 days`);
@@ -1901,6 +1904,9 @@ setInterval(runScheduler, SCHEDULER_TICK_MS);
 // Due tasks and follow-ups become notifications.
 void sweepDueTasks();
 setInterval(() => void sweepDueTasks(), 60_000).unref();
+// Messages the outbox held (quiet hours, the daily cap) go out as one summary once it is allowed.
+const sweepOutbox = (): Promise<number> => releaseHeld((t, b, o) => notify(t, b, o));
+setInterval(() => void sweepOutbox(), 5 * 60_000).unref();
 // The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
 void sweepHeadsup();
 setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();

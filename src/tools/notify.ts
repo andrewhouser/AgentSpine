@@ -95,7 +95,7 @@ export const notifyTool: Tool = {
         "may notify freely; this only applies to a live chat turn.)",
     };
   },
-  run: async (a: Args) => {
+  run: async (a: Args, ctx) => {
     const title = String(a?.title ?? "agentspine").slice(0, 120);
     const body = String(a?.body ?? "").slice(0, 2000);
     if (!body.trim()) return "ERROR: notify needs a body — an empty notification tells the user nothing.";
@@ -118,7 +118,10 @@ export const notifyTool: Tool = {
       }
     }
 
-    const r = await notify(title, body, { priority });
+    // A live chat that got this far asked for the push (checkPolicy), so it is exempt from the
+    // outbox's rules. An unattended run (a watcher, a scheduled brief) is what they govern.
+    const r = await notify(title, body, { priority, source: ctx?.run?.conversational ? "chat" : "tool" });
+    if (r.held) return `notification not sent now: ${r.detail}. It is kept and shown later, so do not send it again.`;
     return r.ok
       ? `notification delivered (${r.detail})${note}.`
       : `notification NOT delivered: ${r.detail}`;

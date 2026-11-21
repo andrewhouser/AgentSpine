@@ -60,7 +60,7 @@ const realDeps: MorningDeps = {
   fetchEvents: (now) => fetchScanEvents(now),
   googleEnabled,
   remembered: (now) => rememberedEvents(now),
-  send: notify,
+  send: (title, body, opts) => notify(title, body, { ...opts, source: "headsup" }),
 };
 
 /** "today", "tomorrow", "in 10 days". */

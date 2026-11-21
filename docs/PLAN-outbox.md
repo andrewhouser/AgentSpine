@@ -1,6 +1,34 @@
 # Plan: The outbox — one place every message to you passes through
 
-Written 2026-11-21, against `main` at `9e98f0f`. Status: **proposed.** Nothing here is built.
+Written 2026-11-21, against `main` at `9e98f0f`. Status: **Phases 0 and 1 built, enforcement off by default.**
+Phases 2 to 4 are proposed. Nothing has run against real traffic yet.
+
+## Build status
+
+| Phase | State |
+|---|---|
+| 0. `outbox` table, every `notify()` recorded | Built: `src/outbox.ts`, `src/outbox-rules.ts`, hook in `src/notify.ts` |
+| 1. Quiet hours, repeats, soft cap, held summary | Built, but **log-only until `OUTBOX_ENFORCE=true`**. In log-only mode `would_be` records what it would have done and everything is delivered as before. |
+| 2. Opened and dismissed reporting | Not started (needs iOS Swift) |
+| 3. Weekly review screen and feedback | Not started. The digest already has the counts (`npm run digest`). |
+| 4. Propose switching off a source | Not started |
+
+**To turn enforcement on:** run for a week, read the "What I sent you" section of `npm run digest`
+(its `would be held or collapsed` column is the number to judge by), then set `OUTBOX_ENFORCE=true`
+and restart the dashboard. Held messages are released by a 5 minute sweep in `src/server.ts`.
+
+Deviations from the design below, made while building:
+
+- Sources are `chat`, `confirmation`, `digest`, `headsup`, `outbox`, `reminder`, `run`, `study`, `tool`
+  and `unknown`. There is no `watcher` or `schedule`: watchers and scheduled briefs speak through the
+  `notify` tool, so they are `tool` (unattended) or `chat` (a live chat that asked for a push, exempt).
+  Only `study` and `tool` are governed.
+- In log-only mode the cap and repeat checks look at rows that were *sent*, which includes ones
+  enforcement would have held, so the would-be counts can run slightly high. They are an upper bound.
+- Not wired: `.env.example` (`OUTBOX_ENFORCE` is documented in `src/config.ts`), and the Phase 1 item
+  about routing proactive callers through `notifyProactive`. The outbox now does that job for the
+  rules that matter; the judge gate stays unwired and off.
+
 
 This came from comparing AgentSpine with Anthropic's guide to "always-on agents" (a five-piece
 model: inbox, timers, memory, permissions, outbox). Four of the five are covered, and the

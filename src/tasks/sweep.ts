@@ -15,7 +15,7 @@ export const sweepDueTasks = async (renudgeHours = 24): Promise<number> => {
     const waiting = t.kind === "followup";
     const title = waiting ? `Follow up${t.waiting_on ? `: ${t.waiting_on}` : ""}` : "Task due";
     try {
-      await notify(title, t.title, { priority: 3, tags: ["alarm_clock"] });
+      await notify(title, t.title, { priority: 3, source: "reminder", tags: ["alarm_clock"] });
       sent++;
     } catch (err) {
       console.warn(`[tasks] nudge for #${t.id} failed: ${err instanceof Error ? err.message : String(err)}`);

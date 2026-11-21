@@ -1,0 +1,239 @@
+/**
+ * The outbox: a record of every message AgentSpine tried to send you, and (when enforcement
+ * is on) the one place that decides whether a message nobody asked for goes out now.
+ * docs/PLAN-outbox.md, Phases 0 and 1.
+ *
+ * Why it exists: quiet hours, a daily cap and "ignored" tracking lived only inside Heads-up,
+ * while watchers, the study sweep and scheduled briefs called `notify` directly and could
+ * wake you at 3am. The interruption budget in learn/interrupt.ts was written but nothing
+ * called it. This is the single choke point, and it logs first.
+ *
+ * Phase 0 (OUTBOX_ENFORCE off, the default) changes nothing about delivery. It records every
+ * message and, in `would_be`, what enforcement WOULD have done, so a week of real traffic can
+ * set the thresholds instead of a guess.
+ *
+ * Two properties this is built around:
+ *   1. It fails open. Any error here means the message is sent. A notification is a side
+ *      channel, and a bug in the bookkeeping must never silence an approval request.
+ *   2. Nothing is silently dropped. A held message is stored, listed, and sent later as one
+ *      summary built by code. A cap that discarded messages would look exactly like a quiet day.
+ */
+import { OUTBOX_ENFORCE } from "./config.ts";
+import { isQuietNow } from "./headsup/prefs.ts";
+import { rawDb } from "./memory/store.ts";
+import type { NotifyOpts } from "./notify.ts";
+import {
+  BODY_CLIP,
+  COUNTED_SOURCES,
+  DEDUPE_HOURS,
+  GOVERNED_SOURCES,
+  OUTBOX_RETENTION_DAYS,
+  PROACTIVE_DAILY_CAP,
+  RELEASE_LIST_MAX,
+  URGENT_PRIORITY,
+} from "./outbox-rules.ts";
+import type { OutboxSource } from "./outbox-rules.ts";
+
+rawDb.exec(`
+  CREATE TABLE IF NOT EXISTS outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created TEXT NOT NULL,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    priority INTEGER NOT NULL,
+    governed INTEGER NOT NULL,
+    decision TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    would_be TEXT NOT NULL,
+    dedupe_key TEXT NOT NULL,
+    via TEXT,
+    delivered INTEGER,
+    released_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox (created);
+  CREATE INDEX IF NOT EXISTS idx_outbox_held ON outbox (decision, released_at);
+`);
+
+/** What happened to a message. `held` waits for the next release; the others are final. */
+export type OutboxDecision = "deduped" | "held" | "sent";
+
+export interface Admission {
+  decision: OutboxDecision;
+  /** Present when decision is not `sent`: a sentence for the caller and the review. */
+  reason: string;
+  /** The row, so the transport result can be written back. Null if the row could not be written. */
+  id: null | number;
+}
+
+export interface AdmitInput {
+  body: string;
+  dedupeKey?: string;
+  priority?: number;
+  source?: OutboxSource;
+  title: string;
+}
+
+const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+const startOfLocalDay = (now: Date): string => {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+};
+
+/** The key a repeat is recognised by. A caller that knows better passes its own. */
+const keyOf = (source: string, title: string, dedupeKey?: string): string =>
+  `${source}:${(dedupeKey ?? title).toLowerCase().replace(/\s+/g, " ").trim().slice(0, 160)}`;
+
+/** Sends that count against the cap since local midnight. Held and de-duplicated rows do not. */
+export const sentToday = (now: Date = new Date()): number => {
+  const counted = [...COUNTED_SOURCES].map(() => "?").join(",");
+  const row = rawDb
+    .prepare(`SELECT COUNT(*) AS n FROM outbox WHERE decision = 'sent' AND created >= ? AND source IN (${counted})`)
+    .get(startOfLocalDay(now), ...COUNTED_SOURCES) as { n: number };
+  return row.n;
+};
+
+/**
+ * What the rules say about this message, without writing anything. Pure with respect to the
+ * outbox: it only reads. Order matters and is the order in the plan: urgent first (never
+ * held), then repeats, then quiet hours, then the cap.
+ */
+export const judgeMessage = (
+  input: Required<Pick<AdmitInput, "priority" | "source">> & { key: string },
+  now: Date,
+): { decision: OutboxDecision; reason: string } => {
+  if (!GOVERNED_SOURCES.has(input.source)) return { decision: "sent", reason: "" };
+  if (input.priority >= URGENT_PRIORITY) return { decision: "sent", reason: "" };
+
+  const since = new Date(now.getTime() - DEDUPE_HOURS * 3_600_000).toISOString();
+  const repeat = rawDb
+    .prepare("SELECT 1 AS x FROM outbox WHERE dedupe_key = ? AND decision = 'sent' AND created >= ? LIMIT 1")
+    .get(input.key, since);
+  if (repeat) return { decision: "deduped", reason: `the same message was sent in the last ${DEDUPE_HOURS} hours` };
+
+  if (isQuietNow(now)) return { decision: "held", reason: "quiet hours: held until they end" };
+  if (sentToday(now) >= PROACTIVE_DAILY_CAP)
+    return { decision: "held", reason: `daily limit of ${PROACTIVE_DAILY_CAP} reached: held until tomorrow` };
+  return { decision: "sent", reason: "" };
+};
+
+/**
+ * Record a message and decide whether it goes now. Never throws: on any failure the answer is
+ * `sent`, with no row.
+ */
+export const admit = (input: AdmitInput, now: Date = new Date()): Admission => {
+  try {
+    const source = input.source ?? "unknown";
+    const priority = Math.min(5, Math.max(1, Math.round(input.priority ?? 3)));
+    const key = keyOf(source, input.title, input.dedupeKey);
+    const verdict = judgeMessage({ key, priority, source }, now);
+    // Log-only: remember what enforcement would have done, but let it through.
+    const decision: OutboxDecision = OUTBOX_ENFORCE ? verdict.decision : "sent";
+    const reason = OUTBOX_ENFORCE ? verdict.reason : verdict.decision === "sent" ? "" : `would have been ${verdict.decision}: ${verdict.reason}`;
+    const res = rawDb
+      .prepare(
+        `INSERT INTO outbox (created, source, title, body, priority, governed, decision, reason, would_be, dedupe_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        now.toISOString(),
+        source,
+        clip(input.title, 120),
+        clip(input.body, BODY_CLIP),
+        priority,
+        GOVERNED_SOURCES.has(source) ? 1 : 0,
+        decision,
+        reason,
+        verdict.decision,
+        key,
+      );
+    return { decision, id: Number(res.lastInsertRowid), reason: OUTBOX_ENFORCE ? verdict.reason : "" };
+  } catch (err) {
+    console.warn(`[outbox] could not record a message, sending it anyway: ${err instanceof Error ? err.message : String(err)}`);
+    return { decision: "sent", id: null, reason: "" };
+  }
+};
+
+/** Write the transport result back onto the row. Never throws. */
+export const complete = (id: null | number, result: { ok: boolean; via: string }): void => {
+  if (id == null) return;
+  try {
+    rawDb.prepare("UPDATE outbox SET via = ?, delivered = ? WHERE id = ?").run(result.via, result.ok ? 1 : 0, id);
+  } catch (err) {
+    console.warn(`[outbox] could not record delivery: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+interface HeldRow {
+  id: number;
+  source: string;
+  title: string;
+}
+
+/**
+ * Send what was held, as ONE message built by code. Does nothing while quiet hours are on or
+ * the cap is still reached, so a held message cannot be released into the same condition that
+ * held it. Rows are marked released only if the push was delivered; otherwise the next sweep
+ * tries again.
+ *
+ * `send` is a seam for tests. The summary's source is `outbox`, which is not governed, so it
+ * cannot be held by the rules it is releasing.
+ */
+export const releaseHeld = async (
+  send: (title: string, body: string, opts: NotifyOpts) => Promise<{ ok: boolean }>,
+  now: Date = new Date(),
+): Promise<number> => {
+  try {
+    const rows = rawDb
+      .prepare("SELECT id, source, title FROM outbox WHERE decision = 'held' AND released_at IS NULL ORDER BY id")
+      .all() as unknown as HeldRow[];
+    if (!rows.length) return 0;
+    if (isQuietNow(now) || sentToday(now) >= PROACTIVE_DAILY_CAP) return 0;
+
+    const lines = rows.slice(0, RELEASE_LIST_MAX).map((r) => `• ${r.title}`);
+    if (rows.length > RELEASE_LIST_MAX) lines.push(`…and ${rows.length - RELEASE_LIST_MAX} more`);
+    const title = rows.length === 1 ? "1 message held back" : `${rows.length} messages held back`;
+    const result = await send(title, lines.join("\n"), { priority: 3, source: "outbox" });
+    if (!result.ok) return 0;
+
+    const mark = rawDb.prepare("UPDATE outbox SET released_at = ? WHERE id = ?");
+    for (const r of rows) mark.run(now.toISOString(), r.id);
+    return rows.length;
+  } catch (err) {
+    console.warn(`[outbox] could not release held messages: ${err instanceof Error ? err.message : String(err)}`);
+    return 0;
+  }
+};
+
+export interface OutboxTally {
+  deduped: number;
+  held: number;
+  sent: number;
+  source: string;
+  /** In log-only mode: messages enforcement would have held or de-duplicated. */
+  wouldChange: number;
+}
+
+/** Per-source counts for the digest. A number from SQL, never from a model. */
+export const tallyBySource = (days: number, now: Date = new Date()): OutboxTally[] => {
+  const since = new Date(now.getTime() - days * 86_400_000).toISOString();
+  return rawDb
+    .prepare(
+      `SELECT source,
+              SUM(decision = 'sent') AS sent,
+              SUM(decision = 'held') AS held,
+              SUM(decision = 'deduped') AS deduped,
+              SUM(decision = 'sent' AND would_be != 'sent') AS wouldChange
+         FROM outbox WHERE created >= ? GROUP BY source ORDER BY COUNT(*) DESC`,
+    )
+    .all(since) as unknown as OutboxTally[];
+};
+
+/** Delete rows past the retention window. Returns how many went. */
+export const pruneOutbox = (days: number = OUTBOX_RETENTION_DAYS, now: Date = new Date()): number => {
+  if (days <= 0) return 0;
+  const before = new Date(now.getTime() - days * 86_400_000).toISOString();
+  return Number(rawDb.prepare("DELETE FROM outbox WHERE created < ? AND (decision != 'held' OR released_at IS NOT NULL)").run(before).changes);
+};

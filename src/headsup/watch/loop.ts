@@ -99,7 +99,7 @@ export const realWatchDeps: WatchDeps = {
   flights: () => (blockedReason("flight") ? null : aeroDataBox(HEADSUP_FLIGHT_KEY)),
   home: () => HEADSUP_HOME,
   limits: () => ({ flightsPerMonth: HEADSUP_FLIGHT_CALLS_PER_MONTH, travelPerDay: HEADSUP_TRAVEL_CALLS_PER_DAY }),
-  send: notify,
+  send: (title, body, opts) => notify(title, body, { ...opts, source: "headsup" }),
   travel: () => (blockedReason("drive") ? null : tomTom(HEADSUP_TOMTOM_KEY)),
 };
 

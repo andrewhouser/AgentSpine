@@ -17,7 +17,8 @@ const KEY = "cards_nudged";
 export const sweepDueCards = async (
   minHours = 20,
   at: Date = new Date(),
-  send: (title: string, body: string, opts?: NotifyOpts) => Promise<unknown> = notify,
+  send: (title: string, body: string, opts?: NotifyOpts) => Promise<unknown> = (t, b, o) =>
+    notify(t, b, { ...o, source: "study" }),
 ): Promise<boolean> => {
   const n = countDue(undefined, at);
   if (!n) return false;

@@ -226,6 +226,7 @@ export const executeCall = async (
     if (NOTIFY_ON_CONFIRMATION) {
       const token = store.getApprovalToken(cid);
       void notify(`Approval needed (#${cid})`, classified.summary, {
+        source: "confirmation",
         priority: 4,
         tags: ["warning"],
         actions: token ? confirmationActions(cid, token) : [],
