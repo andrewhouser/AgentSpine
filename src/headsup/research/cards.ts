@@ -20,7 +20,7 @@ import { safeGet } from "./net.ts";
 import type { GetOpts } from "./net.ts";
 
 export const IMAGE_MAX_BYTES = 1_500_000;
-const IMAGE_DIR = path.join(ATTACHMENTS_DIR, "headsup");
+export const IMAGE_DIR = path.join(ATTACHMENTS_DIR, "headsup");
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS headsup_images (

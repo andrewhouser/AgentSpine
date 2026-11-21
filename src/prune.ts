@@ -28,6 +28,7 @@ import {
 import { dedupeMemories, pruneFriction, pruneMemories } from "./memory/rag.ts";
 import { pruneLedger, vacuum } from "./memory/store.ts";
 import { pruneOutbox } from "./outbox.ts";
+import { pruneHeadsup } from "./headsup/prune.ts";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry") || args.includes("--dry-run");
@@ -79,6 +80,10 @@ const recipes = dryRun || RECIPE_MEMORY_MAX <= 0 ? 0 : pruneMemories("recipe", R
 const lessons = dryRun || LESSON_MEMORY_MAX <= 0 ? 0 : pruneMemories("lesson", LESSON_MEMORY_MAX);
 // Conversation summaries (cross-conversation memory) — auto-generated, its own cap.
 const convos = dryRun || CONVERSATION_MEMORY_MAX <= 0 ? 0 : pruneMemories("conversation", CONVERSATION_MEMORY_MAX);
+const hu = dryRun ? null : pruneHeadsup();
+console.log(`  ${String(hu ? hu.cardSets : 0).padStart(6)} finished heads-ups' research (cards and photos) past 30 days`);
+console.log(`  ${String((hu?.watches ?? 0) + (hu?.ledger ?? 0)).padStart(6)} heads-up watches (30 days) and ledger rows (400 days)`);
+console.log(`  ${String((hu?.orphanFiles ?? 0) + (hu?.orphanImageRows ?? 0)).padStart(6)} orphan heads-up images`);
 const outboxRows = dryRun ? 0 : pruneOutbox();
 console.log(`  ${String(outboxRows).padStart(6)} outbox rows past their retention`);
 console.log(`  ${String(duplicates).padStart(6)} duplicate memories`);

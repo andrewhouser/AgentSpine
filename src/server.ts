@@ -71,6 +71,7 @@ import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./c
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { pruneOutbox, releaseHeld } from "./outbox.ts";
+import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
@@ -1755,6 +1756,9 @@ const prune = async (): Promise<void> => {
           (r.withheld ? ` (${r.withheld} kept — pending or unfinished)` : ""),
       );
     }
+    const hu = pruneHeadsup();
+    if (hu.cardSets + hu.watches + hu.ledger + hu.orphanFiles + hu.orphanImageRows)
+      console.log(`pruned: heads-up ${hu.cardSets} card sets, ${hu.watches} watches, ${hu.ledger} ledger rows, ${hu.orphanFiles + hu.orphanImageRows} orphan images`);
     const outbox = pruneOutbox();
     if (outbox) console.log(`pruned: ${outbox} outbox rows`);
     // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.

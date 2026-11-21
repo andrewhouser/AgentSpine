@@ -16,6 +16,7 @@ import { deniedProposals } from "./learn/denials.ts";
 import { promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify } from "./notify.ts";
 import { tallyBySource } from "./outbox.ts";
+import { headsupSection } from "./headsup/telemetry.ts";
 import { OUTBOX_ENFORCE } from "./config.ts";
 
 const sinceIso = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
@@ -243,6 +244,9 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
       out.push(`    ${proposalDiff(p)}`);
     }
   }
+
+  // --- heads-up (docs/PLAN-heads-up-next.md F) ---
+  out.push(...headsupSection());
 
   // --- what I sent you (docs/PLAN-outbox.md) ---
   // Counted from the outbox table, like everything here. In log-only mode the last column says

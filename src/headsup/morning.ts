@@ -20,6 +20,7 @@ import * as ledger from "./ledger.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
 import { getPrefs, isQuietNow } from "./prefs.ts";
+import { recordCalendarFailure } from "./telemetry.ts";
 import { MORNING_HOUR, MORNING_MINUTE, RETRY_AFTER_ERROR_MINUTES } from "./rules.ts";
 import { scanEvents } from "./scan.ts";
 import type { ScanEvent } from "./scan.ts";
@@ -142,8 +143,12 @@ export const runMorningHeadsup = async (
     if (deps.googleEnabled()) fetched = await deps.fetchEvents(now);
   } catch (err) {
     kvSet(LAST_ERROR, now.toISOString());
+    recordCalendarFailure(err instanceof Error ? err.message : String(err), now);
     return result("error", { errors: [err instanceof Error ? err.message : String(err)] });
   }
+
+  // One calendar failing still yields the others' events (see index.ts), so count it here too.
+  if (fetched.errors.length) recordCalendarFailure(fetched.errors.join("; "), now);
 
   ledger.expirePast(now);
   const events = [...fetched.events, ...dropCoveredByCalendar(deps.remembered(now), fetched.events)];

@@ -1,6 +1,14 @@
 # Plan: Heads-up, what comes next
 
-Written 2026-11-18, against `main` at `e72b6f1`. Status: **proposed.** Nothing here is built.
+Written 2026-11-18, against `main` at `e72b6f1`. Status: **E and F built (2026-11-21); the rest proposed.**
+
+- **E, retention: built.** `src/headsup/prune.ts`, run by the daily prune and `npm run prune`. Test:
+  `test/headsup-prune.test.mjs`. Outcomes are not pruned because `headsup_outcomes` does not exist until B.
+- **F, telemetry: built.** `src/headsup/telemetry.ts`, printed by `npm run digest`. Offers and answers
+  are read from the ledger as it stands now (a snapshot; B's outcomes table would make it a history).
+  Research now stores its `rung` in the payload, and calendar read failures are counted. Test:
+  `test/headsup-telemetry.test.mjs`. Per-watch notification counts are not stored, so it reports how
+  many watches have ever notified.
 
 `PLAN-heads-up.md` is the record of what was built (Phases 0 to 5 and three follow-ups) and why.
 This is the spec for what remains. It is ordered by what unblocks what, and every item says how

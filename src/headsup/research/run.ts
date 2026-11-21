@@ -29,6 +29,7 @@ import { safeGet } from "./net.ts";
 import type { GetResult } from "./net.ts";
 import { extractProduct, cleanText, safeUrl } from "./product.ts";
 import { assertAnonymous, dinnerQuery, giftQuery, mapsLink, shoppingLink } from "./query.ts";
+import { rungOf } from "../telemetry.ts";
 import { describeRecipient } from "./recipient.ts";
 import type { Recipient, RecipientDeps } from "./recipient.ts";
 
@@ -86,7 +87,7 @@ const realDeps: ResearchDeps = {
       return false;
     }
   },
-  send: notify,
+  send: (title, body, opts) => notify(title, body, { ...opts, source: "headsup" }),
 };
 
 /** The person in a subject: "Garrett's Birthday" -> "Garrett", "Your Wife's Birthday" -> "your wife". */
@@ -210,10 +211,13 @@ export const researchHeadsup = async (id: number, deps: ResearchDeps = realDeps)
     } else {
       note = "web search is off in policy.json";
     }
-    if (!cards.length) cards = [fallback];
+    const usedFallback = !cards.length;
+    if (usedFallback) cards = [fallback];
 
     replaceCards(id, cards, deps.now());
-    ledger.markResearched(id, { note, query }, deps.now());
+    // The rung is stored so the digest can say how often a page was readable at all, which is
+    // also the number that decides whether a browser fallback (PLAN-heads-up-next H1) is worth building.
+    ledger.markResearched(id, { note, query, rung: rungOf(cards, usedFallback) }, deps.now());
     const ideas = cards.filter((c) => c.kind !== "link").length;
     if (ideas > 0) {
       const what = kind === "gift" ? "gift ideas" : "restaurant ideas";
