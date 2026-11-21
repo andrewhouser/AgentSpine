@@ -52,9 +52,13 @@ const CANDIDATES = 50;
 /**
  * Below this cosine the vector path does not count a chunk as a match, so "found by vector" means the model
  * judged it related. A first guess, to be set from the K1 evaluation set once there is one, in code rather
- * than a prompt like every threshold here.
+ * than a prompt like every threshold here. `KNOWLEDGE_VECTOR_MIN` overrides it for one run, so the evaluation can be
+ * repeated at 0.15, 0.25 and 0.35 and the value that does best on your questions kept.
  */
-export const VECTOR_MIN_SIMILARITY = 0.25;
+export const VECTOR_MIN_SIMILARITY = ((): number => {
+  const v = Number(process.env.KNOWLEDGE_VECTOR_MIN);
+  return process.env.KNOWLEDGE_VECTOR_MIN !== undefined && Number.isFinite(v) && v >= 0 && v < 1 ? v : 0.25;
+})();
 
 /**
  * A user's words as an FTS5 query. Filler words are dropped and the rest are OR-ed, so a long question still

@@ -346,7 +346,7 @@ baseline, and the meeting recall number is still unmeasured.
   `forbidSources`, `kinds`, `since`, and `expectNone` (reports the best score so a no-evidence threshold can be
   chosen from real data). Keep the file outside the repository. **You: write 30 to 50 questions** you actually
   care about (some with changed information, some whose right answer is "not enough evidence"), then run it on
-  the Mini before changing retrieval again; `VECTOR_MIN_SIMILARITY` is set from the result. Suite:
+  the Mini before changing retrieval again; `VECTOR_MIN_SIMILARITY` is set from the result: run it with `KNOWLEDGE_VECTOR_MIN=0.15`, `0.25` and `0.35` in front of the command and keep the value with the best recall and no new leaks. `eval/questions.example.json` is an invented template to copy outside the repo. Suite:
   `test/knowledge-eval.test.mjs`, which shows each path winning its own kind of question and the fused mode
   winning both. Not built: citation correctness, stale-answer rate and extraction acceptance rate (they need
   K4's records and K6's answers). This also still measures meeting recall (section 4a) once questions exist.
