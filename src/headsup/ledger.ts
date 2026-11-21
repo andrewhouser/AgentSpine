@@ -5,9 +5,11 @@
  * birthday is one row, however many times the calendar is read in the ten days before it.
  * Same SQLite file as everything else, same style as tasks.
  *
- * `stage` is the index into the kind's lead-time list that was last offered (-1: none yet). It
- * only ever moves forward, which is what makes "first mention, then a reminder" work without
- * a separate row per mention.
+ * `stage_days` is the lead-time THRESHOLD, in days, last offered (null: none yet). It only ever moves
+ * toward zero, which is what makes "first mention, then a reminder" work without a separate row per
+ * mention. It is a number of days and not an index because the lead-time list can be edited in Settings
+ * (prefs.ts): an index into a list that changed would re-offer or skip. `stage` is the old index, kept
+ * for history and for tests; nothing decides anything from it any more except the backfill below.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { rawDb } from "../memory/store.ts";
@@ -21,7 +23,7 @@ import type { WatchView } from "./watch/store.ts";
 import type { Candidate } from "./scan.ts";
 import { subjectKey } from "./scan.ts";
 import { backfillOutcomes, recordAnswer, recordIgnoredBefore, recordOffer } from "./outcomes.ts";
-import { SNOOZE_HOURS } from "./rules.ts";
+import { LEAD_DAYS, SNOOZE_HOURS } from "./rules.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS headsups (
@@ -55,6 +57,18 @@ rawDb.exec(`
 if (!(rawDb.prepare("PRAGMA table_info(headsups)").all() as { name: string }[]).some((c) => c.name === "answer_token"))
   rawDb.exec("ALTER TABLE headsups ADD COLUMN answer_token TEXT");
 
+// Added with lead-time overrides. Rows made before it only know their stage as an index into the default
+// list, so translate that once, here, while the default list is still what the index meant.
+if (!(rawDb.prepare("PRAGMA table_info(headsups)").all() as { name: string }[]).some((c) => c.name === "stage_days")) {
+  rawDb.exec("ALTER TABLE headsups ADD COLUMN stage_days INTEGER");
+  const old = rawDb.prepare("SELECT id, kind, stage FROM headsups WHERE stage >= 0").all() as { id: number; kind: string; stage: number }[];
+  const set = rawDb.prepare("UPDATE headsups SET stage_days = ? WHERE id = ?");
+  for (const r of old) {
+    const days = (LEAD_DAYS as Record<string, number[] | undefined>)[r.kind]?.[r.stage];
+    if (days !== undefined) set.run(days, r.id);
+  }
+}
+
 // The outcome history (outcomes.ts) starts from what this ledger already knows.
 backfillOutcomes();
 
@@ -79,6 +93,8 @@ export interface HeadsupRow {
   payload_json: null | string;
   snooze_until: null | string;
   stage: number;
+  /** Lead-time threshold in days last offered; null if none yet. See the header. */
+  stage_days?: null | number;
   state: HeadsupState;
   subject: string;
   updated: string;
@@ -100,20 +116,22 @@ export const listByState = (states: HeadsupState[], limit = 100): HeadsupRow[] =
     .all(...states, limit) as unknown as HeadsupRow[];
 
 /**
- * Record that `c` was offered at lead-time stage `stage`. Creates the row on first offer and
+ * Record that `c` was offered at lead-time stage `stage`, whose threshold is `stageDays` days (derived
+ * from the default list when a caller gives only the index). Creates the row on first offer and
  * advances the stage afterwards; never moves it backwards, so a late scan cannot re-offer an
  * earlier stage. Returns the row.
  */
-export const markOffered = (c: Candidate, stage: number, now: Date): HeadsupRow => {
+export const markOffered = (c: Candidate, stage: number, now: Date, stageDays?: null | number): HeadsupRow => {
+  const days = stageDays !== undefined ? stageDays : ((LEAD_DAYS as Record<string, number[] | undefined>)[c.kind]?.[stage] ?? null);
   const t = iso(now);
   const existing = getByKey(c.dedupeKey);
   if (!existing) {
     rawDb
       .prepare(
         `INSERT INTO headsups
-           (dedupe_key, kind, subject, due_at, state, stage, fingerprint, first_offered_at,
+           (dedupe_key, kind, subject, due_at, state, stage, stage_days, fingerprint, first_offered_at,
             last_nudged_at, payload_json, created, updated)
-         VALUES (?,?,?,?, 'offered', ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?,?,?,?, 'offered', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         c.dedupeKey,
@@ -121,6 +139,7 @@ export const markOffered = (c: Candidate, stage: number, now: Date): HeadsupRow 
         c.subject,
         c.startsAt,
         stage,
+        days,
         c.fingerprint,
         t,
         t,
@@ -135,12 +154,14 @@ export const markOffered = (c: Candidate, stage: number, now: Date): HeadsupRow 
     rawDb
       .prepare(
         `UPDATE headsups
-            SET stage = MAX(stage, ?), fingerprint = ?, due_at = ?, subject = ?, last_nudged_at = ?,
+            SET stage = MAX(stage, ?),
+                stage_days = CASE WHEN ? IS NULL THEN stage_days WHEN stage_days IS NULL THEN ? ELSE MIN(stage_days, ?) END,
+                fingerprint = ?, due_at = ?, subject = ?, last_nudged_at = ?,
                 state = CASE WHEN state IN ('snoozed','offered') THEN 'offered' ELSE state END,
                 snooze_until = NULL, updated = ?
           WHERE id = ?`,
       )
-      .run(stage, c.fingerprint, c.startsAt, c.subject, t, t, existing.id);
+      .run(stage, days, days, days, c.fingerprint, c.startsAt, c.subject, t, t, existing.id);
   }
   return getByKey(c.dedupeKey)!;
 };

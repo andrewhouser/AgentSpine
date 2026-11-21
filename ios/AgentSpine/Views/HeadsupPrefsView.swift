@@ -79,6 +79,28 @@ struct HeadsupPrefsView: View {
                     }
                 }
 
+                if let lead = prefs.leadDays {
+                    Section {
+                        ForEach(Self.kinds.filter { lead[$0.id] != nil }) { kind in
+                            LeadDaysRow(
+                                label: kind.label,
+                                days: lead[kind.id] ?? [],
+                                defaults: prefs.leadDaysDefault?[kind.id] ?? lead[kind.id] ?? []
+                            ) { value in
+                                Task { await change(["leadDays": [kind.id: value ?? NSNull()]]) }
+                            }
+                            // A new list means a new row, so the text field starts from what the server kept.
+                            .id("\(kind.id):\((lead[kind.id] ?? []).map(String.init).joined(separator: ","))")
+                        }
+                    } header: {
+                        Text("When to mention each kind")
+                    } footer: {
+                        Text("Days before the date, largest first, up to three, each 0 to 45. The first is the first "
+                             + "mention and the rest are reminders. A change applies to what has not been mentioned "
+                             + "yet and never repeats a mention you already got.")
+                    }
+                }
+
                 Section("Each morning") {
                     Stepper(
                         "At most \(prefs.dailyCap) per morning",
@@ -159,6 +181,46 @@ struct HeadsupPrefsView: View {
             actionError = error.localizedDescription
             // Reload, so the control snaps back to what the server actually holds.
             await load()
+        }
+    }
+}
+
+/// One kind's lead times as text ("5, 1, 0"), sent when you press return. The server validates the
+/// whole list; a refused one reloads the screen so the field goes back to what is kept.
+private struct LeadDaysRow: View {
+    let label: String
+    let days: [Int]
+    let defaults: [Int]
+    let save: (Any?) -> Void
+    @State private var text: String
+
+    init(label: String, days: [Int], defaults: [Int], save: @escaping (Any?) -> Void) {
+        self.label = label
+        self.days = days
+        self.defaults = defaults
+        self.save = save
+        _text = State(initialValue: days.map(String.init).joined(separator: ", "))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                Spacer()
+                TextField("5, 1, 0", text: $text)
+                    .multilineTextAlignment(.trailing)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        let parsed = text.split(whereSeparator: { $0 == "," || $0 == " " }).compactMap { Int($0) }
+                        let pieces = text.split(whereSeparator: { $0 == "," || $0 == " " })
+                        // A piece that is not a whole number goes to the server as-is and is refused there.
+                        save(parsed.count == pieces.count ? parsed : pieces.map(String.init))
+                    }
+            }
+            if days != defaults {
+                Button("Use \(defaults.map(String.init).joined(separator: ", "))") { save(nil) }
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+            }
         }
     }
 }

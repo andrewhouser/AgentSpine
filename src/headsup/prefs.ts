@@ -10,17 +10,40 @@
  * becoming a polling storm against a free-tier API, and a setting you can lower defeats that.
  */
 import { kvGet, kvSet } from "../memory/store.ts";
-import { DAILY_CAP, FAST_LOOP_FLOOR_MINUTES, inQuietHours, QUIET_END_HOUR, QUIET_START_HOUR } from "./rules.ts";
+import { DAILY_CAP, FAST_LOOP_FLOOR_MINUTES, inQuietHours, LEAD_DAYS, LOOKAHEAD_DAYS, QUIET_END_HOUR, QUIET_START_HOUR } from "./rules.ts";
 import type { HeadsupKind } from "./rules.ts";
 
 export const ALL_KINDS: HeadsupKind[] = ["anniversary", "appointment", "bill", "birthday", "flight", "recurring"];
 
 export const MAX_DAILY_CAP = 10;
+export const MAX_LEAD_STAGES = 3;
+/** The kinds whose lead times can be changed. */
+export const LEAD_KINDS: HeadsupKind[] = ALL_KINDS.filter((k) => k !== "recurring");
+
+/** A lead-time list, or the sentence saying why not. Exact: nothing is sorted or trimmed for you. */
+export const validLeadDays = (v: unknown): { error: string } | { ok: number[] } => {
+  if (!Array.isArray(v) || v.length < 1 || v.length > MAX_LEAD_STAGES)
+    return { error: `give 1 to ${MAX_LEAD_STAGES} day counts` };
+  const out: number[] = [];
+  for (const d of v) {
+    if (typeof d !== "number" || !Number.isInteger(d) || d < 0 || d > LOOKAHEAD_DAYS)
+      return { error: `each day count must be a whole number from 0 to ${LOOKAHEAD_DAYS}` };
+    if (out.length && d >= out[out.length - 1]) return { error: "list the day counts from largest to smallest, with no repeats" };
+    out.push(d);
+  }
+  return { ok: out };
+};
+
 
 export interface Prefs {
   dailyCap: number;
   /** A kind set to false is never offered. Existing watches keep running. */
   kinds: Record<string, boolean>;
+  /**
+   * Days before the event at which each kind is mentioned, largest first: the default list unless you
+   * changed it. "recurring" has no list (it is one mention per series), so it is not here.
+   */
+  leadDays: Record<string, number[]>;
   /** Quiet from this hour (inclusive) to the end hour (exclusive), local. Equal hours mean no quiet hours. */
   quietEndHour: number;
   quietStartHour: number;
@@ -29,6 +52,7 @@ export interface Prefs {
 export const defaultPrefs = (): Prefs => ({
   dailyCap: DAILY_CAP,
   kinds: Object.fromEntries(ALL_KINDS.map((k) => [k, true])),
+  leadDays: Object.fromEntries(LEAD_KINDS.map((k) => [k, [...LEAD_DAYS[k]]])),
   quietEndHour: QUIET_END_HOUR,
   quietStartHour: QUIET_START_HOUR,
 });
@@ -52,6 +76,11 @@ export const getPrefs = (): Prefs => {
     if (qs !== null) out.quietStartHour = qs;
     if (qe !== null) out.quietEndHour = qe;
     for (const k of ALL_KINDS) if (raw?.kinds?.[k] === false) out.kinds[k] = false;
+    // A stored list that no longer validates is ignored, so the default stands.
+    for (const k of LEAD_KINDS) {
+      const v = raw?.leadDays?.[k] === undefined ? null : validLeadDays(raw.leadDays[k]);
+      if (v && "ok" in v) out.leadDays[k] = v.ok;
+    }
   } catch {
     /* corrupt storage means defaults */
   }
@@ -86,9 +115,30 @@ export const updatePrefs = (patch: unknown): { error: string; ok: false } | { ok
       next.kinds[k] = v;
     }
   }
-  kvSet(KEY, JSON.stringify(next));
+  if (p.leadDays !== undefined) {
+    if (!p.leadDays || typeof p.leadDays !== "object" || Array.isArray(p.leadDays))
+      return { error: "leadDays must be an object like { bill: [5, 1, 0] }", ok: false };
+    for (const [k, v] of Object.entries(p.leadDays)) {
+      if (!LEAD_KINDS.includes(k as HeadsupKind)) return { error: `"${k}" has no lead times to change`, ok: false };
+      // null puts the default back.
+      if (v === null) {
+        next.leadDays[k] = [...LEAD_DAYS[k as HeadsupKind]];
+        continue;
+      }
+      const r = validLeadDays(v);
+      if ("error" in r) return { error: `leadDays.${k}: ${r.error}`, ok: false };
+      next.leadDays[k] = r.ok;
+    }
+  }
+  // Store only what differs from the default, so a later change to a shipped default still reaches you.
+  const stored: Record<string, number[]> = {};
+  for (const k of LEAD_KINDS) if (next.leadDays[k].join() !== LEAD_DAYS[k].join()) stored[k] = next.leadDays[k];
+  kvSet(KEY, JSON.stringify({ ...next, leadDays: stored }));
   return { ok: true, prefs: next };
 };
+
+/** The lead times in force for a kind: yours, or the default. */
+export const leadDaysFor = (kind: string): number[] => getPrefs().leadDays[kind] ?? (LEAD_DAYS as Record<string, number[]>)[kind] ?? [];
 
 /** Whether this kind may be offered. */
 export const kindEnabled = (kind: string): boolean => getPrefs().kinds[kind] !== false;

@@ -134,7 +134,7 @@ page, iOS, flights and drives), the tab badge, brief line and preferences, **E r
 | A | Verify what has only run against fixtures | S | **You** |
 | B | Learn from dismissals | M | **Built**, unproven: needs weeks of real answers (A3 first) |
 | C | `docs/ROLLOUT-heads-up.md` rollout checklist | S | Not started; needs A |
-| D | Lead-time overrides in Settings | M | Not started |
+| D | Lead-time overrides in Settings | M | **Built** 2026-11-21, not yet seen rendered |
 | G | Live Activity for a flight | L | Not started; needs A1 and A3 rung 6 first |
 | H | Small and conditional items | S each | Not started |
 
@@ -176,12 +176,19 @@ accuracy); 6 learning from dismissals after B. Each rung states its metric, its 
 a kind toggle, a policy flag) and the standing rule: if the number does not move as predicted, switch it
 off and report, do not tune.
 
-**D. Lead-time overrides.** A per-kind ordered list of 1 to 3 day counts, largest first, each 0 to 45, no
-duplicates, validated all-or-nothing; `LEAD_DAYS` stays the default. **The trap:** the ledger's `stage` is an
-index into the kind's list, so changing the list mid-sequence would re-offer or skip. Record the threshold
-in days in a new `stage_days` column at offer time and compare thresholds, with a migration that backfills
-from the old index. Done when a test changes a list mid-sequence and nothing is re-offered or skipped, and
-Settings shows it on web and iOS.
+**D. Lead-time overrides. Built 2026-11-21.** Per kind, an ordered list of 1 to 3 day counts, largest first,
+each 0 to 45, no repeats, validated all or nothing (`validLeadDays` and `updatePrefs` in `prefs.ts`; a list in
+the wrong order is refused, not sorted). `LEAD_DAYS` stays the default, and only a list that differs from it is
+stored, so a later change to a shipped default still reaches you. `recurring` has no list (one mention per
+series). **The trap, fixed:** the ledger's `stage` was an index into the kind's list, so editing the list
+mid-sequence would have re-offered or skipped. The ledger now keeps `stage_days`, the threshold in days last
+offered, and `plan.ts` compares days, never indexes (`stage` stays as history). A migration in `ledger.ts`
+backfills `stage_days` from the old index through the default list once, when the column is added. The planner
+takes the list through `deps.lead`. Settings shows an editable "When to mention each kind" list with a
+put-the-default-back button on web and in the shared Swift `HeadsupPrefsView` (iPhone and Mac). Tests:
+`test/headsup-leadtime.test.mjs` (40 checks: validation, all-or-nothing, three mid-sequence edits, a snooze
+across an edit, the backfill from a real old table). **Not verified:** the Settings rows have not been seen
+rendered on any client, and the Swift field has only been compiled if a build was run after this change.
 
 **G. Live Activity for a flight.** Needs a second Xcode target. You, in Xcode: add a Widget Extension named
 `AgentSpineLiveActivity` with "Include Live Activity" ticked, share the `ActivityAttributes` file with both

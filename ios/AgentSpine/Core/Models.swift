@@ -953,6 +953,10 @@ struct HeadsupPrefs: Codable, Hashable {
     /// A kind set to false is never offered. Keys are "birthday", "anniversary", "bill",
     /// "appointment", "flight" and "recurring".
     let kinds: [String: Bool]
+    /// Days before the event at each mention, largest first. Absent from a server that predates lead-time overrides.
+    let leadDays: [String: [Int]]?
+    /// The shipped lead times. Read-only.
+    let leadDaysDefault: [String: [Int]]?
     let quietStartHour: Int
     let quietEndHour: Int
     let unavailable: HeadsupUnavailable

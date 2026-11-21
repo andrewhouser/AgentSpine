@@ -160,7 +160,7 @@ export const runMorningHeadsup = async (
   const plan = planOffers(
     // A kind you turned off is never offered. Watches already running are not affected.
     scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
-    { get: ledger.getByKey, muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
+    { get: ledger.getByKey, lead: (k) => prefs.leadDays[k] ?? [], muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
     now,
     prefs.dailyCap,
     [prefs.quietStartHour, prefs.quietEndHour],
@@ -168,7 +168,7 @@ export const runMorningHeadsup = async (
 
   // Record before sending. If the send fails, the offer is still on the list in the app, which
   // is the better failure than offering it again tomorrow as though it were new.
-  const rows = plan.offers.map((o) => ledger.markOffered(o.candidate, o.stage, now));
+  const rows = plan.offers.map((o) => ledger.markOffered(o.candidate, o.stage, now, o.stageDays));
   kvSet(LAST_RUN, dayStamp(now));
   if (!opts.force) kvSet(LAST_ERROR, "");
 

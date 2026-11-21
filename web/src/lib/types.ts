@@ -549,6 +549,10 @@ export interface HeadsupPrefs {
   /** The watch loop never polls one watch more often than this. Shown, not changeable. */
   floorMinutes: number;
   kinds: Record<string, boolean>;
+  /** Days before the event at each mention, largest first. Absent from a server that predates lead-time overrides. */
+  leadDays?: Record<string, number[]>;
+  /** The shipped lead times. Read-only. */
+  leadDaysDefault?: Record<string, number[]>;
   /** Read-only. Absent from a server that predates the learning. */
   learning?: HeadsupKindLearning[];
   quietEndHour: number;

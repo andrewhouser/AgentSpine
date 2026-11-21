@@ -8,6 +8,7 @@
  */
 import type { HeadsupRow } from "./ledger.ts";
 import { DAILY_CAP, inQuietHours, KIND_PRIORITY, LEAD_DAYS } from "./rules.ts";
+import type { HeadsupKind } from "./rules.ts";
 import type { Candidate } from "./scan.ts";
 
 export type OfferReason = "changed" | "new" | "reminder" | "snoozed";
@@ -15,12 +16,16 @@ export type OfferReason = "changed" | "new" | "reminder" | "snoozed";
 export interface Offer {
   candidate: Candidate;
   reason: OfferReason;
-  /** Index into LEAD_DAYS[kind]; record it with markOffered. */
+  /** Index into the kind's lead-time list at the moment of the offer; record it with markOffered. */
   stage: number;
+  /** The threshold in days that this offer crossed. This is what the ledger compares, not the index. */
+  stageDays: null | number;
 }
 
 export interface PlanDeps {
   get: (dedupeKey: string) => HeadsupRow | undefined;
+  /** The lead-time list for a kind (prefs.ts), largest first. Default: LEAD_DAYS. */
+  lead?: (kind: string) => number[];
   muted: (kind: string, subject: string) => boolean;
   /**
    * Kinds you keep passing on (outcomes.ts): they keep their first mention but lose reminders, and sort
@@ -35,39 +40,54 @@ export interface Plan {
   offers: Offer[];
 }
 
-/** The latest stage whose threshold has been crossed, or -1 if none has. LEAD_DAYS is descending. */
-const targetStage = (c: Candidate): number => {
-  const days = LEAD_DAYS[c.kind];
-  let target = -1;
-  for (let i = 0; i < days.length; i++) if (c.daysUntil <= days[i]) target = i;
+type Lead = (kind: string) => number[];
+
+/** The latest threshold crossed, as { index, days }, or null if none has been. The list is descending. */
+const targetStage = (c: Candidate, lead: Lead): null | { days: number; index: number } => {
+  const days = lead(c.kind);
+  let target: null | { days: number; index: number } = null;
+  for (let i = 0; i < days.length; i++) if (c.daysUntil <= days[i]) target = { days: days[i], index: i };
   return target;
 };
 
+/**
+ * Where the ledger says this item got to, in days. A row from before `stage_days` existed is read through
+ * the default list, which is what its index meant. null: nothing offered yet.
+ */
+const rowDays = (row: HeadsupRow): null | number =>
+  row.stage_days !== undefined ? row.stage_days : row.stage >= 0 ? ((LEAD_DAYS as Record<string, number[] | undefined>)[row.kind]?.[row.stage] ?? null) : null;
+
 /** Decide one candidate, or null for "nothing to say". */
-const decide = (c: Candidate, row: HeadsupRow | undefined, now: Date, quiet = false): Offer | null => {
+const decide = (c: Candidate, row: HeadsupRow | undefined, now: Date, quiet: boolean, lead: Lead): Offer | null => {
   // Already engaged with, or finished with. An accepted offer is the user's now.
   if (row && ["accepted", "dismissed", "done", "expired", "researched"].includes(row.state)) return null;
 
   if (c.kind === "recurring") {
-    if (!row) return { candidate: c, reason: "new", stage: 0 };
+    const days = LEAD_DAYS.recurring[0];
+    if (!row) return { candidate: c, reason: "new", stage: 0, stageDays: days };
     if (row.state === "snoozed" && row.snooze_until && new Date(row.snooze_until) <= now)
-      return { candidate: c, reason: "snoozed", stage: 0 };
+      return { candidate: c, reason: "snoozed", stage: 0, stageDays: days };
     if (row.state === "snoozed") return null;
-    return row.fingerprint !== c.fingerprint ? { candidate: c, reason: "changed", stage: 0 } : null;
+    return row.fingerprint !== c.fingerprint ? { candidate: c, reason: "changed", stage: 0, stageDays: days } : null;
   }
 
-  const target = targetStage(c);
-  if (target < 0) return null;
+  const target = targetStage(c, lead);
+  if (!target) return null;
 
   if (row?.state === "snoozed") {
     // Snoozed: silent until the snooze runs out, then it comes back at its current stage.
     if (row.snooze_until && new Date(row.snooze_until) > now) return null;
-    return { candidate: c, reason: "snoozed", stage: Math.max(target, row.stage) };
+    const was = rowDays(row);
+    const days = was !== null && was < target.days ? was : target.days;
+    const index = lead(c.kind).indexOf(days);
+    return { candidate: c, reason: "snoozed", stage: index >= 0 ? index : target.index, stageDays: days };
   }
-  if (!row) return { candidate: c, reason: "new", stage: target };
+  if (!row) return { candidate: c, reason: "new", stage: target.index, stageDays: target.days };
   // A reminder is the second and later mention. A quietened kind has earned only the first.
   if (quiet) return null;
-  return target > row.stage ? { candidate: c, reason: "reminder", stage: target } : null;
+  // Compare thresholds in days, never indexes: the list may have been edited since the last mention.
+  const was = rowDays(row);
+  return was === null || target.days < was ? { candidate: c, reason: "reminder", stage: target.index, stageDays: target.days } : null;
 };
 
 /**
@@ -85,7 +105,7 @@ export const planOffers = (
   const due: Offer[] = [];
   for (const c of candidates) {
     if (deps.muted(c.kind, c.subject)) continue;
-    const o = decide(c, deps.get(c.dedupeKey), now, deps.quiet?.(c.kind) ?? false);
+    const o = decide(c, deps.get(c.dedupeKey), now, deps.quiet?.(c.kind) ?? false, deps.lead ?? ((k) => LEAD_DAYS[k as HeadsupKind] ?? []));
     if (o) due.push(o);
   }
   const isQuiet = (o: Offer): number => (deps.quiet?.(o.candidate.kind) ? 1 : 0);

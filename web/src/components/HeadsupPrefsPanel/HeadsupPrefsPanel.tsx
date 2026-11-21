@@ -21,6 +21,51 @@ const hourLabel = (h: number): string => new Date(2000, 0, 1, h).toLocaleTimeStr
 
 const NONE: HeadsupPrefs | null = null;
 
+const parseDays = (text: string): number[] =>
+  text
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number);
+
+/** One kind's lead times as text ("5, 1, 0"), saved when you leave the field or press Enter. */
+const LeadRow = ({ days, defaults, label, onSave }: { days: number[]; defaults: number[]; label: string; onSave: (v: null | number[]) => void }) => {
+  const [text, setText] = useState(days.join(", "));
+  const isDefault = days.join() === defaults.join();
+  const commit = (): void => {
+    const next = parseDays(text);
+    if (next.join() === days.join()) return;
+    onSave(next);
+  };
+  return (
+    <div className={styles.row}>
+      <span className={styles.label}>{label}</span>
+      <input
+        aria-label={`${label} lead times in days`}
+        className={styles.input}
+        onBlur={commit}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+        }}
+        size={10}
+        value={text}
+      />
+      <span className={styles.fixed}>days before</span>
+      {!isDefault && (
+        <button
+          onClick={() => {
+            setText(defaults.join(", "));
+            onSave(null);
+          }}
+          type="button"
+        >
+          Use {defaults.join(", ")}
+        </button>
+      )}
+    </div>
+  );
+};
+
 /**
  * Settings → Heads-up: which kinds you want, how many per morning, and when it must stay quiet.
  * The 30 minute floor on watches is shown but not editable: it exists to stop a mistake becoming a
@@ -77,6 +122,26 @@ export const HeadsupPrefsPanel = () => {
               );
             })}
           </ul>
+        </>
+      )}
+
+      {prefs.leadDays && (
+        <>
+          <h3 className={styles.note}>When to mention each kind</h3>
+          <div className={styles.note}>
+            Days before the date, largest first, up to three, each 0 to 45. The first is the first mention and the
+            rest are reminders. A change applies to what has not been mentioned yet and never repeats a mention you
+            already got.
+          </div>
+          {KIND_LABELS.filter(([kind]) => prefs.leadDays?.[kind]).map(([kind, label]) => (
+            <LeadRow
+              days={prefs.leadDays![kind]}
+              defaults={prefs.leadDaysDefault?.[kind] ?? prefs.leadDays![kind]}
+              key={`${kind}:${prefs.leadDays![kind].join()}`}
+              label={label}
+              onSave={(v) => void change({ leadDays: { [kind]: v } })}
+            />
+          ))}
         </>
       )}
 

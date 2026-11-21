@@ -74,7 +74,7 @@ export const planMorning = async (now: Date = new Date()): Promise<Plan & { erro
   const quiet = quietKinds(now);
   const plan = planOffers(
     scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
-    { get: ledger.getByKey, muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
+    { get: ledger.getByKey, lead: (k) => prefs.leadDays[k] ?? [], muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
     now,
     prefs.dailyCap,
     [prefs.quietStartHour, prefs.quietEndHour],
