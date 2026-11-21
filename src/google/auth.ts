@@ -6,7 +6,12 @@
  * authorization code Google redirects back to 127.0.0.1, and exchanges it for a refresh
  * token stored 0600 outside the repo. This script never sees your password.
  *
- * The token grants calendar.readonly + gmail.readonly and nothing else.
+ * The default token grants calendar.readonly + gmail.readonly and nothing else.
+ *
+ *   npm run auth            the read-only token (everything that reads Google)
+ *   npm run auth -- write   a SECOND, separate token with gmail.modify + calendar.events, used only by
+ *                           src/google/write.ts for the inbox cleanup and bill events. Run it only on
+ *                           the machine that should be allowed to change mail and calendar.
  *
  * Setup (once): in Google Cloud Console create a project, enable the Calendar and Gmail
  * APIs, make an OAuth client of type "Desktop app", add yourself as a test user, and put
@@ -16,7 +21,12 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { GOOGLE_SCOPES, GOOGLE_TOKEN_PATH, loadGoogleCreds } from "../config.ts";
+import { GOOGLE_SCOPES, GOOGLE_TOKEN_PATH, GOOGLE_WRITE_SCOPES, GOOGLE_WRITE_TOKEN_PATH, loadGoogleCreds } from "../config.ts";
+
+const WRITE = process.argv.includes("write");
+const SCOPES = WRITE ? GOOGLE_WRITE_SCOPES : GOOGLE_SCOPES;
+const TOKEN_PATH = WRITE ? GOOGLE_WRITE_TOKEN_PATH : GOOGLE_TOKEN_PATH;
+const KIND = WRITE ? "write" : "read-only";
 
 const PORT = 4477;
 const REDIRECT = `http://127.0.0.1:${PORT}`;
@@ -36,7 +46,7 @@ const authUrl =
     client_id: creds.clientId,
     redirect_uri: REDIRECT,
     response_type: "code",
-    scope: GOOGLE_SCOPES.join(" "),
+    scope: SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
   });
@@ -64,12 +74,12 @@ const server = http.createServer(async (req, res) => {
   try {
     const token = await exchange(code);
     if (!token.refresh_token) throw new Error("Google returned no refresh token. Revoke prior access and retry.");
-    fs.mkdirSync(path.dirname(GOOGLE_TOKEN_PATH), { recursive: true });
-    fs.writeFileSync(GOOGLE_TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
+    fs.mkdirSync(path.dirname(TOKEN_PATH), { recursive: true });
+    fs.writeFileSync(TOKEN_PATH, JSON.stringify(token, null, 2), { mode: 0o600 });
     res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("agentspine is authorized (read-only). You can close this tab.");
-    console.log(`\nSaved read-only token to ${GOOGLE_TOKEN_PATH}`);
-    console.log("Scopes granted:", GOOGLE_SCOPES.join(", "));
+    res.end(`agentspine is authorized (${KIND}). You can close this tab.`);
+    console.log(`\nSaved ${KIND} token to ${TOKEN_PATH}`);
+    console.log("Scopes granted:", SCOPES.join(", "));
     server.close(() => process.exit(0));
   } catch (err) {
     res.writeHead(500).end(err instanceof Error ? err.message : String(err));
@@ -79,7 +89,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log("Open this URL in your browser and approve the read-only access:\n");
+  console.log(`Open this URL in your browser and approve the ${KIND} access:\n`);
   console.log(authUrl + "\n");
   console.log(`Waiting for the redirect on ${REDIRECT} ...`);
 });

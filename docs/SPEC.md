@@ -400,6 +400,34 @@ is to keep it.
 
 ---
 
+> ### Amendment — 2026-11-21: a separate write token, for the inbox cleanup
+>
+> Andrew asked for the recurring Gmail cleanup (until now a cloud task) to run on AgentSpine, which
+> needs archive, label, trash, mark spam, and creating bill events. **This is a new, explicit decision
+> and it narrows, not repeals, the one above.**
+>
+> - The read token is unchanged: `calendar.readonly` + `gmail.readonly`, used by every read.
+> - A **second token**, `npm run auth -- write`, holds `gmail.modify` + `calendar.events`, in
+>   `google-write-token.json`, and is used by `src/google/write.ts` and nothing else (a test greps for this).
+>   Revoke it and every write stops while reads keep working.
+> - **The honest limit:** Gmail has no scope for "modify but not send". `gmail.modify` is the narrowest
+>   scope that can archive or label, and Google lets it send as well. So "it cannot send" is now a property
+>   of the code (there is no send function; `write.ts` is the only holder of the token), not of the token.
+>   `draft` is unchanged and still composes text only.
+> - What the tools may do: `gmail_triage` (archive, label, unlabel, trash, spam, at most 25 ids a call, at most
+>   `policy.google.write.maxChangesPerRun` per run), `calendar_write` (create or update all-day events on the calendars
+>   named in `policy.google.write.calendars`, default "Bills", which it never creates), `calendar_find` (read).
+>   No permanent delete, no empty trash, no calendar delete, no settings or filters.
+> - Protections that are code, not prompt: only inbox mail; never mail from anyone Andrew has emailed (looked up in
+>   Sent), unless the sender is on `trashOverrideSenders` in his own `policy.json`; never starred or sent mail.
+> - Tiers: archive and label are reversible; trash and spam are irreversible, so they queue in a chat and run
+>   unattended in a schedule Andrew set up. Calendar writes are reversible and limited to one named calendar.
+> - Not carried over from the cloud task: unsubscribing through a browser. The cleanup lists senders worth
+>   unsubscribing from instead. Reading remains headers and snippet only, never a full body.
+> - Off unless both `policy.google.write.enabled` is true and the write token exists.
+
+---
+
 ## 6. Cross-cutting — earn trust as it acts more  ✅ **BUILT**
 
 > **Status: done — all four bullets.**

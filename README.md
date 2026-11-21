@@ -915,8 +915,9 @@ src/                 the agent — no build step, two runtime dependencies
     draft.ts       draft — composes mail/events for YOU to send; adds no OAuth scope
     recipes.ts     recipe_save / recipe_use / recipe_list — named procedures you approve
   google/
-    auth.ts        one-time read-only OAuth (npm run auth)
+    auth.ts        one-time OAuth: `npm run auth` (read-only) or `npm run auth -- write` (separate write token)
     client.ts      read-only Gmail + Calendar REST (no SDK)
+    write.ts       the only module that changes Google: archive, label, trash, spam, bill events (no send, no delete)
   recipes/
     store.ts       named recipes: own table, matched by name in code, never pruned
   memory/

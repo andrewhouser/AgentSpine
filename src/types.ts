@@ -78,7 +78,7 @@ export interface Policy {
   apps: { allow: string[] };
   web: { searchEnabled: boolean; fetchAllowlist: string[] };
   browser: { enabled: boolean; navigateAllowlist: string[] };
-  google: { enabled: boolean };
+  google: { enabled: boolean; write?: GoogleWritePolicy };
   fs: { readableDirs: string[]; writableDirs?: string[] };
   /**
    * Optional sections. A policy.json written before these existed simply lacks them, and
@@ -226,6 +226,24 @@ export interface Policy {
  * being gated. Absent — a subagent, an approval executed later — means the safe reading,
  * which is that nobody is watching and nobody asked.
  */
+/**
+ * What the Google WRITE token may be used for (docs/SPEC.md section 5, 2026-11-21). Absent means
+ * denied, like every other optional section, so an old policy.json can never grant it by omission.
+ */
+export interface GoogleWritePolicy {
+  /** Calendars bill events may be written to, by name. Never created. Default ["Bills"]. */
+  calendars?: string[];
+  enabled: boolean;
+  /** The most Gmail changes one run may make. Default 60. A cleanup that wants more has gone wrong. */
+  maxChangesPerRun?: number;
+  /**
+   * Senders whose mail may be trashed even though you have emailed them, as an address or a domain.
+   * The "never touch anyone you have emailed" rule is code, so an exception is a line here, in your
+   * file, and not something a model can talk itself into.
+   */
+  trashOverrideSenders?: string[];
+}
+
 export interface RunContext {
   /** A person is reading this exchange as it happens, i.e. a chat turn. */
   conversational: boolean;

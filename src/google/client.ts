@@ -178,6 +178,12 @@ export const eventsBetween = async (cal: CalendarInfo, from: Date, to: Date): Pr
 };
 
 export interface MailHeader {
+  /** Gmail's message id, needed to act on the message. Empty only in old fixtures. */
+  id?: string;
+  /** Gmail label ids ("INBOX", "UNREAD", "SENT", "STARRED", user labels). */
+  labelIds?: string[];
+  /** True when the message carries a List-Unsubscribe header: a mailing list, not a person. */
+  listUnsubscribe?: boolean;
   from: string;
   subject: string;
   date: string;
@@ -198,12 +204,15 @@ export const searchMessages = async (query = "is:unread in:inbox", max = 10): Pr
   for (const id of ids) {
     const msg = await apiGet(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
-        `&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+        `&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=List-Unsubscribe`,
     );
     const headers = Object.fromEntries(
       (msg.payload?.headers ?? []).map((h: any) => [h.name.toLowerCase(), h.value]),
     );
     out.push({
+      id,
+      labelIds: msg.labelIds ?? [],
+      listUnsubscribe: !!headers["list-unsubscribe"],
       from: headers.from ?? "?",
       subject: headers.subject ?? "(no subject)",
       date: headers.date ?? "",

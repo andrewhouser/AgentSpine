@@ -14,6 +14,8 @@ import { readMoreTool } from "./read-more.ts";
 import { editFile, makeDir, moveFile, writeFile } from "./write-file.ts";
 import { gmailSearch } from "./gmail.ts";
 import { calendarUpcoming } from "./calendar.ts";
+import { calendarFind, calendarWrite } from "./calendar-write.ts";
+import { gmailTriage } from "./gmail-triage.ts";
 import { memorySave, memoryRecall } from "./memory.ts";
 import { conversationDetail, findPastOutput, recallOutput } from "./conversation.ts";
 import { notifyTool } from "./notify.ts";
@@ -58,7 +60,10 @@ export const tools: Tool[] = [
   makeDir,
   scaffoldIosApp,
   gmailSearch,
+  gmailTriage,
   calendarUpcoming,
+  calendarFind,
+  calendarWrite,
   memorySave,
   memoryRecall,
   conversationDetail,

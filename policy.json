@@ -44,8 +44,15 @@
   },
 
   "google": {
-    "//": "Read-only Gmail + Calendar (gmail_search, calendar_upcoming). Requires a read-only token: npm run auth. The OAuth scopes are read-only by construction and must never be widened.",
-    "enabled": true
+    "//": "Reads (gmail_search, calendar_upcoming, calendar_find) use a read-only token, npm run auth, whose scopes are read-only by construction and are never widened. Writes use a SEPARATE token, npm run auth -- write (gmail.modify + calendar.events), used only by the inbox cleanup: archive, label, trash, mark spam, and all-day events on the calendars named below. Decision of 2026-11-21, SPEC section 5. There is no send, no permanent delete and no calendar delete anywhere. Without that second token, enabled:true here does nothing.",
+    "enabled": true,
+    "write": {
+      "//": "calendars: the only calendars calendar_write may touch, by name; a missing one is reported, never created. maxChangesPerRun: the most Gmail changes one run may make. trashOverrideSenders: senders whose mail may be trashed even though you have emailed them (an address or a domain). Without an entry here, mail from anyone you have ever emailed is never trashed.",
+      "enabled": true,
+      "calendars": ["Bills"],
+      "maxChangesPerRun": 60,
+      "trashOverrideSenders": ["afs.ameriprise.com"]
+    }
   },
 
   "fs": {

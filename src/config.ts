@@ -1004,11 +1004,23 @@ export const homeDir = os.homedir();
 export const CONFIG_DIR = env.AGENTSPINE_CONFIG_DIR ?? path.join(homeDir, ".config", "agentspine");
 export const GOOGLE_TOKEN_PATH = env.GOOGLE_TOKEN_PATH ?? path.join(CONFIG_DIR, "google-token.json");
 
-// READ-ONLY BY CONSTRUCTION. Never widen these — the moment a token can write, a single
-// crafted email becomes an exploit and every softer defense here stops mattering.
+// READ-ONLY BY CONSTRUCTION. This token is never widened: everything that reads Google (search, the
+// heads-up scanner, calendar lookups) uses it, and it physically cannot change anything.
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/gmail.readonly",
+];
+
+// The WRITE token (docs/SPEC.md section 5, decision of 2026-11-21): a second, separate token used only
+// by src/google/write.ts, for the inbox cleanup (archive, label, trash, mark spam) and for creating
+// bill events. Separate on purpose, so reads keep a token that cannot write, and so the write token
+// can be revoked on its own. Gmail has no scope for "archive and label but not send": gmail.modify
+// is the narrowest that can change a message, and Google allows it to send too. What stops a send
+// is that src/google/write.ts has no send function and nothing else in the repo holds this token.
+export const GOOGLE_WRITE_TOKEN_PATH = env.GOOGLE_WRITE_TOKEN_PATH ?? path.join(CONFIG_DIR, "google-write-token.json");
+export const GOOGLE_WRITE_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/gmail.modify",
 ];
 
 /** Load OAuth client id/secret from env, or from a client_secret_*.json in CONFIG_DIR. */
