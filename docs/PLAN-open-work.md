@@ -588,7 +588,9 @@ metadata do.
 **Done when:** a scripted conflict is reported as a conflict, an unsupported question says there is insufficient
 evidence, and every reviewed-fact claim links to its source passage or timestamp.
 
-### S8. Behavioural harness-awareness tests (Code)
+### S8. Behavioural harness-awareness tests (built 2026-11-21)
+
+**Built:** `test/harness-behaviour.test.mjs` runs the real loop, broker and tools against a scripted model under two explicit policies (ask about everything, and trust drafts and schedules in chat) and asserts what the model was told and what then happened: a send request, a reminder, a scheduled run creating standing work, where a file is saved, local or cloud, what approval does, a private meeting pinning the run, a restricted helper, and each result status. It found and fixed four divergences between prompt and broker: the summary said mail is never sent although `mac_control` can send through Mail after approval, drafts and schedules were described as always queued although `policy.trust.chatAutoTools` runs them at once in a live chat and pre-approved runs do not ask about drafts, the scheduler and draft paragraphs in `src/agent.ts` repeated those claims, and the refusal for an unavailable tool had no result line. Not done: scenarios for a live model; these use a scripted one by design.
 
 Keep prompt substring tests as tripwires, but add scripted-model scenarios that exercise behaviour:
 
@@ -611,7 +613,7 @@ tool calls as well as final prose, since a fluent correct answer can hide an inc
 
 ### Sequence and decisions
 
-Build order: F1 to F7, S1 and S2 are done; S3 to S6 are built; next S8; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
+Build order: F1 to F7, S1 and S2 are done; S3 to S6 and S8 are built; S7 waits for K4; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
 minimum: they make every later feature easier to explain without accumulating prompt folklore.
 
 Open decisions for you:

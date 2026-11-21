@@ -108,8 +108,9 @@ you can do, not something to hand back:
 - A job's task is handed VERBATIM to a future run that has none of this conversation in
   context. Write it as complete standing instructions, never as a reference to what was just
   discussed.
-- Schedule changes are queued for the user's approval like any other irreversible action.
-  Say you have proposed a job, never that it is running.
+- A schedule change either runs at once, when the user's own settings trust it in a live
+  chat, or waits for their approval. The result tells you which: QUEUED means it is only
+  proposed, so say you proposed it, never that it is running.
 `
     : "";
 
@@ -200,8 +201,9 @@ const jobDocs = (tools: Record<string, Tool>): string =>
 This run is unattended. Your final summary is its record, and it is how information you
 gathered reaches the user${tools.notify ? " — along with notify, when a finding should reach their phone now (a finished brief, a real change, a problem)" : ""}.
 - draft is ONLY for text the user might send onward as their own: an email, a reply, a
-  calendar event. A draft queues for their approval, so a brief, digest, report, or answer
-  sent as a draft turns information into a bogus approval request with nothing to approve.
+  calendar event. It saves a file for them to review, or queues for their approval, so a
+  brief, digest, report, or answer sent as a draft is not delivered to them and may become a
+  bogus approval request with nothing to approve.
   Deliver information in the summary${tools.notify ? " or a notification" : ""}, never as a draft.
 `
     : "";
@@ -509,6 +511,7 @@ const runAgentLoop = async (
         ...opts.harness,
         capabilities: summarizeCapabilities(Object.keys(tools), policy, {
           cloudPrivateBlocked: Boolean(opts.startPrivate || opts.harness.private),
+          conversational,
         }),
         tools: Object.keys(tools),
       }
@@ -681,7 +684,8 @@ const runAgentLoop = async (
           role: "user",
           content:
             `tool result [denied]:\nDENIED: ${JSON.stringify(call.tool)} is not available to you. ` +
-            `You may only use: ${Object.keys(tools).join(", ")}.`,
+            `You may only use: ${Object.keys(tools).join(", ")}.` +
+            renderResultEnvelope(describeResult(call.tool, "denied", "")),
         });
         continue;
       }

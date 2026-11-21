@@ -67,7 +67,17 @@ console.log("\nTHE ENVELOPE");
   check("names the conversation and project", text.includes("Conversation #7") && text.includes('Project: "Reorg" (#3)'), true);
   check("states where a bare filename is saved", text.includes("saved in /docs/reorg"), true);
   check("lists what it can draw on", text.includes("earlier turns, saved memories, the project's documents"), true);
-  check("says plainly that mail is never sent", text.includes("send email (mail is drafted, never sent)"), true);
+  check("with no capabilities recorded it still states a limit that is always true", text.includes("Cannot: permanently delete mail"), true);
+  const noMac = h.summarizeCapabilities(["gmail_search"], { apps: { allow: ["com.apple.mail"] }, google: { enabled: true } }, { cloudPrivateBlocked: false });
+  check("without mac_control, mail is drafted and never sent", noMac.cannot.includes("send email (mail is drafted, never sent)"), true);
+  const withMac = h.summarizeCapabilities(["mac_control"], { apps: { allow: ["com.apple.mail", "com.apple.MobileSMS"] }, userDirected: { actions: ["mac_control.send_mail"], enabled: true } }, { cloudPrivateBlocked: false });
+  check("with mac_control and Mail allowed, mail CAN be sent, after approval", withMac.can.some((x) => x.includes("send mail through the Mac's Mail app") && x.includes("approval")), true);
+  check("and only Gmail mail is called drafted-never-sent", withMac.cannot.some((x) => x.startsWith("send email through Gmail")), true);
+  const trustPolicy = { drafts: { enabled: true }, schedules: { enabled: true }, trust: { chatAutoTools: ["draft", "schedule_create"] } };
+  const chatTrusted = h.summarizeCapabilities(["draft", "schedule_create"], trustPolicy, { cloudPrivateBlocked: false, conversational: true });
+  check("a chat that trusts drafts and schedules says they run at once", chatTrusted.can.some((x) => x.includes("this chat trusts drafts")) && chatTrusted.can.some((x) => x.includes("create schedules at once")), true);
+  const unattended = h.summarizeCapabilities(["draft", "schedule_create"], trustPolicy, { cloudPrivateBlocked: false, conversational: false });
+  check("an unattended run can only propose schedules", unattended.can.some((x) => x.startsWith("propose schedule changes")), true);
   check("a normal run is not described as private", text.includes("Privacy: normal"), true);
 
   const priv = h.renderEnvelope({ ...chat, private: true }, false);
