@@ -23,7 +23,7 @@ drafts/
 # whatever it was useful for. Deleting a conversation deletes its images from here too.
 attachments/
 # The Knowledge Inbox: private originals and the compiled OCR helper. Never committed.
-inbox/
+/inbox/
 # Generated images from the generate_image tool. Machine-generated output served at
 # /images/, regenerated on demand — not source, and potentially large.
 images/
