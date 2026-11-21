@@ -16,6 +16,12 @@ const SOURCE_LABELS: Record<string, string> = {
   tool: "Watchers and briefs",
 };
 
+/** "the daily digest: morning" reads better in a sentence as "the daily digest (morning)". The server's topic string is a stable key, so the wording is fixed here. */
+const sayTopic = (topic: string): string => {
+  const at = topic.lastIndexOf(": ");
+  return at < 0 ? topic : `${topic.slice(0, at)} (${topic.slice(at + 2)})`;
+};
+
 const OUTCOME_LABELS: Record<ReviewItem["outcome"], string> = {
   dismissed: "you swiped it away",
   ignored: "not opened",
@@ -57,8 +63,8 @@ export const WeeklyReviewPanel = () => {
       const r = await api.answerOutbox(item.id, value);
       if (value === "useful") return "Noted.";
       return r.remembered
-        ? `Noted. I will be quieter about ${r.topic}.`
-        : `Already noted: I am quieter about ${r.topic}.`;
+        ? `Noted. I will be quieter about ${sayTopic(r.topic)}.`
+        : `Already noted: I am quieter about ${sayTopic(r.topic)}.`;
     });
 
   const sendWish = (): Promise<void> =>
@@ -107,7 +113,10 @@ export const WeeklyReviewPanel = () => {
         </button>
       </div>
 
-      {message && <div className={styles.status}>{message}</div>}
+      {/* Always rendered, so an answer does not push the list down under the cursor. */}
+      <div aria-live="polite" className={`${styles.status} ${styles.reserved}`}>
+        {message}
+      </div>
       {error && <div className={styles.error}>{error}</div>}
       {review.items.length === 0 && <div className={styles.empty}>Nothing to review yet.</div>}
 

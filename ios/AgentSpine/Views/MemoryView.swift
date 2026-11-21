@@ -184,6 +184,12 @@ struct WeeklyReviewView: View {
         return "\(name): " + parts.joined(separator: ", ")
     }
 
+    /// "the daily digest: morning" reads better in a sentence as "the daily digest (morning)".
+    private static func sayTopic(_ topic: String) -> String {
+        guard let range = topic.range(of: ": ", options: .backwards) else { return topic }
+        return "\(topic[..<range.lowerBound]) (\(topic[range.upperBound...]))"
+    }
+
     private func send(_ item: ReviewItem, answer: String) async {
         busy = true
         defer { busy = false }
@@ -193,8 +199,8 @@ struct WeeklyReviewView: View {
                 message = "Noted."
             } else {
                 message = result.remembered
-                    ? "Noted. I will be quieter about \(result.topic)."
-                    : "Already noted: I am quieter about \(result.topic)."
+                    ? "Noted. I will be quieter about \(Self.sayTopic(result.topic))."
+                    : "Already noted: I am quieter about \(Self.sayTopic(result.topic))."
             }
             error = nil
             if let index = review?.items.firstIndex(where: { $0.id == item.id }) {

@@ -102,6 +102,10 @@
   margin: 4px 0;
 }
 
+.reserved {
+  min-height: 1.25rem;
+}
+
 .error {
   color: var(--danger, #c0392b);
   font-size: 0.8125rem;
