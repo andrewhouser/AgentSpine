@@ -170,6 +170,28 @@
   font-size: 0.6875rem;
 }
 
+/* Where a memory came from, under its text. Quiet: it is for tracing a wrong fact, not for reading. */
+.origin {
+  color: var(--text-faint);
+  display: block;
+  font-size: 0.6875rem;
+  margin-top: 2px;
+}
+
+.runLink {
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.runLink:hover {
+  color: var(--text);
+}
+
 /* Retract a single learned memory. Kept quiet — faint until the row is hovered — because
    deleting is the rare correction, not the primary action of the list. */
 .forget {

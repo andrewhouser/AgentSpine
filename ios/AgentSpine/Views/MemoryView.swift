@@ -25,6 +25,7 @@ struct MemoryView: View {
                     }
                     .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.textDim)
+                    provenance(memory)
                 }
                 .swipeActions {
                     Button("Forget", role: .destructive) { Task { await forget(memory) } }
@@ -44,6 +45,27 @@ struct MemoryView: View {
         .refreshable { await load() }
         .task { await load() }
         .overlay { if loading && memories.isEmpty { ProgressView() } }
+    }
+
+    /// Where this memory came from, with a way into the run that wrote it. A pruned run says so rather
+    /// than offering a link that would 404; a memory from before provenance says that and nothing more.
+    @ViewBuilder
+    private func provenance(_ memory: Memory) -> some View {
+        HStack(spacing: 6) {
+            Text(memory.originLabel)
+            if let runId = memory.runId {
+                Text("·")
+                if memory.runPruned == true {
+                    Text("run pruned")
+                } else {
+                    NavigationLink("run #\(runId)") { RunDetailView(runID: runId) }
+                        .buttonStyle(.plain)
+                        .underline()
+                }
+            }
+        }
+        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+        .foregroundStyle(Spine.Palette.textDim)
     }
 
     private func load() async {

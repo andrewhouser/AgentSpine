@@ -141,9 +141,9 @@ export const profileSave: Tool = {
     if (facts.some(looksLikeSecretValue)) return { allowed: false, reason: "one of those looks like a secret. Leave it out." };
     return { allowed: true, reason: "saving facts the user approves" };
   },
-  run: async (a) => {
+  run: async (a, ctx) => {
     let saved = 0;
-    for (const f of factsOf(a)) if (await remember(f, PROFILE_KIND)) saved++;
+    for (const f of factsOf(a)) if (await remember(f, PROFILE_KIND, { origin: "profile", runId: ctx?.runId })) saved++;
     const skipped = factsOf(a).length - saved;
     return `Saved ${saved} fact${saved === 1 ? "" : "s"} about the user${skipped ? ` (${skipped} already known)` : ""}. They can read or forget them in Settings → Memory.`;
   },

@@ -87,7 +87,7 @@ export const critiqueRun = async (
     if (!reason) return null;
 
     const lesson = `On a task like "${task.slice(0, 120)}", a past run fell short: ${reason}`;
-    if (!(await remember(lesson, LESSON_KIND))) return null; // duplicate of a known lesson
+    if (!(await remember(lesson, LESSON_KIND, { origin: "lesson", runId }))) return null; // duplicate of a known lesson
 
     if (countMemories(LESSON_KIND) > LESSON_MEMORY_MAX) pruneMemories(LESSON_KIND, LESSON_MEMORY_MAX);
     console.log(`[critique] lesson: ${reason}`);

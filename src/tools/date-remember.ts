@@ -59,8 +59,8 @@ export const dateRemember: Tool = {
     };
   },
   checkPolicy: (): PolicyDecision => ({ allowed: true, reason: "local only, and always queued for approval" }),
-  run: async (a) => {
+  run: async (a, ctx) => {
     const p = parse(a);
-    return "error" in p ? `ERROR: ${p.error}` : saveApprovedDate(p);
+    return "error" in p ? `ERROR: ${p.error}` : saveApprovedDate(p, ctx?.runId);
   },
 };

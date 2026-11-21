@@ -136,10 +136,11 @@ export const AppShell = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
-  const go = useCallback((next: { conversationId?: null | number; projectId?: null | number; view: View }) => {
+  const go = useCallback((next: { conversationId?: null | number; projectId?: null | number; runId?: null | number; view: View }) => {
     const value = {
       conversationId: next.conversationId ?? null,
       projectId: next.projectId ?? null,
+      runId: next.runId ?? null,
       view: next.view,
     };
     writeRoute(value);
@@ -230,11 +231,11 @@ export const AppShell = () => {
           <span className={styles.topBarTitle}>{barTitle(route, conversations, projects)}</span>
         </div>
 
-        {route.view === "activity" && <ActivityView />}
+        {route.view === "activity" && <ActivityView onSelectRun={(id) => go({ runId: id, view: "activity" })} runId={route.runId} />}
         {route.view === "builds" && <BuildsView />}
         {route.view === "schedules" && <SchedulesView />}
         {route.view === "meetings" && <MeetingsView projects={projects} />}
-        {route.view === "settings" && <SettingsView />}
+        {route.view === "settings" && <SettingsView onOpenRun={(id) => go({ runId: id, view: "activity" })} />}
         {route.view === "headsup" && <HeadsupView />}
         {route.view === "tasks" && <TasksView projects={projects} />}
         {route.view === "study" && <StudyView />}

@@ -130,6 +130,8 @@ export interface ReflectOpts {
    * calls. A run that went badly must not have its method learned, so this defaults false.
    */
   allowRecipe?: boolean;
+  /** The run being reflected on, recorded as the provenance of whatever is saved (Nod N1). */
+  runId?: number;
 }
 
 /**
@@ -199,7 +201,7 @@ export const reflect = async (task: string, trace: Msg[], opts: ReflectOpts = {}
       // The dedupe this loop used to do by hand now lives inside `remember`, so every
       // writer gets it rather than only this one — see the note there about the 20 copies
       // the `memory_save` tool managed to store by not asking. `false` means already known.
-      if (await remember(fact, REFLECTION_KIND)) saved.push(fact);
+      if (await remember(fact, REFLECTION_KIND, { origin: "reflection", runId: opts.runId })) saved.push(fact);
       else skipped++;
     }
 
@@ -213,7 +215,7 @@ export const reflect = async (task: string, trace: Msg[], opts: ReflectOpts = {}
     let recipe: string | undefined;
     if (allowRecipe) {
       const text = renderRecipe(parsed?.recipe);
-      if (text && (await remember(text, RECIPE_KIND))) {
+      if (text && (await remember(text, RECIPE_KIND, { origin: "recipe", runId: opts.runId }))) {
         recipe = text;
         if (countMemories(RECIPE_KIND) > RECIPE_MEMORY_MAX) pruneMemories(RECIPE_KIND, RECIPE_MEMORY_MAX);
         console.log(`[reflect] learned a recipe: ${text.split("\n")[0]}`);

@@ -96,7 +96,7 @@ import { ensureMorningBrief } from "./briefing.ts";
 import { pruneSources } from "./research/sources.ts";
 import { parseWhen } from "./tasks/when.ts";
 import { rawDb } from "./memory/store.ts";
-import { dedupeMemories, deleteMemory, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
+import { dedupeMemories, deleteMemory, listMemories, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
 import { overview } from "./overview.ts";
@@ -111,12 +111,6 @@ const HOST = process.env.DASHBOARD_HOST ?? "127.0.0.1";
 const TOKEN = process.env.DASHBOARD_TOKEN ?? "";
 const IS_LOCAL = HOST === "127.0.0.1" || HOST === "localhost";
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
-
-// --- memory reads (kept here to avoid re-editing store.ts) ---
-const listMemories = (limit: number) =>
-  rawDb.prepare("SELECT id, ts, kind, text FROM memories ORDER BY id DESC LIMIT ?").all(limit);
-const searchMemories = (q: string, limit: number) =>
-  rawDb.prepare("SELECT id, ts, kind, text FROM memories WHERE text LIKE ? ORDER BY id DESC LIMIT ?").all(`%${q}%`, limit);
 
 // --- tiny http helpers ---
 type Res = http.ServerResponse;
@@ -884,7 +878,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/memories?query=
     if (m === "GET" && seg[1] === "memories" && seg.length === 2) {
       const q = url.searchParams.get("query");
-      return sendJson(res, 200, q ? searchMemories(q, 100) : listMemories(100));
+      return sendJson(res, 200, listMemories(100, q || undefined));
     }
 
     // /api/memories/:id  — retract a single learned memory. The human-facing correction for

@@ -137,6 +137,7 @@ const rejectOnly = async (id: number, reason = ""): Promise<ConfirmOutcome> => {
         `The user rejected this proposed action: "${row.summary}" (tool: ${row.tool}). ` +
           `Their reason: ${why}. Respect this when considering similar actions.`,
         PREFERENCE_KIND,
+        { origin: "rejection", runId: row.run_id },
       );
     } catch (err) {
       // The rejection itself already succeeded and is what matters; failing to learn from
@@ -253,6 +254,7 @@ const noteSilentRejection = async (tool: string, argsJson: string, summary: stri
       `The user has silently rejected the proposed action "${summary}" (tool: ${tool}) ` +
         `${count} times without giving a reason. Do not propose this again without new justification.`,
       PREFERENCE_KIND,
+      { origin: "rejection" }, // a pattern over several rejections, so there is no single run to point at
     );
     store.kvDelete(key);
     return;

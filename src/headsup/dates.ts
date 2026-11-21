@@ -131,11 +131,14 @@ export const proposeDatesFromChat = (text: string): number[] => {
 };
 
 /** Persist an approved date and make it recallable. Used by the `date_remember` tool. */
-export const saveApprovedDate = async (d: { day: number; month: number; occasion: Occasion; who: string; year?: number }): Promise<string> => {
+export const saveApprovedDate = async (
+  d: { day: number; month: number; occasion: Occasion; who: string; year?: number },
+  runId?: null | number,
+): Promise<string> => {
   const id = addDate(d);
   if (id === null) return `already remembered: ${describeDate(d)}.`;
   // The memory is a convenience for recall; a failure to write it must not undo the date.
-  await remember(memorySentence(d), DATE_KIND).catch(() => false);
+  await remember(memorySentence(d), DATE_KIND, { origin: "date", runId }).catch(() => false);
   return `remembered: ${describeDate(d)}. Heads-up will mention it ahead of time.`;
 };
 

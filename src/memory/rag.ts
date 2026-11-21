@@ -33,6 +33,40 @@ try {
   /* column already exists */
 }
 
+// Provenance (Nod N1): which run wrote a memory, and by which route. Both are set by code, never by
+// the model, so a poisoned fact cannot claim to have come from you. NULL means the row predates this
+// column, which is why the UI says "before provenance" and does not guess.
+for (const col of ["run_id INTEGER", "origin TEXT"]) {
+  try {
+    rawDb.exec(`ALTER TABLE memories ADD COLUMN ${col}`);
+  } catch {
+    /* column already exists */
+  }
+}
+
+/**
+ * The routes a memory can be written by. A closed set, checked at write time: anything else is stored
+ * as NULL rather than as free text, because the point of provenance is that it is trustworthy.
+ *   reflection   a fact reflect.ts extracted after a run        recipe        a procedure reflect.ts learned
+ *   lesson       a self-critique of a run that fell short       rejection     a rejected proposal, with or without a reason
+ *   interrupt    a dismissed proactive notification             conversation  a summary of a finished conversation
+ *   profile      facts you approved in chat (profile_remember)  tool          the model chose to remember (memory_save)
+ *   date         a date you approved for Heads-up               friction      a tool failure, recorded by the broker's error path
+ */
+export const ORIGINS = ["conversation", "date", "friction", "interrupt", "lesson", "profile", "recipe", "reflection", "rejection", "tool"] as const;
+export type Origin = (typeof ORIGINS)[number];
+
+export interface MemorySource {
+  origin: Origin;
+  /** The run that wrote it, when there is one. Many writers (a summary, a dismissal) have none. */
+  runId?: null | number;
+}
+
+const sourceColumns = (source?: MemorySource): { origin: null | string; runId: null | number } => ({
+  origin: source && (ORIGINS as readonly string[]).includes(source.origin) ? source.origin : null,
+  runId: Number.isInteger(source?.runId) && (source?.runId as number) > 0 ? (source?.runId as number) : null,
+});
+
 // --- embedder (lazy, optional) ---
 type Embedder = (text: string) => Promise<Float32Array>;
 let embedderPromise: Promise<Embedder | null> | null = null;
@@ -146,10 +180,12 @@ const now = () => new Date().toISOString();
  * Deliberately NOT scoped by kind: the same sentence saved as a `note` and as a
  * `reflection` is the same sentence, and it will crowd recall exactly as hard either way.
  */
-export const remember = async (text: string, kind = "note"): Promise<boolean> => {
+export const remember = async (text: string, kind = "note", source?: MemorySource): Promise<boolean> => {
   const trimmed = text.trim();
   if (!trimmed) return false;
 
+  // Both refusals below return before anything is written, so a duplicate never overwrites or
+  // adds to the original's provenance: the row that exists keeps the run and route that made it.
   const exact = rawDb
     .prepare("SELECT id FROM memories WHERE lower(trim(text)) = ? LIMIT 1")
     .get(trimmed.toLowerCase());
@@ -174,10 +210,43 @@ export const remember = async (text: string, kind = "note"): Promise<boolean> =>
     if (nearest && nearest.score > MEMORY_DEDUPE_THRESHOLD) return false;
   }
 
+  const { origin, runId } = sourceColumns(source);
   rawDb
-    .prepare("INSERT INTO memories (ts, kind, text, embedding) VALUES (?,?,?,?)")
-    .run(now(), kind, trimmed, vec ? toBlob(vec) : null);
+    .prepare("INSERT INTO memories (ts, kind, text, embedding, origin, run_id) VALUES (?,?,?,?,?,?)")
+    .run(now(), kind, trimmed, vec ? toBlob(vec) : null, origin, runId);
   return true;
+};
+
+/** A memory as Settings shows it: what it says, and where it came from. */
+export interface MemoryRow {
+  id: number;
+  kind: null | string;
+  /** The route that wrote it, or null for a row that predates provenance. */
+  origin: null | string;
+  /** The run that wrote it, or null (no run, or predates provenance). */
+  runId: null | number;
+  /** True when `runId` is set but that run's trace has since been pruned (runs are kept 90 days, memories are not). */
+  runPruned: boolean;
+  text: string;
+  ts: string;
+}
+
+/**
+ * Newest first, optionally only those containing `query`. `runPruned` is worked out here, in one
+ * query, so every client says "run pruned" the same way instead of each one finding out by following
+ * a link to a 404.
+ */
+export const listMemories = (limit: number, query?: string): MemoryRow[] => {
+  const rows = rawDb
+    .prepare(
+      `SELECT m.id, m.ts, m.kind, m.text, m.origin, m.run_id AS runId,
+              (m.run_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.id = m.run_id)) AS runPruned
+         FROM memories m
+        ${query ? "WHERE m.text LIKE ?" : ""}
+        ORDER BY m.id DESC LIMIT ?`,
+    )
+    .all(...(query ? [`%${query}%`, limit] : [limit])) as Array<Omit<MemoryRow, "runPruned"> & { runPruned: number }>;
+  return rows.map((r) => ({ ...r, runPruned: r.runPruned === 1 }));
 };
 
 /**
@@ -204,7 +273,7 @@ export const rememberFriction = (tool: string, detail: string, max: number): boo
     if (dup) return false;
 
     rawDb
-      .prepare("INSERT INTO memories (ts, kind, tool, text, embedding) VALUES (?, 'friction', ?, ?, NULL)")
+      .prepare("INSERT INTO memories (ts, kind, tool, text, embedding, origin) VALUES (?, 'friction', ?, ?, NULL, 'friction')")
       .run(now(), tool, text);
 
     if (max > 0) {

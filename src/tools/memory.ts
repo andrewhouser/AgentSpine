@@ -17,8 +17,8 @@ export const memorySave: Tool = {
     summary: `Remember: "${String(a?.text ?? "").slice(0, 80)}"`,
   }),
   checkPolicy: (p) => always(p),
-  run: async (a) => {
-    const saved = await remember(String(a?.text ?? ""), a?.kind ?? "note");
+  run: async (a, ctx) => {
+    const saved = await remember(String(a?.text ?? ""), a?.kind ?? "note", { origin: "tool", runId: ctx?.runId });
     return saved ? "saved to long-term memory." : "not saved: already known (or empty).";
   },
 };

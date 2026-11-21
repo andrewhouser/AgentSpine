@@ -27,7 +27,24 @@ const THEMES: { label: string; value: ThemeChoice }[] = [
   { label: "Dark", value: "dark" },
 ];
 
-export const SettingsView = () => {
+/** What each origin means, in words. An unknown one is shown as written rather than hidden. */
+const ORIGIN_LABELS: Record<string, string> = {
+  conversation: "conversation summary",
+  date: "date you approved",
+  friction: "tool failure note",
+  interrupt: "from a dismissed notification",
+  lesson: "lesson from a self-critique",
+  profile: "profile fact you approved",
+  recipe: "recipe learned from a run",
+  reflection: "reflection after a run",
+  rejection: "from a rejected proposal",
+  tool: "saved by the assistant",
+};
+
+/** Origin is set by code, never by the model. A row with none predates provenance; it is not guessed at. */
+const originLabel = (m: Memory): string => (m.origin === null ? "before provenance" : (ORIGIN_LABELS[m.origin] ?? m.origin));
+
+export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void }) => {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [policy, setPolicy] = useState<null | Record<string, unknown>>(null);
   const [query, setQuery] = useState("");
@@ -296,7 +313,10 @@ export const SettingsView = () => {
           What it has learned about you. <code>reflection</code> memories are written automatically after
           each run; <code>preference</code> memories come from rejections you explained. Hover a row and
           click <code>×</code> to forget one that is wrong or stale. Standing facts you want it to always
-          know belong in <code>profile.md</code>, which nothing automated writes to.
+          know belong in <code>profile.md</code>, which nothing automated writes to. Under each memory is where it
+          came from, set by the code and never by the model, with a link to the run that wrote it. Runs are
+          pruned after 90 days by default, so an older memory says "run pruned"; one saved before this was
+          tracked says "before provenance".
         </p>
         <input
           className={styles.search}
@@ -308,7 +328,21 @@ export const SettingsView = () => {
         {memories.map((m) => (
           <div className={styles.memory} key={m.id}>
             <span className={styles.kind}>{m.kind}</span>
-            <span className={styles.text}>{m.text}</span>
+            <span className={styles.text}>
+              {m.text}
+              <span className={styles.origin}>
+                {originLabel(m)}
+                {m.runId !== null && m.runPruned && " · run pruned"}
+                {m.runId !== null && !m.runPruned && (
+                  <>
+                    {" · "}
+                    <button className={styles.runLink} onClick={() => onOpenRun(m.runId as number)} type="button">
+                      run #{m.runId}
+                    </button>
+                  </>
+                )}
+              </span>
+            </span>
             <span className={styles.when}>{new Date(m.ts).toLocaleDateString()}</span>
             <button
               aria-label={`Forget: ${m.text}`}

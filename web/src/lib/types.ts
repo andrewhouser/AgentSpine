@@ -93,6 +93,12 @@ export interface Conversation {
 export interface Memory {
   id: number;
   kind: string;
+  /** The route that wrote it (reflection, tool, profile, ...), or null for a memory from before provenance. */
+  origin: null | string;
+  /** The run that wrote it, when there is one. */
+  runId: null | number;
+  /** `runId` is set but that run's trace has since been pruned. */
+  runPruned: boolean;
   text: string;
   ts: string;
 }

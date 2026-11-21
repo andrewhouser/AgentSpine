@@ -590,8 +590,33 @@ struct SavedPath: Codable {
 struct Memory: Codable, Identifiable, Hashable {
     let id: Int
     let kind: String
+    /// The route that wrote it (reflection, tool, profile ...), set by the server's code and never by the
+    /// model. Nil for a memory from before provenance was tracked; the UI says so rather than guessing.
+    let origin: String?
+    /// The run that wrote it, when there is one.
+    let runId: Int?
+    /// `runId` is set but that run's trace has been pruned, so there is nothing to open.
+    let runPruned: Bool?
     let text: String
     let ts: String
+
+    /// What `origin` means, in words. An origin this build does not know is shown as written.
+    var originLabel: String {
+        guard let origin else { return "before provenance" }
+        switch origin {
+        case "conversation": return "conversation summary"
+        case "date": return "date you approved"
+        case "friction": return "tool failure note"
+        case "interrupt": return "from a dismissed notification"
+        case "lesson": return "lesson from a self-critique"
+        case "profile": return "profile fact you approved"
+        case "recipe": return "recipe learned from a run"
+        case "reflection": return "reflection after a run"
+        case "rejection": return "from a rejected proposal"
+        case "tool": return "saved by the assistant"
+        default: return origin
+        }
+    }
 }
 
 /// A named recipe from `GET /api/recipes`: a procedure you approved in chat, which a later run

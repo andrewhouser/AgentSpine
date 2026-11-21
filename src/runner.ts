@@ -510,7 +510,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // calls (Phase 3.1) — read from the run's own audit rows, never assumed.
       if (REFLECT_ENABLED && !opts.noMemory) {
         const allowRecipe = RECIPE_ENABLED && store.runIsClean(runId);
-        const result = await reflect(task, trace, { allowRecipe });
+        const result = await reflect(task, trace, { allowRecipe, runId });
         // Standing intent caught in conversation (Phase 4.2) becomes a PROPOSED recurring
         // job — queued for approval, never installed. Chat only: a scheduled run restating
         // its own standing task would propose itself forever.

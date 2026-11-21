@@ -192,10 +192,10 @@ HERE free tier, a static-speed provider, or flights only; whether to want G at a
 
 ## 4. Security hardening and learning (`docs/archive/PLAN-nod-learnings.md`, from n8n's Nod)
 
-N5 and the offline half of N2 are built (2026-11-21). N1, N3, N4 and the live half of N2 are not (checked
-2026-11-21: no `origin` column on `memories`, no cloud token cap, no styles table, no `eval:injection`). The
-write token raised the value of N2, since a hostile email is now worth more to an attacker.
-**Order: N1, N3, N4; the live half of N2 whenever the model host is free.** The offline half is done, so the
+N5, N1 and the offline half of N2 are built (2026-11-21). N3, N4 and the live half of N2 are not (checked
+2026-11-21: no cloud token cap, no styles table, no `eval:injection`). The write token raised the value of N2,
+since a hostile email is now worth more to an attacker.
+**Order: N3, N4; the live half of N2 whenever the model host is free.** The offline half is done, so the
 inbox cleanup can run unattended as far as code guards go; the live half is what measures the model.
 
 - **N5 Architecture test. Built 2026-11-21: `test/architecture.test.mjs`.** Reads the source with the
@@ -236,13 +236,21 @@ inbox cleanup can run unattended as far as code guards go; the live half is what
   and the one model call I found (`research/recipient.ts`) is given your memories, not event text, so I
   expect little exposure there; I did not trace whether an event title reaches a search query or a card, so
   that path is unchecked.
-- **N1 Memory provenance.** Add `run_id` and `origin` to `memories` with the existing best-effort `ALTER`
-  pattern. `origin` is a code-set vocabulary: `reflection`, `recipe`, `lesson`, `rejection`, `approval`,
-  `interrupt`, `conversation`, `profile`, `tool`. Widen `remember(text, kind, source?)` with `source`
-  optional; pass it from `reflect.ts` (two), `confirmations.ts` (two), `learn/critique.ts`,
-  `learn/interrupt.ts`, `tools/memory.ts`, `memory/summarize.ts`, `tools/profile.ts`. A refused duplicate keeps
-  the original provenance. Settings shows origin, links to the run trace, and says "run pruned" (never 404)
-  after the 90 day trace prune; old rows say "before provenance". Update `LEARNING.md`.
+- **N1 Memory provenance. Built 2026-11-21: `src/memory/rag.ts`, `test/memory-provenance.test.mjs`.**
+  `memories` gained `run_id` and `origin` (best-effort `ALTER`). `origin` is a closed, code-set vocabulary
+  (`ORIGINS`): the plan's nine minus `approval`, which no call site uses, plus `date` and `friction`. The
+  plan listed nine call sites; there were ten, because `headsup/dates.ts` (`date_remember`) also calls
+  `remember()`, and `rememberFriction` inserts into the table directly. `remember(text, kind, source?)` takes `{ origin, runId? }`; every call
+  site passes one, and the test reads the syntax tree and fails if any call in `src/` omits it. An origin
+  outside the vocabulary, or a run id that is not a positive integer, is stored as NULL. A refused duplicate
+  returns before it writes, so it keeps the original provenance (tested, including a case-only variant).
+  `listMemories()` computes `runPruned` in one query, so Settings says "run pruned" (never a 404) once a run
+  is past `RUN_RETENTION_DAYS`; old rows say "before provenance". **Settings shows it on web, Mac and
+  iPhone** (the Mac shares `MemoryView.swift` and `Models.swift` with the phone), each with a link to the run:
+  on the web that is a new URL, `/activity/:id`, so a run is bookmarkable and Back returns to Settings. Writers
+  with no single run (a conversation summary, a dismissal, a pattern of silent rejections) record an origin and
+  no run. `LEARNING.md` has a paragraph. Not done: a run id on friction rows (the broker's error path has one,
+  `recordFriction` does not take it), and nothing uses `origin` to change recall or pruning, by design.
 - **N3 Cloud token cap (lower priority).** Cap tokens, not dollars: `CLOUD_TOKENS_PER_DAY`,
   `CLOUD_TOKENS_PER_MONTH`, `CLOUD_TOKENS_PER_RUN`, counted from `llm_calls`, enforced in the router before
   the call, cloud calls only. Chat gets an error offering to continue locally; unattended runs stop, log, and

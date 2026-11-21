@@ -121,7 +121,7 @@ export const summarizeConversation = async (
     // Prefix the title so recall surfaces WHICH conversation this was, and so two threads on
     // different subjects don't dedupe against each other on a generic opening clause.
     const text2 = convo.title ? `Conversation "${convo.title}": ${summary}` : summary;
-    const stored = await remember(text2, CONVERSATION_KIND);
+    const stored = await remember(text2, CONVERSATION_KIND, { origin: "conversation" });
     store.markConversationSummarized(conversationId);
 
     if (stored) {

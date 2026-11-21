@@ -68,6 +68,7 @@ export const recordDismissal = async (topic: string): Promise<boolean> => {
     return await remember(
       `The user dismissed a proactive notification about "${t}". Do not interrupt them about this again unless it is materially more important.`,
       PREFERENCE_KIND,
+      { origin: "interrupt" },
     );
   } catch (err) {
     console.warn(`[interrupt] dismissal not recorded: ${err instanceof Error ? err.message : String(err)}`);

@@ -15,15 +15,16 @@ import styles from "./ActivityView.module.css";
  * watchers, and heartbeats never appear in a conversation, so this is where they surface —
  * with the same tool-call detail and the same broker decisions.
  */
-export const ActivityView = () => {
+export const ActivityView = ({ onSelectRun, runId }: { onSelectRun: (id: null | number) => void; runId: null | number }) => {
   const [runs, setRuns] = useState<Run[]>([]);
-  const [selected, setSelected] = useState<null | number>(null);
 
   useEffect(() => {
     void api.listRuns(100).then(setRuns);
   }, []);
 
-  if (selected !== null) return <RunDetail onBack={() => setSelected(null)} runId={selected} />;
+  // The selected run lives in the URL (/activity/12) rather than here, so a memory in Settings can
+  // link straight to the run that wrote it, and the back button returns to where you were.
+  if (runId !== null) return <RunDetail onBack={() => onSelectRun(null)} runId={runId} />;
 
   return (
     <div className={styles.page}>
@@ -47,7 +48,7 @@ export const ActivityView = () => {
         </thead>
         <tbody>
           {runs.map((r) => (
-            <tr className={styles.row} key={r.id} onClick={() => setSelected(r.id)}>
+            <tr className={styles.row} key={r.id} onClick={() => onSelectRun(r.id)}>
               <td className={styles.mono}>{r.id}</td>
               <td>
                 <span className={styles.kind}>{r.kind}</span>

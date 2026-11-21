@@ -44,6 +44,19 @@ that is the answer, not a thing to design around.
    `NOTE_MEMORY_MAX` exist so one weird run cannot flood recall. Three new kinds means
    three new caps, wired into `prune.ts` alongside the others.
 
+**Provenance (Nod N1, 2026-11-21).** Every memory records the route that wrote it (`origin`) and, when there
+is one, the run (`run_id`). Both are set by code at the `remember()` call, never by the model, so a poisoned
+fact cannot claim to have come from you. `origin` is a closed set (`ORIGINS` in `src/memory/rag.ts`:
+`reflection`, `recipe`, `lesson`, `rejection`, `interrupt`, `conversation`, `profile`, `tool`, `date`,
+`friction`); anything else is stored as NULL. A refused duplicate returns before it writes, so the row that
+exists keeps its original provenance. Rows from before this show "before provenance", not a guess. Memories
+outlive runs (runs are pruned at 90 days by default), so the list reports `runPruned` and Settings says "run
+pruned" instead of offering a link that would 404. Settings shows the origin on web, Mac and iPhone, with a
+link to the run. `test/memory-provenance.test.mjs` reads the syntax tree and fails if any `remember()` call in
+`src/` omits an origin, so a new writer cannot forget it. Provenance helps you find the cause of a wrong
+memory; it does not prevent one, and it does not enforce the rule that memory learns only from your own
+words (that stays in `reflect.ts`'s prompt, and N2's live half measures it).
+
 ---
 
 ## Phase 0 — Measure first  ✅ **BUILT, 2026-09-10**
