@@ -278,8 +278,8 @@ export const listClaims = (f: ClaimFilter = {}): Claim[] => {
   if (f.asOf) {
     c.push("COALESCE(c.said_on, substr(c.created,1,10)) <= ?");
     a.push(f.asOf);
-    // Still true on that date: not yet superseded or retracted by then.
-    c.push("(c.status IN ('active','resolved') OR substr(c.status_changed,1,10) > ?)");
+    // Still open on that date: active now, or it only stopped being active (resolved, superseded, retracted) after it.
+    c.push("(c.status = 'active' OR substr(c.status_changed,1,10) > ?)");
     a.push(f.asOf);
   }
   const rows = rawDb

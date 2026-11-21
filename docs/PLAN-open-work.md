@@ -408,15 +408,21 @@ baseline, and the meeting recall number is still unmeasured.
   questions, mark statements that supersede earlier ones, accept or reject suggested links, and preview how
   briefs will change. Favour quick accept and correct over editing. A correction teaches a deterministic alias
   for a speaker, acronym or project name.
-- **K6. Briefs and synthesis operations (Code).** Materialized, durable project and person briefs backed by K4
-  (not regenerated free text): objective and status, recent changes, active decisions with rationale, risks,
-  commitments by owner and date, open questions, stakeholders, recent activity, evidence links; for a person,
-  recent one-on-one topics, commitments in each direction, goals and concerns, feedback and follow-ups, with
-  tighter visibility and retention on sensitive notes. Then explicit, testable operations, each with a defined
-  retrieval recipe and output structure rather than an open-ended prompt: brief me for my next meeting; what
-  changed in this project this week; prepare a one-on-one; commitments I owe, and that others owe me; trace how
-  a decision evolved; risks that recur across projects; topics unresolved for over a month; a weekly staff
-  summary with citations; compare what the written plan says with what recent meetings say.
+- **K6. Briefs and synthesis operations (backend built 2026-11-21; the screens are not).** `src/knowledge/briefs.ts`:
+  briefs are ASSEMBLED from reviewed claims by code, with a fixed recipe and output shape per operation, never written
+  freehand by a model, so every line is a claim with its id, source, exact cited words and evidence level, and an
+  empty section says "Nothing recorded". Unreviewed claims are never mixed in; they are counted as "waiting for
+  review". A project brief (goals, active decisions, risks, commitments by due date with overdue flagged, open
+  questions, recent changes, conflicting information, people involved), a person brief (what they own, what they
+  raised, what they said; "owed to them by others" is stated as not recorded), and the operations `next-meeting`,
+  `what-changed`, `commitments` (overdue first, optionally one person), `recurring-risks`, `stale-topics` and
+  `weekly-summary`, plus `decisionTrace` (how a decision evolved). Any brief can be asked as of an earlier date,
+  rendered as Markdown with each citation (`?format=md`), and is materialized in `kn_briefs` so it is the same
+  document until refreshed. API: `GET /api/knowledge/briefs/{project|person|op|trace}/...`. Suite:
+  `test/knowledge-briefs.test.mjs`. **Not built:** the brief screens on web, iPhone and Mac; "compare what the
+  written plan says with what recent meetings say" (needs document claims at scale, K3's extraction run over a real
+  plan); a brief that tells the person what to ask in a one-on-one beyond what is recorded; and visibility and
+  retention tighter than the rest for notes marked sensitive (there is no sensitivity flag on a claim yet).
 - **K7. Retention rules (built 2026-11-21).** Separate rules per kind of thing, stated from the same numbers the
   code enforces (`src/knowledge/retention.ts`, `GET /api/retention`): original audio (`MEETING_KEEP_AUDIO_HOURS`),
   raw transcripts (`TRANSCRIPT_RETENTION_DAYS`, 30), a transcript indexed in a project (only if you chose to keep

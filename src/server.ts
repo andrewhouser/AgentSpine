@@ -44,6 +44,7 @@ import { checkWorkspaceFile } from "./projects/workspace.ts";
 import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
+import * as briefs from "./knowledge/briefs.ts";
 import * as knowledge from "./knowledge/store.ts";
 import { retentionRules } from "./knowledge/retention.ts";
 import { extractClaims, inboxItemText, normalizeMeeting } from "./knowledge/extract.ts";
@@ -1050,6 +1051,32 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
               return sendJson(res, 200, present(knowledge.getClaim(claimId) as knowledge.Claim));
             }
           }
+        }
+        // GET /api/knowledge/briefs/{project|person|op|trace}/...: assembled from reviewed claims, never free text.
+        // ?format=md returns Markdown with each line's citation; ?refresh=1 rebuilds a stored brief.
+        if (m === "GET" && seg[2] === "briefs" && seg.length >= 5) {
+          const asOf = str("asOf");
+          const fresh = url.searchParams.get("refresh") === "1";
+          const maxAge = fresh ? 0 : 60;
+          let brief: briefs.Brief;
+          if (seg[3] === "project") {
+            const pid = Number(seg[4]);
+            const project = projects.getProject(pid);
+            if (!project) return sendJson(res, 404, { error: "no such project" });
+            brief = asOf ? briefs.projectBrief(pid, project.name, { asOf }) : briefs.materialize({ kind: "project", subject: String(pid) }, () => briefs.projectBrief(pid, project.name), maxAge);
+          } else if (seg[3] === "person") {
+            const eid = Number(seg[4]);
+            brief = asOf ? briefs.personBrief(eid, { asOf }) : briefs.materialize({ kind: "person", subject: String(eid) }, () => briefs.personBrief(eid), maxAge);
+          } else if (seg[3] === "op") {
+            const name = seg[4] as briefs.Operation;
+            if (!briefs.OPERATIONS.includes(name)) return sendJson(res, 404, { error: `unknown operation; one of ${briefs.OPERATIONS.join(", ")}` });
+            const pid = num("project");
+            brief = briefs.operation(name, { asOf, days: num("days"), ownerId: num("owner"), projectId: pid, projectName: pid ? projects.getProject(pid)?.name : undefined });
+          } else if (seg[3] === "trace") {
+            brief = briefs.decisionTrace(Number(seg[4]));
+          } else return sendJson(res, 404, { error: "unknown brief" });
+          if (str("format") === "md") return sendJson(res, 200, { markdown: briefs.renderBrief(brief) });
+          return sendJson(res, 200, brief);
         }
         // POST /api/knowledge/meetings/:id: carry a meeting's extraction into the store (idempotent).
         if (m === "POST" && seg[2] === "meetings" && seg.length === 4) return sendJson(res, 200, { claims: normalizeMeeting(Number(seg[3])) });
