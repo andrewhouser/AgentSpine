@@ -344,7 +344,7 @@ baseline, and the meeting recall number is still unmeasured.
   rank and the leak rate (a forbidden source appearing), with ids and numbers only, never question text or
   passages. Question format: `id`, `question`, `project`, `expectSources` (path or ticket-like text),
   `forbidSources`, `kinds`, `since`, and `expectNone` (reports the best score so a no-evidence threshold can be
-  chosen from real data). Keep the file outside the repository. **You: write 30 to 50 questions** you actually
+  chosen from real data). Keep the file outside the repository. **You (deferred 2026-11-21): write 30 to 50 questions** you actually
   care about (some with changed information, some whose right answer is "not enough evidence"), then run it on
   the Mini before changing retrieval again; `VECTOR_MIN_SIMILARITY` is set from the result: run it with `KNOWLEDGE_VECTOR_MIN=0.15`, `0.25` and `0.35` in front of the command and keep the value with the best recall and no new leaks. `eval/questions.example.json` is an invented template to copy outside the repo. Suite:
   `test/knowledge-eval.test.mjs`, which shows each path winning its own kind of question and the fused mode
@@ -378,9 +378,7 @@ baseline, and the meeting recall number is still unmeasured.
   **Screens:** web has an Inbox entry (drop or choose files, paste a thread or type a note, search everything with
   the path that found each hit shown, items with an honest status, the suggested project with a one-click file,
   a project picker, try again, delete); iPhone and Mac share one `InboxView` (add files, paste text, context menu
-  and swipe actions) and an Inbox tab or sidebar row. `InboxView` lives at the bottom of `ProjectsView.swift`
-  because a new shared Swift file needs Target Membership ticked in Xcode: when convenient, move it to its own
-  `Views/InboxView.swift` and tick both targets. I looked at the web screen through the page's own DOM (the pane
+  and swipe actions) and an Inbox tab or sidebar row. `InboxView` is in `Views/InboxView.swift`, shared by both targets. I looked at the web screen through the page's own DOM (the pane
   was not on screen), not by eye. **Not built:** the iPhone share sheet and dictated notes; adopting the existing Milliman
   knowledge-folder loader as one source of the Inbox; people and tag suggestions beyond a project; "document date"
   inference from a PDF's own metadata.
@@ -410,8 +408,7 @@ baseline, and the meeting recall number is still unmeasured.
   their cited words and source, Accept (web also lets you correct the text first), Reject, and after accepting a
   decision or status, "Does this replace an earlier one?" with the earlier reviewed claims of the same kind and
   project, so supersession is always a person's act; conflicting information with "This one is wrong"; and a brief
-  reader (a project brief, or one of the six operations). It reads the API in K4 and K6. As elsewhere,
-  `KnowledgeView` sits at the bottom of `ProjectsView.swift` until Target Membership can be ticked for a new file.
+  reader (a project brief, or one of the six operations). It reads the API in K4 and K6. `KnowledgeView` is in `Views/KnowledgeView.swift`, shared by both targets.
   **Not built:** the close-out as one flow at the end of a meeting (confirm participants and speaker names, assign
   projects or topics, preview how briefs will change) rather than a review list; a correction that teaches a
   deterministic alias for a speaker, acronym or project name from the screen (the store merges aliases; no screen
