@@ -32,9 +32,9 @@ yet. Every reproduction below becomes a test in the same change as its fix, and 
 to the `npm test` list in `package.json`.
 
 **Suggested order, and why:** F2, F3 and F4 are done. F1 and F5 matter as soon as a project overlay is used, so
-they come before anyone relies on overlays, but they need no change to what runs today. F6 is a small fix once
-you pick the interim behaviour, and it should land before more workplace transcripts are filed. F7 is a
-decision first. All are Code. F6 and F7 are also step K0 of section 8.
+they come before anyone relies on overlays, but they need no change to what runs today. F7 is decided and ready
+to build, and is the smaller job. F6 is decided but needs a filing choice on web, Mac and iPhone, and should land
+before more workplace transcripts are filed. All are Code. F6 and F7 are also step K0 of section 8.
 
 **F1. Critical. A project overlay can open the browser to any domain.**
 `intersectNavigate()` in `src/projects/narrow-policy.ts` returns `[]` when the global and project allowlists are
@@ -76,25 +76,31 @@ meeting under a project (`indexIntoProject` in `src/meetings/session.ts`) copies
 project's `chunks` table as a `project_sources` row of kind `meeting`, and the prune does not touch those chunks.
 Confirmed by reading both functions; not yet run. `deleteMeeting` does remove the source, so only the prune is
 inconsistent. A searchable full transcript therefore survives after the transcript is nominally gone.
-Fix, and a decision first: either the prune also removes `kind = 'meeting'` chunks at the same window, or filing
-is treated as a deliberate retention opt-in and says so where you file. Section 8 (K7) sets the longer-term
-retention rules, so pick the interim behaviour now. Test: file a meeting, run the prune past the window, and
-assert no chunk of that transcript remains (or, for the opt-in choice, that the filing screen states it).
+**Decided 2026-11-21:** filing asks. When you file a meeting under a project, choose "keep the full transcript"
+or "keep only the summary, decisions and tasks". A kept transcript stays searchable and the screen says so; the
+other choice indexes only the extraction. The prune removes the chunks of any meeting filed the second way, and
+of any meeting whose transcript has been pruned. This is a UI change on web, Mac and iPhone together, plus a
+default for existing filed meetings (proposed: keep what is there, and say so once). Section 8 (K7) sets the
+longer-term rules. Tests: file a meeting each way, run the prune past the window, and
+assert that no chunk of the summary-only one remains, that the kept one does and is labelled, and that the filing
+screen on each client shows the choice.
 
 
-**F7. Medium. Other private material still travels with the run's tier.** Found while auditing for F2; none of it
-was changed, because each needs a decision.
-(a) A run inside a project is given the project's retrieved documents (`knowledgeFor` in `src/runner.ts`) as a
-user message on whatever tier the task was sized to, so project documents can reach the cloud on a `deep` run.
-This is the same decision as K0's "a project defaults to private". If yes, the fix is to start such runs pinned.
-(b) Mail, calendar, file and browser results (`gmail_search`, `calendar_upcoming`, `read_file`, `list_dir`,
-`browser`, `web_read`, `draft`) are treated as sensitive by the critique pass, but the main loop does not pin
-after them. `CLAUDE.md` does not list them as local-only, so this is your call. With `privateOutput` it is one
-line per tool.
-(c) The next turn of a conversation is given earlier assistant replies as history, so an answer that quoted a
-transcript can reach the cloud on a later `deep` turn. Read from `src/runner.ts`, not tested. Fix: record that a
-conversation touched private material and start its later turns pinned.
-Tests: the same two-server pattern as `test/private-output.test.mjs`, one case per item you decide to close.
+**F7. Medium. Other private material still travels with the run's tier.** Found while auditing for F2.
+**Decided 2026-11-21**, not yet built:
+(a) A run inside a project starts pinned to the local model, so project documents never reach the cloud. This is
+also K0's "a project is private by default", now settled. The documents are retrieved by `knowledgeFor` in
+`src/runner.ts` and enter as a user message on the run's tier today. Cost to accept: no deep tier inside a project.
+(b) After `gmail_search`, `calendar_upcoming`, `read_file`, `list_dir` or `draft` has run, the rest of that run is
+pinned local, by declaring `privateOutput` on each (the F2 mechanism). `browser` and `web_read` are not pinned:
+public pages gain nothing from it, and pinning them would take the deep tier from any run that browses.
+(c) A conversation that has touched private material stays local for good: record it on the conversation and
+start every later turn pinned, because earlier assistant replies are carried as history (read from
+`src/runner.ts`, not yet tested). Open detail: show a "Local only" badge on the thread, and whether a new chat
+is the way out (proposed: yes, it is).
+Tests: the two-server pattern in `test/private-output.test.mjs`, one case each: a project run, one tool from the
+(b) list, and a second turn after a private first turn. Also update `CLAUDE.md`'s local-first line to name what
+is now local-only, in the same change.
 ---
 
 ## 1. Roll out what is already built (You, on the Mini)
@@ -268,6 +274,24 @@ Preview row (C), Weekly review with "Kinds you mostly skip" (Phase 3 and 4), the
 provenance links in Settings, Memory (N1), and the Heads-up outcome lines in Settings. This list is the same
 check that sections 2, 3 and 4 ask for, in one pass.
 
+**A plan card for a running task (Code, then a look by you).** Show the steps a run is working through as a card
+in the conversation, each marked waiting, in progress or done, the way Claude Code does. Runs already publish
+typed events (`step_start`, `tool_call`, `tool_result`, `final` in `src/events.ts`), and the web client
+(`web/src/hooks/useRunStream.ts`) and the iPhone app (`ios/AgentSpine/Core/RunStream.swift`) both consume them, so
+the shape is a new `plan` event plus a card on web, Mac and iPhone together. Code owns the step state, as it
+owns every number; the model never marks its own progress.
+Two sources for the steps, built in this order:
+1. A checklist derived from the tool calls themselves ("Searching the web", "Reading a meeting", "Drafting"),
+   which costs no model tokens and cannot get the protocol wrong. It also works for scheduled runs in the
+   Activity view.
+2. Only if the first feels thin: a model-written plan of 3 to 7 steps on multi-step chat runs on the `deep` tier,
+   as one more action in the JSON protocol. Prefill is the expensive part on the model host, and a small local
+   model is the least reliable at extra protocol, so this stays off the `fast` and `standard` tiers until
+   measured.
+Decide while building: whether the card collapses when the run ends, and whether a plan is shown for a run that
+only answers in one step (proposed: no). Tests: the pure state machine (what advances a step, what happens on a
+denied or errored call, a repeated call, a subagent's calls), and the event shape both clients decode.
+
 **Not verified or not done:**
 - A VoiceOver pass by actually using it, Increase Contrast and Dynamic Type on the device, light-mode
   screenshots (light was derived from the dark mocks and never drawn).
@@ -409,9 +433,9 @@ baseline, and the meeting recall number is still unmeasured.
   citation showing the evidence has aged out. K0's interim choice for F6 is replaced by this.
 - **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
 
-Open decisions for you: OCR approach (K3); how backups are protected (K0); whether a project is private by
-default (K0, proposed yes); the schema for supersession and who marks it (K4, proposed: you, in the close-out);
-the interim F6 behaviour.
+Open decisions for you: OCR approach (K3); how backups are protected (K0); the schema for supersession and who
+marks it (K4, proposed: you, in the close-out). Settled 2026-11-21: a project is private by default (F7a), and
+filing a meeting asks whether to keep the full transcript (F6).
 
 ---
 
