@@ -1042,12 +1042,19 @@ final class APIClient {
 
     /// Pass nil to take it out of its project. Filing a finished meeting indexes its
     /// transcript into the project, which can take a moment.
-    func fileMeeting(_ id: Int, under projectID: Int?) async throws {
-        var req = try jsonRequest(
-            "/api/meetings/\(id)",
-            method: "PATCH",
-            body: ["projectId": projectID ?? NSNull()]
-        )
+    /// `keepTranscript` says whether the project keeps the full transcript searchable (true) or only the
+    /// summary, topics and decisions (false). It only matters when filing under a project.
+    func fileMeeting(_ id: Int, under projectID: Int?, keepTranscript: Bool? = nil) async throws {
+        var body: [String: Any] = ["projectId": projectID ?? NSNull()]
+        if let keepTranscript { body["keepTranscript"] = keepTranscript }
+        var req = try jsonRequest("/api/meetings/\(id)", method: "PATCH", body: body)
+        req.timeoutInterval = 300
+        try await sendRaw(req, using: longSession)
+    }
+
+    /// Change what an already-filed meeting keeps in its project.
+    func setMeetingKeep(_ id: Int, keepTranscript: Bool) async throws {
+        var req = try jsonRequest("/api/meetings/\(id)", method: "PATCH", body: ["keepTranscript": keepTranscript])
         req.timeoutInterval = 300
         try await sendRaw(req, using: longSession)
     }

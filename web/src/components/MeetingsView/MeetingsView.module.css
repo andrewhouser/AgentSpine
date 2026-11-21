@@ -627,3 +627,24 @@ button.tag {
 .savedChat {
   margin: 10px 0;
 }
+
+/* The question asked when a meeting is filed under a project: what should the project keep. */
+.filing {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  margin: 6px 0;
+  padding: 8px 12px;
+}
+
+.filing p {
+  margin: 0 0 6px;
+}
+
+.filingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}

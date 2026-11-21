@@ -410,9 +410,13 @@ export const api = {
   setDefaultStyle: (name: string) => request<{ defaultStyle: string }>("/api/style-default", { body: JSON.stringify({ name }), method: "PUT" }),
   setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
 
-  /** File a finished meeting under a project — this is what indexes its transcript. */
-  setMeetingProject: (id: number, projectId: null | number) =>
-    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ projectId }), method: "PATCH" }),
+  /** Change what a filed meeting keeps in its project: the full transcript, or only the summary. */
+  setMeetingKeep: (id: number, keepTranscript: boolean) =>
+    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ keepTranscript }), method: "PATCH" }),
+
+  /** File a finished meeting under a project, and say whether its full transcript stays searchable there. */
+  setMeetingProject: (id: number, projectId: null | number, keepTranscript?: boolean) =>
+    request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ keepTranscript, projectId }), method: "PATCH" }),
 
   /** Replace a meeting's tags. */
   setMeetingTags: (id: number, tags: string[]) =>

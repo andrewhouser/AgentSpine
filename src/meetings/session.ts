@@ -623,6 +623,9 @@ export const runExtraction = async (meetingId: number): Promise<void> => {
       ? `${result.decisions} decisions, ${result.queued} work items for review, ${result.rejected} rejected`
       : (store.getExtraction(meetingId)?.note ?? "nothing to extract");
     emit({ kind: "extraction", meetingId, note: done });
+    // A meeting filed "summary only" has nothing in the project until its extraction exists.
+    const filed = store.getMeeting(meetingId);
+    if (filed?.project_id != null && filed.keep_transcript === 0) await indexIntoProject(meetingId, filed.project_id);
   } catch (err) {
     // extractMeeting records its own failures; this is the belt to that braces.
     emit({ kind: "extraction", meetingId, note: `extraction failed: ${(err as Error).message}` });
@@ -645,20 +648,43 @@ export const runExtraction = async (meetingId: number): Promise<void> => {
 };
 
 /**
- * File the transcript into a project's index.
+ * File a meeting into a project's index, as the person chose.
  *
- * A meeting becomes a `project_sources` row of kind `meeting` — a column that has existed
- * since projects were built and has never had a second value. Its chunks go into the same
- * `chunks` table as indexed documents, which means project recall picks the meeting up with
- * no new retrieval code and no second ranking path to keep in step with the first.
+ * A meeting becomes a `project_sources` row of kind `meeting`, in the same `chunks` table as
+ * indexed documents, so project recall picks it up with no second ranking path to keep in step.
+ * What goes in depends on `keepTranscript`:
+ *
+ *   true   the full transcript, searchable until the meeting is deleted. The transcript table is
+ *          pruned after TRANSCRIPT_RETENTION_DAYS, so this is a deliberate retention opt-in and
+ *          every screen that files a meeting says so.
+ *   false  only the summary, topics and decisions (`meeting-summary:<id>`). The words themselves
+ *          never enter the project index, so the prune has nothing of theirs to leave behind.
+ *
+ * Omitted means "as already chosen", and for a meeting that was never asked, true: that is what
+ * filing did before the choice existed, so nothing changes for existing meetings. Returns the
+ * number of chunks indexed.
  */
-export const indexIntoProject = async (meetingId: number, projectId: number): Promise<number> => {
-  const text = store.transcriptText(meetingId, "final");
+export const indexIntoProject = async (
+  meetingId: number,
+  projectId: number,
+  keepTranscript?: boolean,
+): Promise<number> => {
+  const meeting = store.getMeeting(meetingId);
+  const keep = keepTranscript ?? meeting?.keep_transcript !== 0;
+  if (keepTranscript !== undefined) store.setKeepTranscript(meetingId, keepTranscript);
+
+  const transcriptRef = `meeting:${meetingId}`;
+  const summaryRef = `meeting-summary:${meetingId}`;
+  const sources = projects.listSources(projectId);
+  // Whichever form is not wanted goes, so switching the choice replaces the old copy.
+  const stale = sources.find((s) => s.ref === (keep ? summaryRef : transcriptRef));
+  if (stale) projects.removeSource(stale.id);
+
+  const ref = keep ? transcriptRef : summaryRef;
+  const text = keep ? store.transcriptText(meetingId, "final") : summaryText(meetingId);
   if (!text) return 0;
 
-  const meeting = store.getMeeting(meetingId);
-  const ref = `meeting:${meetingId}`;
-  const existing = projects.listSources(projectId).find((s) => s.ref === ref);
+  const existing = sources.find((s) => s.ref === ref);
   const sourceId = existing?.id ?? projects.addSource(projectId, ref, "meeting");
 
   const pieces = chunkText(text);
@@ -667,16 +693,25 @@ export const indexIntoProject = async (meetingId: number, projectId: number): Pr
   for (let i = 0; i < pieces.length; i++) {
     const vector = embedder ? await embedder(pieces[i]) : null;
     // The fingerprint for a meeting is when it was transcribed. It never changes after
-    // that, so the incremental walk in ingest.ts would consider it unchanged forever —
+    // that, so the incremental walk in ingest.ts would consider it unchanged forever,
     // which is correct: a recording of a past meeting cannot be edited.
     const stamp = meeting?.transcribed_at ?? meeting?.started ?? new Date().toISOString();
     projects.insertChunk(projectId, sourceId, ref, i, stamp, pieces[i], vector ? toBlob(vector) : null);
   }
-  projects.setSourceStatus(sourceId, `meeting transcript, ${pieces.length} chunks`, {
+  projects.setSourceStatus(sourceId, `${keep ? "meeting transcript" : "meeting summary"}, ${pieces.length} chunks`, {
     chunks: pieces.length,
     files: 1,
   });
   return pieces.length;
+};
+
+/** The extraction as prose for the project index: summary, topics, decisions. Empty until it has run. */
+const summaryText = (meetingId: number): string => {
+  const ex = store.getExtraction(meetingId);
+  if (!ex || ex.status !== "done") return "";
+  const parts = [ex.summary ?? "", ex.topics.length ? `Topics: ${ex.topics.join("; ")}` : ""];
+  for (const d of ex.decisions) parts.push(`Decision: ${d.text}`);
+  return parts.filter(Boolean).join("\n\n");
 };
 
 export type DeleteResult = { ok: false; reason: string } | { ok: true; rejectedItems: number };
@@ -710,8 +745,9 @@ export const deleteMeeting = (meetingId: number): DeleteResult => {
 
   // The project index: the transcript chunks are retrievable context, which is the point of this.
   if (meeting.project_id != null) {
-    const source = projects.listSources(meeting.project_id).find((s) => s.ref === `meeting:${meetingId}`);
-    if (source) projects.removeSource(source.id);
+    for (const source of projects.listSources(meeting.project_id)) {
+      if (source.ref === `meeting:${meetingId}` || source.ref === `meeting-summary:${meetingId}`) projects.removeSource(source.id);
+    }
   }
   deleteAudio(meetingId);
   store.deleteMeeting(meetingId);

@@ -1064,6 +1064,9 @@ struct Meeting: Codable, Identifiable, Hashable {
     let device: String
     let ended: String?
     let id: Int
+    /// 1 the full transcript stays searchable in its project, 0 only the summary, nil never chosen
+    /// (acts as 1). Absent from older servers.
+    let keepTranscript: Int?
     let note: String?
     let projectID: Int?
     let started: String
@@ -1077,8 +1080,19 @@ struct Meeting: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case device, ended, id, note, started, status, tags, title
         case audioExpires = "audio_expires"
+        case keepTranscript = "keep_transcript"
         case projectID = "project_id"
         case wordCount = "word_count"
+    }
+
+    /// What the project index holds for this meeting, in words. Empty when it is not filed.
+    var projectKeeps: String? {
+        guard projectID != nil else { return nil }
+        switch keepTranscript {
+        case 0: return "Summary, topics and decisions only"
+        case 1: return "Full transcript, searchable after the 30 day retention window"
+        default: return "Full transcript (filed before you were asked), searchable after the 30 day retention window"
+        }
     }
 
     var displayTitle: String {

@@ -555,8 +555,30 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     reloadMeetings();
   };
 
+  // Filing indexes the meeting into a project, so it asks what the project should keep. Taking a
+  // meeting out of a project needs no question.
+  const [filing, setFiling] = useState<{ id: number; projectId: number } | null>(null);
+
   const assign = async (id: number, value: string): Promise<void> => {
-    await api.setMeetingProject(id, value === "" ? null : Number(value));
+    if (value === "") {
+      setFiling(null);
+      await api.setMeetingProject(id, null);
+      reloadMeetings();
+      return;
+    }
+    setFiling({ id, projectId: Number(value) });
+  };
+
+  const file = async (keepTranscript: boolean): Promise<void> => {
+    if (!filing) return;
+    const target = filing;
+    setFiling(null);
+    await api.setMeetingProject(target.id, target.projectId, keepTranscript);
+    reloadMeetings();
+  };
+
+  const changeKeep = async (id: number, keepTranscript: boolean): Promise<void> => {
+    await api.setMeetingKeep(id, keepTranscript);
     reloadMeetings();
   };
 
@@ -800,6 +822,39 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
               ))}
             </select>
           </div>
+
+          {filing?.id === m.id && (
+            <div aria-label="What the project keeps" className={styles.filing} role="group">
+              <p>
+                File under {projects.find((p) => p.id === filing.projectId)?.name ?? "this project"}. Keep the full
+                transcript searchable there, or only the summary, topics and decisions? A kept transcript stays
+                searchable after the 30 day transcript retention window, until you delete the meeting.
+              </p>
+              <div className={styles.filingActions}>
+                <button className={styles.linkButton} onClick={() => void file(true)} type="button">
+                  Keep full transcript
+                </button>
+                <button className={styles.linkButton} onClick={() => void file(false)} type="button">
+                  Summary only
+                </button>
+                <button className={styles.linkButton} onClick={() => setFiling(null)} type="button">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {m.project_id != null && filing?.id !== m.id && (
+            <p className={styles.hint}>
+              {m.keep_transcript === 0
+                ? "The project keeps only this meeting's summary, topics and decisions."
+                : m.keep_transcript === 1
+                  ? "The full transcript stays searchable in the project, after the 30 day retention window, until you delete the meeting."
+                  : "The full transcript is searchable in the project (filed before you were asked), and stays so after the 30 day retention window."}{" "}
+              <button className={styles.linkButton} onClick={() => void changeKeep(m.id, m.keep_transcript === 0)} type="button">
+                {m.keep_transcript === 0 ? "Keep the full transcript" : "Keep only the summary"}
+              </button>
+            </p>
+          )}
 
           <div className={styles.tagBar}>
             {(m.tags ?? []).map((t) => (

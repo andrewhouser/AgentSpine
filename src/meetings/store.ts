@@ -127,6 +127,15 @@ try {
   // already there
 }
 
+// 1 = the full transcript stays searchable in the project it was filed under; 0 = only the summary,
+// topics and decisions are indexed there; null = never chosen (filed before the choice existed, or
+// by a caller that did not say), which behaves as 1 and is shown as such. See indexIntoProject.
+try {
+  rawDb.exec("ALTER TABLE meetings ADD COLUMN keep_transcript INTEGER");
+} catch {
+  // already there
+}
+
 const now = (): string => new Date().toISOString();
 
 /** `recording` while capture runs, `transcribing` during the final pass, then a terminal state. */
@@ -139,6 +148,8 @@ export interface MeetingRow {
   device: string;
   ended: null | string;
   id: number;
+  /** 1 keep the full transcript searchable in the project, 0 summary only, null never chosen (acts as 1). */
+  keep_transcript: null | number;
   note: null | string;
   project_id: null | number;
   started: string;
@@ -316,6 +327,10 @@ export const setStatus = (id: number, status: MeetingStatus, note?: string): voi
 
 export const setProject = (id: number, projectId: null | number): void => {
   rawDb.prepare("UPDATE meetings SET project_id = ? WHERE id = ?").run(projectId, id);
+};
+
+export const setKeepTranscript = (id: number, keep: boolean): void => {
+  rawDb.prepare("UPDATE meetings SET keep_transcript = ? WHERE id = ?").run(keep ? 1 : 0, id);
 };
 
 export const setAudioExpires = (id: number, iso: null | string): void => {
@@ -627,6 +642,20 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
   rawDb
     .prepare("DELETE FROM meeting_segments WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
     .run(cutoff);
+  // A meeting filed "summary only" never has transcript chunks in a project, by construction. This
+  // is the backstop for one that somehow does (a copy made before the choice was switched): the
+  // transcript source is dropped at the same window as the transcript. A meeting filed "keep" (or
+  // never asked) stays searchable on purpose, and says so where it is filed.
+  const transcriptSources = rawDb
+    .prepare(
+      "SELECT s.id FROM project_sources s JOIN meetings m ON s.ref = 'meeting:' || m.id " +
+        "WHERE s.kind = 'meeting' AND m.keep_transcript = 0 AND m.started < ?",
+    )
+    .all(cutoff) as unknown as { id: number }[];
+  for (const src of transcriptSources) {
+    rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(src.id);
+    rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(src.id);
+  }
   // Speaker names go with the words they labelled.
   rawDb
     .prepare("DELETE FROM meeting_speakers WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")

@@ -1448,9 +1448,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           // Assigning a project is what files the transcript into that project's index.
           // Doing it here rather than only at stop() is the whole point of assign-after —
           // you often don't know which project a meeting was about until it's over.
-          if (projectId && meeting.status === "done") await meetings.indexIntoProject(id, projectId);
+          if (projectId && meeting.status === "done")
+            await meetings.indexIntoProject(id, projectId, typeof b.keepTranscript === "boolean" ? b.keepTranscript : undefined);
           // Items already waiting in Approvals move onto the project's task list.
           if (projectId) fileQueuedItems(id, projectId);
+        } else if (typeof b?.keepTranscript === "boolean") {
+          // Changing the choice for a meeting that is already filed replaces what the project holds.
+          if (meeting.project_id != null && meeting.status === "done") await meetings.indexIntoProject(id, meeting.project_id, b.keepTranscript);
+          else meetingStore.setKeepTranscript(id, b.keepTranscript);
         }
         return sendJson(res, 200, meetingStore.getMeeting(id));
       }

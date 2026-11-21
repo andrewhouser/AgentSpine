@@ -337,6 +337,8 @@ export interface Meeting {
   device: string;
   ended: null | string;
   id: number;
+  /** 1 the full transcript stays searchable in its project, 0 summary only, null never chosen (acts as 1). */
+  keep_transcript?: null | number;
   note: null | string;
   project_id: null | number;
   started: string;

@@ -5,7 +5,7 @@ piece of work is not here, it is either built (the design records are in `docs/a
 not a to-do list) or deliberately not wanted (see "Ground rules"). When you finish or change something, change
 this file in the same commit. When you start something new, add it here rather than writing another PLAN doc.
 
-**Priority order (decided 2026-11-21).** Section 0 first (the security findings: F1 to F5 and F7 are fixed, F6 is open). Then section 8, the
+**Priority order (decided 2026-11-21).** Section 0 first (the security findings, all fixed). Then section 8, the
 management knowledge system, which is the main direction: the highest return is making AgentSpine very good at
 remembering, connecting, citing and updating workplace knowledge. Live Activities, richer travel integrations,
 buying or booking actions and most new proactive behaviour are deprioritized until section 8 has a reliable
@@ -31,10 +31,9 @@ I checked each finding against the code on 2026-11-21. **F1 to F5 and F7 are fix
 yet. Every reproduction below becomes a test in the same change as its fix, and each new suite is added by hand
 to the `npm test` list in `package.json`.
 
-**What is left:** F6 only. It is decided but needs a filing choice on web, Mac and iPhone, and should land before
-more workplace transcripts are filed. It is also step K0 of section 8.
+**What is left in this section:** nothing in code. The "Local only" note and the filing question have not been seen rendered.
 
-**F1, F2, F3, F4, F5 and F7: fixed 2026-11-21, numbers kept so the others do not shift.** F1 (an overlay opening the browser to any domain): two non-empty allowlists that share nothing now set `browser.denyAll`, which `browser` and `web_read` test before the list. F5 (an overlay raising a budget): caps are compared as the broker applies them, so no tool ends above the base's effective cap. Suite: `test/narrow-policy-holes.test.mjs`. F2 (meeting transcripts reaching
+**F1 to F7: all fixed 2026-11-21, numbers kept so they do not shift.** F6 (filed transcripts outliving the retention window): filing a meeting under a project asks whether the project keeps the full transcript searchable or only the summary, topics and decisions. The choice is stored as `meetings.keep_transcript`; summary-only meetings never put their words in the project index (`meeting-summary:<id>`), so the prune has nothing of theirs to leave behind, and the prune also drops any stray transcript copy of one. A kept transcript is an explicit retention opt-in and every screen says so. A meeting filed before the choice existed keeps its transcript, shown as such. Web, iPhone and Mac ask when you file after the fact, and each can change the choice later. Not yet asked: a meeting recorded or imported with a project already chosen files with the transcript kept, because there is no filing moment to ask at; change it from the meeting afterwards. Suite: `test/meeting-filing.test.mjs`. F1 (an overlay opening the browser to any domain): two non-empty allowlists that share nothing now set `browser.denyAll`, which `browser` and `web_read` test before the list. F5 (an overlay raising a budget): caps are compared as the broker applies them, so no tool ends above the base's effective cap. Suite: `test/narrow-policy-holes.test.mjs`. F2 (meeting transcripts reaching
 the cloud): a tool can declare `privateOutput` (`src/types.ts`), and once one has run, the agent loop pins every
 later model call in that run, its re-asks and its closing answer, and any subagent in the tree, to
 `sensitivity: "private"` (`src/sensitivity.ts`). `meeting_list` and the study tools on a project-linked topic
@@ -50,22 +49,6 @@ state, and a row left `executing` by a crash ends as `error` on server start and
 `test/confirm-race.test.mjs`. F4 (`state_set` reaching internal `kv` keys): `state_get` and `state_set` store every
 key under `watch:`, so nothing internal is reachable by construction, and a one-time migration copies legacy
 watcher keys so no watcher reports a spurious first observation. Suite: `test/state-namespace.test.mjs`.
-
-**F6. Medium. Filed transcripts outlive the transcript retention window.**
-`pruneTranscripts` in `src/meetings/store.ts` deletes a meeting's segments, speakers, chat and quotes after
-`TRANSCRIPT_RETENTION_DAYS` (30), because that table is "the most sensitive in this project". But filing a
-meeting under a project (`indexIntoProject` in `src/meetings/session.ts`) copies the full transcript into the
-project's `chunks` table as a `project_sources` row of kind `meeting`, and the prune does not touch those chunks.
-Confirmed by reading both functions; not yet run. `deleteMeeting` does remove the source, so only the prune is
-inconsistent. A searchable full transcript therefore survives after the transcript is nominally gone.
-**Decided 2026-11-21:** filing asks. When you file a meeting under a project, choose "keep the full transcript"
-or "keep only the summary, decisions and tasks". A kept transcript stays searchable and the screen says so; the
-other choice indexes only the extraction. The prune removes the chunks of any meeting filed the second way, and
-of any meeting whose transcript has been pruned. This is a UI change on web, Mac and iPhone together, plus a
-default for existing filed meetings (proposed: keep what is there, and say so once). Section 8 (K7) sets the
-longer-term rules. Tests: file a meeting each way, run the prune past the window, and
-assert that no chunk of the summary-only one remains, that the kept one does and is labelled, and that the filing
-screen on each client shows the choice.
 
 ---
 
@@ -344,7 +327,7 @@ cites every important assertion and shows a disagreement instead of silently pic
 **Order.** Adjusted from the review: measurement moves ahead of the big builds, because "better" needs a
 baseline, and the meeting recall number is still unmeasured.
 
-- **K0. Privacy and retention first (Code, plus decisions).** F6 above (F2 and F7 are done). Then make sensitivity a property
+- **K0. Privacy and retention first (Code, plus decisions).** F2, F6 and F7 are done. Make sensitivity a property
   of a stored source and of everything derived from it (embedding, extraction, retrieval, synthesis, reflection
   all stay local for a private source); a project is already private by default (F7, built), and sending
   any of it to a cloud model needs an explicit decision. Decide backups: the app has none of its own, so either
@@ -480,7 +463,7 @@ must have one owner:
 - Untrusted content is evidence, never harness instruction.
 - Private material cannot go to the cloud. F2 and F7 are fixed, so this is a runtime fact for meeting, mail,
   calendar, file and project-source material and for runs inside a project (`src/sensitivity.ts`); it is not yet
-  true of what is derived from a stored source (F6, K0), so do not claim more than that.
+  true of what is derived from a stored source (K0), so do not claim more than that.
 - The model cannot edit policy or grant itself a capability.
 
 Render only clauses relevant to visible features, but do not key the whole application description on
@@ -658,7 +641,7 @@ from instead).
   judgment.
 - Local-first: `sensitivity: "private"` content never reaches the cloud tier. Meeting work and study topics
   linked to a project are local-only. Milliman and other workplace material never goes to web search, paste
-  services or third-party APIs. F6 is the known hole in this rule.
+  services or third-party APIs. F6 is fixed for filed meetings; what is derived from a stored source (K0) is the remaining gap.
 - Standing work needs consent: a tool that creates or edits what future unattended runs follow sets
   `confirmWhenUnattended: true` or refuses non-chat runs.
 - Tests first for arithmetic and every boundary; new suites are added by hand to the `npm test` list in

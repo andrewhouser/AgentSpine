@@ -313,6 +313,8 @@ struct MeetingDetailView: View {
     @State private var cards: ContextCards?
     @State private var error: String?
     @State private var renaming = false
+    /// The project a meeting is about to be filed under, while the "what should it keep" question is open.
+    @State private var filingUnder: Project?
     @State private var newTitle = ""
     @State private var reprocessing = false
     @State private var headCount = ""
@@ -352,6 +354,18 @@ struct MeetingDetailView: View {
         }
         .navigationTitle(detail?.meeting.displayTitle ?? "Meeting")
         .spineInlineTitle()
+        .confirmationDialog(
+            "What should \(filingUnder?.name ?? "the project") keep?",
+            isPresented: Binding(get: { filingUnder != nil }, set: { if !$0 { filingUnder = nil } }),
+            titleVisibility: .visible,
+            presenting: filingUnder
+        ) { project in
+            Button("Keep the full transcript") { Task { await file(project.id, keepTranscript: true) } }
+            Button("Summary, topics and decisions only") { Task { await file(project.id, keepTranscript: false) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("A kept transcript stays searchable in the project after the 30 day transcript retention window, until you delete the meeting.")
+        }
         .toolbar {
             ToolbarItem(placement: .spineTrailing) {
                 if let meeting = detail?.meeting {
@@ -360,7 +374,13 @@ struct MeetingDetailView: View {
                         Menu("File under project") {
                             Button("None") { Task { await file(nil) } }
                             ForEach(state.projects) { project in
-                                Button(project.name) { Task { await file(project.id) } }
+                                // Filing indexes the meeting, so it asks what the project should keep.
+                                Button(project.name) { filingUnder = project }
+                            }
+                        }
+                        if meeting.projectID != nil {
+                            Button(meeting.keepTranscript == 0 ? "Keep the full transcript in the project" : "Keep only the summary in the project") {
+                                Task { await setKeep(meeting.keepTranscript == 0) }
                             }
                         }
                         Button("Re-run extraction") { Task { await extract() } }
@@ -441,6 +461,9 @@ struct MeetingDetailView: View {
             if let id = meeting.projectID,
                let project = state.projects.first(where: { $0.id == id }) {
                 LabeledContent("Project", value: project.name)
+                if let keeps = meeting.projectKeeps {
+                    LabeledContent("Project keeps", value: keeps)
+                }
             }
             if let note = meeting.note, !note.isEmpty {
                 Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
@@ -711,9 +734,16 @@ struct MeetingDetailView: View {
         } catch { self.error = error.localizedDescription }
     }
 
-    private func file(_ projectID: Int?) async {
+    private func file(_ projectID: Int?, keepTranscript: Bool? = nil) async {
         do {
-            try await APIClient.shared.fileMeeting(meetingID, under: projectID)
+            try await APIClient.shared.fileMeeting(meetingID, under: projectID, keepTranscript: keepTranscript)
+            await load()
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func setKeep(_ keep: Bool) async {
+        do {
+            try await APIClient.shared.setMeetingKeep(meetingID, keepTranscript: keep)
             await load()
         } catch { self.error = error.localizedDescription }
     }
