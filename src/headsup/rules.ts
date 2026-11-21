@@ -59,6 +59,21 @@ export const RETRY_AFTER_ERROR_MINUTES = 60;
 /** "Not now" comes back after this long. */
 export const SNOOZE_HOURS = 24;
 
+// --- learning from dismissals (workstream B) -----------------------------------------------
+// Counted offers are yes + never + ignored; `later` and still-open items are left out (outcomes.ts).
+// Starting values from PLAN-open-work.md section 3, used as written when B was built (2026-11-21).
+
+/** Outcomes older than this stop counting. */
+export const OUTCOME_WINDOW_DAYS = 90;
+/** Quieten a kind: first mention kept, reminders dropped, sorted last under the daily cap. */
+export const QUIETEN_MIN_COUNTED = 6;
+export const QUIETEN_MIN_RATE = 0.7;
+/** Propose switching a kind off, through the confirmation queue. */
+export const OFF_MIN_COUNTED = 10;
+export const OFF_MIN_RATE = 0.85;
+/** After a proposal for a kind, in any state, wait this long before proposing again. */
+export const OFF_SUPPRESS_DAYS = 90;
+
 /**
  * The time-sensitive loop never runs more often than this, whatever any setting says. Not a
  * preference: a floor that keeps a bug or a misconfiguration from turning into a polling storm

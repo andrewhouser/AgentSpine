@@ -17,6 +17,7 @@ import type { NotifyOpts } from "../notify.ts";
 import { dropCoveredByCalendar, rememberedEvents } from "./dates.ts";
 import { fetchScanEvents, googleEnabled } from "./index.ts";
 import * as ledger from "./ledger.ts";
+import { proposeKindsOff, quietKinds } from "./outcomes.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
 import { getPrefs, isQuietNow } from "./prefs.ts";
@@ -153,10 +154,13 @@ export const runMorningHeadsup = async (
   ledger.expirePast(now);
   const events = [...fetched.events, ...dropCoveredByCalendar(deps.remembered(now), fetched.events)];
   const prefs = getPrefs();
+  // A kind you keep passing on may earn a proposal to switch it off. Queued, never applied: it waits for you.
+  proposeKindsOff(now, (k) => prefs.kinds[k] !== false);
+  const quiet = quietKinds(now);
   const plan = planOffers(
     // A kind you turned off is never offered. Watches already running are not affected.
     scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
-    { get: ledger.getByKey, muted: ledger.isMuted },
+    { get: ledger.getByKey, muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
     now,
     prefs.dailyCap,
     [prefs.quietStartHour, prefs.quietEndHour],

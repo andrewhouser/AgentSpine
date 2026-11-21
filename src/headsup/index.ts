@@ -12,6 +12,7 @@ import { isExcludedCalendar } from "./calendars.ts";
 import type { CalendarScope } from "./calendars.ts";
 import { dropCoveredByCalendar, rememberedEvents } from "./dates.ts";
 import * as ledger from "./ledger.ts";
+import { quietKinds } from "./outcomes.ts";
 import { planOffers } from "./plan.ts";
 import { getPrefs } from "./prefs.ts";
 import type { Plan } from "./plan.ts";
@@ -70,9 +71,10 @@ export const gatherEvents = async (now: Date, scope?: CalendarScope): Promise<{ 
 export const planMorning = async (now: Date = new Date()): Promise<Plan & { errors: string[] }> => {
   const { errors, events } = await gatherEvents(now);
   const prefs = getPrefs();
+  const quiet = quietKinds(now);
   const plan = planOffers(
     scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
-    { get: ledger.getByKey, muted: ledger.isMuted },
+    { get: ledger.getByKey, muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
     now,
     prefs.dailyCap,
     [prefs.quietStartHour, prefs.quietEndHour],

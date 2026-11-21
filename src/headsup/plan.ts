@@ -22,6 +22,11 @@ export interface Offer {
 export interface PlanDeps {
   get: (dedupeKey: string) => HeadsupRow | undefined;
   muted: (kind: string, subject: string) => boolean;
+  /**
+   * Kinds you keep passing on (outcomes.ts): they keep their first mention but lose reminders, and sort
+   * after everything else under the daily cap. Optional so a caller with no history changes nothing.
+   */
+  quiet?: (kind: string) => boolean;
 }
 
 export interface Plan {
@@ -39,7 +44,7 @@ const targetStage = (c: Candidate): number => {
 };
 
 /** Decide one candidate, or null for "nothing to say". */
-const decide = (c: Candidate, row: HeadsupRow | undefined, now: Date): Offer | null => {
+const decide = (c: Candidate, row: HeadsupRow | undefined, now: Date, quiet = false): Offer | null => {
   // Already engaged with, or finished with. An accepted offer is the user's now.
   if (row && ["accepted", "dismissed", "done", "expired", "researched"].includes(row.state)) return null;
 
@@ -60,6 +65,8 @@ const decide = (c: Candidate, row: HeadsupRow | undefined, now: Date): Offer | n
     return { candidate: c, reason: "snoozed", stage: Math.max(target, row.stage) };
   }
   if (!row) return { candidate: c, reason: "new", stage: target };
+  // A reminder is the second and later mention. A quietened kind has earned only the first.
+  if (quiet) return null;
   return target > row.stage ? { candidate: c, reason: "reminder", stage: target } : null;
 };
 
@@ -78,11 +85,13 @@ export const planOffers = (
   const due: Offer[] = [];
   for (const c of candidates) {
     if (deps.muted(c.kind, c.subject)) continue;
-    const o = decide(c, deps.get(c.dedupeKey), now);
+    const o = decide(c, deps.get(c.dedupeKey), now, deps.quiet?.(c.kind) ?? false);
     if (o) due.push(o);
   }
+  const isQuiet = (o: Offer): number => (deps.quiet?.(o.candidate.kind) ? 1 : 0);
   due.sort(
     (a, b) =>
+      isQuiet(a) - isQuiet(b) ||
       a.candidate.daysUntil - b.candidate.daysUntil ||
       KIND_PRIORITY[a.candidate.kind] - KIND_PRIORITY[b.candidate.kind] ||
       a.candidate.subject.localeCompare(b.candidate.subject),

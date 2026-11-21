@@ -126,13 +126,13 @@ delete it.
 
 **Built:** Phases 0 to 5 (calendar reader, scanner, rules, ledger, planner, morning heads-up, API, web
 page, iOS, flights and drives), the tab badge, brief line and preferences, **E retention**
-(`src/headsup/prune.ts`) and **F telemetry** (`src/headsup/telemetry.ts`, printed by `npm run digest`;
-reads answers from the ledger as a snapshot until B's table exists).
+(`src/headsup/prune.ts`), **F telemetry** (`src/headsup/telemetry.ts`, printed by `npm run digest`) and
+**B learn from dismissals** (`src/headsup/outcomes.ts`; built 2026-11-21, not yet proven on real use).
 
 | # | Workstream | Size | State |
 |---|---|---|---|
 | A | Verify what has only run against fixtures | S | **You** |
-| B | Learn from dismissals | M | Not started; needs A3 first |
+| B | Learn from dismissals | M | **Built**, unproven: needs weeks of real answers (A3 first) |
 | C | `docs/ROLLOUT-heads-up.md` rollout checklist | S | Not started; needs A |
 | D | Lead-time overrides in Settings | M | Not started |
 | G | Live Activity for a flight | L | Not started; needs A1 and A3 rung 6 first |
@@ -149,20 +149,25 @@ consciously skipped. A4 confirm each provider's real free tier (AeroDataBox on R
 v1 Calculate Route may not be free) so `HEADSUP_FLIGHT_CALLS_PER_MONTH` and `HEADSUP_TRAVEL_CALLS_PER_DAY`
 defaults sit safely under it.
 
-**B. Learn from dismissals.** New table `headsup_outcomes(id, headsup_id, kind, offered_at, outcome,
-resolved_at)`, outcome `yes | later | never | ignored`. `yes`, `later`, `never` come from `answer()` in
-`src/headsup/ledger.ts`; `ignored` is written when an offered item reaches its due date unanswered (where
-`expirePast` already marks it `expired`) and only for items actually offered. Per kind over 90 days:
-`dismissRate = (never + ignored) / offered`, `later` neutral. Tiers, constants in `rules.ts`: under 6 offers
-nothing; 6 or more and rate at least 0.7 quietens (keeps the first mention, loses reminders, sorts last in
-the cap); 10 or more and rate at least 0.85 proposes off through the confirmation queue (and
-`noteSilentRejection`), suppressed 90 days if rejected. The tool that applies it (`headsup_kind_set`) is
-irreversible-tier with `confirmWhenUnattended: true`. Settings shows "Bills: offered 14, you acted on 3".
-Never penalise by subject, never count `later`, never judge in the first weeks, never disable without
-asking, never touch watches. Test every boundary (5 and 5 ignored: no action; 6 offers, 4 ignored: 0.67, no
-action; 10 offers, 9 ignored: one proposal, not one per morning; rejected: quiet for 90 days; yes on a
-quietened kind lets reminders return under 0.7; outcomes older than 90 days stop counting). Then point
-`src/headsup/telemetry.ts` at the table and prune outcomes at 400 days.
+**B. Learn from dismissals. Built 2026-11-21.** `src/headsup/outcomes.ts` keeps `headsup_outcomes(id,
+headsup_id, kind, offered_at, outcome, resolved_at)`, one row per heads-up, written at its first offer
+(`markOffered`) and settled by `answer()` (`yes | later | never`) or, when an unanswered item passes its date
+in `expirePast`, `ignored`. Rows from before the table are backfilled from the ledger. Over 90 days per kind,
+`counted = yes + never + ignored` (`later` and still-open items are left out; a later `yes` or `never`
+replaces a `later`; an item snoozed and then left to expire stays `later`) and `rate = (never + ignored) /
+counted`. Constants are in `rules.ts` (`QUIETEN_MIN_COUNTED` 6, `QUIETEN_MIN_RATE` 0.7, `OFF_MIN_COUNTED` 10,
+`OFF_MIN_RATE` 0.85, `OFF_SUPPRESS_DAYS` 90, `OUTCOME_WINDOW_DAYS` 90). Quieten: the planner (`plan.ts`,
+`deps.quiet`) drops reminders, keeps the first mention and a snoozed return, and sorts the kind last under the
+daily cap. Off: the morning run queues ONE `headsup_kind_set` confirmation per kind, and not again for 90 days
+after any earlier proposal for that kind in any state, so a pending one is not repeated and a rejected one keeps
+the kind quietened but on. `headsup_kind_set` (`src/tools/headsup-kind-set.ts`) is irreversible-tier with
+`confirmWhenUnattended`, and only flips the preference: it never touches a watch. Settings shows "Bills:
+offered 14, you acted on 3" with the tier on web, iPhone and Mac (read-only, from `GET /api/headsups/prefs`).
+Telemetry reads the table, and outcomes are pruned at 400 days. Tests: `test/headsup-outcomes.test.mjs`
+covers every boundary (5 and 5 ignored, 6 with 4 ignored, 10 with 9, exactly 0.70 and 0.85, outcomes outside
+90 days, one proposal not one per morning). **Still to do:** nothing in code. It needs weeks of real answers
+before the numbers mean anything, and the thresholds are still the plan's starting values (open decision
+below). Never penalised by subject, never counts `later`, never disables without asking, never touches watches.
 
 **C. Rollout checklist.** `docs/ROLLOUT-heads-up.md`, same format as `ROLLOUT.md`. Ladder: 0 baseline (Check
 now for a week, no push); 1 morning push, no research; 2 chat dates (watch false positives); 3 research on
@@ -198,7 +203,7 @@ update, which must fit the 18 hour flight window. Done includes a manual device 
 - H8 remembered dates: edit, not just forget.
 - H9 model-worded notifications: only if the code wording reads badly; prefer fixing it in code.
 
-**Open decisions:** thresholds in B (keep 6, 0.7, 10, 0.85, 90 days?); if TomTom's route API is not free,
+**Open decisions:** whether B's thresholds (6, 0.7, 10, 0.85, 90 days) are right once real answers exist; if TomTom's route API is not free,
 HERE free tier, a static-speed provider, or flights only; whether to want G at all.
 
 ---

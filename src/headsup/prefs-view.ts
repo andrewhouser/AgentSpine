@@ -3,6 +3,8 @@
  * them. One function for the web route, the iOS route and the iOS contract test, so the shape is
  * stated once.
  */
+import { learningForClient } from "./outcomes.ts";
+import type { KindLearning } from "./outcomes.ts";
 import { getPrefs, FLOOR_MINUTES } from "./prefs.ts";
 import type { Prefs } from "./prefs.ts";
 import { blockedReason } from "./watch/loop.ts";
@@ -10,6 +12,8 @@ import { blockedReason } from "./watch/loop.ts";
 export interface PrefsForClient extends Prefs {
   /** The watch loop never polls one watch more often than this. Shown, not changeable. */
   floorMinutes: number;
+  /** Per kind over the last 90 days: how many were offered, how many you acted on, and where it stands. Read-only. */
+  learning: KindLearning[];
   /** Why flight tracking or drive watching cannot run yet, in words, or null if it can. */
   unavailable: { drive: null | string; flights: null | string };
 }
@@ -17,5 +21,6 @@ export interface PrefsForClient extends Prefs {
 export const prefsForClient = (): PrefsForClient => ({
   ...getPrefs(),
   floorMinutes: FLOOR_MINUTES,
+  learning: learningForClient(),
   unavailable: { drive: blockedReason("drive"), flights: blockedReason("flight") },
 });

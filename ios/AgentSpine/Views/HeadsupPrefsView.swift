@@ -26,6 +26,13 @@ struct HeadsupPrefsView: View {
         Kind(id: "recurring", label: "Recurring events"),
     ]
 
+    private static func learningLine(_ label: String, _ l: HeadsupKindLearning, on: Bool) -> String {
+        var line = "\(label): offered \(l.offered), you acted on \(l.yes)"
+        if on && l.tier == "quiet" { line += ". Reminders are off for this kind." }
+        if on && l.tier == "off" { line += ". Reminders are off, and it has asked whether to turn the kind off." }
+        return line
+    }
+
     private func hourLabel(_ hour: Int) -> String {
         Calendar.current.date(from: DateComponents(hour: hour))?
             .formatted(date: .omitted, time: .shortened) ?? "\(hour):00"
@@ -53,6 +60,23 @@ struct HeadsupPrefsView: View {
                     Text("What to bring up")
                 } footer: {
                     Text("Turning a kind off stops new offers of it. Anything you are already tracking keeps going.")
+                }
+
+                if let learning = prefs.learning, !learning.isEmpty {
+                    Section {
+                        ForEach(Self.kinds.filter { k in learning.contains { $0.kind == k.id } }) { kind in
+                            if let l = learning.first(where: { $0.kind == kind.id }) {
+                                Text(Self.learningLine(kind.label, l, on: prefs.kinds[kind.id] ?? true))
+                                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                                    .foregroundStyle(Spine.Palette.textDim)
+                            }
+                        }
+                    } header: {
+                        Text("Last 90 days")
+                    } footer: {
+                        Text("A kind you pass on most of the time gets only its first mention, and past that it asks "
+                             + "whether to turn the kind off. It never turns one off on its own.")
+                    }
                 }
 
                 Section("Each morning") {

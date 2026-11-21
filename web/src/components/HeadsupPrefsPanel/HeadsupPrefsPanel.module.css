@@ -15,6 +15,18 @@
   margin: 0 0 12px;
 }
 
+.learning {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.learning li {
+  margin-bottom: 3px;
+}
+
 .kinds {
   display: flex;
   flex-wrap: wrap;

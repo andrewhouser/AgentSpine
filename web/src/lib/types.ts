@@ -529,12 +529,28 @@ export interface HeadsupCard {
   url: string;
 }
 
+/** What became of one kind of heads-up over the last 90 days. `tier` says what the learning has done about it. */
+export interface HeadsupKindLearning {
+  counted: number;
+  ignored: number;
+  kind: string;
+  later: number;
+  never: number;
+  offered: number;
+  open: number;
+  rate: number;
+  tier: "none" | "off" | "quiet";
+  yes: number;
+}
+
 /** Heads-up preferences, plus read-only facts about what cannot run yet. */
 export interface HeadsupPrefs {
   dailyCap: number;
   /** The watch loop never polls one watch more often than this. Shown, not changeable. */
   floorMinutes: number;
   kinds: Record<string, boolean>;
+  /** Read-only. Absent from a server that predates the learning. */
+  learning?: HeadsupKindLearning[];
   quietEndHour: number;
   quietStartHour: number;
   unavailable: { drive: null | string; flights: null | string };

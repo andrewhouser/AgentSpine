@@ -934,11 +934,22 @@ struct HeadsupUnavailable: Codable, Hashable {
     let drive: String?
 }
 
+/// What became of one kind of heads-up over the last 90 days, and what the learning has done about it.
+/// `tier` is "none", "quiet" (reminders dropped) or "off" (it has asked whether to turn the kind off).
+struct HeadsupKindLearning: Codable, Hashable {
+    let kind: String
+    let offered: Int
+    let yes: Int
+    let tier: String
+}
+
 /// What it may bring up, how many per morning, and when it must stay quiet. The 30 minute floor on
 /// watches is carried so it can be shown; it is not something the app can change.
 struct HeadsupPrefs: Codable, Hashable {
     let dailyCap: Int
     let floorMinutes: Int
+    /// Read-only. Absent from a server that predates the learning.
+    let learning: [HeadsupKindLearning]?
     /// A kind set to false is never offered. Keys are "birthday", "anniversary", "bill",
     /// "appointment", "flight" and "recurring".
     let kinds: [String: Bool]

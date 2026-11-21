@@ -16,14 +16,15 @@
  * What never goes: `headsup_mutes` and `headsup_dates`. Those are what you told it, not what it
  * found, and deleting one would quietly undo a "never" you said two years ago.
  *
- * Outcomes (workstream B's `headsup_outcomes`) are not pruned here because that table does not
- * exist yet; add it to this file when B lands, at 400 days.
+ * Outcomes (`headsup_outcomes`, workstream B): 400 days from when the item was first offered. The
+ * learning only looks back 90, so the rest is history for the digest, and it is bounded.
  *
  * Never throws: a tidy-up that did not happen is not a reason to take the dashboard down.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { rawDb } from "../memory/store.ts";
+import "./outcomes.ts"; // creates the headsup_outcomes table this file deletes from
 import { deleteCardsFor, IMAGE_DIR } from "./research/cards.ts";
 
 export const CARD_RETENTION_DAYS = 30;
@@ -37,13 +38,14 @@ export interface HeadsupPruneResult {
   ledger: number;
   orphanFiles: number;
   orphanImageRows: number;
+  outcomes: number;
   watches: number;
 }
 
 const ago = (now: Date, days: number): string => new Date(now.getTime() - days * 86_400_000).toISOString();
 
 export const pruneHeadsup = (now: Date = new Date()): HeadsupPruneResult => {
-  const out: HeadsupPruneResult = { cardSets: 0, ledger: 0, orphanFiles: 0, orphanImageRows: 0, watches: 0 };
+  const out: HeadsupPruneResult = { cardSets: 0, ledger: 0, orphanFiles: 0, orphanImageRows: 0, outcomes: 0, watches: 0 };
   try {
     // Cards and photos first, so a ledger row removed below never leaves them pointing at nothing.
     const cardIds = rawDb
@@ -68,6 +70,10 @@ export const pruneHeadsup = (now: Date = new Date()): HeadsupPruneResult => {
       rawDb.prepare("DELETE FROM headsups WHERE id = ?").run(id);
     }
     out.ledger = old.length;
+
+    out.outcomes = Number(
+      rawDb.prepare("DELETE FROM headsup_outcomes WHERE offered_at < ?").run(ago(now, LEDGER_RETENTION_DAYS)).changes,
+    );
 
     // Image rows nothing points at, or whose file has gone.
     const images = rawDb.prepare("SELECT id, file FROM headsup_images").all() as unknown as { file: string; id: number }[];

@@ -42,6 +42,7 @@ import { recipeTools } from "./recipes.ts";
 import { profileTools } from "./profile.ts";
 import { dateRemember } from "./date-remember.ts";
 import { headsupStatus } from "./headsup.ts";
+import { headsupKindSet } from "./headsup-kind-set.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -101,6 +102,7 @@ export const tools: Tool[] = [
   ...recipeTools,
   ...profileTools,
   dateRemember,
+  headsupKindSet,
   headsupStatus,
 ];
 

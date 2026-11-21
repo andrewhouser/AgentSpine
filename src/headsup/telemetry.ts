@@ -5,13 +5,12 @@
  * Like the rest of the digest, every figure is a SQL count or a stored counter. No model is
  * involved, because a summary of a summary is exactly the artifact you cannot check.
  *
- * What it can and cannot say. Offers and answers come from the ledger as it stands now: an item
- * answered "later" and since expired shows its answer, not both. That is enough to see which
- * kinds you ignore, but it is a snapshot, not an event history. Workstream B's `headsup_outcomes`
- * would give the history; when it lands, switch the answers query to it.
+ * Offers and answers come from `headsup_outcomes` (outcomes.ts), one row per heads-up. An item
+ * answered "later" and then left to expire stays "later", so the digest agrees with what the tiers count.
  */
 import { HEADSUP_FLIGHT_CALLS_PER_MONTH, HEADSUP_TRAVEL_CALLS_PER_DAY } from "../config.ts";
 import { kvGet, kvSet, rawDb } from "../memory/store.ts";
+import "./outcomes.ts"; // creates the headsup_outcomes table the digest reads
 import { dayKey, monthKey, used } from "./watch/budget.ts";
 
 const FAIL_KEY = (d: Date): string => `headsup:calendar-failures:${monthKey(d)}`;
@@ -45,16 +44,14 @@ export const headsupSection = (days = 7, now: Date = new Date()): string[] => {
   // Offers and what became of them, by kind.
   const rows = rawDb
     .prepare(
-      `SELECT kind,
-              COALESCE(answer, CASE state WHEN 'expired' THEN 'ignored' ELSE 'open' END) AS outcome,
-              COUNT(*) AS n
-         FROM headsups WHERE first_offered_at >= ? GROUP BY kind, outcome`,
+      `SELECT kind, COALESCE(outcome, 'open') AS outcome, COUNT(*) AS n
+         FROM headsup_outcomes WHERE offered_at >= ? GROUP BY kind, outcome`,
     )
     .all(since) as unknown as { kind: string; n: number; outcome: string }[];
   const byKind = new Map<string, Record<string, number>>();
   for (const r of rows) byKind.set(r.kind, { ...(byKind.get(r.kind) ?? {}), [r.outcome]: r.n });
   if (byKind.size) {
-    out.push(`  Offered, by kind (answers as they stand now):`);
+    out.push(`  Offered, by kind:`);
     for (const [kind, o] of [...byKind.entries()].sort()) {
       const total = Object.values(o).reduce((a, b) => a + b, 0);
       const part = (k: string): string => (o[k] ? `${o[k]} ${k}` : "");

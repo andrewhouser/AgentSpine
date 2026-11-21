@@ -20,6 +20,7 @@ import { getWatch, toWatchView } from "./watch/store.ts";
 import type { WatchView } from "./watch/store.ts";
 import type { Candidate } from "./scan.ts";
 import { subjectKey } from "./scan.ts";
+import { backfillOutcomes, recordAnswer, recordIgnoredBefore, recordOffer } from "./outcomes.ts";
 import { SNOOZE_HOURS } from "./rules.ts";
 
 rawDb.exec(`
@@ -53,6 +54,9 @@ rawDb.exec(`
 // EXISTS will not add one, so the column is checked for and added here.
 if (!(rawDb.prepare("PRAGMA table_info(headsups)").all() as { name: string }[]).some((c) => c.name === "answer_token"))
   rawDb.exec("ALTER TABLE headsups ADD COLUMN answer_token TEXT");
+
+// The outcome history (outcomes.ts) starts from what this ledger already knows.
+backfillOutcomes();
 
 /** new/offered/accepted/researched/dismissed/snoozed/done/expired, per the plan. */
 export type HeadsupState = "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
@@ -124,6 +128,9 @@ export const markOffered = (c: Candidate, stage: number, now: Date): HeadsupRow 
         t,
         t,
       );
+    // The history starts here: one outcome row per heads-up, settled as you answer it (outcomes.ts).
+    const made = getByKey(c.dedupeKey);
+    if (made) recordOffer(made.id, c.kind, now);
   } else {
     rawDb
       .prepare(
@@ -190,6 +197,7 @@ export const answer = (id: number, a: HeadsupAnswer, now: Date): HeadsupRow | un
     rawDb.prepare("UPDATE headsups SET state='dismissed', answer='never', snooze_until=NULL, answer_token=NULL, updated=? WHERE id=?").run(t, id);
     mute(row.kind, row.subject, now);
   }
+  recordAnswer(id, a, now);
   return getById(id);
 };
 
@@ -202,6 +210,8 @@ const localDate = (d: Date): string =>
  * 3pm on the 20th, and a timestamp comparison would call it past from midnight.
  */
 export const expirePast = (now: Date): number => {
+  // Unanswered offers become `ignored` first, while their state still says they were open.
+  recordIgnoredBefore(localDate(now), now);
   const r = rawDb
     .prepare(
       "UPDATE headsups SET state = CASE WHEN state IN ('accepted','researched') THEN 'done' ELSE 'expired' END, updated = ? " +

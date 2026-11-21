@@ -29,9 +29,14 @@ const check = (label, actual, expected) => {
 const NOW = new Date(2026, 10, 21, 12);
 const ago = (d) => new Date(NOW.getTime() - d * 86_400_000).toISOString();
 let n = 0;
-const head = (kind, state, answer, daysAgo, payload = {}) =>
-  Number(rawDb.prepare("INSERT INTO headsups (dedupe_key, kind, subject, due_at, state, answer, first_offered_at, payload_json, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?)")
+// Seeds the ledger row AND the outcome row the real code writes beside it (outcomes.ts): the digest
+// reads the outcomes table, so a ledger row alone would be an offer with no history.
+const head = (kind, state, answer, daysAgo, payload = {}) => {
+  const id = Number(rawDb.prepare("INSERT INTO headsups (dedupe_key, kind, subject, due_at, state, answer, first_offered_at, payload_json, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?)")
     .run(`k${n++}`, kind, "s", ago(-3), state, answer, ago(daysAgo), JSON.stringify(payload), ago(daysAgo), ago(daysAgo)).lastInsertRowid);
+  rawDb.prepare("INSERT INTO headsup_outcomes (headsup_id, kind, offered_at, outcome) VALUES (?,?,?,?)").run(id, kind, ago(daysAgo), answer ?? (state === "expired" ? "ignored" : null));
+  return id;
+};
 
 console.log("\nEMPTY: nothing to say, says nothing");
 check("no rows, no section", headsupSection(7, NOW), []);
