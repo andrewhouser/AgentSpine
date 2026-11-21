@@ -42,6 +42,9 @@ import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { checkWorkspaceFile } from "./projects/workspace.ts";
 import { searchKnowledge } from "./projects/search.ts";
+import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
+import * as inboxStore from "./inbox/store.ts";
+import { ocrAvailable } from "./inbox/ocr.ts";
 import {
   readAttachment,
   removeAttachment,
@@ -79,6 +82,7 @@ import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outb
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
+import { INBOX_MAX_BYTES, INBOX_WATCH_DIR } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
 import { isDeliverable, listDeliverables } from "./deliverables.ts";
@@ -920,6 +924,73 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (m === "DELETE" && seg[1] === "memories" && seg.length === 3) {
       const removed = deleteMemory(Number(seg[2]));
       return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
+    }
+
+    /**
+     * /api/inbox: the Knowledge Inbox (src/inbox/). Files, screenshots, scans, pasted threads and notes become
+     * source artifacts before they have a project. Local only; nothing here calls out.
+     */
+    if (seg[1] === "inbox") {
+      // The server's file paths stay on the server: a client sees the item, never where its original sits.
+      const withProject = (it: inboxStore.ItemRow | undefined) =>
+        it
+          ? { ...it, stored_path: undefined, suggestedProjectName: it.suggested_project != null ? (projects.getProject(it.suggested_project)?.name ?? null) : null }
+          : undefined;
+      try {
+        // GET /api/inbox/status: what this machine can do with an item.
+        if (m === "GET" && seg[2] === "status" && seg.length === 3) {
+          return sendJson(res, 200, { maxBytes: INBOX_MAX_BYTES, ocr: await ocrAvailable(), watchFolder: INBOX_WATCH_DIR || null });
+        }
+        // GET /api/inbox?status=&unfiled=1
+        if (m === "GET" && seg.length === 2) {
+          const status = url.searchParams.get("status") as inboxStore.ItemStatus | null;
+          return sendJson(res, 200, inboxStore.listItems({ status: status ?? undefined, unfiled: url.searchParams.get("unfiled") === "1" }).map(withProject));
+        }
+        // POST /api/inbox/files?name=&project= (raw bytes). The same bytes again return the existing item.
+        if (m === "POST" && seg[2] === "files" && seg.length === 3) {
+          const bytes = await readBinary(req, INBOX_MAX_BYTES);
+          const project = url.searchParams.get("project");
+          const r = await ingestFile(bytes, { name: url.searchParams.get("name") ?? undefined, projectId: project ? Number(project) : undefined, via: "upload" });
+          return sendJson(res, r.duplicate ? 200 : 201, { duplicate: r.duplicate, item: withProject(r.item) });
+        }
+        // POST /api/inbox/paste { text, name?, kind?: "note"|"paste", project?, thread? }
+        if (m === "POST" && seg[2] === "paste" && seg.length === 3) {
+          const b = await readBody(req);
+          const r = await ingestPaste(String(b?.text ?? ""), {
+            kind: b?.kind === "note" ? "note" : "paste",
+            name: typeof b?.name === "string" ? b.name : undefined,
+            projectId: b?.project != null ? Number(b.project) : undefined,
+            thread: b?.thread === false ? false : undefined,
+            via: "paste",
+          });
+          return sendJson(res, r.duplicate ? 200 : 201, { duplicate: r.duplicate, item: withProject(r.item) });
+        }
+        const itemId = Number(seg[2]);
+        if (Number.isInteger(itemId) && seg.length >= 3) {
+          const item = inboxStore.getItem(itemId);
+          if (!item) return sendJson(res, 404, { error: "no such inbox item" });
+          if (m === "GET" && seg.length === 3) return sendJson(res, 200, withProject(item));
+          if (m === "POST" && seg[3] === "reprocess") return sendJson(res, 200, withProject(await reprocessInboxItem(itemId)));
+          if (m === "DELETE" && seg.length === 3) return sendJson(res, 200, { deleted: deleteInboxItem(itemId) });
+          if (m === "PATCH" && seg.length === 3) {
+            const b = await readBody(req);
+            if ("project" in b) {
+              const target = b.project == null ? null : Number(b.project);
+              if (target != null && !projects.getProject(target)) return sendJson(res, 404, { error: "no such project" });
+              await fileInboxItem(itemId, target);
+            }
+            inboxStore.updateItem(itemId, {
+              docDate: typeof b.docDate === "string" ? b.docDate : undefined,
+              private: typeof b.private === "boolean" ? b.private : undefined,
+              tags: Array.isArray(b.tags) ? b.tags.map(String).slice(0, 20) : undefined,
+            });
+            return sendJson(res, 200, withProject(inboxStore.getItem(itemId)));
+          }
+        }
+      } catch (err) {
+        if (err instanceof TooLargeError) return sendJson(res, 413, { error: (err as Error).message });
+        return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
     }
 
     // /api/knowledge/search?q=&project=&kind=&since=&until=&k= — hybrid full-text and vector search over every
@@ -1942,6 +2013,13 @@ const runScheduler = async (): Promise<void> => {
  * overnight — is exactly the one where the first sweep should not wait five minutes.
  */
 const watchdog = async (): Promise<void> => {
+  // The watched inbox folder rides the same clock: new files are taken in, and a failure to read it is logged.
+  try {
+    const added = await scanWatchDir();
+    if (added) console.log(`inbox: took in ${added} file(s) from the watched folder`);
+  } catch (err) {
+    console.error("inbox scan error:", err instanceof Error ? err.message : err);
+  }
   try {
     const r = await sweepConfirmations();
     if (r.reminded + r.escalated + r.expired > 0) {

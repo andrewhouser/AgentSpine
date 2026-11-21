@@ -116,6 +116,14 @@ export const createProject = (name: string, instructions = ""): number =>
 export const listProjects = (): ProjectRow[] =>
   rawDb.prepare("SELECT * FROM projects WHERE archived = 0 ORDER BY name").all() as unknown as ProjectRow[];
 
+/** Every project, archived or not. The hidden inbox project is archived, so listProjects never shows it. */
+export const getAllProjectsIncludingArchived = (): ProjectRow[] =>
+  rawDb.prepare("SELECT * FROM projects ORDER BY id").all() as unknown as ProjectRow[];
+
+/** Sources with this exact ref, in any project. An inbox item's source moves between projects. */
+export const listSourcesAnyProject = (ref: string): SourceRow[] =>
+  rawDb.prepare("SELECT * FROM project_sources WHERE ref = ?").all(ref) as unknown as SourceRow[];
+
 export const getProject = (id: number): ProjectRow | undefined =>
   rawDb.prepare("SELECT * FROM projects WHERE id = ?").get(id) as ProjectRow | undefined;
 
@@ -194,9 +202,9 @@ export const setSourceStatus = (
     .run(status, now(), counts?.files ?? 0, counts?.chunks ?? 0, id);
 };
 
-export const removeSource = (id: number): void => {
+export const removeSource = (id: number, audit = true): void => {
   const src = rawDb.prepare("SELECT ref, kind, project_id FROM project_sources WHERE id = ?").get(id) as undefined | { kind: string; project_id: number; ref: string };
-  if (src) logDataEvent("project_source_removed", `${src.kind} source ${src.ref}`, `from project #${src.project_id}; its indexed chunks were removed`);
+  if (src && audit) logDataEvent("project_source_removed", `${src.kind} source ${src.ref}`, `from project #${src.project_id}; its indexed chunks were removed`);
   rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(id);
   rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(id);
 };

@@ -359,16 +359,24 @@ baseline, and the meeting recall number is still unmeasured.
   decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
   a person and team filter, a UI for global search, and an agent tool for it (it would need `privateOutput`).
   Done when K1 shows an improvement: that measurement is still to be taken.
-- **K3. Knowledge Inbox (Code, with a decision on OCR).** A first-class intake that accepts dragged or uploaded
-  PDF, Word, Markdown and text; pasted chat or email threads with optional speaker and timestamp parsing; meeting
-  recordings and transcripts; screenshots and scans through local OCR; notes dictated or typed on the phone; and
-  a watched folder (AirDrop). Each item becomes a source artifact before it has a project, keeping the original,
-  extracted text, ingestion time, document date, author or speakers, content hash and extraction status. The
-  system suggests projects, people and tags and queues uncertain filing for review, since management material
-  often belongs to a person or a team more than a project. An extraction that produced no text must show as
-  "needs OCR", never as silently empty. OCR needs a decision: a local binary (the way `pdftotext` is optional)
-  or a small macOS Vision helper; `src/` allows only two runtime dependencies, so no new package. The existing
-  loader for the Milliman knowledge folder should end up as one source of this Inbox. Web, iPhone and Mac.
+- **K3. Knowledge Inbox (backend built 2026-11-21; the screens on web, iPhone and Mac are not).** `src/inbox/`:
+  every file, screenshot, scan, pasted thread and typed note becomes a source artifact (`inbox_items`) before it
+  has a project, with the original kept untouched under `INBOX_DIR`, its content hash (the same bytes twice are one
+  item), when it arrived, document date, author and speakers, and an extraction status. Text is extracted with the
+  project indexer's converters; images and PDFs with no text layer are read by a small macOS Vision helper
+  (`tools/vision-ocr.swift`, compiled once with `swiftc`, no dependency, fully local); when OCR is unavailable the
+  item is `needs_ocr`, and one OCR could not read is `ocr_failed`, never silently empty. Pasted chats and emails
+  are parsed for speakers, times, author and date. The watched folder (`INBOX_WATCH_DIR`) is scanned on the
+  confirmation watchdog's clock, skipping hidden, partial and just-landed files. Chunks are indexed straight away
+  under a hidden "Knowledge Inbox" project, so global search finds an item before anyone files it; the item is
+  private by default, a project is only SUGGESTED (from the words in each project's name and instructions) and
+  applied only when a person files it, and filing moves its chunks. Deleting removes the original, the text and
+  the index and leaves an audit row. API: `GET /api/inbox/status`, `GET /api/inbox`, `POST /api/inbox/files`,
+  `POST /api/inbox/paste`, `PATCH`, `POST .../reprocess` and `DELETE /api/inbox/:id`. Suite: `test/inbox.test.mjs`.
+  **Not built:** the Inbox screen on web, iPhone and Mac (upload, paste, list with status and the suggested
+  project, file, reprocess, delete); the iPhone share sheet and dictated notes; adopting the existing Milliman
+  knowledge-folder loader as one source of the Inbox; people and tag suggestions beyond a project; "document date"
+  inference from a PDF's own metadata.
 - **K4. Knowledge store (Code, needs a schema decision).** A layer separate from semantic memory, so retrieved
   chunks are not promoted into trusted memories. Records for people and teams, projects, decisions with
   rationale, commitments with owner and due date, risks and blockers, open questions, goals and measures, claims,

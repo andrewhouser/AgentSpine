@@ -999,6 +999,15 @@ export const PROFILE_PATH = env.PROFILE_PATH ?? path.join(BASE, "profile.md");
 // schedule and read by hand with sqlite3, and putting megabytes of photograph in it would
 // make both worse. The database holds the metadata and the path; this holds the bytes.
 export const ATTACHMENTS_DIR = env.ATTACHMENTS_DIR ?? path.join(BASE, "attachments");
+// The Knowledge Inbox (docs/PLAN-open-work.md, K3). Originals are kept here untouched; the database holds
+// the metadata and the extracted text is indexed like any other chunk. `INBOX_WATCH_DIR` is a folder (an
+// AirDrop target, say) whose new files are taken in; empty means none. OCR needs macOS and a Swift
+// toolchain, and `INBOX_OCR=off` turns it off so scans show as "needs OCR" instead.
+export const INBOX_DIR = env.INBOX_DIR ?? path.join(BASE, "inbox");
+export const INBOX_WATCH_DIR = env.INBOX_WATCH_DIR ?? "";
+export const INBOX_MAX_BYTES = Number(env.INBOX_MAX_BYTES ?? String(100 * 1024 * 1024));
+export const INBOX_OCR = (env.INBOX_OCR ?? "on").toLowerCase() !== "off";
+export const INBOX_OCR_TIMEOUT_MS = Number(env.INBOX_OCR_TIMEOUT_MS ?? "300000");
 // Where generate_image writes PNGs, and where src/server.ts serves them from under
 // /images/. Deliberately under BASE (the repo root) and NOT PUBLIC_DIR: PUBLIC_DIR is the
 // built frontend and is replaced wholesale on every rebuild, which would delete generated
