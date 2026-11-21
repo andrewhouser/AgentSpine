@@ -113,7 +113,7 @@ final class PushManager: NSObject {
             identifier: Category.run,
             actions: [],
             intentIdentifiers: [],
-            options: []
+            options: [.customDismissAction]
         )
 
         // Heads-up buttons. Two categories because iOS fixes a button's label in the app, and
@@ -136,7 +136,7 @@ final class PushManager: NSObject {
                 never,
             ],
             intentIdentifiers: [],
-            options: []
+            options: [.customDismissAction]
         )
         let headsupWatch = UNNotificationCategory(
             identifier: Category.headsupWatch,
@@ -146,7 +146,7 @@ final class PushManager: NSObject {
                 never,
             ],
             intentIdentifiers: [],
-            options: []
+            options: [.customDismissAction]
         )
         let headsup = UNNotificationCategory(
             identifier: Category.headsup,
@@ -156,7 +156,7 @@ final class PushManager: NSObject {
                 never,
             ],
             intentIdentifiers: [],
-            options: []
+            options: [.customDismissAction]
         )
         UNUserNotificationCenter.current().setNotificationCategories([confirmation, run, headsup, headsupResearch, headsupWatch])
         refreshAuthorization()
@@ -321,7 +321,33 @@ extension PushManager: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let userInfo = response.notification.request.content.userInfo
+        // Only an Int is carried across, not the whole payload, so nothing non-Sendable leaves here.
+        let outboxID = userInfo["outboxId"] as? Int
 
+        // Swiping a notification away is a signal too, and it must NOT fall through to the deep-link
+        // code below: that code reads a dismissal as a tap and would open the thread on next launch.
+        // (iOS only delivers this at all for a category that sets `.customDismissAction`.)
+        if response.actionIdentifier == UNNotificationDismissActionIdentifier {
+            await reportOutcome(outboxID, event: "dismissed")
+            return
+        }
+
+        await route(response, userInfo: userInfo)
+        // Anything else, a tap or one of the buttons, means you saw it and did something.
+        await reportOutcome(outboxID, event: "opened")
+    }
+
+    /// Tell the server what became of a push, so the weekly review can say which ones were useful
+    /// and which went unread (docs/PLAN-open-work.md, outbox Phase 2). Best effort and silent: a
+    /// failed report loses one data point and must never surface on a lock screen. Only pushes that
+    /// carry an `outboxId` report; an older server, or one that did not log the message, sends none.
+    private func reportOutcome(_ outboxID: Int?, event: String) async {
+        guard let outboxID, Settings.shared.isConfigured else { return }
+        try? await APIClient.shared.reportOutbox(id: outboxID, event: event)
+    }
+
+    /// What a tap or a button does: answer the question, or open the right screen.
+    private func route(_ response: UNNotificationResponse, userInfo: [AnyHashable: Any]) async {
         switch response.actionIdentifier {
         case ActionID.approve:
             await respond(to: userInfo, approve: true)

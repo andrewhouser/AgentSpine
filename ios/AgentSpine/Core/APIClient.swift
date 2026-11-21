@@ -410,6 +410,14 @@ final class APIClient {
         return try await sendRaw(request(path))
     }
 
+    // MARK: - Outbox
+
+    /// Report what happened to a push: "opened" or "dismissed". Idempotent on the server, where the
+    /// first report of each kind wins. Behind the dashboard token like the rest of the app's calls.
+    func reportOutbox(id: Int, event: String) async throws {
+        try await sendRaw(jsonRequest("/api/outbox/\(id)/\(event)", method: "POST"))
+    }
+
     /// Answer from a notification's own narrow token. Like `respondToConfirmation`: no dashboard
     /// token, so it works before `Settings` has loaded, and a payload read off Apple's servers
     /// buys one answer to one item you were about to be asked about anyway.

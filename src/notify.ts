@@ -69,7 +69,7 @@ export interface NotifyOpts {
   /** ntfy only: the page a tap on the notification opens (an absolute URL). */
   click?: string;
   /**
-   * Who is sending, for the outbox (docs/PLAN-outbox.md). Optional so an untagged caller still
+   * Who is sending, for the outbox (docs/archive/PLAN-outbox.md). Optional so an untagged caller still
    * works; it is recorded as `unknown` and never held, so forgetting this fails open.
    */
   source?: OutboxSource;
@@ -158,10 +158,13 @@ const apnsPublish = async (
   title: string,
   body: string,
   opts: NotifyOpts,
+  rowId: null | number,
 ): Promise<NotifyResult> => {
   const r = await sendPush(title, body, {
     priority: opts.priority ?? 3,
     ...opts.push,
+    // After the spread: the outbox owns this field, a caller cannot set it.
+    ...(rowId != null ? { outboxId: rowId } : {}),
   });
   return { ok: r.ok, via: "apns", detail: r.detail };
 };
@@ -192,7 +195,7 @@ export const notify = async (
   } catch (err) {
     console.warn(`[notify] outbox unavailable, sending anyway: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const result = await deliver(title, body, opts);
+  const result = await deliver(title, body, opts, rowId);
   outbox?.complete(rowId, result);
   return result;
 };
@@ -201,9 +204,10 @@ const deliver = async (
   title: string,
   body: string,
   opts: NotifyOpts,
+  rowId: null | number,
 ): Promise<NotifyResult> => {
   const attempts: Promise<NotifyResult>[] = [];
-  if (APNS_ENABLED) attempts.push(apnsPublish(title, body, opts));
+  if (APNS_ENABLED) attempts.push(apnsPublish(title, body, opts, rowId));
   if (NTFY_ENABLED) attempts.push(ntfyPublish(title, body, opts));
   if (!attempts.length) return macNotify(title, body);
 

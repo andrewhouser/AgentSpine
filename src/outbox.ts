@@ -1,7 +1,7 @@
 /**
  * The outbox: a record of every message AgentSpine tried to send you, and (when enforcement
  * is on) the one place that decides whether a message nobody asked for goes out now.
- * docs/PLAN-outbox.md, Phases 0 and 1.
+ * docs/archive/PLAN-outbox.md, Phases 0 and 1.
  *
  * Why it exists: quiet hours, a daily cap and "ignored" tracking lived only inside Heads-up,
  * while watchers, the study sweep and scheduled briefs called `notify` directly and could
@@ -27,6 +27,7 @@ import {
   COUNTED_SOURCES,
   DEDUPE_HOURS,
   GOVERNED_SOURCES,
+  IGNORED_AFTER_HOURS,
   OUTBOX_RETENTION_DAYS,
   PROACTIVE_DAILY_CAP,
   RELEASE_LIST_MAX,
@@ -54,6 +55,16 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_outbox_created ON outbox (created);
   CREATE INDEX IF NOT EXISTS idx_outbox_held ON outbox (decision, released_at);
 `);
+
+// What the phone reported. Added after the table shipped, so the ALTERs are best-effort like the
+// others in this codebase: a column that already exists is not an error.
+for (const col of ["opened_at", "dismissed_at"]) {
+  try {
+    rawDb.exec(`ALTER TABLE outbox ADD COLUMN ${col} TEXT`);
+  } catch {
+    /* already there */
+  }
+}
 
 /** What happened to a message. `held` waits for the next release; the others are final. */
 export type OutboxDecision = "deduped" | "held" | "sent";
@@ -166,6 +177,43 @@ export const complete = (id: null | number, result: { ok: boolean; via: string }
   }
 };
 
+export type OutboxReport = "dismissed" | "opened";
+
+/**
+ * Record what the phone saw. The FIRST report of each kind wins, so a retried request or a second
+ * tap cannot move the time. Returns false for an id that is not a row, so the route can say 404.
+ * Never throws: a failed bookkeeping write must not turn into an error on a lock screen.
+ */
+export const markOutcome = (id: number, report: OutboxReport, now: Date = new Date()): boolean => {
+  try {
+    const col = report === "opened" ? "opened_at" : "dismissed_at";
+    const r = rawDb.prepare(`UPDATE outbox SET ${col} = COALESCE(${col}, ?) WHERE id = ?`).run(now.toISOString(), id);
+    return Number(r.changes) > 0;
+  } catch (err) {
+    console.warn(`[outbox] could not record ${report}: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+};
+
+/**
+ * What became of a message, as far as we can honestly say. Only an APNs delivery can ever be
+ * anything but `unknown`: ntfy and the Mac banner report nothing, and that is not guessed.
+ * `opened` wins over `dismissed` (you dismissed it, then thought better), and `ignored` is a
+ * read-time inference from silence after IGNORED_AFTER_HOURS, never stored.
+ */
+export type OutboxOutcome = "dismissed" | "ignored" | "opened" | "pending" | "unknown";
+
+export const outcomeOf = (
+  row: { created: string; decision: string; delivered: null | number; dismissed_at: null | string; opened_at: null | string; via: null | string },
+  now: Date = new Date(),
+): OutboxOutcome => {
+  if (row.opened_at) return "opened";
+  if (row.dismissed_at) return "dismissed";
+  if (row.decision !== "sent" || row.via !== "apns" || row.delivered !== 1) return "unknown";
+  const age = now.getTime() - new Date(row.created).getTime();
+  return age >= IGNORED_AFTER_HOURS * 3_600_000 ? "ignored" : "pending";
+};
+
 interface HeldRow {
   id: number;
   source: string;
@@ -209,7 +257,11 @@ export const releaseHeld = async (
 
 export interface OutboxTally {
   deduped: number;
+  dismissed: number;
   held: number;
+  /** APNs sends nobody opened or dismissed within IGNORED_AFTER_HOURS. */
+  ignored: number;
+  opened: number;
   sent: number;
   source: string;
   /** In log-only mode: messages enforcement would have held or de-duplicated. */
@@ -225,10 +277,14 @@ export const tallyBySource = (days: number, now: Date = new Date()): OutboxTally
               SUM(decision = 'sent') AS sent,
               SUM(decision = 'held') AS held,
               SUM(decision = 'deduped') AS deduped,
-              SUM(decision = 'sent' AND would_be != 'sent') AS wouldChange
+              SUM(decision = 'sent' AND would_be != 'sent') AS wouldChange,
+              SUM(opened_at IS NOT NULL) AS opened,
+              SUM(opened_at IS NULL AND dismissed_at IS NOT NULL) AS dismissed,
+              SUM(decision = 'sent' AND via = 'apns' AND delivered = 1 AND opened_at IS NULL
+                  AND dismissed_at IS NULL AND created < ?) AS ignored
          FROM outbox WHERE created >= ? GROUP BY source ORDER BY COUNT(*) DESC`,
     )
-    .all(since) as unknown as OutboxTally[];
+    .all(new Date(now.getTime() - IGNORED_AFTER_HOURS * 3_600_000).toISOString(), since) as unknown as OutboxTally[];
 };
 
 /** Delete rows past the retention window. Returns how many went. */

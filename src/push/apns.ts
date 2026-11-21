@@ -273,6 +273,12 @@ export interface PushAlert {
    * lets this notification answer it. Same posture as `approvalToken`, for the same reason.
    */
   headsupId?: number;
+  /**
+   * The outbox row for this message, so the app can report back that it was opened or dismissed
+   * (POST /api/outbox/:id/opened, /dismissed). A bare row number: it grants nothing, and the
+   * report itself goes out behind the dashboard token.
+   */
+  outboxId?: number;
   headsupToken?: string;
   /** ntfy-style 1–5; mapped above. */
   priority?: number;
@@ -314,6 +320,7 @@ export const buildPayload = (title: string, body: string, alert: PushAlert): str
   if (alert.screen) custom.screen = alert.screen;
   if (alert.approvalToken) custom.approvalToken = alert.approvalToken;
   if (alert.headsupId !== undefined) custom.headsupId = alert.headsupId;
+  if (alert.outboxId !== undefined) custom.outboxId = alert.outboxId;
   if (alert.headsupToken) custom.headsupToken = alert.headsupToken;
 
   const build = (text: string): string =>

@@ -70,7 +70,7 @@ import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
-import { pruneOutbox, releaseHeld } from "./outbox.ts";
+import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
@@ -851,6 +851,19 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     }
 
     /**
+     * POST /api/outbox/:id/opened and /dismissed: the phone reporting what happened to a push
+     * (docs/archive/PLAN-outbox.md, Phase 2). Only an APNs delivery can say this; the id rides in
+     * the push payload. Idempotent, first report wins. Behind the dashboard token, and it records
+     * a timestamp and nothing else, so a wrong call can at worst skew a count.
+     */
+    if (m === "POST" && seg[1] === "outbox" && seg.length === 4 && (seg[3] === "opened" || seg[3] === "dismissed")) {
+      const id = Number(seg[2]);
+      if (!Number.isInteger(id) || id <= 0) return sendJson(res, 400, { error: "id must be a positive integer" });
+      const recorded = markOutcome(id, seg[3]);
+      return sendJson(res, recorded ? 200 : 404, { id, recorded });
+    }
+
+    /**
      * POST /api/push/test — send a notification to every registered phone, right now.
      *
      * This earns its place because the APNs failure modes are all silent from the phone's
@@ -1547,7 +1560,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
     }
 
-    // /api/headsups — proactive suggestions (src/headsup, docs/PLAN-heads-up.md).
+    // /api/headsups — proactive suggestions (src/headsup, docs/archive/PLAN-heads-up.md).
     if (seg[1] === "headsups") {
       if (m === "GET" && seg.length === 2)
         return sendJson(

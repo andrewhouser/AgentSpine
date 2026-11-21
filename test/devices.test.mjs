@@ -155,6 +155,18 @@ check("answers 502 rather than pretending", test.status, 502);
 check("  and says why in words", test.json.detail, "APNs not configured");
 check("  delivered nothing", test.json.delivered, 0);
 
+console.log("\n/api/outbox/:id/opened and /dismissed — the phone reporting back");
+const { admit } = await import("../src/outbox.ts");
+const { rawDb } = await import("../src/memory/store.ts");
+const sent = admit({ body: "b", source: "tool", title: "reported on" });
+check("opened answers 200 for a real row", (await call("POST", `/api/outbox/${sent.id}/opened`)).status, 200);
+check("  and stamps it", typeof rawDb.prepare("SELECT opened_at FROM outbox WHERE id = ?").get(sent.id).opened_at, "string");
+check("dismissed answers 200", (await call("POST", `/api/outbox/${sent.id}/dismissed`)).status, 200);
+check("an id that is not a row is a 404", (await call("POST", "/api/outbox/987654/opened")).status, 404);
+check("a non-numeric id is a 400", (await call("POST", "/api/outbox/abc/opened")).status, 400);
+check("it needs the dashboard token", (await call("POST", `/api/outbox/${sent.id}/opened`, { token: "" })).status, 401);
+check("an unknown report kind is not a route", (await call("POST", `/api/outbox/${sent.id}/deleted`)).status, 404);
+
 console.log("\nUNCHANGED ROUTES — the new ones did not shadow anything");
 check("/api/status still answers", (await call("GET", "/api/status")).status, 200);
 const statusBody = (await call("GET", "/api/status")).json;

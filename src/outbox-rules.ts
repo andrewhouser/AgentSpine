@@ -1,5 +1,5 @@
 /**
- * The outbox's numbers and its one classification. docs/PLAN-outbox.md.
+ * The outbox's numbers and its one classification. docs/archive/PLAN-outbox.md.
  *
  * Code owns these, never a prompt. They are deliberately small and each says why, because
  * the first version of every one of them is a guess; Phase 0 logs what WOULD have happened
@@ -45,6 +45,13 @@ export const PROACTIVE_DAILY_CAP = 6;
 
 /** A body can quote mail; keep only what a review needs. */
 export const BODY_CLIP = 300;
+
+/**
+ * An APNs push with no open and no dismissal after this long is read as ignored. Derived at read
+ * time, never stored: it is a judgment about silence, and a phone that was off for a day would
+ * otherwise write a false fact that a later open could not undo.
+ */
+export const IGNORED_AFTER_HOURS = 24;
 
 /** How long rows are kept. */
 export const OUTBOX_RETENTION_DAYS = 90;

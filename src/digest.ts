@@ -245,10 +245,10 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
     }
   }
 
-  // --- heads-up (docs/PLAN-heads-up-next.md F) ---
+  // --- heads-up (docs/archive/PLAN-heads-up-next.md F) ---
   out.push(...headsupSection());
 
-  // --- what I sent you (docs/PLAN-outbox.md) ---
+  // --- what I sent you (docs/archive/PLAN-outbox.md) ---
   // Counted from the outbox table, like everything here. In log-only mode the last column says
   // how many messages enforcement WOULD have held or collapsed, which is the number the quiet
   // hours and the cap get tuned against.
@@ -262,7 +262,13 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
         : r.wouldChange
           ? [`${r.wouldChange} would be held or collapsed`]
           : [];
-      out.push(`  ${r.source.padEnd(13)} ${String(r.sent).padStart(3)} sent${extra.length ? ` — ${extra.join(", ")}` : ""}`);
+      // Only APNs reports back, so these are counts of what the phone said, not of everything sent.
+      const seen = [
+        r.opened ? `${r.opened} opened` : "",
+        r.dismissed ? `${r.dismissed} dismissed` : "",
+        r.ignored ? `${r.ignored} ignored after a day` : "",
+      ].filter(Boolean);
+      out.push(`  ${r.source.padEnd(13)} ${String(r.sent).padStart(3)} sent${[...extra, ...seen].length ? ` — ${[...extra, ...seen].join(", ")}` : ""}`);
     }
   }
 

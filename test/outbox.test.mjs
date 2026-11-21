@@ -1,5 +1,5 @@
 /**
- * The outbox (docs/PLAN-outbox.md, Phases 0 and 1).
+ * The outbox (docs/archive/PLAN-outbox.md, Phases 0 and 1).
  *
  * What matters here is what it must NOT do: hold an approval request, lose a message without a
  * trace, or let a bug in the bookkeeping stop a notification. The rules themselves are the easy part.
@@ -17,10 +17,11 @@ const logOnly = process.argv[2] === "logonly";
 process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-outbox-${logOnly ? "log" : "enf"}-${process.pid}.db`);
 process.env.OUTBOX_ENFORCE = logOnly ? "false" : "true";
 
-const { admit, complete, judgeMessage, pruneOutbox, releaseHeld, sentToday, tallyBySource } = await import("../src/outbox.ts");
+const { admit, complete, judgeMessage, markOutcome, outcomeOf, pruneOutbox, releaseHeld, sentToday, tallyBySource } = await import("../src/outbox.ts");
 const { updatePrefs } = await import("../src/headsup/prefs.ts");
 const { rawDb } = await import("../src/memory/store.ts");
-const { PROACTIVE_DAILY_CAP } = await import("../src/outbox-rules.ts");
+const { IGNORED_AFTER_HOURS, PROACTIVE_DAILY_CAP } = await import("../src/outbox-rules.ts");
+const { buildPayload } = await import("../src/push/apns.ts");
 
 let passed = 0;
 let failed = 0;
@@ -32,7 +33,7 @@ const check = (label, actual, expected) => {
 const row = (id) => rawDb.prepare("SELECT * FROM outbox WHERE id = ?").get(id);
 const reset = () => rawDb.exec("DELETE FROM outbox");
 
-// Local times, so quiet hours (default 21 to 7) mean what they say.
+// Local times, so quiet hours (default 21 to 6) mean what they say.
 const NOON = new Date(2026, 0, 15, 12, 0);
 const THREE_AM = new Date(2026, 0, 15, 3, 0);
 const hoursLater = (d, h) => new Date(d.getTime() + h * 3_600_000);
@@ -131,6 +132,48 @@ complete(long.id, { ok: true, via: "apns" });
 check("the transport result is written back", [row(long.id).via, row(long.id).delivered], ["apns", 1]);
 complete(null, { ok: true, via: "apns" });
 check("completing a message with no row does not throw", true, true);
+
+console.log("\nWHAT THE PHONE REPORTS (Phase 2)");
+reset();
+const apns = admit({ body: "b", source: "tool", title: "apns one" }, NOON);
+complete(apns.id, { ok: true, via: "apns" });
+check("just sent over APNs: pending, not ignored", outcomeOf(row(apns.id), hoursLater(NOON, 1)), "pending");
+check("silent for the full window: ignored", outcomeOf(row(apns.id), hoursLater(NOON, IGNORED_AFTER_HOURS)), "ignored");
+check("one minute short of the window: still pending", outcomeOf(row(apns.id), hoursLater(NOON, IGNORED_AFTER_HOURS - 1 / 60)), "pending");
+check("ignored is inferred, never stored", [row(apns.id).opened_at, row(apns.id).dismissed_at], [null, null]);
+
+const ntfy = admit({ body: "b", source: "tool", title: "ntfy one" }, NOON);
+complete(ntfy.id, { ok: true, via: "ntfy" });
+check("ntfy cannot report, so it is unknown and never 'ignored'", outcomeOf(row(ntfy.id), hoursLater(NOON, 100)), "unknown");
+const failedPush = admit({ body: "b", source: "tool", title: "failed one" }, NOON);
+complete(failedPush.id, { ok: false, via: "apns" });
+check("a push that did not deliver is not ignored, it was never seen", outcomeOf(row(failedPush.id), hoursLater(NOON, 100)), "unknown");
+
+check("opened is recorded", markOutcome(apns.id, "opened", hoursLater(NOON, 2)), true);
+check("and reads as opened, even long after", outcomeOf(row(apns.id), hoursLater(NOON, 100)), "opened");
+markOutcome(apns.id, "opened", hoursLater(NOON, 5));
+check("the first report wins: a second tap does not move the time", row(apns.id).opened_at, hoursLater(NOON, 2).toISOString());
+check("an id that is not a row is refused", markOutcome(999999, "opened"), false);
+
+const dis = admit({ body: "b", source: "tool", title: "dismissed one" }, NOON);
+complete(dis.id, { ok: true, via: "apns" });
+markOutcome(dis.id, "dismissed", hoursLater(NOON, 1));
+check("dismissed reads as dismissed", outcomeOf(row(dis.id), hoursLater(NOON, 100)), "dismissed");
+markOutcome(dis.id, "opened", hoursLater(NOON, 2));
+check("opened after dismissed: opened wins", outcomeOf(row(dis.id), hoursLater(NOON, 100)), "opened");
+
+const tally = tallyBySource(5, hoursLater(NOON, 30)).find((r) => r.source === "tool");
+check("the digest tally: opened", tally.opened, 2);
+check("the digest tally: ignored counts only silent APNs sends", tally.ignored, 0);
+const silent = admit({ body: "b", source: "tool", title: "silent one" }, NOON);
+complete(silent.id, { ok: true, via: "apns" });
+check("a second silent APNs send is ignored after a day", tallyBySource(5, hoursLater(NOON, 30)).find((r) => r.source === "tool").ignored, 1);
+check("but not before the window ends", tallyBySource(5, hoursLater(NOON, 3)).find((r) => r.source === "tool").ignored, 0);
+
+console.log("\nTHE ID RIDES IN THE PUSH");
+const payload = JSON.parse(buildPayload("t", "b", { outboxId: 42 }));
+check("outboxId is a top-level key the app can read", payload.outboxId, 42);
+check("a push without one carries none", "outboxId" in JSON.parse(buildPayload("t", "b", {})), false);
 
 console.log("\nRETENTION");
 reset();
