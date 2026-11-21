@@ -359,7 +359,7 @@ baseline, and the meeting recall number is still unmeasured.
   decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
   a person and team filter, a UI for global search, and an agent tool for it (it would need `privateOutput`).
   Done when K1 shows an improvement: that measurement is still to be taken.
-- **K3. Knowledge Inbox (backend built 2026-11-21; the screens on web, iPhone and Mac are not).** `src/inbox/`:
+- **K3. Knowledge Inbox (built 2026-11-21: backend and screens on web, iPhone and Mac; the screens have been built but not seen on the native apps).** `src/inbox/`:
   every file, screenshot, scan, pasted thread and typed note becomes a source artifact (`inbox_items`) before it
   has a project, with the original kept untouched under `INBOX_DIR`, its content hash (the same bytes twice are one
   item), when it arrived, document date, author and speakers, and an extraction status. Text is extracted with the
@@ -373,8 +373,13 @@ baseline, and the meeting recall number is still unmeasured.
   applied only when a person files it, and filing moves its chunks. Deleting removes the original, the text and
   the index and leaves an audit row. API: `GET /api/inbox/status`, `GET /api/inbox`, `POST /api/inbox/files`,
   `POST /api/inbox/paste`, `PATCH`, `POST .../reprocess` and `DELETE /api/inbox/:id`. Suite: `test/inbox.test.mjs`.
-  **Not built:** the Inbox screen on web, iPhone and Mac (upload, paste, list with status and the suggested
-  project, file, reprocess, delete); the iPhone share sheet and dictated notes; adopting the existing Milliman
+  **Screens:** web has an Inbox entry (drop or choose files, paste a thread or type a note, search everything with
+  the path that found each hit shown, items with an honest status, the suggested project with a one-click file,
+  a project picker, try again, delete); iPhone and Mac share one `InboxView` (add files, paste text, context menu
+  and swipe actions) and an Inbox tab or sidebar row. `InboxView` lives at the bottom of `ProjectsView.swift`
+  because a new shared Swift file needs Target Membership ticked in Xcode: when convenient, move it to its own
+  `Views/InboxView.swift` and tick both targets. I looked at the web screen through the page's own DOM (the pane
+  was not on screen), not by eye. **Not built:** the iPhone share sheet and dictated notes; adopting the existing Milliman
   knowledge-folder loader as one source of the Inbox; people and tag suggestions beyond a project; "document date"
   inference from a PDF's own metadata.
 - **K4. Knowledge store (Code, needs a schema decision).** A layer separate from semantic memory, so retrieved

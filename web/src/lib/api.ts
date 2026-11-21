@@ -24,7 +24,10 @@ import type {
   HeadsupPrefs,
   HeadsupPreview,
   HeadsupRun,
+  InboxItem,
+  InboxStatus,
   IngestResult,
+  KnowledgeHit,
   LiveStatus,
   Meeting,
   MeetingExtraction,
@@ -228,10 +231,6 @@ export const api = {
 
   headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
 
-  /**
-   * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
-   * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
-   */
   importMeeting: (file: Blob, opts: { name: string; projectId: null | number; started?: string; title?: string }) => {
     const params = new URLSearchParams({ name: opts.name });
     if (opts.projectId) params.set("project", String(opts.projectId));
@@ -243,6 +242,32 @@ export const api = {
       method: "POST",
     });
   },
+
+  /**
+   * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
+   * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
+   */
+  /** Add a file, screenshot or scan to the Knowledge Inbox. The same bytes again return the existing item. */
+  inboxAddFile: (file: Blob, name: string) =>
+    request<{ duplicate: boolean; item: InboxItem }>(`/api/inbox/files?${new URLSearchParams({ name })}`, {
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      method: "POST",
+    }),
+
+  inboxDelete: (id: number) => request<{ deleted: boolean }>(`/api/inbox/${id}`, { method: "DELETE" }),
+
+  inboxFile: (id: number, project: null | number) =>
+    request<InboxItem>(`/api/inbox/${id}`, { body: JSON.stringify({ project }), method: "PATCH" }),
+
+  inboxList: () => request<InboxItem[]>("/api/inbox"),
+
+  inboxPaste: (text: string, opts: { kind?: "note" | "paste"; name?: string } = {}) =>
+    request<{ duplicate: boolean; item: InboxItem }>("/api/inbox/paste", { body: JSON.stringify({ text, ...opts }), method: "POST" }),
+
+  inboxReprocess: (id: number) => request<InboxItem>(`/api/inbox/${id}/reprocess`, { method: "POST" }),
+
+  inboxStatus: () => request<InboxStatus>("/api/inbox/status"),
 
   listAgents: () => request<Agent[]>("/api/agents"),
 
@@ -395,6 +420,14 @@ export const api = {
     request<WritingStyle>(`/api/styles/${encodeURIComponent(name)}`, { body: JSON.stringify(body), method: "PUT" }),
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
 
+  /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */
+  searchKnowledge: (q: string, opts: { kind?: string; project?: number } = {}) => {
+    const params = new URLSearchParams({ q });
+    if (opts.project) params.set("project", String(opts.project));
+    if (opts.kind) params.set("kind", opts.kind);
+    return request<KnowledgeHit[]>(`/api/knowledge/search?${params}`);
+  },
+
   sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
     post<{ conversationId: number; runId: number }>(`/api/conversations/${conversationId}/messages`, {
       attachmentIds,
@@ -406,8 +439,8 @@ export const api = {
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
-
   setDefaultStyle: (name: string) => request<{ defaultStyle: string }>("/api/style-default", { body: JSON.stringify({ name }), method: "PUT" }),
+
   setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
 
   /** Change what a filed meeting keeps in its project: the full transcript, or only the summary. */

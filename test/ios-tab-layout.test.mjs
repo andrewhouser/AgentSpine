@@ -34,7 +34,7 @@ if (!swiftc) {
   process.exit(0);
 }
 
-const all = ["threads", "headsup", "tasks", "study", "schedules", "projects", "files", "clients", "search", "meetings", "builds", "activity", "settings"];
+const all = ["threads", "headsup", "tasks", "study", "schedules", "projects", "files", "inbox", "clients", "search", "meetings", "builds", "activity", "settings"];
 
 // Each case: what was saved, and the order that must come out.
 const cases = [
@@ -98,10 +98,10 @@ try {
     }
   });
   const split = lines[cases.length];
-  if (split === "4 9") console.log("  PASS  four tabs in the bar, the other nine under More");
+  if (split === "4 10") console.log("  PASS  four tabs in the bar, the other ten under More");
   else {
     failed++;
-    console.log(`  FAIL  bar/more split: want "4 9", got "${split}"`);
+    console.log(`  FAIL  bar/more split: want "4 10", got "${split}"`);
   }
 } catch (error) {
   failed++;

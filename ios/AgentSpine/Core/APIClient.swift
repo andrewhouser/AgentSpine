@@ -587,6 +587,48 @@ final class APIClient {
         )
     }
 
+    // MARK: - Knowledge Inbox
+
+    func inboxItems() async throws -> [InboxItem] {
+        try await send(request("/api/inbox"), as: [InboxItem].self)
+    }
+
+    func inboxStatus() async throws -> InboxStatus {
+        try await send(request("/api/inbox/status"), as: InboxStatus.self)
+    }
+
+    /// Add a file, screenshot or scan. The same bytes again return the existing item.
+    func inboxAddFile(data: Data, name: String) async throws -> InboxAddResult {
+        var req = try request("/api/inbox/files", query: ["name": name])
+        req.httpMethod = "POST"
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        req.timeoutInterval = 300
+        return try await send(req, as: InboxAddResult.self, using: longSession)
+    }
+
+    /// Paste a thread (`kind` "paste", parsed for speakers and times) or type a note (`kind` "note").
+    func inboxPaste(text: String, kind: String, name: String?) async throws -> InboxAddResult {
+        var body: [String: Any] = ["kind": kind, "text": text]
+        if let name, !name.isEmpty { body["name"] = name }
+        return try await send(jsonRequest("/api/inbox/paste", method: "POST", body: body), as: InboxAddResult.self)
+    }
+
+    func inboxFile(_ id: Int, under projectID: Int?) async throws {
+        try await sendRaw(jsonRequest("/api/inbox/\(id)", method: "PATCH", body: ["project": projectID ?? NSNull()]))
+    }
+
+    func inboxReprocess(_ id: Int) async throws {
+        var req = try request("/api/inbox/\(id)/reprocess")
+        req.httpMethod = "POST"
+        req.timeoutInterval = 300
+        try await sendRaw(req, using: longSession)
+    }
+
+    func inboxDelete(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/inbox/\(id)", method: "DELETE"))
+    }
+
     func clients() async throws -> [Client] {
         try await send(request("/api/clients"), as: [Client].self)
     }

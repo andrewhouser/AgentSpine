@@ -872,3 +872,42 @@ export interface WakeResult {
   heard: string;
   woke: boolean;
 }
+
+/** A source artifact in the Knowledge Inbox: what arrived, and what happened to its text. */
+export interface InboxItem {
+  author: null | string;
+  chars: number;
+  doc_date: null | string;
+  id: number;
+  ingested: string;
+  kind: "file" | "image" | "note" | "paste";
+  name: string;
+  note: null | string;
+  private: number;
+  project_id: null | number;
+  speakers: string[];
+  /** ready, needs_ocr (not read yet), ocr_failed, empty (no text) or failed. */
+  status: "empty" | "failed" | "needs_ocr" | "ocr_failed" | "ready";
+  suggested_project: null | number;
+  suggestedProjectName: null | string;
+  tags: string[];
+  via: null | string;
+}
+
+export interface InboxStatus {
+  maxBytes: number;
+  ocr: boolean;
+  watchFolder: null | string;
+}
+
+/** One hit from searching everything that has been indexed. `via` says which paths found it. */
+export interface KnowledgeHit {
+  id: number;
+  kind: string;
+  mtime: null | string;
+  path: string;
+  projectId: number;
+  score: number;
+  text: string;
+  via: string[];
+}

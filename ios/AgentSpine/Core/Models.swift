@@ -1307,3 +1307,57 @@ struct CoachState: Codable {
     let answer: CoachAnswer?
     let thinking: Bool
 }
+
+
+// MARK: - Knowledge Inbox
+
+/// A source artifact in the Knowledge Inbox: something that arrived, and what happened to its text.
+struct InboxItem: Codable, Identifiable, Hashable {
+    let author: String?
+    let docDate: String?
+    let id: Int
+    let ingested: String
+    let kind: String
+    let name: String
+    let note: String?
+    let projectID: Int?
+    let speakers: [String]
+    /// ready, needs_ocr (not read yet), ocr_failed, empty (no text) or failed.
+    let status: String
+    let suggestedProject: Int?
+    let suggestedProjectName: String?
+    let via: String?
+
+    enum CodingKeys: String, CodingKey {
+        case author, id, ingested, kind, name, note, speakers, status, via
+        case docDate = "doc_date"
+        case projectID = "project_id"
+        case suggestedProject = "suggested_project"
+        case suggestedProjectName
+    }
+
+    /// What the status means, in words. An item that was not read is never described as empty.
+    var statusText: String {
+        switch status {
+        case "ready": return "Read and searchable"
+        case "needs_ocr": return "Not read yet: needs OCR"
+        case "ocr_failed": return "OCR found no text"
+        case "empty": return "No text in it"
+        default: return "Could not read it"
+        }
+    }
+
+    var isReady: Bool { status == "ready" }
+    /// Worth offering "read again": it failed or was never read.
+    var canRetry: Bool { status == "needs_ocr" || status == "ocr_failed" || status == "failed" }
+}
+
+struct InboxStatus: Codable, Hashable {
+    let ocr: Bool
+    let watchFolder: String?
+}
+
+struct InboxAddResult: Codable, Hashable {
+    let duplicate: Bool
+    let item: InboxItem
+}
