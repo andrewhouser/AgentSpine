@@ -150,8 +150,8 @@ or push-to-start (iOS 17.2 and later)? Activities end after about 8 hours withou
 - H1 browser fallback for blocked retailers: only if A3 rung 4 or telemetry shows over half of cards are
   link-only; scope it to an allowlist, because the SSRF guard does not cover a browser. F1, which let a project overlay
   open the browser to any domain, is fixed.
-- H2 web sidebar badge for open heads-ups (offered plus dates to confirm), mirroring iOS. Checked 2026-11-21:
-  the web sidebar has the Heads-up entry and no badge, so this is still open. Code.
+- H2 web sidebar badge for open heads-ups: built 2026-11-21 (offered items plus dates to confirm, the same rule as
+  the iPhone; hidden when Heads-up cannot be read). Not seen rendered.
 - H4 a second flight provider, one file behind `FlightSource`, if A4 shows AeroDataBox is unsuitable.
 - H5 restaurant booking and H6 buying a gift: irreversible-tier, queued, never automatic. Only if asked.
 - H7 arrival-side flight alerts (baggage claim, landing gate).
@@ -177,8 +177,8 @@ Section 0 is the priority in this area. What is left of the Nod items:
   baseline. Not covered: Heads-up. Its scanner parses event titles in plain code and I did not trace whether an
   event title reaches a search query or a card, so that path is unchecked. The write token raised the value of
   this work, since a hostile email is now worth more to an attacker.
-- **N1 memory provenance.** Code: a run id on friction rows (`recordFriction` does not take one). Nothing uses
-  `origin` to change recall or pruning, by design.
+- **N1 memory provenance.** Built 2026-11-21: a friction note now records the run that first met the error
+  (`recordFriction` takes the run id from the broker). Nothing uses `origin` to change recall or pruning, by design.
 - **N3 cloud token cap.** You: add `CLOUD_TOKENS_PER_DAY`, `CLOUD_TOKENS_PER_MONTH` and `CLOUD_TOKENS_PER_RUN` to
   the example env file, and check that `CONSOLIDATE_SIMILARITY` and `CONSOLIDATE_GROUP_MAX` are there too. Also
   delete the stale `JUDGE_INTERRUPTIONS_PROACTIVE` comment line from it. The sandbox blocks me from editing that

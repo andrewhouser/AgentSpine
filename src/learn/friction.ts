@@ -65,9 +65,11 @@ export const classifyError = (raw: string): string => {
  * Record one tool failure. `errorText` is the broker's `output` for an errored call. Returns
  * whether a new friction row was written (false on a duplicate or empty input).
  */
-export const recordFriction = (tool: string, errorText: string): boolean => {
+export const recordFriction = (tool: string, errorText: string, runId: null | number = null): boolean => {
   const cls = classifyError(errorText);
-  return rememberFriction(tool, cls, FRICTION_MEMORY_MAX);
+  // The run that hit it is kept, so a friction note can link back to the run like every other memory (N1). A repeat of
+  // a class already on file adds no row, so the run recorded is the first one that met it.
+  return rememberFriction(tool, cls, FRICTION_MEMORY_MAX, runId);
 };
 
 /**

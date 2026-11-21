@@ -40,7 +40,8 @@ check("unknown falls back to trimmed message", classifyError("ERROR: something w
 check("unknown is length-capped", classifyError("ERROR: " + "x".repeat(500)).length <= 80, true);
 
 console.log("\nDEDUPE — the same failure is not stored twice");
-check("first write lands", recordFriction("web_read", "ERROR: fetch timed out"), true);
+check("first write lands", recordFriction("web_read", "ERROR: fetch timed out", 4242), true);
+check("and records the run that met it", store.rawDb.prepare("SELECT run_id FROM memories WHERE kind = 'friction' AND tool = 'web_read' ORDER BY id LIMIT 1").get().run_id, 4242);
 check("identical class is a no-op", recordFriction("web_read", "ERROR: fetch timed out again"), false);
 check("a different class lands", recordFriction("web_read", "ERROR: blocked by robots.txt"), true);
 check("web_read has two", store.frictionForTool("web_read", 10).length, 2);

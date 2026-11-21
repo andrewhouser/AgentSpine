@@ -268,7 +268,7 @@ export const listMemories = (limit: number, query?: string): MemoryRow[] => {
  * Never throws — this runs off the broker's error path and must not turn a tool error into
  * a second failure.
  */
-export const rememberFriction = (tool: string, detail: string, max: number): boolean => {
+export const rememberFriction = (tool: string, detail: string, max: number, runId: null | number = null): boolean => {
   try {
     const text = detail.trim().slice(0, 300);
     if (!tool || !text) return false;
@@ -279,8 +279,8 @@ export const rememberFriction = (tool: string, detail: string, max: number): boo
     if (dup) return false;
 
     rawDb
-      .prepare("INSERT INTO memories (ts, kind, tool, text, embedding, origin) VALUES (?, 'friction', ?, ?, NULL, 'friction')")
-      .run(now(), tool, text);
+      .prepare("INSERT INTO memories (ts, kind, tool, text, embedding, origin, run_id) VALUES (?, 'friction', ?, ?, NULL, 'friction', ?)")
+      .run(now(), tool, text, Number.isInteger(runId) && (runId as number) > 0 ? runId : null);
 
     if (max > 0) {
       rawDb

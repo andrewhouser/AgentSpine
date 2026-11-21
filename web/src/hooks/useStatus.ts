@@ -12,6 +12,8 @@ const POLL_MS = 5000;
 
 export interface Status {
   depth: number;
+  /** Heads-ups offered and waiting on an answer, plus remembered dates waiting to be confirmed. */
+  headsupsWaiting: number;
   /** Open questions across every thread. Used as a change signal for the blue dots. */
   pendingConfirmations: number;
   reachable: boolean;
@@ -19,7 +21,7 @@ export interface Status {
   schedules: number;
 }
 
-const OFFLINE: Status = { depth: 0, pendingConfirmations: 0, reachable: false, running: false, schedules: 0 };
+const OFFLINE: Status = { depth: 0, headsupsWaiting: 0, pendingConfirmations: 0, reachable: false, running: false, schedules: 0 };
 
 export const useStatus = (refreshKey: number): Status => {
   const [status, setStatus] = useState<Status>(OFFLINE);
@@ -29,10 +31,19 @@ export const useStatus = (refreshKey: number): Status => {
 
     const poll = async (): Promise<void> => {
       try {
-        const [s, confirmations] = await Promise.all([api.status(), api.listConfirmations("pending")]);
+        // Heads-up may be switched off or unreachable; a badge that cannot be counted is simply absent, not an error.
+        const [s, confirmations, offered, dates] = await Promise.all([
+          api.status(),
+          api.listConfirmations("pending"),
+          api.listHeadsups("open").catch(() => []),
+          api.listHeadsupDates().catch(() => null),
+        ]);
         if (cancelled) return;
         setStatus({
           depth: s.queue?.depth ?? 0,
+          // Only `offered` is waiting on you: a snoozed item waits on the clock and a tracked flight is
+          // informational, and a badge on either stops meaning anything. Same rule as the iPhone.
+          headsupsWaiting: offered.filter((h) => h.state === "offered").length + (dates?.proposals.length ?? 0),
           pendingConfirmations: confirmations.filter((c) => c.state === "pending").length,
           reachable: true,
           running: s.queue?.running ?? false,

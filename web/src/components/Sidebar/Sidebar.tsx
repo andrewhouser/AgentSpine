@@ -214,6 +214,11 @@ export const Sidebar = ({
         >
           {item.label}
           {item.key === "schedules" && ` (${status.schedules})`}
+          {item.key === "headsup" && status.headsupsWaiting > 0 && (
+            <span aria-label={`${status.headsupsWaiting} waiting for you`} className={styles.badge}>
+              {status.headsupsWaiting}
+            </span>
+          )}
         </button>
       ))}
         </div>

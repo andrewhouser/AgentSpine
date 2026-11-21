@@ -264,7 +264,7 @@ export const executeCall = async (
     // Learn the failure so the tool's own description can warn the next run (LEARNING Phase
     // 1.2). Inference-free (a regex classifies the error) and never throws; a learner must
     // not turn one tool error into two.
-    recordFriction(call.tool, output);
+    recordFriction(call.tool, output, runId);
     return record(classified, "error", output);
   }
 };
