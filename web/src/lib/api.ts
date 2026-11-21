@@ -466,7 +466,7 @@ export const api = {
   toggleSchedule: (id: number, enabled: boolean) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify({ enabled }), method: "PATCH" }),
 
-  updateProject: (id: number, fields: { instructions?: string; name?: string }) =>
+  updateProject: (id: number, fields: { instructions?: string; instructionsFile?: null | string; name?: string }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
 
   /**

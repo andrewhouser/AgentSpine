@@ -40,6 +40,7 @@ import { listenForTurn, listenForWake, planSpeech, speak, voiceStatus } from "./
 import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
+import { checkWorkspaceFile } from "./projects/workspace.ts";
 import {
   readAttachment,
   removeAttachment,
@@ -1498,6 +1499,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         // there is nothing to validate away here — an overlay asking for more simply
         // doesn't get it at run time.
         if ("policyOverlay" in b) patch.policyOverlay = b.policyOverlay ?? null;
+        // Trusting a file is a privilege (it joins the system context of every run in the project),
+        // so it is checked here and again each time it is read. Clearing it needs no check.
+        if ("instructionsFile" in b) {
+          if (b.instructionsFile == null || b.instructionsFile === "") patch.instructionsFile = null;
+          else {
+            const check = checkWorkspaceFile(id, String(b.instructionsFile), loadPolicy());
+            if (!check.ok) return sendJson(res, 400, { error: check.reason });
+            patch.instructionsFile = check.real;
+          }
+        }
         projects.updateProject(id, patch);
         return sendJson(res, 200, projects.getProject(id));
       }

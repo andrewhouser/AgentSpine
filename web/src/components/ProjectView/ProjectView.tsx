@@ -31,6 +31,8 @@ export const ProjectView = ({
   const load = useCallback(() => api.project(projectId), [projectId]);
   const [detail, reload] = useResource<Detail | null>(load, null);
   const [instructions, setInstructions] = useState<null | string>(null);
+  const [workspaceFile, setWorkspaceFile] = useState<null | string>(null);
+  const [workspaceError, setWorkspaceError] = useState("");
   const [newPath, setNewPath] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -41,6 +43,7 @@ export const ProjectView = ({
   if (!detail) return <div className={styles.page}>Loading…</div>;
 
   const value = instructions ?? detail.project.instructions ?? "";
+  const fileValue = workspaceFile ?? detail.project.instructions_file ?? "";
 
   const addSource = async (): Promise<void> => {
     const path = newPath.trim();
@@ -90,6 +93,44 @@ export const ProjectView = ({
               setInstructions(null);
               reload();
             });
+          }}
+          type="button"
+        >
+          Save
+        </button>
+      </section>
+
+      <section>
+        <h2 className={styles.subhead}>Trusted workspace file</h2>
+        <p className={styles.note}>
+          Optionally trust one file named <code>AGENTSPINE.md</code> as standing rules for this project, in
+          addition to the instructions above. It must sit inside one of this project&apos;s own folders and
+          outside any folder the assistant can write to (<code>policy.fs.writableDirs</code>), so a run can
+          never rewrite its own rules. A file with the same name that is merely indexed stays untrusted evidence.
+          Leave empty for none.
+        </p>
+        <input
+          aria-label="Path to AGENTSPINE.md"
+          className={styles.textarea}
+          onChange={(e) => {
+            setWorkspaceFile(e.target.value);
+            setWorkspaceError("");
+          }}
+          placeholder="/path/to/project/AGENTSPINE.md"
+          value={fileValue}
+        />
+        {workspaceError && <p className={styles.note}>{workspaceError}</p>}
+        <button
+          className={styles.primary}
+          disabled={workspaceFile === null}
+          onClick={() => {
+            void api
+              .updateProject(projectId, { instructionsFile: fileValue.trim() === "" ? null : fileValue.trim() })
+              .then(() => {
+                setWorkspaceFile(null);
+                reload();
+              })
+              .catch((err: unknown) => setWorkspaceError(err instanceof Error ? err.message : String(err)));
           }}
           type="button"
         >

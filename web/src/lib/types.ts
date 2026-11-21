@@ -299,6 +299,8 @@ export interface Project {
   created: string;
   id: number;
   instructions: null | string;
+  /** The one workspace file (AGENTSPINE.md) the owner vouches for as trusted instructions. */
+  instructions_file?: null | string;
   name: string;
   policy_overlay: null | string;
 }

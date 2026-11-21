@@ -793,6 +793,15 @@ final class APIClient {
         )
     }
 
+    /// Trust one file named AGENTSPINE.md as the project's standing rules, or pass nil to clear it. The
+    /// server refuses a file outside the project's folders or inside a folder the assistant can write to,
+    /// and says why; that message is thrown as the error.
+    func setProjectWorkspaceFile(_ id: Int, path: String?) async throws {
+        try await sendRaw(
+            jsonRequest("/api/projects/\(id)", method: "PATCH", body: ["instructionsFile": path ?? NSNull()])
+        )
+    }
+
     /// Rename only. The PATCH route updates just the fields it is sent, so this cannot touch
     /// the project's instructions the way `updateProject` would if they were stale.
     func renameProject(_ id: Int, to name: String) async throws {

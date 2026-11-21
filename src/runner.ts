@@ -49,6 +49,7 @@ import { reflect } from "./reflect.ts";
 import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
 import { watchPin } from "./sensitivity.ts";
+import { workspaceInstructions } from "./projects/workspace.ts";
 import { buildHarnessContext } from "./harness.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
@@ -400,6 +401,8 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     publish(runId, { reason: sizing.reason, tier: sizing.tier, type: "tier", via: sizing.via });
 
     const used: string[] = [];
+    /** Where this run's trusted instructions came from, for the envelope and the run inspector. */
+    const instructionSources: string[] = [];
     const context = opts.noMemory ? [] : await buildContext(task, used);
     // Project instructions join the TRUSTED system context (they are yours, like
     // profile.md); project documents do not — see the knowledge block below.
@@ -408,6 +411,17 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       if (instructions) {
         context.unshift(instructions);
         used.push(`project instructions (${project.name})`);
+        instructionSources.push("the project's own instructions");
+      }
+      // The one workspace file the owner vouches for. Checked again here, not only when it was set.
+      const workspace = workspaceInstructions(project.id, policy);
+      if (workspace) {
+        context.unshift(
+          `Workspace rules for the "${project.name}" project, from ${workspace.source}. The workspace owner wrote them, ` +
+            `so they are trusted like the project instructions and take precedence over your general defaults:\n\n${workspace.text}`,
+        );
+        used.push(`${workspace.source} (${project.name})`);
+        instructionSources.push(workspace.source);
       }
     }
     if (project) {
@@ -494,6 +508,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       const harness = buildHarnessContext({
         conversationId,
         history: history.length > 0,
+        instructionSources,
         kind,
         memory: !opts.noMemory,
         preApproved: isUnattended(kind),

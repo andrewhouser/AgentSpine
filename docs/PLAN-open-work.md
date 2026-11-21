@@ -552,7 +552,9 @@ state it added needs a model-facing meaning too: treat it as `queued` with `effe
 **Done when:** the model cannot reasonably interpret `queued` or `dry-run` as completed; duplicate retry
 behaviour improves in scripted tests; the web, iPhone and Mac cards retain their current readable presentation.
 
-### S6. Workspace instructions (Code and docs)
+### S6. Workspace instructions (built 2026-11-21)
+
+**Built:** a project has one optional trusted file, `AGENTSPINE.md`, set from the project screen on web, iPhone and Mac (`projects.instructions_file`, `src/projects/workspace.ts`). It must be named exactly that, sit inside one of the project's own path sources, and sit outside every `policy.fs.writableDirs` folder (otherwise a run could rewrite the rules every later run follows); this is checked when set and again on every read. The text joins the trusted context labelled with its source, the envelope lists the active instruction sources, the run inspector records them, helpers do not inherit them, and a same-named indexed file stays untrusted knowledge. Note: this repo's own `policy.json` makes `~/Developer` writable, so a project folder under it cannot use a workspace file until the file is moved out or that entry is narrowed. Suite: `test/workspace-instructions.test.mjs`. Not done: a per-run inspector view beyond the existing "context used" list. The original design follows.
 
 Formalize three trust levels:
 
@@ -609,7 +611,7 @@ tool calls as well as final prose, since a fluent correct answer can hide an inc
 
 ### Sequence and decisions
 
-Build order: F1 to F7, S1 and S2 are done; S3 to S5 are built; next S6; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
+Build order: F1 to F7, S1 and S2 are done; S3 to S6 are built; next S8; S6; S8. S7 lands with K4 and K6. S1 and S2 are the useful
 minimum: they make every later feature easier to explain without accumulating prompt folklore.
 
 Open decisions for you:

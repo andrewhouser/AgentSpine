@@ -158,6 +158,7 @@ struct ProjectDetailView: View {
     @State private var error: String?
     @State private var name = ""
     @State private var instructions = ""
+    @State private var workspaceFile = ""
     @State private var seeded = false
     @State private var saving = false
     @State private var busySource: Int?
@@ -169,6 +170,7 @@ struct ProjectDetailView: View {
     private var dirty: Bool {
         guard let project = detail?.project else { return false }
         return name != project.name || instructions != (project.instructions ?? "")
+            || workspaceFile != (project.instructionsFile ?? "")
     }
 
     var body: some View {
@@ -185,6 +187,17 @@ struct ProjectDetailView: View {
                 Text("Instructions")
             } footer: {
                 Text("Given to the assistant on every turn in this project's threads.")
+            }
+            Section {
+                TextField("/path/to/project/AGENTSPINE.md", text: $workspaceFile)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+            } header: {
+                Text("Trusted workspace file")
+            } footer: {
+                Text("Optionally trust one file named AGENTSPINE.md as standing rules. It must sit inside one of this project's folders and outside any folder the assistant can write to. An indexed file of the same name stays untrusted. Leave empty for none.")
             }
             if dirty {
                 Section {
@@ -279,6 +292,7 @@ struct ProjectDetailView: View {
             if !seeded {
                 name = fresh.project.name
                 instructions = fresh.project.instructions ?? ""
+                workspaceFile = fresh.project.instructionsFile ?? ""
                 seeded = true
             }
             error = nil
@@ -294,6 +308,10 @@ struct ProjectDetailView: View {
             try await APIClient.shared.updateProject(
                 projectID, name: name.trimmingCharacters(in: .whitespaces), instructions: instructions
             )
+            let file = workspaceFile.trimmingCharacters(in: .whitespaces)
+            if file != (detail?.project.instructionsFile ?? "") {
+                try await APIClient.shared.setProjectWorkspaceFile(projectID, path: file.isEmpty ? nil : file)
+            }
             seeded = false
             await load()
         } catch {

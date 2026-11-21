@@ -299,6 +299,13 @@ struct Project: Codable, Identifiable, Hashable {
     /// Only on the list and detail routes; absent where a project is merely a label.
     let instructions: String?
     let chunks: Int?
+    /// The one file (AGENTSPINE.md) the owner vouches for as trusted instructions. Absent from older servers.
+    let instructionsFile: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, instructions, chunks
+        case instructionsFile = "instructions_file"
+    }
 }
 
 struct ProjectSource: Codable, Identifiable, Hashable {

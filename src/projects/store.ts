@@ -51,6 +51,13 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_sources_project ON project_sources (project_id);
 `);
 
+// The one file the owner vouches for as trusted instructions (src/projects/workspace.ts).
+try {
+  rawDb.exec("ALTER TABLE projects ADD COLUMN instructions_file TEXT");
+} catch {
+  // already there
+}
+
 const now = () => new Date().toISOString();
 
 export interface ProjectRow {
@@ -58,6 +65,8 @@ export interface ProjectRow {
   created: string;
   id: number;
   instructions: null | string;
+  /** Path of the trusted workspace file, validated when set and again whenever it is read. */
+  instructions_file: null | string;
   name: string;
   policy_overlay: null | string;
 }
@@ -90,6 +99,7 @@ export const getProject = (id: number): ProjectRow | undefined =>
 export interface ProjectFields {
   archived?: boolean;
   instructions?: string;
+  instructionsFile?: null | string;
   name?: string;
   policyOverlay?: null | PolicyOverlay;
 }
@@ -97,7 +107,7 @@ export interface ProjectFields {
 export const updateProject = (id: number, fields: ProjectFields): void => {
   const cur = getProject(id);
   if (!cur) return;
-  rawDb.prepare("UPDATE projects SET name=?, instructions=?, policy_overlay=?, archived=? WHERE id=?").run(
+  rawDb.prepare("UPDATE projects SET name=?, instructions=?, policy_overlay=?, archived=?, instructions_file=? WHERE id=?").run(
     fields.name ?? cur.name,
     fields.instructions ?? cur.instructions,
     fields.policyOverlay !== undefined
@@ -106,6 +116,7 @@ export const updateProject = (id: number, fields: ProjectFields): void => {
         : null
       : cur.policy_overlay,
     (fields.archived ?? cur.archived) ? 1 : 0,
+    fields.instructionsFile !== undefined ? fields.instructionsFile : cur.instructions_file,
     id,
   );
 };
