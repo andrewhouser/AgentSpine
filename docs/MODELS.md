@@ -80,6 +80,10 @@ throughput, and `standard` stays the right default.
 ~/Library/Python/3.9/bin/mlx_lm.server --model mlx-community/Llama-3.2-3B-Instruct-4bit --port 8081 --host 0.0.0.0
 ```
 
+(That 3.9 path is how 8081 was first started. "Two Python stacks" below says 8081 has since moved
+off Python 3.9, and the host's plist is the truth, so use the interpreter named in
+`com.local.mlx-server-llama.plist` rather than copying this line.)
+
 Then on the AgentSpine machine:
 
 ```bash
@@ -95,7 +99,8 @@ guess.
 
 ## Keeping them up (launchd)
 
-These already exist on the model host as two user LaunchAgents. **The labels are `com.local.*`,
+These already exist on the model host as user LaunchAgents: two for the language tiers below, and a
+third for the `vision` server on 8082 (its plist is described under "Seeing"). **The labels are `com.local.*`,
 not `com.agentspine.*`.** An earlier draft of this doc prescribed the latter and they were never
 created — so any `launchctl` command naming `com.agentspine.mlx-standard` fails with
 `Unload failed: 5: Input/output error`, which only ever means *that plist path does not exist*.
@@ -153,7 +158,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.local.mlx-server.pli
 tail -20 ~/Library/Logs/mlx-server-error.log
 ```
 
-`/v1/models` lists the whole HuggingFace cache, not what is resident — all four models show
+`/v1/models` lists the whole HuggingFace cache, not what is resident — every cached model shows
 up on both ports. To find out what is actually loaded, send a one-token completion and read
 the `model` field back; a resident model answers in under a second, a swap takes ~8s.
 
@@ -299,7 +304,8 @@ The two 4B models went on 2026-07-31. **The 14B did not** — this doc said it h
 wrong for six weeks; see "A pinned server is only pinned if every client agrees" below. It was
 actually deleted on 2026-09-12, reclaiming 15GB.
 
-The cache now holds exactly three models: `Llama-3.2-3B-Instruct-4bit` (1.7GB),
+As of the 2026-09-12 snapshot the cache held exactly three models (the vision model on 8082 was
+added after this and is not counted): `Llama-3.2-3B-Instruct-4bit` (1.7GB),
 `Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ` (16GB, the one-line revert), and
 `Qwen3.6-35B-A3B-4bit-DWQ` (19GB, the `standard` tier) — 37GB total, verified 2026-09-12.
 
@@ -346,7 +352,7 @@ cache, not the resident model, so every port reports every model it could load.
 
 ## Two Python stacks
 
-The two servers deliberately run on **different Python installs**, and this is load-bearing:
+The two language servers (8080 and 8081) were deliberately run on **different Python installs**, and this is load-bearing:
 
 | port | interpreter | mlx-lm |
 |---|---|---|
@@ -367,7 +373,7 @@ staring at `Model type qwen3_5_moe not supported` with an "up to date" install.
 Do not upgrade the 3.9 site-packages to fix this — add models to the 3.12 venv instead, and
 migrate 8081 to the same venv if it ever needs a post-3.9 architecture.
 
-## Why two servers
+## Why separate servers (two language tiers; vision is a third)
 
 ```
 alternating between two models on one server .... 1.7s to reach the 3B, 7.9s to reach the 30B

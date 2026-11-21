@@ -121,21 +121,41 @@ time-sensitive. Quiet by default.
 Set the **hard rail first** — it needs no model call. In `policy.json`:
 
 ```json
-"budgets": { "perDay": { "tools": { "notify": 5 } } }
+"budgets": { "perDay": { "tools": { "notify": 20 } } }
 ```
 
-Then, only if pushes still feel noisy, add the soft judgment gate (costs a model round-trip per
-proactive push):
+(20 is what is set as of 2026-11-21: a backstop that catches a looping run, not a way to tune
+volume. The outbox, 4d below, is what governs how much a normal day sends.)
+
+> **The rest of 4b is inert today.** `JUDGE_INTERRUPTIONS_PROACTIVE` and the dismissal learning
+> path live in `src/learn/interrupt.ts`, but `notifyProactive` has no callers and
+> `recordDismissal` is only called by a test. Setting the flag changes nothing and dismissals do
+> not become memories. Leave it off until the weekly review (`docs/PLAN-open-work.md` section 2)
+> wires them in.
+
+- [x] Hard `notify` per-day cap set in `policy.json` (20).
+- [ ] ~~Soft gate~~ and ~~dismissals becoming `preference` memories~~: not wired, skip.
+
+Reversal: raise/remove the cap.
+
+### 4d. The outbox (log-only first)
+
+`notify()` records every message in the `outbox` table. Enforcement is **off** until
+`OUTBOX_ENFORCE=true`, and in log-only mode everything is delivered as before while each row's
+`would_be` records what the rules would have done (quiet hours 9 pm to 6 am, a repeat inside 12
+hours, six proactive messages a day including Heads-up).
 
 ```
-JUDGE_INTERRUPTIONS_PROACTIVE=true
+npm run digest 168     # "What I sent you": per source, sent, opened, dismissed, ignored
 ```
 
-- [ ] Hard `notify` per-day cap set low in `policy.json`.
-- [ ] (Optional) soft gate enabled after the hard cap proved insufficient.
-- [ ] Dismissed notifications are turning into `preference` memories as expected.
+- [ ] Ran log-only for about a week.
+- [ ] Read the "would be held or collapsed" counts and the opened, dismissed and ignored counts.
+      Opened and dismissed come from the iPhone only; ntfy and Mac banners report nothing.
+- [ ] Switched on `OUTBOX_ENFORCE=true` only if the numbers say the rules would have helped.
 
-Reversal: raise/remove the cap; `JUDGE_INTERRUPTIONS_PROACTIVE=false`.
+Approvals, reminders, run results and priority 5 are never held. Reversal:
+`OUTBOX_ENFORCE=false` (a held message is released by a 5 minute sweep once allowed).
 
 ### 4c. Horizon heartbeat (Phase 4.6) — only once 4a is trusted
 

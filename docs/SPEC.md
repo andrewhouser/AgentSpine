@@ -1,7 +1,10 @@
 # AgentSpine — Anticipatory Assistant: Build Spec
 
 Status: **§1–§6 and §11–§18 built** (§7–§10 are sequencing, conventions, commands and the data model, not features). §5 took the draft-not-send path by explicit decision on
-2026-07-25; the Google scopes remain read-only and are not to be widened without a new one. This spec turns AgentSpine from a capable *reactive*
+2026-07-25 and kept every read on a read-only token. A second, separate write token was added by a
+recorded decision on 2026-11-21 (see the amendment in §5); reads still use the read-only token, and
+no further scope is to be added without another one. What is still to do lives in
+[PLAN-open-work.md](PLAN-open-work.md), not here. This spec turns AgentSpine from a capable *reactive*
 tool-runner into an assistant that **understands you, notices when your world changes, and
 can reach you and act while you're away** — without abandoning its security-first, local-first
 posture.
@@ -82,23 +85,29 @@ stripping — no build step**; run `.ts` directly. Deps: `openai`, `playwright-c
   `127.0.0.1:8787`. Runs `markInterruptedRuns()` on boot.
 - `browser-check.ts` — `npm run browser:check`.
 - `google/auth.ts` (`npm run auth`, loopback OAuth) + `google/client.ts` (read-only Gmail+Calendar).
+  `google/write.ts` is the only code that holds the separate write token (`npm run auth -- write`,
+  §5 amendment of 2026-11-21).
 - `memory/store.ts` — SQLite (`spine.db`): `runs`, `messages` (traces), `actions` (audit log),
   `confirmations`, `schedules`, `memories`. Full CRUD.
 - `memory/rag.ts` — `remember(text, kind)` / `recall(query, k)`; embedder priority
   `EMBEDDINGS_URL` → Transformers.js (uninstalled) → keyword; cosine over stored vectors.
-- `tools/` — one file per capability plus `index.ts` (the registry). **25 tools today**
-  (verified against `src/tools/index.ts`, 2026-09-10): `mac_control`, `notify`, `web_search`,
-  `web_read`, `browser`, `read_file`, `list_dir`, `read_more` (§ stash), `gmail_search`,
-  `calendar_upcoming`, `memory_save`, `memory_recall`, `conversation_detail`, `state_get`,
-  `state_set`, `schedule_list`, `schedule_create`, `schedule_update`, `schedule_delete`,
-  `weather`, `weather_alerts`, `git_status`, `digest`, `draft`, `subagent`. (The four
-  `schedule_*` tools, `subagent`, `conversation_detail`, and `read_more` arrived with §11–§13
-  and the stash work; the earlier "18 tools" figure predated them.)
-- `public/` — dashboard `index.html` + `style.css` + `script.js` (tabs: Jobs w/ traces,
-  Schedules, Confirmations, Memory, Policy, Run).
-- `policy.json` — deny-by-default surfaces: `autoExecute`, `apps`, `web`, `browser`, `google`,
-  `fs`, `weather`, `git`, plus the surfaces added by later sections — `drafts` (§5), `budgets`
-  (§6), and `audio` (§15). All the later-added surfaces are optional in the `Policy` type
+- `tools/` — one file per capability plus `index.ts` (the registry). **55 tools** at 2026-11-21
+  (counted from the `tools` array in `src/tools/index.ts`). This spec no longer lists them: the
+  list went stale twice (18, then 25), and the array is the only thing that grants the agent a
+  capability, so read that. The original core, still the best map of the shape: `mac_control`,
+  `notify`, `web_search`, `web_read`, `browser`, `read_file`, `list_dir`, `read_more`,
+  `gmail_search`, `calendar_upcoming`, `memory_save`, `memory_recall`, `state_get`, `state_set`,
+  `schedule_*`, `weather`, `git_status`, `digest`, `draft`, `subagent`. Later work added the study
+  tools, the build loop (`run_command`, `git_write`), image generation, MCP tools
+  (`mcp__<server>__<tool>`), tasks, files, clients, and the Gmail and Calendar writers.
+- The dashboard is the React client in `web/` (`npm run web:build` writes it to `public/`, which is
+  gitignored build output; a fresh checkout has no `public/` until it is built). The original
+  `index.html`, `style.css` and `script.js` with six tabs are gone.
+- `policy.json` — deny-by-default surfaces. At 2026-11-21 the top-level keys are `autoExecute`,
+  `budgets`, `apps`, `userDirected`, `trust`, `web`, `browser`, `google`, `fs`, `mcp`, `weather`,
+  `images`, `drafts`, `subagents`, `schedules`, `git`, `build` and `audio`. The ones added after the
+  first set: `drafts` (§5), `budgets` (§6), `audio` (§15), and later `trust`, `mcp`, `images`,
+  `schedules`, `build` and `google.write`. All the later-added surfaces are optional in the `Policy` type
   (see `src/types.ts`) and denied when absent, so an older config can't silently grant a newer
   capability. Note `audio` *inverts* the allowlist convention: an empty `devices: []` means **no**
   microphone, not any (§15).
@@ -510,7 +519,10 @@ thing deliberately left undone is widening the Google scopes, which needs its ow
   content to cloud (chat *or* embeddings/reflection).
 - **Security model.** Deny-by-default `policy.json`; reversibility-tiered broker; irreversible →
   confirm queue; **`tagUntrusted` all external content and never follow instructions inside it**;
-  Google scopes are **read-only — never widen** without explicit sign-off.
+  Reads use a **read-only** Google token, which never widens. Writes (archive, label, trash, spam,
+  all-day events on one named calendar) use a **separate** token held only by `src/google/write.ts`,
+  by recorded decision (§5 amendment, 2026-11-21). No send, no permanent delete; adding either needs
+  a new recorded decision.
 - **Restart after server-side changes.** The scheduler + API run inside the `npm run dashboard`
   process; code changes need a restart. `public/` static files refresh on browser reload.
 - **Don't mix embedding models** — different dims corrupt cosine ranking. If `EMBEDDINGS_MODEL`

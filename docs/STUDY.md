@@ -98,13 +98,17 @@ before a recall), `POST /api/study/cards/:id/review {answer}`.
 ## Reminders
 
 Once a day at most, while any card is due, `sweepDueCards` sends one notification ("N study cards
-due"). It runs from the dashboard server beside the task sweep. A tap opens the Study screen: on
+due"). It runs from the dashboard server beside the task sweep. It goes through the outbox as the
+`study` source, which is one of the governed ones: with `OUTBOX_ENFORCE` on, quiet hours hold it, a repeat
+inside 12 hours is collapsed, and it counts toward the daily cap (`docs/PLAN-open-work.md` section 2). A tap opens the Study screen: on
 the iPhone through the push's `screen: "study"`, and in ntfy through a click URL when
 `DASHBOARD_PUBLIC_URL` is set.
 
 ## Data
 
-Four tables in the main SQLite file: `study_topics`, `study_cards`, `study_attempts`, `study_meta`.
+Five tables in the main SQLite file: `study_topics`, `study_cards`, `study_attempts`, `study_meta`,
+and `study_meeting_questions` (the candidates waiting for review, see "Questions you were asked in
+meetings").
 `study_attempts` is the ledger of everything you produced; the diagnostician and the
 read-versus-produced counter in `study_topic get` both read from it. Deleting a topic removes its
 cards and history and is the one study action that asks for confirmation.

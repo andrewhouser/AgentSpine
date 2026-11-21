@@ -230,6 +230,41 @@ inbox cleanup runs unattended.
 
 ---
 
+### 4a. Leftovers from the reference docs (found in the 2026-11-21 review)
+
+These were open items inside docs that otherwise describe built things, so they were easy to lose.
+
+- **Memory consolidation, `LEARNING.md` Phase 6.** 6.0 is built (`npm run consolidate`, read-only, no model
+  call) but has never been run against the real memory table: the MacBook's database is empty, so the first
+  number has to come from the AgentSpine Mini. Run it, set `CONSOLIDATE_SIMILARITY` (0.75, a guess) from
+  the histogram, and if it finds only a handful, stop there. If it finds enough: 6.1 (judge each candidate
+  group with a local model pinned `private`, results `distinct | duplicate | superseded | merge`, queued as
+  proposals, `CONSOLIDATE_MAX_PROPOSALS` caps a pass, a rejected pair is never proposed again) and 6.2
+  (approval sets `memories.retired`, recall skips retired rows, `prune` hard-deletes after
+  `CONSOLIDATE_GRACE_DAYS`, default 30, un-retire in Settings → Memory during the grace window; trigger from
+  the daily prune tick with `CONSOLIDATE_EVERY_DAYS`, default 0). Three open questions to settle before
+  building are listed in `LEARNING.md`. Also check `CONSOLIDATE_SIMILARITY` and `CONSOLIDATE_GROUP_MAX` are
+  documented in `.env.example`.
+- **The proposers have no trigger.** Nothing in `src/` calls `runProposer` (recurring-intent schedules,
+  `npm run propose`) or `runRewriter` (`npm run rewrite`) except their own command lines, so they run only
+  when you run them. Decide whether a weekly trigger is wanted before turning on anything that depends on
+  them (ROLLOUT Steps 3 and 5).
+- **Interruption budget wiring.** `notifyProactive` and `recordDismissal` in `src/learn/interrupt.ts` are
+  unwired (see section 2). Either the weekly review wires them or they are deleted.
+- **Meetings, `SPEC.md` section 15 note of 2026-07-30.** Items it listed as still to do, not rechecked: index
+  something into a project so the sidecar and coach have a corpus; one dashboard Record, Stop, extract run
+  against live speech; re-run the Phase 2 numbers against a real multi-person meeting (neither sample so far
+  measures **recall**); re-check the "flat ~1.1 s prefill" claim in the coaching table, which did not
+  reproduce. Several may be done by now through use, so check before doing any.
+- **Study.** `STUDY.md` lists heartbeat-scheduled study sessions as not built, and said to wait until the
+  Study screen existed. It does now, so this is buildable if wanted. Practice-app generation stays off the
+  list (the Study screen covers it).
+- **Model host.** `CLAUDE.md` says the model host is `192.168.0.145`; the code, `MODELS.md` and `SPEC.md` say
+  `.150`, static since 2026-09-08 (it went `.145` to `.134` to `.150`). `CLAUDE.md` was left as is because
+  only you know which is true today. Fix whichever is wrong.
+
+---
+
 ## 5. Native apps and UI (`docs/archive/PLAN-native-apps-and-ui-refresh.md`)
 
 **Built:** the `AgentSpine Mac` target (eight shared files), the token pipeline (`design/tokens.json`,

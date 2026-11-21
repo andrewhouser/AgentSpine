@@ -5,7 +5,9 @@ changed — which is the difference between an assistant that tells you somethin
 that pesters you every thirty minutes with the same news.
 
 There is no watcher object in the codebase. A watcher is an ordinary schedule whose task
-happens to follow one shape:
+happens to follow one shape. (Heads-up's flight and drive "watches" are a different thing: rows in
+their own table, polled by code in `src/headsup/watch/`, not schedules. See `PLAN-open-work.md`
+section 3.)
 
 ```
 poll the source  ->  compare against stored state  ->  act only on a difference
@@ -71,7 +73,17 @@ npm run watcher template                 # print the template, for writing your 
 Starters included: `weather-alerts` (dangerous heat/cold, cold snaps, 4″+ snow, storms,
 damaging gusts), `model-releases` (new MLX releases of the model family you run),
 `calendar-tomorrow` (tomorrow's schedule changed since the last check), `inbox-urgent` (a
-genuinely new urgent message appeared).
+genuinely new urgent message appeared), `horizon` (weekdays at 8 am and noon: a quiet look-forward
+brief, "Phase 4.3" in `LEARNING.md`, which the heartbeat can run instead under `HEARTBEAT_HORIZON`),
+and `inbox-cleanup` (every 8 hours).
+
+`inbox-cleanup` is **not** this pattern. It acts on every run, not on a difference: it trashes
+subscriptions and junk, adds bills to the Bills calendar and writes a plain-language summary. It is
+a watcher only in being a schedule, and it needs the separate Google write token
+(`npm run auth -- write`). Its guards are code in `src/tools/gmail-triage.ts` and
+`src/tools/calendar-write.ts`, not task text: inbox mail only, never mail from anyone you have
+emailed, never starred or sent mail, and a cap on changes per run (SPEC §5, amendment of 2026-11-21).
+Read its first summary by hand before trusting it. The cost note below does not apply to it.
 
 ### The `weather-alerts` starter is the pattern done properly
 

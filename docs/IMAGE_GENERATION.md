@@ -5,8 +5,10 @@ the model host.
 
 The service itself is already written and measured: [`services/mflux/server.py`](../services/mflux/server.py).
 It was built and benchmarked on the 32 GB model host on 2026-09-12, and the numbers in this
-document are measured on that hardware, not estimated. What remains is deploying it on `.85`
-and wiring AgentSpine to it.
+document are measured on that hardware, not estimated. AgentSpine's side is wired too (steps 6 and 7
+below are built: `IMAGE_BASE_URL` in `src/config.ts`, the `generate_image` tool in
+`src/tools/generate-image.ts`, and the `images` block in `policy.json`). What remains is
+deploying the service on `.85` and setting `IMAGE_URL` there.
 
 ## Why this needs a service at all
 
@@ -169,10 +171,10 @@ Those use `KeepAlive = { SuccessfulExit = false }`, which makes a clean stop amb
 `ThrottleInterval = 60`, which can leave a minute-long dead window after a restart. Neither
 is wanted here.
 
-### 6. AgentSpine: config
+### 6. AgentSpine: config (built)
 
-`IMAGE_URL` does not exist anywhere in the codebase yet. Add to `src/config.ts` alongside the
-other endpoints:
+`IMAGE_URL` is read in `src/config.ts` alongside the other endpoints; this is the line that is
+there:
 
 ```typescript
 export const IMAGE_BASE_URL = env.IMAGE_URL ?? "";
@@ -180,9 +182,9 @@ export const IMAGE_BASE_URL = env.IMAGE_URL ?? "";
 
 Empty-string default keeps it a no-op when unset, matching how `FAST_BASE_URL` degrades.
 
-### 7. AgentSpine: the tool
+### 7. AgentSpine: the tool (built as `src/tools/generate-image.ts`; the notes below are the design it followed)
 
-New file in `src/tools/`, registered in `src/tools/index.ts` (import it, then add it to the
+A file in `src/tools/`, registered in `src/tools/index.ts` (import it, then add it to the
 `tools` array — that array is the only thing that grants the agent a capability).
 
 A `Tool` must supply `name`, `description`, `argsSchema`, `classify`, `checkPolicy`, and
@@ -215,8 +217,8 @@ Loopback, because the service and AgentSpine are on the same machine. Use
 > **`.env` is resolved relative to the process working directory.** `src/config.ts` calls
 > `process.loadEnvFile()` with no argument. If the launchd job for AgentSpine has no
 > `WorkingDirectory` pointing at the repo root, `.env` is silently skipped and *every* value
-> falls back to its default — including `LOCAL_LLM_URL`, whose default is the dead
-> `192.168.0.145`. That failure mode looks exactly like the model host being down. Confirm
+> falls back to its default — including `LOCAL_LLM_URL`, whose default is
+> `192.168.0.150` (it was the dead `.145` when this was written). That failure mode looks exactly like the model host being down. Confirm
 > the job's `WorkingDirectory` before blaming the network.
 
 ## One thing to know about failover while testing
@@ -234,6 +236,6 @@ Nothing about the image service depends on this. It matters because if you test 
 
 ## Related
 
-- [MODELS.md](MODELS.md) — the model host, the two pinned servers, and the 14B incident
+- [MODELS.md](MODELS.md) — the model host, the three pinned servers, and the 14B incident
 - `src/tiers.ts` — why a tier is an endpoint
 - `src/router.ts` — retry and tier fallback

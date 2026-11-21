@@ -1758,9 +1758,12 @@ retention window — a row dies with its run either way.
 
 Gmail and Calendar reads (`gmail_search`, `calendar_upcoming`) are **read-only by
 construction** — the OAuth token is minted with `gmail.readonly` + `calendar.readonly`, so
-the credential *physically cannot* send mail or change your calendar no matter what the
+that credential *physically cannot* send mail or change your calendar no matter what the
 model does. That boundary lives at Google's auth server, not in a prompt; **never widen the
-scopes.** Email is also treated as hostile: only headers + Gmail's snippet are read (never
+read token's scopes.** Since 2026-11-21 there is also a separate write token (`npm run auth --
+write`, scopes `gmail.modify` + `calendar.events`) held only by `src/google/write.ts`, used by the
+inbox cleanup. It is not read-only, and Gmail has no "modify but not send" scope, so for that token
+"it cannot send" is a property of the code (there is no send function), not of Google. See SPEC §5. Email is also treated as hostile: only headers + Gmail's snippet are read (never
 full bodies, the richest injection surface), and everything is tagged UNTRUSTED.
 
 Setup (once):

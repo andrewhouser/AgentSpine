@@ -437,6 +437,15 @@ ask the model to be.
   rejected confirmation. "Don't tell me about this again" has to be learnable, or the
   feature dies of irritation inside a week and you turn the whole thing off.
 
+> **Status check, 2026-11-21: only the hard rail is live.** `src/learn/interrupt.ts` has the soft
+> gate (`JUDGE_INTERRUPTIONS_PROACTIVE`) and the learning path (`recordDismissal`), but
+> `notifyProactive` has no callers and `recordDismissal` is called only by its test, so the setting
+> does nothing and no dismissal becomes a memory today. The hard rail works, and
+> `policy.budgets.perDay.tools.notify` is 20 (set 2026-11-21). Quiet hours, a daily cap and a
+> repeat filter now live in the outbox (`docs/archive/PLAN-outbox.md`, built log-only), and its
+> weekly review is what will finally give `recordDismissal` a caller: open work, in
+> `docs/PLAN-open-work.md` section 2.
+
 ### 4.6 Retire `goals.md` as a static file
 
 Its honest default is `(none)`, and the file's own comment admits the awkwardness: a task
@@ -495,6 +504,9 @@ the README already refuses to build elsewhere.
 ---
 
 ## Phase 6 — Memory consolidation  🚧 **6.0 BUILT 2026-11-19; 6.1 and 6.2 planned**
+
+> Open work from this phase (run 6.0 on the Mini, then 6.1 and 6.2, and the proposers' missing
+> trigger) is tracked in `docs/PLAN-open-work.md` section 4a, so it is not lost here.
 
 > **Status.** 6.0 is `src/learn/consolidate.ts`, `npm run consolidate`, and
 > `test/learn-consolidate.test.mjs` (26 checks). It is read-only and makes no model call.
@@ -609,9 +621,9 @@ nullable column. Un-retiring a row is a click in Settings → Memory during the 
 - **Manual:** `npm run consolidate`, beside `propose` and `rewrite`. Today (6.0) it only
   counts. From 6.1 it queues proposals, and `-- --dry` will list them without queueing.
 
-**Gap worth knowing.** `propose.ts` says it is "meant for a weekly schedule", but nothing
-in `server.ts` or `index.ts` calls `runProposer` or the rewriter (I did not search the rest
-of `src/`), so today those two run only when someone runs the CLI. Phase 6 should not copy
+**Gap worth knowing (confirmed 2026-11-21).** `propose.ts` says it is "meant for a weekly schedule", but nothing
+in `src/` calls `runProposer` or `runRewriter` except their own command-line entry points
+(grep of all of `src/`, 2026-11-21), so today those two run only when someone runs the CLI. Phase 6 should not copy
 that: a learner with no trigger is a learner that never runs.
 
 **Config knobs:** built with 6.0: `CONSOLIDATE_SIMILARITY` (0.75) and
