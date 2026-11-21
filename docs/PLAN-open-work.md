@@ -5,7 +5,7 @@ piece of work is not here, it is either built (the design records are in `docs/a
 not a to-do list) or deliberately not wanted (see "Ground rules"). When you finish or change something, change
 this file in the same commit. When you start something new, add it here rather than writing another PLAN doc.
 
-**Priority order (decided 2026-11-21).** Section 0 first (the security findings, now six). Then section 8, the
+**Priority order (decided 2026-11-21).** Section 0 first (the security findings: F1 to F5 and F7 are fixed, F6 is open). Then section 8, the
 management knowledge system, which is the main direction: the highest return is making AgentSpine very good at
 remembering, connecting, citing and updating workplace knowledge. Live Activities, richer travel integrations,
 buying or booking actions and most new proactive behaviour are deprioritized until section 8 has a reliable
@@ -127,7 +127,7 @@ never repeated within 90 days.
 
 **A. Verification (You).** A1 the iOS app builds and runs (done); the lock-screen buttons (rung 8) have not been
 exercised on a device. A2 `npm run check` on Node 24 (it also compiles the iOS Heads-up models against
-Foundation). A3 a shakedown, one rung at a time, passing before moving on: 1 Calendar (Check now lists real
+Foundation; it passed on Node 26.3 on the development Mac on 2026-11-21, so run it on the Mini's Node too). A3 a shakedown, one rung at a time, passing before moving on: 1 Calendar (Check now lists real
 items, none PAID, no holidays); 2 Morning push (one push, opens the tab); 3 Chat dates ("Garrett's birthday is
 March 4" gives a card within seconds); 4 Gift research (cards under two minutes; **record how many had a price
 and photo versus link-only**, H1 depends on it); 5 Restaurants (needs `DEFAULT_LOCATION`); 6 Flights (key plus
@@ -162,7 +162,8 @@ or push-to-start (iOS 17.2 and later)? Activities end after about 8 hours withou
 
 **H. Small and conditional.**
 - H1 browser fallback for blocked retailers: only if A3 rung 4 or telemetry shows over half of cards are
-  link-only; scope it to an allowlist, because the SSRF guard does not cover a browser. Do F1 first.
+  link-only; scope it to an allowlist, because the SSRF guard does not cover a browser. F1, which let a project overlay
+  open the browser to any domain, is fixed.
 - H2 web sidebar badge for open heads-ups (offered plus dates to confirm), mirroring iOS. Checked 2026-11-21:
   the web sidebar has the Heads-up entry and no badge, so this is still open. Code.
 - H4 a second flight provider, one file behind `FlightSource`, if A4 shows AeroDataBox is unsuitable.
@@ -236,7 +237,8 @@ Section 0 is the priority in this area. What is left of the Nod items:
 **One look at the screens nobody has seen rendered (You).** Run the iPhone simulator against a fresh test server
 and look at each, on web, iPhone and Mac where the feature exists: Styles (N4), the lead-time rows (D), the
 Preview row (C), Weekly review with "Kinds you mostly skip" (Phase 3 and 4), the Cloud usage panel (N3), the
-provenance links in Settings, Memory (N1), and the Heads-up outcome lines in Settings. This list is the same
+provenance links in Settings, Memory (N1), the Heads-up outcome lines in Settings, and the "Local only" note
+on a thread that has touched private material (F7). This list is the same
 check that sections 2, 3 and 4 ask for, in one pass.
 
 **A plan card for a running task (Code, then a look by you).** Show the steps a run is working through as a card
@@ -327,7 +329,8 @@ embedding a query 63 ms, a sweep over 50,000 chunks 101 ms.
 **What does not exist.** No SQLite full-text index (FTS5 is available in the built-in `node:sqlite`, checked
 2026-11-21, so it needs no new dependency). No way to add a document except an allowlisted filesystem path (the
 only upload is a chat attachment). No OCR, no watched folder, no pasted-chat parsing. No sensitivity on a source
-or a project: privacy is by convention, which is F2's hole. No people, commitments, decisions-over-time or
+or a project: a run inside a project is pinned local (F7), but a stored source carries no sensitivity of its
+own, so everything derived from it (embeddings, extraction) relies on that rule rather than on the source. No people, commitments, decisions-over-time or
 supersession model; semantic memory cannot say that "launch moved to August" replaces "launch is June". The
 app does not encrypt or audit backups, deletion or export. Global search covers conversation questions and
 answers, not every source type.
