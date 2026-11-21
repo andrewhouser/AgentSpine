@@ -196,7 +196,7 @@ struct HeadsupView: View {
             case "nothing":
                 note = "Nothing new to mention right now."
             case "quiet":
-                note = "It's quiet hours (9 pm to 7 am), so nothing was sent."
+                note = "It's quiet hours (9 pm to 6 am), so nothing was sent."
             case "disabled":
                 note = "Heads-up is turned off on the server (HEADSUP_ENABLED)."
             default:

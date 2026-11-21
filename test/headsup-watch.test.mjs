@@ -195,7 +195,7 @@ check("and a later landing ends it with a notice", (flightQueue = [status({ arri
 check("... 'Landed, gate 41.'", sent.at(-1).body, "Landed, gate 41.");
 check("... and the watch is over", store.getWatch(f4.id).active, 0);
 
-console.log("\nquiet hours (9 pm to 7 am)\n");
+console.log("\nquiet hours (9 pm to 6 am)\n");
 const q = mkFlight("flight:q", 5);
 for (const w of store.activeWatches()) if (w.headsup_id !== q.id) store.endWatch(w.id, "parked");
 // Departs Nov 20 05:00. Window opens Nov 19 23:00.
@@ -225,8 +225,8 @@ flightQueue = [status()];
 await run(at(20, 3, 0));
 reset();
 flightQueue = [status({ departureGate: "C4" })];
-await run(at(20, 6, 30));
-check("a held change is delivered once quiet hours end", await run(at(20, 7, 5)), ["notified"]);
+await run(at(20, 5, 30));
+check("a held change is delivered once quiet hours end", await run(at(20, 6, 5)), ["notified"]);
 check("... and says the same thing", sent.at(-1).body, "Gate changed from B12 to C4.");
 
 console.log("\nbudgets\n");
@@ -357,14 +357,14 @@ check("an address it cannot find is 'unknown'", (await runWatchLoop(at(23, 14, 3
 check("... with a note", store.getWatch(apt3.id).note, "Could not find one of the addresses.");
 
 console.log("\nquiet hours hold drive notices (a drive is never an emergency)\n");
-const apt4 = offer(cand("appointment", "Early", "apt:early", { location: "5 Early St", startsAt: iso(24, 7, 30) }));
+const apt4 = offer(cand("appointment", "Early", "apt:early", { location: "5 Early St", startsAt: iso(24, 6, 30) }));
 enableWatch(ledger.getById(apt4.id), at(18, 8));
 for (const w of store.activeWatches()) if (w.headsup_id !== apt4.id) store.endWatch(w.id, "parked");
 reset();
 driveTimes = [{ minutes: 20, typicalMinutes: 20 }];
-check("at 6:30am, within the hour of leaving, it is held", await run(at(24, 6, 30)), ["quiet"]);
+check("at 5:30am, within the hour of leaving, it is held", await run(at(24, 5, 30)), ["quiet"]);
 check("... nothing sent", sent.length, 0);
-check("at 7:00 it says it", await run(at(24, 7, 5)), ["notified"]);
+check("at 6:05 it says it", await run(at(24, 6, 5)), ["notified"]);
 
 console.log("\nwatched items stay on the list\n");
 ledger.answer(f1.id, "yes", at(18, 8));

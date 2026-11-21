@@ -116,7 +116,7 @@ export const HeadsupView = () => {
           : r.status === "nothing"
             ? "Nothing new to mention right now."
             : r.status === "quiet"
-              ? "It's quiet hours (9 pm to 7 am), so nothing was sent."
+              ? "It's quiet hours (9 pm to 6 am), so nothing was sent."
               : r.status === "disabled"
                 ? "Heads-up is off. Google reads must be enabled in policy.json (and HEADSUP_ENABLED not false)."
                 : `Couldn't check the calendar: ${r.errors.join("; ") || r.status}`,

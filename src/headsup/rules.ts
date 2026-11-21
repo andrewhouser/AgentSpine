@@ -13,7 +13,7 @@ export type HeadsupKind = "anniversary" | "appointment" | "bill" | "birthday" | 
  * Days before the event at which each mention happens, largest first. `[10, 2]` means: a first
  * mention ten days out, a reminder two days out. A bill's `0` is "the day it is due".
  *
- * Starting values from docs/PLAN-heads-up.md, meant to be tuned against what actually feels
+ * Starting values from docs/archive/PLAN-heads-up.md, meant to be tuned against what actually feels
  * right. A flight's later stages belong to the time-sensitive loop (Phase 5), not here.
  */
 export const LEAD_DAYS: Record<HeadsupKind, number[]> = {
@@ -44,7 +44,7 @@ export const DAILY_CAP = 3;
 
 /** No pushes from QUIET_START (inclusive) to QUIET_END (exclusive), local time. */
 export const QUIET_START_HOUR = 21;
-export const QUIET_END_HOUR = 7;
+export const QUIET_END_HOUR = 6;
 
 /**
  * The morning heads-up does not run before this local time. It is just after quiet hours end
@@ -141,7 +141,7 @@ export const findAmount = (e: Pick<Classifiable, "description" | "title">): stri
 // --- quiet hours --------------------------------------------------------------------------
 
 /**
- * Whether `now` is in quiet hours. The window may wrap midnight (21 to 7) or sit inside a day
+ * Whether `now` is in quiet hours. The window may wrap midnight (21 to 6) or sit inside a day
  * (1 to 6). Equal hours mean no quiet hours at all, which is a choice you are allowed to make.
  */
 export const inQuietHours = (now: Date, start: number = QUIET_START_HOUR, end: number = QUIET_END_HOUR): boolean => {

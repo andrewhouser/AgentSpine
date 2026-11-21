@@ -12,7 +12,7 @@
   "budgets": {
     "//": "Call caps counted from the actions audit log. 'default' applies to any tool without its own entry; 'tools' overrides per tool. Absent or 0 = unlimited. Only executed/queued calls count — a denial cost nothing and shouldn't eat the allowance. Example: { \"perRun\": { \"default\": 8 }, \"perDay\": { \"tools\": { \"web_search\": 50 } } }",
     "perRun": {},
-    "perDay": {}
+    "perDay": { "tools": { "notify": 20 } }
   },
 
   "apps": {

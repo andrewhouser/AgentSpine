@@ -39,7 +39,7 @@ const dateStr = (n) => { const d = at(18 + n, 12); return `${d.getFullYear()}-${
 console.log("\ndefaults\n");
 const d = prefs.getPrefs();
 check("every kind is on", Object.values(d.kinds).every((v) => v === true) && Object.keys(d.kinds).length === 6, true);
-check("the cap and quiet hours are the shipped defaults", [d.dailyCap, d.quietStartHour, d.quietEndHour], [DAILY_CAP, 21, 7]);
+check("the cap and quiet hours are the shipped defaults", [d.dailyCap, d.quietStartHour, d.quietEndHour], [DAILY_CAP, 21, 6]);
 check("the client view adds the floor, and says what cannot run", [prefsForClient().floorMinutes, typeof prefsForClient().unavailable.drive], [30, "string"]);
 check("flights are not blocked here (key and policy set)", prefsForClient().unavailable.flights, null);
 check("drives are (no routing key)", prefsForClient().unavailable.drive, "Drive watching needs TOMTOM_API_KEY in .env.");
@@ -79,7 +79,7 @@ check("an unknown kind in storage is dropped", "lunch" in prefs.getPrefs().kinds
 store0.kvSet("headsup:prefs", "{}");
 
 console.log("\nquiet-hour windows\n");
-check("21 to 7 wraps midnight (the default)", [inQuietHours(at(18, 22)), inQuietHours(at(18, 3)), inQuietHours(at(18, 12))], [true, true, false]);
+check("21 to 6 wraps midnight (the default)", [inQuietHours(at(18, 22)), inQuietHours(at(18, 3)), inQuietHours(at(18, 12))], [true, true, false]);
 check("1 to 6 sits inside a day", [inQuietHours(at(18, 3), 1, 6), inQuietHours(at(18, 0), 1, 6), inQuietHours(at(18, 6), 1, 6), inQuietHours(at(18, 22), 1, 6)], [true, false, false, false]);
 check("start is inclusive and end is exclusive", [inQuietHours(at(18, 21), 21, 7), inQuietHours(at(18, 7), 21, 7), inQuietHours(at(18, 6, 59), 21, 7)], [true, false, true]);
 check("equal hours mean no quiet hours at all", [inQuietHours(at(18, 3), 5, 5), inQuietHours(at(18, 12), 0, 0)], [false, false]);

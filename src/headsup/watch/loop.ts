@@ -16,7 +16,7 @@
  *      feed last said), using bucketed fingerprints, so a feed that wobbles 12 to 17 minutes does
  *      not notify twice. The first look records and stays quiet, except for bad news.
  *
- * Quiet hours (9 pm to 7 am) hold back everything except a cancellation, or a long delay on a
+ * Quiet hours (9 pm to 6 am) hold back everything except a cancellation, or a long delay on a
  * flight leaving within a few hours. A held-back change is NOT recorded as told, so it is sent when
  * quiet hours end if it still matters.
  *
