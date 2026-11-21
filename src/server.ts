@@ -45,6 +45,7 @@ import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
 import * as knowledge from "./knowledge/store.ts";
+import { retentionRules } from "./knowledge/retention.ts";
 import { extractClaims, inboxItemText, normalizeMeeting } from "./knowledge/extract.ts";
 import { ocrAvailable } from "./inbox/ocr.ts";
 import {
@@ -1056,6 +1057,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
       }
     }
+
+    // /api/retention: what is kept, and for how long, per kind of thing. Read-only; the numbers are config.
+    if (m === "GET" && seg[1] === "retention" && seg.length === 2) return sendJson(res, 200, retentionRules());
 
     // /api/knowledge/search?q=&project=&kind=&since=&until=&k= — hybrid full-text and vector search over every
     // indexed document and filed meeting (src/projects/search.ts). Omit project to search the whole base.

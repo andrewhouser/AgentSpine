@@ -98,12 +98,22 @@ export interface Claim {
   said_on: null | string;
   source_kind: string;
   source_ref: string;
+  /** `available`, or `expired` once retention removed the raw source (the quote above is what remains). */
+  source_state: "available" | "expired";
   speaker: null | string;
   status: ClaimStatus;
   status_changed: null | string;
   supersedes_id: null | number;
   text: string;
   topic: null | string;
+}
+
+// Whether the passage a claim cites can still be opened: `available`, or `expired` when the retention window
+// removed the raw source while the reviewed claim was kept (K7). The claim's own quote stays as its citation.
+try {
+  rawDb.exec("ALTER TABLE kn_claims ADD COLUMN source_state TEXT NOT NULL DEFAULT 'available'");
+} catch {
+  // already there
 }
 
 // --- entities ---
@@ -378,6 +388,26 @@ export const evidenceLevel = (c: Claim): EvidenceLevel => {
   if (c.review_state === "proposed" || c.review_state === "rejected") return "machine-extracted";
   if (findConflicts().some((g) => g.claims.some((x) => x.id === c.id))) return "conflicting";
   return c.method === "inferred" ? "inferred" : "reviewed";
+};
+
+/**
+ * The raw sources of these claims aged out of their retention window. Reviewed knowledge outlives its evidence: the
+ * claim is kept, marked `expired`, and still shows the exact words it cited. A claim nobody reviewed (proposed or
+ * rejected) has nothing left to stand on, so it goes. Returns how many of each.
+ */
+export const expireSources = (sourceKind: string, refs: string[]): { kept: number; removed: number } => {
+  let kept = 0;
+  let removed = 0;
+  for (const ref of refs) {
+    kept += Number(rawDb.prepare("UPDATE kn_claims SET source_state = 'expired' WHERE source_kind = ? AND source_ref = ? AND review_state = 'reviewed' AND source_state != 'expired'").run(sourceKind, ref).changes);
+    const gone = (rawDb.prepare("SELECT id FROM kn_claims WHERE source_kind = ? AND source_ref = ? AND review_state != 'reviewed'").all(sourceKind, ref) as { id: number }[]).map((r) => r.id);
+    for (const id of gone) {
+      rawDb.prepare("DELETE FROM kn_links WHERE from_claim = ? OR to_claim = ?").run(id, id);
+      rawDb.prepare("DELETE FROM kn_claims WHERE id = ?").run(id);
+    }
+    removed += gone.length;
+  }
+  return { kept, removed };
 };
 
 export const counts = (): { proposed: number; reviewed: number } => ({

@@ -973,6 +973,10 @@ export const RUN_RETENTION_DAYS = Number(env.RUN_RETENTION_DAYS ?? RETENTION_DAY
  * `memories` and is kept until you delete it. This window governs the raw words only.
  */
 export const TRANSCRIPT_RETENTION_DAYS = Number(env.TRANSCRIPT_RETENTION_DAYS ?? "30");
+// How long a filed meeting's full transcript stays searchable in its project. 0 (the default) means until the
+// meeting is deleted, which is what choosing "keep the full transcript" when filing says; a number of days makes it
+// expire with the same prune, even for a meeting that chose to keep it. See docs/PLAN-open-work.md, K7.
+export const INDEXED_TRANSCRIPT_RETENTION_DAYS = Number(env.INDEXED_TRANSCRIPT_RETENTION_DAYS ?? "0");
 /**
  * Ceiling on how much of an over-long tool result is kept for `read_more` to page through.
  *

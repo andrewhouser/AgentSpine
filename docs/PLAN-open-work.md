@@ -417,10 +417,16 @@ baseline, and the meeting recall number is still unmeasured.
   changed in this project this week; prepare a one-on-one; commitments I owe, and that others owe me; trace how
   a decision evolved; risks that recur across projects; topics unresolved for over a month; a weekly staff
   summary with citations; compare what the written plan says with what recent meetings say.
-- **K7. Retention rules (Code, decision).** Separate rules for original audio, raw transcripts, indexed
-  transcript passages, verified decisions and commitments, and summaries and briefs. Reviewed structured
-  knowledge should generally outlive raw transcripts: raw passages may expire while accepted facts stay, with the
-  citation showing the evidence has aged out. K0's interim choice for F6 is replaced by this.
+- **K7. Retention rules (built 2026-11-21).** Separate rules per kind of thing, stated from the same numbers the
+  code enforces (`src/knowledge/retention.ts`, `GET /api/retention`): original audio (`MEETING_KEEP_AUDIO_HOURS`),
+  raw transcripts (`TRANSCRIPT_RETENTION_DAYS`, 30), a transcript indexed in a project (only if you chose to keep
+  it when filing, then until the meeting is deleted, or for `INDEXED_TRANSCRIPT_RETENTION_DAYS` if you set one),
+  reviewed decisions and commitments (kept when their transcript expires, with their exact cited words and the
+  note that the evidence has aged out), claims nobody reviewed (removed with their evidence), summaries and
+  extractions (until the meeting is deleted), inbox items (until you delete them), and the deletion records
+  (kept, without content). Deleting a meeting or inbox item is still total, reviewed claims included. This
+  replaces the interim F6 behaviour. Suite: `test/retention.test.mjs`. Not built: a retention screen (the API
+  states the rules; nothing shows them yet), and a per-project override.
 - **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
 
 Settled 2026-11-21: OCR is a small macOS Vision helper (K3, chosen for speed; no new dependency); backups rely on

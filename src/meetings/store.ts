@@ -40,6 +40,8 @@
  * along with the segments they came from, and everything else in the extraction stays.
  */
 import { logDataEvent, rawDb } from "../memory/store.ts";
+import { INDEXED_TRANSCRIPT_RETENTION_DAYS } from "../config.ts";
+import { expireSources } from "../knowledge/store.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS meetings (
@@ -656,7 +658,29 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
     rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(src.id);
     rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(src.id);
   }
-  logDataEvent("transcript_expired", `transcripts older than ${days} days`, `${n} segment(s) removed by the retention window`);
+  // Reviewed claims cited to these transcripts are kept and marked expired; unreviewed ones go with their evidence.
+  const aged = (rawDb.prepare("SELECT id FROM meetings WHERE started < ?").all(cutoff) as { id: number }[]).map((r) => `meeting:${r.id}`);
+  const claims = expireSources("meeting", aged);
+  // A kept transcript can also be given a lifetime of its own (INDEXED_TRANSCRIPT_RETENTION_DAYS; 0 = until deleted).
+  let indexed = 0;
+  if (INDEXED_TRANSCRIPT_RETENTION_DAYS > 0) {
+    const indexedCutoff = new Date(Date.now() - INDEXED_TRANSCRIPT_RETENTION_DAYS * 86_400_000).toISOString();
+    const old = rawDb
+      .prepare("SELECT s.id FROM project_sources s JOIN meetings m ON s.ref = 'meeting:' || m.id WHERE s.kind = 'meeting' AND m.started < ?")
+      .all(indexedCutoff) as { id: number }[];
+    for (const src of old) {
+      rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(src.id);
+      rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(src.id);
+    }
+    indexed = old.length;
+  }
+  logDataEvent(
+    "transcript_expired",
+    `transcripts older than ${days} days`,
+    `${n} segment(s) removed by the retention window` +
+      (claims.kept || claims.removed ? `; ${claims.kept} reviewed claim(s) kept with their evidence marked expired, ${claims.removed} unreviewed removed` : "") +
+      (indexed ? `; ${indexed} indexed transcript(s) removed from projects` : ""),
+  );
   // Speaker names go with the words they labelled.
   rawDb
     .prepare("DELETE FROM meeting_speakers WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")

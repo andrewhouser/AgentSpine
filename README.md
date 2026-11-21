@@ -1884,6 +1884,10 @@ is still inside the retention window. Deleting something in the app removes it f
 for a meeting, its kept audio; it cannot reach into a backup, so a backup keeps what it held until you delete
 the backup.
 
+What is kept and for how long, per kind of thing (audio, raw transcripts, an indexed transcript, reviewed decisions,
+unreviewed claims, summaries, inbox items), is stated by `GET /api/retention` from the same settings that enforce it:
+reviewed decisions outlive their transcripts, with their cited words kept and the evidence marked aged out.
+
 What was deleted or expired is recorded, without its content, in `data_events` (`GET /api/data-events`): ids,
 counts and project names only.
 
