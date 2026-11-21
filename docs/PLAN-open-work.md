@@ -5,8 +5,14 @@ piece of work is not here, it is either built (the design records are in `docs/a
 not a to-do list) or deliberately not wanted (see "Ground rules"). When you finish or change something, change
 this file in the same commit. When you start something new, add it here rather than writing another PLAN doc.
 
-Section numbers are stable on purpose, because code comments and other docs point at them: 0 is new, then
-1 to 7 and 4a as before.
+**Priority order (decided 2026-11-21).** Section 0 first (the security findings, now six). Then section 8, the
+management knowledge system, which is the main direction: the highest return is making AgentSpine very good at
+remembering, connecting, citing and updating workplace knowledge. Live Activities, richer travel integrations,
+buying or booking actions and most new proactive behaviour are deprioritized until section 8 has a reliable
+foundation (they are marked in section 3). Sections 1 to 7 are the rest, mostly verification that needs you.
+
+Section numbers are stable on purpose, because code comments and other docs point at them: 0 and 8 are new,
+and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -15,9 +21,10 @@ means it can be done in the repo and tested there. **Both** means code first, th
 
 ## 0. Fix first: findings from the outside review (2026-11-21)
 
-Source: `docs/CHATGPT_REVIEW.md`, an outside review of the working tree against the project's stated security
-guarantees. That file is not committed (`docs/*` is ignored except `PLAN-*.md`), so everything needed is here.
-`npm run check` passed throughout; these are gaps the suite does not cover.
+Source: an outside review of the working tree against the project's stated security guarantees (F1 to F5), and
+the management-knowledge review (F6). Both were uncommitted working notes (`docs/*` is ignored except
+`PLAN-*.md`), and everything needed from them is here. `npm run check` passed throughout; these are gaps the
+suite does not cover.
 
 I checked each finding against the code on 2026-11-21. **F1 and F5 reproduce** when `narrowPolicy` is run on
 plain objects. **F2, F3 and F4 are confirmed by reading the code path** but not yet by a running test. None has
@@ -27,7 +34,9 @@ new suite is added by hand to the `npm test` list in `package.json`.
 **Suggested order, and why:** F3 and F4 first, because they are reachable by the unattended runs that the
 rollout (section 1, steps 3 and 5) is about to switch on, and one of those runs reads hostile mail. Then F2,
 which is a privacy promise in `CLAUDE.md`. F1 and F5 matter as soon as a project overlay is used, so they come
-before anyone relies on overlays, but they need no change to what runs today. All five are Code.
+before anyone relies on overlays, but they need no change to what runs today. F6 is a small fix once you pick
+the interim behaviour, and it should land before more workplace transcripts are filed. All six are Code.
+F2 and F6 are also step K0 of section 8.
 
 **F1. Critical. A project overlay can open the browser to any domain.**
 `intersectNavigate()` in `src/projects/narrow-policy.ts` returns `[]` when the global and project allowlists are
@@ -84,6 +93,18 @@ Fix: for each tool, compute the base's effective cap first (its own cap if prese
 bound the overlay result by it. Tests: every combination of global default, global tool cap, overlay default
 and overlay tool cap, for both `perRun` and `perDay`, asserting the effective cap per tool never exceeds the
 base's.
+
+**F6. Medium. Filed transcripts outlive the transcript retention window.**
+`pruneTranscripts` in `src/meetings/store.ts` deletes a meeting's segments, speakers, chat and quotes after
+`TRANSCRIPT_RETENTION_DAYS` (30), because that table is "the most sensitive in this project". But filing a
+meeting under a project (`indexIntoProject` in `src/meetings/session.ts`) copies the full transcript into the
+project's `chunks` table as a `project_sources` row of kind `meeting`, and the prune does not touch those chunks.
+Confirmed by reading both functions; not yet run. `deleteMeeting` does remove the source, so only the prune is
+inconsistent. A searchable full transcript therefore survives after the transcript is nominally gone.
+Fix, and a decision first: either the prune also removes `kind = 'meeting'` chunks at the same window, or filing
+is treated as a deliberate retention opt-in and says so where you file. Section 8 (K7) sets the longer-term
+retention rules, so pick the interim behaviour now. Test: file a meeting, run the prune past the window, and
+assert no chunk of that transcript remains (or, for the opt-in choice, that the filing screen states it).
 
 ---
 
@@ -166,6 +187,10 @@ Mac. Note that the web "Check now" button is not a dry run: it records and pushe
 
 **D. Lead-time overrides.** You: look at the "When to mention each kind" rows in Settings on web, iPhone and Mac,
 and confirm the Swift field compiles after the next build.
+
+**Deprioritized 2026-11-21 (until section 8 has a reliable foundation):** G, H4, H5, H6, H7 and H9 below, and
+any new proactive behaviour. Do not start them without a new decision. A, B, C, D and H1 and H2 are unaffected,
+because they finish or verify what is already built.
 
 **G. Live Activity for a flight.** You, in Xcode: add a Widget Extension named `AgentSpineLiveActivity` with
 "Include Live Activity" ticked, share the `ActivityAttributes` file with both targets, set
@@ -305,6 +330,103 @@ All You, on your own machines.
 
 ---
 
+## 8. Management knowledge system (the main direction)
+
+**Goal.** The primary user is a software engineering manager whose company computer cannot run AgentSpine. It
+runs on the Mac Mini beside it, records meetings acoustically, collects notes and permitted exports, and gives a
+private interface to accumulated workplace knowledge. It should capture material from meetings, chats, PDFs,
+documents, notes and images; keep where each fact came from; connect people, projects, sources and time;
+distinguish current from superseded or contradicted information; and answer with cited evidence. Questions it
+should handle: what did we decide about this migration; what has this person raised over three months; which
+commitments are overdue and whose; how has the plan changed since last quarter; what do I need before my next
+one-on-one; where are teams working from conflicting assumptions.
+
+**What exists (verified 2026-11-21).** Local meeting capture and transcription, meeting extraction (summary,
+topics, decisions, work items, which go to the review queue because most are false positives), project document
+indexing (`textutil` for Office files, optional `pdftotext` for PDFs), one shared `chunks` table for documents
+and filed meetings, a cosine sweep that retrieves a few chunks from one project, and live context cards. Measured:
+embedding a query 63 ms, a sweep over 50,000 chunks 101 ms.
+
+**What does not exist.** No SQLite full-text index (FTS5 is available in the built-in `node:sqlite`, checked
+2026-11-21, so it needs no new dependency). No way to add a document except an allowlisted filesystem path (the
+only upload is a chat attachment). No OCR, no watched folder, no pasted-chat parsing. No sensitivity on a source
+or a project: privacy is by convention, which is F2's hole. No people, commitments, decisions-over-time or
+supersession model; semantic memory cannot say that "launch moved to August" replaces "launch is June". The
+app does not encrypt or audit backups, deletion or export. Global search covers conversation questions and
+answers, not every source type.
+
+**Rules for all of it.** Every step runs on local models. Milliman and other workplace material never goes to
+web search, paste services or third-party APIs, and never to the cloud tier (embeddings included). A derived
+record is never trusted straight away: extracted claims queue for review, as meeting work items do. An answer
+cites every important assertion and shows a disagreement instead of silently picking one.
+
+**Order.** Adjusted from the review: measurement moves ahead of the big builds, because "better" needs a
+baseline, and the meeting recall number is still unmeasured.
+
+- **K0. Privacy and retention first (Code, plus decisions).** F2 and F6 above. Then make sensitivity a property
+  of a stored source and of everything derived from it (embedding, extraction, retrieval, synthesis, reflection
+  all stay local for a private source); a project holding workplace material defaults to private, and sending
+  any of it to a cloud model needs an explicit decision. Decide backups: the app has none of its own, so either
+  rely on FileVault plus an encrypted Time Machine volume on the Mini and write that down, or build an encrypted
+  export. Make deletion and export leave an audit row.
+- **K1. Evaluation set (You write the questions, Code builds the harness).** 30 to 50 questions you actually
+  care about, each with its known supporting sources, expected project, person and date filters, required
+  citations, some with changed or contradictory information, and some whose right answer is "not enough
+  evidence". Track retrieval recall, citation correctness, stale-answer rate and extraction acceptance rate.
+  Kept outside the repo and out of git, because it is workplace material; the harness runs on local models only.
+  Take the baseline before K2 changes retrieval. This also finally measures meeting recall (section 4a).
+- **K2. Hybrid global retrieval (Code).** Keep project filtering but make a project one view over the whole base.
+  Three paths: FTS5 for exact names, acronyms, ticket numbers and quoted phrases; the existing vector search;
+  structured lookup for people, decisions, dates, owners and status. Merge with reciprocal-rank fusion or
+  another inspectable method, with per-source quotas so several chunks of one meeting cannot crowd out a PDF.
+  Filters: project, person, team, topic, source type, date range and "as of" date, reviewed against
+  machine-extracted, current against superseded. Keep the property that meeting cards and document cards are
+  scored together and then split (`src/meetings/context.ts`). Done when K1 shows an improvement.
+- **K3. Knowledge Inbox (Code, with a decision on OCR).** A first-class intake that accepts dragged or uploaded
+  PDF, Word, Markdown and text; pasted chat or email threads with optional speaker and timestamp parsing; meeting
+  recordings and transcripts; screenshots and scans through local OCR; notes dictated or typed on the phone; and
+  a watched folder (AirDrop). Each item becomes a source artifact before it has a project, keeping the original,
+  extracted text, ingestion time, document date, author or speakers, content hash and extraction status. The
+  system suggests projects, people and tags and queues uncertain filing for review, since management material
+  often belongs to a person or a team more than a project. An extraction that produced no text must show as
+  "needs OCR", never as silently empty. OCR needs a decision: a local binary (the way `pdftotext` is optional)
+  or a small macOS Vision helper; `src/` allows only two runtime dependencies, so no new package. The existing
+  loader for the Milliman knowledge folder should end up as one source of this Inbox. Web, iPhone and Mac.
+- **K4. Knowledge store (Code, needs a schema decision).** A layer separate from semantic memory, so retrieved
+  chunks are not promoted into trusted memories. Records for people and teams, projects, decisions with
+  rationale, commitments with owner and due date, risks and blockers, open questions, goals and measures, claims,
+  topics and relationships. Each carries a citation to the source and exact passage or meeting timestamp, when
+  the statement was made, the period it applies to, the speaker, the extraction method and review state, a
+  status of `active`, `resolved`, `retracted` or `superseded`, and links to related records. Flow: source
+  artifact, passages, extracted claims, reviewed current knowledge. Generalize the existing meeting extraction
+  to every source type and normalize accepted results into it. Do not call it a ledger: the Heads-up code already
+  uses that word for something else.
+- **K5. Post-meeting close-out (Code, web, iPhone and Mac).** Expand the review screen: confirm participants and
+  speaker names, assign projects or topics, review decisions, commitments with owners and dates, risks and open
+  questions, mark statements that supersede earlier ones, accept or reject suggested links, and preview how
+  briefs will change. Favour quick accept and correct over editing. A correction teaches a deterministic alias
+  for a speaker, acronym or project name.
+- **K6. Briefs and synthesis operations (Code).** Materialized, durable project and person briefs backed by K4
+  (not regenerated free text): objective and status, recent changes, active decisions with rationale, risks,
+  commitments by owner and date, open questions, stakeholders, recent activity, evidence links; for a person,
+  recent one-on-one topics, commitments in each direction, goals and concerns, feedback and follow-ups, with
+  tighter visibility and retention on sensitive notes. Then explicit, testable operations, each with a defined
+  retrieval recipe and output structure rather than an open-ended prompt: brief me for my next meeting; what
+  changed in this project this week; prepare a one-on-one; commitments I owe, and that others owe me; trace how
+  a decision evolved; risks that recur across projects; topics unresolved for over a month; a weekly staff
+  summary with citations; compare what the written plan says with what recent meetings say.
+- **K7. Retention rules (Code, decision).** Separate rules for original audio, raw transcripts, indexed
+  transcript passages, verified decisions and commitments, and summaries and briefs. Reviewed structured
+  knowledge should generally outlive raw transcripts: raw passages may expire while accepted facts stay, with the
+  citation showing the evidence has aged out. K0's interim choice for F6 is replaced by this.
+- **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
+
+Open decisions for you: OCR approach (K3); how backups are protected (K0); whether a project is private by
+default (K0, proposed yes); the schema for supersession and who marks it (K4, proposed: you, in the close-out);
+the interim F6 behaviour.
+
+---
+
 ## Ground rules (settled; not work)
 
 **Settled decisions. Do not reopen without a new recorded decision.**
@@ -331,7 +453,8 @@ from instead).
 - Code owns the numbers (thresholds, schedules, budgets in code, never in a prompt). The model owns the
   judgment.
 - Local-first: `sensitivity: "private"` content never reaches the cloud tier. Meeting work and study topics
-  linked to a project are local-only. F2 is the known hole in this rule.
+  linked to a project are local-only. Milliman and other workplace material never goes to web search, paste
+  services or third-party APIs. F2 and F6 are the known holes in this rule.
 - Standing work needs consent: a tool that creates or edits what future unattended runs follow sets
   `confirmWhenUnattended: true` or refuses non-chat runs. F4 is the known hole in this rule.
 - Tests first for arithmetic and every boundary; new suites are added by hand to the `npm test` list in
