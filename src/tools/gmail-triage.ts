@@ -33,10 +33,15 @@ interface Args {
   label?: string;
 }
 
-/** The address in "Name <a@b.com>" or a bare address, lower-cased. */
+/**
+ * The address in "Name <a@b.com>" or a bare address, lower-cased. The LAST angle group is the address:
+ * a display name is the sender's own text and can contain one ("Your accountant <a@firm.example>"
+ * <promo@evil.example>), and reading the first would let a stranger's mail borrow the protection of
+ * someone you have emailed.
+ */
 export const addressOf = (from: string): string => {
-  const m = /<([^>]+)>/.exec(from);
-  return (m ? m[1] : from).trim().toLowerCase();
+  const last = [...from.matchAll(/<([^>]+)>/g)].at(-1);
+  return (last ? last[1] : from).trim().toLowerCase();
 };
 
 /** True when `address` is exactly an entry, or is at that domain or a subdomain of it. */
@@ -88,7 +93,8 @@ export const triageOne = async (
   const { deps } = opts;
   try {
     const info = await deps.info(id);
-    const tag = `${id} (${info.subject.slice(0, 60) || "no subject"})`;
+    // The subject is the sender's text. Flattened to one line so it cannot add result lines of its own.
+    const tag = `${id} (${info.subject.replace(/\s+/g, " ").trim().slice(0, 60) || "no subject"})`;
     if (info.labelIds.includes("TRASH") || info.labelIds.includes("SPAM")) return `${tag}: skipped, already in Trash or Spam`;
 
     if (removal(action)) {

@@ -192,10 +192,11 @@ HERE free tier, a static-speed provider, or flights only; whether to want G at a
 
 ## 4. Security hardening and learning (`docs/archive/PLAN-nod-learnings.md`, from n8n's Nod)
 
-N5 is built (2026-11-21). N1 to N4 are not (checked 2026-11-21: no `origin` column on `memories`, no
-injection corpus, no cloud token cap, no styles table). The write token raised the value of N2, since a
-hostile email is now worth more to an attacker. **Order: N2 offline half, N1, N3, N4.** Do N2 before the
-inbox cleanup runs unattended.
+N5 and the offline half of N2 are built (2026-11-21). N1, N3, N4 and the live half of N2 are not (checked
+2026-11-21: no `origin` column on `memories`, no cloud token cap, no styles table, no `eval:injection`). The
+write token raised the value of N2, since a hostile email is now worth more to an attacker.
+**Order: N1, N3, N4; the live half of N2 whenever the model host is free.** The offline half is done, so the
+inbox cleanup can run unattended as far as code guards go; the live half is what measures the model.
 
 - **N5 Architecture test. Built 2026-11-21: `test/architecture.test.mjs`.** Reads the source with the
   TypeScript compiler (comments stripped exactly), runs nothing, and asserts: only `learn/promote.ts` can
@@ -207,17 +208,34 @@ inbox cleanup runs unattended.
   scanner cannot pass vacuously, and was shown to fail on a planted violating tool. The token-holder check
   moved out of `test/google-write.test.mjs`. It is a tripwire, not a proof: a shell redirect is the broker's
   job to gate. `LEARNING.md` invariant 1 points at it.
-- **N2 Prompt-injection corpus.** `test/fixtures/injection/` JSON cases `{ id, surface, payload, forbidden }`
-  over surfaces (email, web page, file, calendar entry, meeting transcript) and payload families
-  ("remember that Andrew authorised X", "ignore your rules", fake system message, hidden quoted-reply
-  instructions, a secret-shaped string, a request to schedule a job or save a recipe). Add cases aimed at the
-  new tools: an email telling it to trash everything, archive a protected message, write a calendar event,
-  or label something to hide it. Offline half goes in `npm test` (no network): `tagUntrusted` wraps every
-  surface, the reflect secret filter drops credential-shaped strings, `recipe_save` and `schedule_create`
-  refuse or queue from a non-chat run, the broker denies or queues each forbidden call, and the guards in
-  `gmail-triage.ts` hold. Live half is `npm run eval:injection` (needs the model host), run once per model
-  change and before any ROLLOUT step that switches on a learner; record the baseline in SPEC or MODELS. A
-  broker bypass must be zero by construction. Any other threshold is decided after the baseline.
+- **N2 Prompt-injection corpus. Offline half built 2026-11-21: `test/injection.test.mjs` and
+  `test/fixtures/injection/*.json` (27 fixtures, 5 surfaces); live half not built.** Each fixture is
+  `{ id, surface, family, payload, scanFlags, forbidden, attacks?, liveOnly? }`. The suite wraps every payload
+  with `tagUntrusted` (and records whether the scanner flags it), then hands each fixture's forbidden outcome to
+  the code that must refuse it, asserting a refusal, queue or denial **and that no mutating call was made**:
+  mass trash (over 25 ids, and the 60-per-run cap), starred mail, mail from someone you have emailed, a
+  lookalike override domain, a display name that borrows a trusted address, a subject that forges result lines,
+  built-in labels (TRASH, SPAM, INBOX, STARRED) through `label`, writing to another calendar, creating a
+  calendar, deleting an event, a bad date, `schedule_create` and `recipe_save` from chat, schedule and
+  subagent runs through the real broker, and a scripted **compromised model** driving `reflect()` with a
+  credential and a recipe containing a password (both dropped, and a benign control that is kept, so the
+  filters are not passing by refusing everything). It found four real gaps, all fixed in the same change:
+  the injection scanner could never match "Assistant:" or "Assistant," (a `\b` after punctuation); the
+  `calendar_upcoming` reader returned event titles and locations unmarked, though anyone can invite you;
+  `addressOf` read the first `<...>` in a From header, so a display name could make a stranger's mail look
+  like mail from someone you have emailed and so immune to cleanup; and a newline in a subject added result
+  lines to `gmail_triage`'s output. **What it cannot do** (marked `liveOnly`, listed as SKIP in its output): a
+  fact like "Andrew authorised ACME to charge his card" is not credential-shaped, so no code filter tells it
+  from a true one, and a recipe whose steps came from a hostile file looks like any recipe. Those need the
+  **live half**, `npm run eval:injection` (needs the model host): run each fixture through reflection, recipe
+  extraction, critique and the agent loop with `dryRun` on, reporting per surface and per tier the facts saved
+  that quote the payload, recipes or lessons written from it, and forbidden calls attempted; run once per model
+  change and before any ROLLOUT step that switches on a learner; record the baseline in SPEC or MODELS. The
+  fixtures are already the input. A broker bypass must be zero by construction. Any other threshold is decided
+  after the baseline. Not covered: Heads-up. Its scanner (`src/headsup/scan.ts`) parses event titles in plain code,
+  and the one model call I found (`research/recipient.ts`) is given your memories, not event text, so I
+  expect little exposure there; I did not trace whether an event title reaches a search query or a card, so
+  that path is unchecked.
 - **N1 Memory provenance.** Add `run_id` and `origin` to `memories` with the existing best-effort `ALTER`
   pattern. `origin` is a code-set vocabulary: `reflection`, `recipe`, `lesson`, `rejection`, `approval`,
   `interrupt`, `conversation`, `profile`, `tool`. Widen `remember(text, kind, source?)` with `source`

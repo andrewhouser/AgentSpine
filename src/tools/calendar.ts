@@ -2,6 +2,7 @@
  * calendar_upcoming — read-only Google Calendar. Gated by policy.google.enabled. Needs a
  * read-only token (npm run auth). Reversible.
  */
+import { tagUntrusted } from "../audit.ts";
 import { upcomingEvents, GoogleAuthError } from "../google/client.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
@@ -27,9 +28,13 @@ export const calendarUpcoming: Tool = {
     try {
       const events = await upcomingEvents(Number(a?.hours ?? 48), Number(a?.max ?? 20));
       if (!events.length) return "No upcoming events.";
-      return events
-        .map((e) => `- ${e.start}  ${e.title}${e.location ? ` @ ${e.location}` : ""}${e.attendees ? ` (${e.attendees} attendees)` : ""}`)
-        .join("\n");
+      // Titles and locations come from whoever sent the invite, so the list is untrusted data.
+      return tagUntrusted(
+        "calendar",
+        events
+          .map((e) => `- ${e.start}  ${e.title}${e.location ? ` @ ${e.location}` : ""}${e.attendees ? ` (${e.attendees} attendees)` : ""}`)
+          .join("\n"),
+      );
     } catch (err) {
       if (err instanceof GoogleAuthError) return `NOT CONFIGURED: ${err.message}`;
       return `ERROR: ${err instanceof Error ? err.message : String(err)}`;

@@ -8,8 +8,11 @@
  * _archive/audit.js and can be layered back in on top of this.
  */
 
+// `assistant:` and `assistant,` are matched outside the \b...\b group on purpose: a trailing \b after
+// punctuation needs a word character right behind it, so inside the group "Assistant: do X" (a space
+// after the colon) could never match. Found by the injection corpus (test/injection.test.mjs).
 const INJECTION =
-  /\b(ignore (all |the )?(previous|above)|disregard|you must|as an ai|assistant[:,]|send (an |the )?email|transfer|wire|delete|forward this|run this|system prompt|override|new instructions|click here|verify your account)\b/gi;
+  /\b(?:ignore (?:all |the )?(?:previous|above)|disregard|you must|as an ai|send (?:an |the )?email|transfer|wire|delete|forward this|run this|system prompt|override|new instructions|click here|verify your account)\b|\bassistant[:,]/gi;
 
 /** Return suspicious snippets found in text. Empty array means it looks clean. */
 export const scanForInjection = (text: unknown): string[] =>
