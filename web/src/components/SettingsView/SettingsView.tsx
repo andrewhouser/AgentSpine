@@ -15,10 +15,12 @@ import {
   SCALE_STEP,
 } from "../../lib/preferences.ts";
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
+import { CloudUsagePanel } from "../CloudUsagePanel/CloudUsagePanel.tsx";
 import { HeadsupPrefsPanel } from "../HeadsupPrefsPanel/HeadsupPrefsPanel.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PolicyProposals } from "../PolicyProposals/PolicyProposals.tsx";
 import { RecipesPanel } from "../RecipesPanel/RecipesPanel.tsx";
+import { WeeklyReviewPanel } from "../WeeklyReviewPanel/WeeklyReviewPanel.tsx";
 import styles from "./SettingsView.module.css";
 
 const THEMES: { label: string; value: ThemeChoice }[] = [
@@ -38,6 +40,7 @@ const ORIGIN_LABELS: Record<string, string> = {
   recipe: "recipe learned from a run",
   reflection: "reflection after a run",
   rejection: "from a rejected proposal",
+  review: "you said so in the weekly review",
   tool: "saved by the assistant",
 };
 
@@ -358,6 +361,10 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
       </section>
 
       <HeadsupPrefsPanel />
+
+      <WeeklyReviewPanel />
+
+      <CloudUsagePanel />
 
       <RecipesPanel />
 

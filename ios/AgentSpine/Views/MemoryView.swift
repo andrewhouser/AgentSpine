@@ -89,6 +89,228 @@ struct MemoryView: View {
     }
 }
 
+/// What was sent to you in the last week, with Useful and Skip this kind on each, and a box for
+/// something you wish you had been told. An answer writes memory only: it never edits profile.md,
+/// goals.md, policy.json or a schedule, so "skip" quietens a topic without switching anything off.
+struct WeeklyReviewView: View {
+    @State private var review: OutboxReview?
+    @State private var wish = ""
+    @State private var message: String?
+    @State private var error: String?
+    @State private var busy = false
+
+    var body: some View {
+        List {
+            if let error {
+                ErrorNotice(message: error) { Task { await load() } }
+            }
+            if let review {
+                Section {
+                    ForEach(review.tally, id: \.self) { t in
+                        Text(tallyLine(t))
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                } header: {
+                    Text("Last \(review.days) days")
+                } footer: {
+                    Text("Skipping saves a note that I should not interrupt you about that kind again unless it is "
+                         + "clearly more important. It does not switch anything off, and you can forget the note "
+                         + "under Memory. Looking at this list marks it as seen.")
+                }
+
+                Section("Something I wish I'd been told") {
+                    TextField("For example: a snow day notice", text: $wish, axis: .vertical)
+                    Button("Save") { Task { await sendWish() } }
+                        .disabled(busy || wish.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                if let message {
+                    Section { Text(message).foregroundStyle(Spine.Palette.textDim) }
+                }
+
+                Section {
+                    if review.items.isEmpty {
+                        Text("Nothing to review yet.").foregroundStyle(Spine.Palette.textDim)
+                    }
+                    ForEach(review.items) { item in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(item.title)
+                            Text("\(item.sourceLabel) · \(SpineDate.relative(item.created)) · \(item.outcomeLabel)")
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.textDim)
+                            if !item.body.isEmpty {
+                                Text(item.body)
+                                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                                    .foregroundStyle(Spine.Palette.textDim)
+                            }
+                            HStack {
+                                verdictButton("Useful", item: item, answer: "useful")
+                                verdictButton("Skip this kind", item: item, answer: "skip")
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("Messages")
+                }
+            } else if error == nil {
+                ProgressView()
+            }
+        }
+        .navigationTitle("Weekly review")
+        .spineInlineTitle()
+        .refreshable { await load() }
+        .task { await load() }
+    }
+
+    private func verdictButton(_ label: String, item: ReviewItem, answer: String) -> some View {
+        Button(label) { Task { await send(item, answer: answer) } }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fontWeight(item.feedback == answer ? .bold : .regular)
+            .disabled(busy)
+    }
+
+    private func tallyLine(_ t: ReviewTally) -> String {
+        var parts = ["\(t.sent) sent"]
+        if t.held > 0 { parts.append("\(t.held) held") }
+        if t.deduped > 0 { parts.append("\(t.deduped) repeats removed") }
+        if t.opened > 0 { parts.append("\(t.opened) opened") }
+        if t.dismissed > 0 { parts.append("\(t.dismissed) dismissed") }
+        if t.ignored > 0 { parts.append("\(t.ignored) ignored") }
+        let name = ReviewItem(body: "", created: "", feedback: nil, id: 0, kind: "", outcome: "", source: t.source,
+                              title: "", topic: "").sourceLabel
+        return "\(name): " + parts.joined(separator: ", ")
+    }
+
+    private func send(_ item: ReviewItem, answer: String) async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await APIClient.shared.answerOutbox(item.id, answer: answer)
+            if answer == "useful" {
+                message = "Noted."
+            } else {
+                message = result.remembered
+                    ? "Noted. I will be quieter about \(result.topic)."
+                    : "Already noted: I am quieter about \(result.topic)."
+            }
+            error = nil
+            if let index = review?.items.firstIndex(where: { $0.id == item.id }) {
+                review?.items[index].feedback = answer
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func sendWish() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await APIClient.shared.sendOutboxWish(wish)
+            message = result.remembered ? "Noted. I will bring up things like that." : "I already had that one."
+            wish = ""
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func load() async {
+        do {
+            review = try await APIClient.shared.outboxReview()
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// Cloud tokens today and this month against the caps in `.env`.
+///
+/// Read-only on purpose: a control that raised the limit would put the fence within reach of
+/// the loop it exists to stop, and the numbers are config, not preferences.
+struct CloudUsageView: View {
+    @State private var usage: CloudUsage?
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            if let error {
+                ErrorNotice(message: error) { Task { await load() } }
+            }
+            if let usage {
+                Section {
+                    row("Today", used: usage.used.day, cap: usage.caps.day)
+                    row("This month", used: usage.used.month, cap: usage.caps.month)
+                    HStack {
+                        Text("Per run")
+                        Spacer()
+                        Text(usage.caps.run > 0 ? "cap \(count(usage.caps.run))" : "no cap")
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                } header: {
+                    Text(usage.enabled ? "Cloud tokens (\(usage.model ?? "cloud"))" : "Cloud tokens")
+                } footer: {
+                    Text(usage.enabled
+                         ? "Local model calls are free and never counted. A call over a cap is refused before anything is sent."
+                         : "The cloud is off, because no OPENAI_API_KEY is set, so nothing is being spent.")
+                }
+
+                if !usage.recent.isEmpty {
+                    Section("Recent refusals") {
+                        ForEach(usage.recent, id: \.self) { refusal in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("The \(refusal.cap) cap: \(count(refusal.used)) of \(count(refusal.limit)) tokens")
+                                Text(SpineDate.relative(refusal.ts) + (refusal.runId.map { " · run #\($0)" } ?? ""))
+                                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                    .foregroundStyle(Spine.Palette.textDim)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                } footer: {
+                    Text("Set CLOUD_TOKENS_PER_DAY, CLOUD_TOKENS_PER_MONTH and CLOUD_TOKENS_PER_RUN in .env on the "
+                         + "AgentSpine host, then restart it. 0 or unset means no cap.")
+                }
+            } else if error == nil {
+                ProgressView()
+            }
+        }
+        .navigationTitle("Cloud usage")
+        .spineInlineTitle()
+        .refreshable { await load() }
+        .task { await load() }
+    }
+
+    private func row(_ label: String, used: Int, cap: Int) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(cap > 0 ? "\(count(used)) of \(count(cap))" : "\(count(used)), no cap")
+                .foregroundStyle(cap > 0 && used >= cap ? Spine.Palette.warn : Spine.Palette.textDim)
+                .monospacedDigit()
+        }
+    }
+
+    private func count(_ n: Int) -> String {
+        n.formatted(.number.grouping(.automatic))
+    }
+
+    private func load() async {
+        do {
+            usage = try await APIClient.shared.cloudUsage()
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
 /// `policy.json`, read-only. Editing it stays a text-editor job on the Mac on purpose.
 struct PolicyView: View {
     @State private var text: String?

@@ -75,6 +75,12 @@ export interface NotifyOpts {
   source?: OutboxSource;
   /** What makes two messages "the same" for de-duplication. Defaults to the title. */
   dedupeKey?: string;
+  /**
+   * What the message is about, short and the same every week: a watcher's name, a Heads-up kind.
+   * The weekly review files "skip this kind" under `source` plus this, so a title that changes
+   * every time must not go here. Optional; a message without one is reviewed under its source alone.
+   */
+  kind?: string;
 }
 
 export interface NotifyResult {
@@ -189,7 +195,7 @@ export const notify = async (
   let rowId: null | number = null;
   try {
     outbox = await import("./outbox.ts");
-    const a = outbox.admit({ body, dedupeKey: opts.dedupeKey, priority: opts.priority, source: opts.source, title });
+    const a = outbox.admit({ body, dedupeKey: opts.dedupeKey, kind: opts.kind, priority: opts.priority, source: opts.source, title });
     rowId = a.id;
     if (a.decision !== "sent") return { detail: a.reason, held: true, ok: true, via: "none" };
   } catch (err) {

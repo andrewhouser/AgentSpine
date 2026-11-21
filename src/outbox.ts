@@ -31,7 +31,13 @@ import {
   OUTBOX_RETENTION_DAYS,
   PROACTIVE_DAILY_CAP,
   RELEASE_LIST_MAX,
+  REVIEW_DAYS,
+  REVIEW_HOUR,
+  REVIEW_MIN_ROWS,
+  REVIEW_WEEKDAY,
+  REVIEWED_SOURCES,
   URGENT_PRIORITY,
+  WISH_MAX,
 } from "./outbox-rules.ts";
 import type { OutboxSource } from "./outbox-rules.ts";
 
@@ -58,7 +64,9 @@ rawDb.exec(`
 
 // What the phone reported. Added after the table shipped, so the ALTERs are best-effort like the
 // others in this codebase: a column that already exists is not an error.
-for (const col of ["opened_at", "dismissed_at"]) {
+// Phase 3 (the weekly review) added the rest: `kind` says what the message was about, `feedback` is your
+// answer in the review ("useful" or "skip"), and `seen_at` is when a review that listed it was opened.
+for (const col of ["opened_at", "dismissed_at", "kind", "feedback", "feedback_at", "seen_at"]) {
   try {
     rawDb.exec(`ALTER TABLE outbox ADD COLUMN ${col} TEXT`);
   } catch {
@@ -80,6 +88,8 @@ export interface Admission {
 export interface AdmitInput {
   body: string;
   dedupeKey?: string;
+  /** What this message is about, short and stable week to week ("birthday", a watcher's name). See `topicOf`. */
+  kind?: string;
   priority?: number;
   source?: OutboxSource;
   title: string;
@@ -145,8 +155,8 @@ export const admit = (input: AdmitInput, now: Date = new Date()): Admission => {
     const reason = OUTBOX_ENFORCE ? verdict.reason : verdict.decision === "sent" ? "" : `would have been ${verdict.decision}: ${verdict.reason}`;
     const res = rawDb
       .prepare(
-        `INSERT INTO outbox (created, source, title, body, priority, governed, decision, reason, would_be, dedupe_key)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO outbox (created, source, title, body, priority, governed, decision, reason, would_be, dedupe_key, kind)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         now.toISOString(),
@@ -159,6 +169,7 @@ export const admit = (input: AdmitInput, now: Date = new Date()): Admission => {
         reason,
         verdict.decision,
         key,
+        clip(String(input.kind ?? "").trim(), 80),
       );
     return { decision, id: Number(res.lastInsertRowid), reason: OUTBOX_ENFORCE ? verdict.reason : "" };
   } catch (err) {

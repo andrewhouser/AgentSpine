@@ -90,6 +90,49 @@ export interface Conversation {
   updated: string;
 }
 
+/** GET /api/cloud-usage (src/cloud-cap.ts). A cap of 0 means no cap. */
+export interface CloudUsage {
+  caps: { day: number; month: number; run: number };
+  /** False when no cloud key is set: nothing can be spent and the caps are idle. */
+  enabled: boolean;
+  model: null | string;
+  /** Last few refusals, newest first. */
+  recent: { cap: "day" | "month" | "run"; limit: number; period: string; runId: null | number; ts: string; used: number }[];
+  used: { day: number; month: number };
+}
+
+/** One message in the weekly review (src/outbox-review.ts). */
+export interface ReviewItem {
+  body: string;
+  created: string;
+  /** Your answer so far. */
+  feedback: "skip" | "useful" | null;
+  id: number;
+  kind: string;
+  /** What became of it: opened and dismissed come from the phone; ntfy and Mac banners say "unknown". */
+  outcome: "dismissed" | "ignored" | "opened" | "pending" | "unknown";
+  source: string;
+  title: string;
+  /** What "Skip this kind" files the dismissal under. */
+  topic: string;
+}
+
+/** GET /api/outbox/review. */
+export interface OutboxReview {
+  days: number;
+  items: ReviewItem[];
+  tally: {
+    deduped: number;
+    dismissed: number;
+    held: number;
+    ignored: number;
+    opened: number;
+    sent: number;
+    source: string;
+    wouldChange: number;
+  }[];
+}
+
 export interface Memory {
   id: number;
   kind: string;

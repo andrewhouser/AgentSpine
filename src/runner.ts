@@ -70,6 +70,20 @@ const isUnattended = (kind: string): boolean => kind === "schedule" || kind === 
  */
 const isConversational = (kind: string): boolean => kind === "chat" || kind === "approval";
 
+/**
+ * What the weekly review files a scheduled run's push under: the schedule's name, which does not
+ * change from week to week the way a task summary does. Empty for a run that is not a schedule,
+ * which keeps a "tell me when this finishes" push you asked for out of the review.
+ */
+const scheduleKind = (scheduleId: null | number | undefined): string => {
+  if (scheduleId == null) return "";
+  try {
+    return store.getSchedule(scheduleId)?.name ?? "";
+  } catch {
+    return "";
+  }
+};
+
 export interface RunResult {
   runId: number;
   summary: string;
@@ -546,7 +560,11 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // Off by default: a watcher polling every few minutes should be silent unless it
       // found something, and a brief that wants to reach you can call the notify tool.
       if (NOTIFY_ON_SCHEDULE && kind === "schedule") {
-        void notify(`Scheduled job finished`, summary.slice(0, 500), { priority: 2, source: "run" });
+        void notify(`Scheduled job finished`, summary.slice(0, 500), {
+          kind: scheduleKind(opts.scheduleId),
+          priority: 2,
+          source: "run",
+        });
       }
 
       // Asked for by the client that started this and then stopped watching. Priority 3:
@@ -585,6 +603,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // a schedule that retries every few minutes would otherwise push once per attempt.
       if (NOTIFY_ON_FAILURE && (isUnattended(kind) || opts.notifyOnFinish) && !(err instanceof CloudCapError)) {
         void notify(`Run failed: ${task.slice(0, 60)}`, msg.slice(0, 500), {
+          kind: scheduleKind(opts.scheduleId),
           priority: 4,
           source: "run",
           tags: ["rotating_light"],

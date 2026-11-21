@@ -52,8 +52,9 @@ for (const col of ["run_id INTEGER", "origin TEXT"]) {
  *   interrupt    a dismissed proactive notification             conversation  a summary of a finished conversation
  *   profile      facts you approved in chat (profile_remember)  tool          the model chose to remember (memory_save)
  *   date         a date you approved for Heads-up               friction      a tool failure, recorded by the broker's error path
+ *   review       something you wished you had been told, typed into the weekly review
  */
-export const ORIGINS = ["conversation", "date", "friction", "interrupt", "lesson", "profile", "recipe", "reflection", "rejection", "tool"] as const;
+export const ORIGINS = ["conversation", "date", "friction", "interrupt", "lesson", "profile", "recipe", "reflection", "rejection", "review", "tool"] as const;
 export type Origin = (typeof ORIGINS)[number];
 
 export interface MemorySource {

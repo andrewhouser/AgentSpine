@@ -1564,6 +1564,20 @@ export const noteCloudCapBreach = (b: {
   return seen.n === 0;
 };
 
+export interface CloudCapEventRow {
+  cap: string;
+  cap_limit: number;
+  id: number;
+  period: string;
+  run_id: null | number;
+  ts: string;
+  used: number;
+}
+
+/** The most recent announced breaches, newest first. One row per (cap, period) is the interesting one; repeats are kept for the audit. */
+export const recentCloudCapEvents = (limit: number): CloudCapEventRow[] =>
+  db.prepare("SELECT * FROM cloud_cap_events ORDER BY id DESC LIMIT ?").all(limit) as unknown as CloudCapEventRow[];
+
 export const rawDb = db;
 
 // --- devices (iOS push targets) ---

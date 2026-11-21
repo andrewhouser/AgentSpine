@@ -1281,6 +1281,23 @@ approval token is that someone answers one question you were already about to be
 Do not port-forward the dashboard to the public internet to make this work. Tailscale or
 the LAN, per SPEC §3.
 
+### The weekly review — what it sent you, and what you thought
+
+Every message AgentSpine tries to send you is recorded in the outbox (`npm run digest` has a
+"What I sent you" section). Once a week, on Sunday evening, one push says a review is ready. It is
+on **Settings → Weekly review** on the web, the Mac and the iPhone, and lists the last 7 days of
+messages nobody just asked for (Heads-up, study nudges, watcher and brief alerts, scheduled-job
+results, the digest). Approvals, reminders and a push you asked for yourself are not in it.
+
+Each message has **Useful** and **Skip this kind**. *Useful* only records the answer. *Skip this
+kind* saves a `preference` memory, "do not interrupt about this again unless it is materially more
+important", filed under a topic that stays the same week to week (a watcher's name, a Heads-up
+kind), so recall picks it up the next day. It does **not** switch a watcher or schedule off, and you
+can forget the note under Memory. A box at the top takes "something I wish I'd been told", stored as
+a memory phrased as something to bring up. Answers write memory only, never `profile.md`,
+`goals.md`, `policy.json` or `agents/*.md`. No model does the counting. Opening the review marks what
+it lists as seen, which is the only signal an ntfy-only setup can give.
+
 ### The watchdog — a clock on the queue
 
 Pushing once, at the moment a question is queued, is the right push and it used to be the

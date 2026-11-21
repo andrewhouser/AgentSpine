@@ -613,10 +613,106 @@ struct Memory: Codable, Identifiable, Hashable {
         case "recipe": return "recipe learned from a run"
         case "reflection": return "reflection after a run"
         case "rejection": return "from a rejected proposal"
+        case "review": return "you said so in the weekly review"
         case "tool": return "saved by the assistant"
         default: return origin
         }
     }
+}
+
+/// `GET /api/cloud-usage`: cloud tokens against the caps in `.env`. A cap of 0 means no cap.
+struct CloudUsage: Codable, Hashable {
+    struct Caps: Codable, Hashable {
+        let day: Int
+        let month: Int
+        let run: Int
+    }
+
+    struct Used: Codable, Hashable {
+        let day: Int
+        let month: Int
+    }
+
+    /// One refusal: the cap that stopped a cloud call, and what had been spent.
+    struct Refusal: Codable, Hashable {
+        let cap: String
+        let limit: Int
+        let period: String
+        let runId: Int?
+        let ts: String
+        let used: Int
+    }
+
+    let caps: Caps
+    /// False when no cloud key is set: nothing can be spent and the caps are idle.
+    let enabled: Bool
+    let model: String?
+    let recent: [Refusal]
+    let used: Used
+}
+
+/// One message in the weekly review, from `GET /api/outbox/review` (src/outbox-review.ts).
+struct ReviewItem: Codable, Identifiable, Hashable {
+    let body: String
+    let created: String
+    /// Your answer so far: "useful", "skip", or nil.
+    var feedback: String?
+    let id: Int
+    let kind: String
+    /// What became of it: "opened" and "dismissed" come from the phone; ntfy and Mac banners say "unknown".
+    let outcome: String
+    let source: String
+    let title: String
+    /// What "Skip this kind" files the dismissal under.
+    let topic: String
+
+    var outcomeLabel: String {
+        switch outcome {
+        case "opened": return "you opened it"
+        case "dismissed": return "you swiped it away"
+        case "ignored": return "not opened"
+        case "pending": return "delivered, not opened yet"
+        default: return "this channel cannot tell"
+        }
+    }
+
+    var sourceLabel: String {
+        switch source {
+        case "digest": return "Daily digest"
+        case "headsup": return "Heads-up"
+        case "run": return "Scheduled jobs"
+        case "study": return "Study"
+        case "tool": return "Watchers and briefs"
+        default: return source
+        }
+    }
+}
+
+/// Per-source counts for the review window. Computed in SQL; no model is involved.
+struct ReviewTally: Codable, Hashable {
+    let deduped: Int
+    let dismissed: Int
+    let held: Int
+    let ignored: Int
+    let opened: Int
+    let sent: Int
+    let source: String
+}
+
+struct OutboxReview: Codable {
+    let days: Int
+    var items: [ReviewItem]
+    let tally: [ReviewTally]
+}
+
+/// The server's answer to a review verdict. `remembered` is false when a note like it already existed.
+struct ReviewAnswerResult: Codable {
+    let remembered: Bool
+    let topic: String
+}
+
+struct ReviewWishResult: Codable {
+    let remembered: Bool
 }
 
 /// A named recipe from `GET /api/recipes`: a procedure you approved in chat, which a later run

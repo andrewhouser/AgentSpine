@@ -30,7 +30,14 @@
  * Deleting a conversation deletes its runs and so its token rows; that lowers the count. It is
  * a known hole, not an attack surface: it needs a person at the keyboard doing it on purpose.
  */
-import { AUDIT_RETENTION_DAYS, CLOUD_TOKENS_RAW, LLM_TIMING, RUN_RETENTION_DAYS } from "./config.ts";
+import {
+  AUDIT_RETENTION_DAYS,
+  CLOUD_ENABLED,
+  CLOUD_MODEL,
+  CLOUD_TOKENS_RAW,
+  LLM_TIMING,
+  RUN_RETENTION_DAYS,
+} from "./config.ts";
 import { LLMError } from "./llm.ts";
 import * as store from "./memory/store.ts";
 import { notify } from "./notify.ts";
@@ -225,3 +232,31 @@ export const cloudCapLine = (now: Date = new Date(), caps: Caps = CAPS): string 
   const run = caps.run > 0 ? `, ${n(caps.run)} per run` : "";
   return `Cloud tokens: ${part("today", day, caps.day)}, ${part("this month", month, caps.month)}${run}${anyCapSet(caps) ? "" : " (no cap set)"}.`;
 };
+
+export interface CloudUsage {
+  caps: Caps;
+  /** Whether a cloud key is configured at all. With none, nothing can be spent and the caps are idle. */
+  enabled: boolean;
+  /** The cloud model, for the heading. Null when the cloud is off. */
+  model: null | string;
+  /** The last few refusals, newest first. */
+  recent: { cap: CapName; limit: number; period: string; runId: null | number; ts: string; used: number }[];
+  /** Tokens spent on the cloud tier since local midnight and since the 1st. */
+  used: { day: number; month: number };
+}
+
+/** What the Settings screens on web, Mac and iPhone show. Read-only: the caps are code and `.env`, never a form. */
+export const cloudUsage = (now: Date = new Date(), caps: Caps = CAPS): CloudUsage => ({
+  caps,
+  enabled: CLOUD_ENABLED,
+  model: CLOUD_ENABLED ? CLOUD_MODEL : null,
+  recent: store.recentCloudCapEvents(5).map((e) => ({
+    cap: e.cap as CapName,
+    limit: e.cap_limit,
+    period: e.period,
+    runId: e.run_id,
+    ts: e.ts,
+    used: e.used,
+  })),
+  used: { day: store.cloudTokensSince(startOfDay(now)), month: store.cloudTokensSince(startOfMonth(now)) },
+});

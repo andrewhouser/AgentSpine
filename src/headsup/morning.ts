@@ -175,6 +175,8 @@ export const runMorningHeadsup = async (
   try {
     await deps.send(title, body, {
       ...(DASHBOARD_PUBLIC_URL ? { click: `${DASHBOARD_PUBLIC_URL}/headsup` } : {}),
+      // One kind when every offer is the same kind, so "skip this kind" in the weekly review means it.
+      kind: new Set(plan.offers.map((o) => o.candidate.kind)).size === 1 ? plan.offers[0].candidate.kind : "morning list",
       priority: 3,
       push: { collapseId: "headsup-morning", priority: 3, screen: "headsup", ...answerButtons(rows) },
       tags: ["bell"],

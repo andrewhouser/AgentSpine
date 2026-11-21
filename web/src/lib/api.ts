@@ -15,6 +15,7 @@ import type {
   BuildDiff,
   ChatMessage,
   Client,
+  CloudUsage,
   Confirmation,
   Conversation,
   DictationStatus,
@@ -31,6 +32,7 @@ import type {
   MeetingSpeaker,
   MeetingWorkItem,
   Memory,
+  OutboxReview,
   Overview,
   Project,
   ProjectSource,
@@ -140,6 +142,9 @@ export const api = {
     post<Task>("/api/tasks", fields),
   answerHeadsup: (id: number, answer: "later" | "never" | "yes") =>
     post<Headsup>(`/api/headsups/${id}/answer`, { answer }),
+  /** Your answer to one message in the weekly review. "skip" files a dismissal memory for its topic. */
+  answerOutbox: (id: number, answer: "skip" | "useful") =>
+    post<{ remembered: boolean; topic: string }>(`/api/outbox/${id}/feedback`, { answer }),
   /**
    * Accept one auto-approval proposal.
    *
@@ -165,6 +170,9 @@ export const api = {
    */
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
+
+  /** Cloud tokens against the caps (src/cloud-cap.ts). Read-only. */
+  cloudUsage: () => request<CloudUsage>("/api/cloud-usage"),
 
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
 
@@ -322,6 +330,9 @@ export const api = {
   /** Every meeting tag in use, with counts. */
   meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),
 
+  /** The last 7 days of messages you can vote on. Opening it marks what it lists as seen. */
+  outboxReview: () => request<OutboxReview>("/api/outbox/review"),
+
   /** Everything installed, read-only, with the prune list. */
   overview: () => request<Overview>("/api/overview"),
 
@@ -378,6 +389,9 @@ export const api = {
       attachmentIds,
       task,
     }),
+
+  /** "Something I wish I'd been told", stored as a preference memory. */
+  sendOutboxWish: (text: string) => post<{ remembered: boolean }>("/api/outbox/wish", { text }),
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),

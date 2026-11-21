@@ -140,6 +140,8 @@ struct SettingsView: View {
                 NavigationLink("Agents") { AgentsView() }
                 NavigationLink("Heads-up") { HeadsupPrefsView() }
                 NavigationLink("Memory") { MemoryView() }
+                NavigationLink("Weekly review") { WeeklyReviewView() }
+                NavigationLink("Cloud usage") { CloudUsageView() }
                 NavigationLink("Policy") { PolicyView() }
             } header: {
                 Text("Assistant")

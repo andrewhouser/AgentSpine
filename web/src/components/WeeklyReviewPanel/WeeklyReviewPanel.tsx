@@ -1,0 +1,147 @@
+import { useState } from "react";
+
+import type { OutboxReview, ReviewItem } from "../../lib/types.ts";
+
+import { useResource } from "../../hooks/useResource.ts";
+import { api } from "../../lib/api.ts";
+import styles from "./WeeklyReviewPanel.module.css";
+
+const NONE: null | OutboxReview = null;
+
+const SOURCE_LABELS: Record<string, string> = {
+  digest: "Daily digest",
+  headsup: "Heads-up",
+  run: "Scheduled jobs",
+  study: "Study",
+  tool: "Watchers and briefs",
+};
+
+const OUTCOME_LABELS: Record<ReviewItem["outcome"], string> = {
+  dismissed: "you swiped it away",
+  ignored: "not opened",
+  opened: "you opened it",
+  pending: "delivered, not opened yet",
+  unknown: "this channel cannot tell",
+};
+
+/**
+ * Settings → Weekly review: what was sent to you in the last 7 days, with Useful and Skip this kind on
+ * each, and a box for something you wish you had been told. Every figure is counted in SQL; no model is
+ * involved. An answer writes memory only: it never edits profile.md, goals.md, policy.json or a schedule,
+ * so "skip" makes the assistant quieter about a topic without switching anything off.
+ */
+export const WeeklyReviewPanel = () => {
+  const [review, refresh] = useResource(api.outboxReview, NONE);
+  const [wish, setWish] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  if (!review) return null;
+
+  const run = async (work: () => Promise<string>): Promise<void> => {
+    setBusy(true);
+    setError("");
+    try {
+      setMessage(await work());
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const answer = (item: ReviewItem, value: "skip" | "useful"): Promise<void> =>
+    run(async () => {
+      const r = await api.answerOutbox(item.id, value);
+      if (value === "useful") return "Noted.";
+      return r.remembered
+        ? `Noted. I will be quieter about ${r.topic}.`
+        : `Already noted: I am quieter about ${r.topic}.`;
+    });
+
+  const sendWish = (): Promise<void> =>
+    run(async () => {
+      const r = await api.sendOutboxWish(wish);
+      setWish("");
+      return r.remembered ? "Noted. I will bring up things like that." : "I already had that one.";
+    });
+
+  return (
+    <section>
+      <h2 className={styles.subhead}>Weekly review</h2>
+      <p className={styles.note}>
+        What I sent you in the last {review.days} days. Tell me which were useful and which kinds to skip. Skipping
+        saves a note that I should not interrupt you about that kind again unless it is clearly more important; it
+        does not switch anything off, and you can forget the note under Memory. Looking at this list marks it as seen.
+        A Sunday evening push tells you when a week is ready.
+      </p>
+
+      {review.tally.length > 0 && (
+        <ul className={styles.counts}>
+          {review.tally.map((t) => (
+            <li key={t.source}>
+              {SOURCE_LABELS[t.source] ?? t.source}: {t.sent} sent
+              {t.held > 0 && `, ${t.held} held`}
+              {t.deduped > 0 && `, ${t.deduped} repeats removed`}
+              {t.opened > 0 && `, ${t.opened} opened`}
+              {t.dismissed > 0 && `, ${t.dismissed} dismissed`}
+              {t.ignored > 0 && `, ${t.ignored} ignored`}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className={styles.wish}>
+        <input
+          aria-label="Something I wish I'd been told"
+          className={styles.input}
+          maxLength={300}
+          onChange={(e) => setWish(e.target.value)}
+          placeholder="Something I wish I'd been told…"
+          value={wish}
+        />
+        <button className={styles.button} disabled={busy || !wish.trim()} onClick={() => void sendWish()} type="button">
+          Save
+        </button>
+      </div>
+
+      {message && <div className={styles.status}>{message}</div>}
+      {error && <div className={styles.error}>{error}</div>}
+      {review.items.length === 0 && <div className={styles.empty}>Nothing to review yet.</div>}
+
+      {review.items.map((item) => (
+        <div className={styles.item} key={item.id}>
+          <div className={styles.title}>{item.title}</div>
+          <div className={styles.meta}>
+            {SOURCE_LABELS[item.source] ?? item.source} · {new Date(item.created).toLocaleString()} ·{" "}
+            {OUTCOME_LABELS[item.outcome]}
+          </div>
+          {item.body && <p className={styles.body}>{item.body}</p>}
+          <div className={styles.actions}>
+            <button
+              aria-pressed={item.feedback === "useful"}
+              className={`${styles.button} ${item.feedback === "useful" ? styles.chosen : ""}`}
+              disabled={busy}
+              onClick={() => void answer(item, "useful")}
+              type="button"
+            >
+              Useful
+            </button>
+            <button
+              aria-pressed={item.feedback === "skip"}
+              className={`${styles.button} ${item.feedback === "skip" ? styles.chosen : ""}`}
+              disabled={busy}
+              onClick={() => void answer(item, "skip")}
+              title={`Files a note about: ${item.topic}`}
+              type="button"
+            >
+              Skip this kind
+            </button>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+};

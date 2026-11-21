@@ -633,6 +633,34 @@ final class APIClient {
         return try await send(request("/api/memories", query: q), as: [Memory].self)
     }
 
+    /// Cloud tokens against the caps. Read-only: the caps are `.env` numbers, not preferences.
+    func cloudUsage() async throws -> CloudUsage {
+        try await send(request("/api/cloud-usage"), as: CloudUsage.self)
+    }
+
+    // MARK: - Weekly review
+
+    /// The last 7 days of messages you can vote on. Opening it marks what it lists as seen.
+    func outboxReview() async throws -> OutboxReview {
+        try await send(request("/api/outbox/review"), as: OutboxReview.self)
+    }
+
+    /// "useful" records the answer; "skip" also files a note that the assistant should be quieter about the topic.
+    func answerOutbox(_ id: Int, answer: String) async throws -> ReviewAnswerResult {
+        try await send(
+            jsonRequest("/api/outbox/\(id)/feedback", method: "POST", body: ["answer": answer]),
+            as: ReviewAnswerResult.self
+        )
+    }
+
+    /// Something you wish you had been told, stored as a preference memory.
+    func sendOutboxWish(_ text: String) async throws -> ReviewWishResult {
+        try await send(
+            jsonRequest("/api/outbox/wish", method: "POST", body: ["text": text]),
+            as: ReviewWishResult.self
+        )
+    }
+
     // MARK: - Recipes
 
     func recipes() async throws -> [Recipe] {

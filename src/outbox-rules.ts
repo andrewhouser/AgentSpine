@@ -14,6 +14,7 @@ export type OutboxSource =
   | "headsup"
   | "outbox" // the summary of held messages, sent by the outbox itself
   | "reminder" // a task or follow-up you set
+  | "review" // the weekly "what I sent you" push: the review's own entry point, never held and never counted
   | "run" // a run finished or failed
   | "study"
   | "tool" // the notify tool, from an unattended run: where watchers and scheduled briefs speak
@@ -58,3 +59,27 @@ export const OUTBOX_RETENTION_DAYS = 90;
 
 /** At most this many titles are listed in the push that releases held messages. The app has the rest. */
 export const RELEASE_LIST_MAX = 5;
+
+/**
+ * The sources the weekly review lists: messages nobody just asked for. Approvals (the agent is blocked on
+ * you), reminders (you set them), the held-message summary, a chat push you requested and the review's own
+ * push are not up for a vote, so none of them is here.
+ */
+export const REVIEWED_SOURCES: ReadonlySet<OutboxSource> = new Set(["digest", "headsup", "run", "study", "tool"]);
+
+/** How far back the review looks. */
+export const REVIEW_DAYS = 7;
+
+/**
+ * When the weekly push goes: Sunday, local time, from this hour. Evening, so the week it summarises is
+ * over; the sweep that sends it runs every few minutes, so this is a floor and not a minute. Quiet hours
+ * still apply to the push even though the outbox never holds it: a review is never worth waking you for.
+ */
+export const REVIEW_WEEKDAY = 0;
+export const REVIEW_HOUR = 17;
+
+/** A week with fewer reviewable messages than this gets no push. An empty review is noise. */
+export const REVIEW_MIN_ROWS = 1;
+
+/** A wish or a note is clipped to this many characters before it becomes a memory. */
+export const WISH_MAX = 300;

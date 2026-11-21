@@ -87,14 +87,27 @@ opened and dismissed.
 The review screen (Phase 3) can also mark everything in it as seen, which gives an ntfy-only setup a weak
 signal.
 
-**Phase 3: the weekly review.** A "What I sent you" digest section (per source: sent, held,
-de-duplicated, and for APNs opened and dismissed, no model in the counting), and a review screen on web,
-Mac and iPhone together listing the last 7 days with **Useful**, **Skip this kind**, and a "Something I
-wish I'd been told" box. *Skip this kind* calls `recordDismissal(topic)`, which finally gives it a caller
-(today only a test calls it). Answers write memory only, never `profile.md`, `goals.md`, `policy.json` or
-`agents/*.md`. One scheduled push a week is the entry point; it is never held and never counts against the
-cap. Routes: `GET /api/outbox/review`, `POST /api/outbox/:id/feedback`. Done when a week of use produces a
-real review and *Skip this kind* creates one `preference` memory that recall picks up the next day.
+**Phase 3: the weekly review. Built 2026-11-21, not yet used for a real week.** The digest's "What I sent you"
+section already existed from Phase 2. New: `src/outbox-review.ts` (`reviewItems`, `buildReview`, `answerMessage`,
+`recordWish`, `reviewDue`, `sendWeeklyReview`), the `outbox` columns `kind`, `feedback`, `feedback_at`, `seen_at`,
+the `review` source and `REVIEW_*` numbers in `src/outbox-rules.ts`, and the `review` memory origin.
+Routes: `GET /api/outbox/review` (also stamps `seen_at` on what it lists, first stamp wins), `POST
+/api/outbox/:id/feedback` (`useful` or `skip`), `POST /api/outbox/wish`. A 5 minute sweep in `src/server.ts`
+sends one push on Sunday from 17:00 local, outside quiet hours, at most 3 tries a day, only if the week had
+something to review. Source `review` is neither governed nor counted, so it is never held and never spends the
+daily cap. Screens: Settings → Weekly review on the web (`WeeklyReviewPanel`), and `WeeklyReviewView` in
+`MemoryView.swift`, shared by the iPhone and the Mac (a new Swift file would need the project file edited by
+hand). *Skip this kind* calls `recordDismissal(topic)`, its first real caller. The topic is `source` plus `kind`
+(`topicOf`), and `kind` is a stable label set by the caller: a Heads-up kind, a watcher's schedule name, "flash
+cards", "watch", "research". A message title never goes in it, because it changes every time and the memories
+would never group. A run result is reviewable only when it has a schedule's name, which keeps a "tell me when
+this finishes" push you asked for out of the review. Answers write memory only; the test asserts the module
+imports no filesystem code. Tests: `test/outbox-review.test.mjs`.
+Not done or not verified: the push has never gone to a phone, a tap on it only opens the app (there is no
+deep link to the review screen, the iOS `screen` handler knows `study` and `headsup` only), none of the three
+screens has been looked at rendered, and a skipped kind is not undone by answering Useful later (forget the
+note under Memory). "Done when" is still a week of real use: a real review, and one *Skip this kind*
+producing one `preference` memory that recall picks up the next day.
 
 **Phase 4: offer to switch off what you keep ignoring.** Mirrors Heads-up B so there is one pattern.
 Per `source` + `kind` over 90 days, `skipRate = (skipped + ignored + dismissed) / sent` over rows with a
@@ -263,8 +276,10 @@ inbox cleanup can run unattended as far as code guards go; the live half is what
   `test/cloud-cap.test.mjs`, including an end-to-end run through `route()` against a stand-in cloud.
   Known limits, all in the README: one request can overshoot by its own size, a call that died before the
   server answered is not counted, and deleting a conversation lowers the count. Not done: `.env.example` has no
-  entry for the three settings (the sandbox blocks edits to it, so add them by hand), and the cap is not shown
-  in the web, Mac or iPhone Settings. The notification is not yet a "weekly review" item (outbox Phase 3).
+  entry for the three settings (the sandbox blocks edits to it, so add them by hand). Shown, read-only, in Settings on the web (`CloudUsagePanel`), iPhone and Mac
+  (`CloudUsageView` in `MemoryView.swift`) from `GET /api/cloud-usage`. There is no form to raise a cap, on
+  purpose: the numbers are `.env`, and a control that raised the limit would sit within reach of the loop it stops.
+  The cap push is a `run` message, so the weekly review lists it only when it has a schedule's name (it has none).
 - **N4 Writing styles for drafts (defer).** Named styles, several at once, built from Sent mail via the
   unchanged read token. Largest item and independent of everything above. The full design is in the archived
   plan.

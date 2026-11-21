@@ -122,6 +122,7 @@ const clock = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour
 const speak = async (deps: WatchDeps, w: WatchRow, title: string, lines: string[], urgent: boolean, tag: string): Promise<void> => {
   try {
     await deps.send(title, lines.join("\n"), {
+      kind: "watch",
       priority: urgent ? 4 : 3,
       // One notification per watch on the lock screen: a newer update replaces the last.
       push: { collapseId: `headsup-watch-${w.headsup_id}`, priority: urgent ? 4 : 3, screen: "headsup" },

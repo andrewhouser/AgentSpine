@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadAgents } from "./agents.ts";
 import { buildDiff, listBuilds } from "./builds.ts";
-import { capsProblem } from "./cloud-cap.ts";
+import { capsProblem, cloudUsage } from "./cloud-cap.ts";
 import { loadPolicy } from "./config.ts";
 import { syncMcpTools } from "./mcp/register.ts";
 import { probeModelHost } from "./model-probe.ts";
@@ -72,6 +72,7 @@ import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./c
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
+import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
@@ -859,6 +860,32 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     }
 
     /**
+     * The weekly review (docs/archive/PLAN-outbox.md, Phase 3), for web, Mac and iPhone alike.
+     *   GET  /api/outbox/review          the last 7 days of messages you can vote on, plus the counts.
+     *                                    Opening it stamps `seen_at` on what it lists; that is its one side effect.
+     *   POST /api/outbox/:id/feedback    {answer: "useful" | "skip"}. "skip" files a dismissal memory under
+     *                                    the message's topic. Memory only: nothing here edits profile.md,
+     *                                    goals.md, policy.json, agents/*.md or a schedule.
+     *   POST /api/outbox/wish            {text}: something you wish you had been told, stored as a preference memory.
+     */
+    if (m === "GET" && seg[1] === "outbox" && seg[2] === "review" && seg.length === 3) {
+      return sendJson(res, 200, buildReview());
+    }
+    if (m === "POST" && seg[1] === "outbox" && seg[2] === "wish" && seg.length === 3) {
+      const b = await readBody(req);
+      if (!String(b?.text ?? "").trim()) return sendJson(res, 400, { error: "text is required" });
+      return sendJson(res, 200, { remembered: await recordWish(b.text) });
+    }
+    if (m === "POST" && seg[1] === "outbox" && seg.length === 4 && seg[3] === "feedback") {
+      const id = Number(seg[2]);
+      if (!Number.isInteger(id) || id <= 0) return sendJson(res, 400, { error: "id must be a positive integer" });
+      const b = await readBody(req);
+      if (b?.answer !== "useful" && b?.answer !== "skip") return sendJson(res, 400, { error: 'answer must be "useful" or "skip"' });
+      const result = await answerMessage(id, b.answer);
+      return result ? sendJson(res, 200, result) : sendJson(res, 404, { error: "not a message the review lists" });
+    }
+
+    /**
      * POST /api/push/test — send a notification to every registered phone, right now.
      *
      * This earns its place because the APNs failure modes are all silent from the phone's
@@ -957,6 +984,10 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
     // /api/policy
     if (m === "GET" && seg[1] === "policy" && seg.length === 2) return sendJson(res, 200, loadPolicy());
+
+    // GET /api/cloud-usage — cloud tokens against the caps (src/cloud-cap.ts). Read-only on
+    // purpose: the caps are numbers in `.env`, so no screen can raise the limit it is showing.
+    if (m === "GET" && seg[1] === "cloud-usage" && seg.length === 2) return sendJson(res, 200, cloudUsage());
 
     /**
      * /api/proposals — auto-approval proposals from the ledger (LEARNING Phase 2).
@@ -1926,6 +1957,9 @@ setInterval(() => void sweepDueTasks(), 60_000).unref();
 // Messages the outbox held (quiet hours, the daily cap) go out as one summary once it is allowed.
 const sweepOutbox = (): Promise<number> => releaseHeld((t, b, o) => notify(t, b, o));
 setInterval(() => void sweepOutbox(), 5 * 60_000).unref();
+// Sunday evening: one push saying the week's review is ready (src/outbox-review.ts).
+const sweepReview = (): Promise<boolean> => sendWeeklyReview((t, b, o) => notify(t, b, o));
+setInterval(() => void sweepReview(), 5 * 60_000).unref();
 // The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
 void sweepHeadsup();
 setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();

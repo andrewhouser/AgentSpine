@@ -221,7 +221,7 @@ export const researchHeadsup = async (id: number, deps: ResearchDeps = realDeps)
     const ideas = cards.filter((c) => c.kind !== "link").length;
     if (ideas > 0) {
       const what = kind === "gift" ? "gift ideas" : "restaurant ideas";
-      void deps.send(`${ideas} ${what} ready`, row.subject, { priority: 2, push: { collapseId: `headsup-research-${id}`, priority: 2, screen: "headsup" }, tags: ["gift"] }).catch(() => {});
+      void deps.send(`${ideas} ${what} ready`, row.subject, { kind: "research", priority: 2, push: { collapseId: `headsup-research-${id}`, priority: 2, screen: "headsup" }, tags: ["gift"] }).catch(() => {});
     }
     return { cards: cards.length, query, status: "done" };
   } catch (err) {

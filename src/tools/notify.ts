@@ -10,6 +10,7 @@
  * notification is your attention, which is why the tool description pushes the model to
  * be sparing rather than the policy trying to enforce a quota.
  */
+import * as store from "../memory/store.ts";
 import { notify } from "../notify.ts";
 import { judge } from "../judge.ts";
 import { JUDGE_INTERRUPTIONS } from "../config.ts";
@@ -120,7 +121,11 @@ export const notifyTool: Tool = {
 
     // A live chat that got this far asked for the push (checkPolicy), so it is exempt from the
     // outbox's rules. An unattended run (a watcher, a scheduled brief) is what they govern.
-    const r = await notify(title, body, { priority, source: ctx?.run?.conversational ? "chat" : "tool" });
+    // `kind` is the schedule's name, so the weekly review can say "skip alerts from this watcher" and mean
+    // the same watcher next week. A run that is not a schedule has none and is reviewed under its source.
+    const runRow = ctx?.runId != null ? store.getRun(ctx.runId) : undefined;
+    const kind = runRow?.schedule_id != null ? (store.getSchedule(runRow.schedule_id)?.name ?? "") : "";
+    const r = await notify(title, body, { kind, priority, source: ctx?.run?.conversational ? "chat" : "tool" });
     if (r.held) return `notification not sent now: ${r.detail}. It is kept and shown later, so do not send it again.`;
     return r.ok
       ? `notification delivered (${r.detail})${note}.`
