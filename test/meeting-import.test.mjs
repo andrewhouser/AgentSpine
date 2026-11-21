@@ -65,7 +65,10 @@ check("it finishes as done", m.status, "done");
 check("titled from the file name", m.title, "Standup");
 check("labelled as an import", m.device, "import: Standup.m4a");
 check("dated from the recording's own metadata, not the upload", m.started, "2026-11-18T14:30:00.000Z");
-check("ended = started + duration", m.ended, "2026-11-18T14:30:12.000Z");
+// The end is the start plus the DECODED length, and AAC pads its last frame (ffmpeg 8.1 decodes a
+// 12 s sine to 12.005 s), so this is "the duration, give or take a frame", not an exact string.
+const durationMs = Date.parse(m.ended) - Date.parse(m.started);
+check("ended = started + duration (within one AAC frame)", Math.abs(durationMs - 12_000) <= 50, true);
 check("decoded to 16 kHz mono PCM (12 s = 384,000 bytes, give or take a frame)", Math.abs(calls[0].bytes - 384000) < 8000, true);
 check("no live pass, so no coverage baseline", calls[0].opts.liveWords, 0);
 check("its words are the transcript", store.transcriptText(a.meetingId, "final"), "Imported words.");
