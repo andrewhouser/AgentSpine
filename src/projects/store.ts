@@ -81,6 +81,14 @@ try {
   // already there
 }
 
+// A project's own raw-transcript window in days (K7): NULL follows TRANSCRIPT_RETENTION_DAYS, 0 keeps the
+// project's transcripts until the meeting is deleted, a number shortens or lengthens the global window.
+try {
+  rawDb.exec("ALTER TABLE projects ADD COLUMN transcript_retention_days INTEGER");
+} catch {
+  // already there
+}
+
 const now = () => new Date().toISOString();
 
 export interface ProjectRow {
@@ -92,6 +100,8 @@ export interface ProjectRow {
   instructions_file: null | string;
   name: string;
   policy_overlay: null | string;
+  /** Overrides the global raw-transcript window for meetings in this project; null follows it. */
+  transcript_retention_days: null | number;
 }
 
 export interface SourceRow {
@@ -133,12 +143,14 @@ export interface ProjectFields {
   instructionsFile?: null | string;
   name?: string;
   policyOverlay?: null | PolicyOverlay;
+  /** null clears the override; 0 keeps transcripts until the meeting is deleted. */
+  transcriptRetentionDays?: null | number;
 }
 
 export const updateProject = (id: number, fields: ProjectFields): void => {
   const cur = getProject(id);
   if (!cur) return;
-  rawDb.prepare("UPDATE projects SET name=?, instructions=?, policy_overlay=?, archived=?, instructions_file=? WHERE id=?").run(
+  rawDb.prepare("UPDATE projects SET name=?, instructions=?, policy_overlay=?, archived=?, instructions_file=?, transcript_retention_days=? WHERE id=?").run(
     fields.name ?? cur.name,
     fields.instructions ?? cur.instructions,
     fields.policyOverlay !== undefined
@@ -148,6 +160,7 @@ export const updateProject = (id: number, fields: ProjectFields): void => {
       : cur.policy_overlay,
     (fields.archived ?? cur.archived) ? 1 : 0,
     fields.instructionsFile !== undefined ? fields.instructionsFile : cur.instructions_file,
+    fields.transcriptRetentionDays !== undefined ? fields.transcriptRetentionDays : cur.transcript_retention_days,
     id,
   );
 };

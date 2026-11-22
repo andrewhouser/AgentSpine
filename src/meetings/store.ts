@@ -628,6 +628,25 @@ export const workItems = (meetingId: number): WorkItemRow[] =>
     .all(meetingId) as unknown as WorkItemRow[];
 
 /**
+ * The meetings whose raw transcript is past its window. The window is `days` (the global setting) unless the
+ * meeting's project has its own (K7): a project may shorten it, or set 0 to keep its transcripts until the
+ * meeting is deleted. A meeting outside any project always follows the global one. 0 days globally keeps
+ * forever, as before, so a project override is the only thing that can expire anything then.
+ */
+export const expiredMeetingIds = (days: number): number[] => {
+  const now = Date.now();
+  const rows = rawDb
+    .prepare("SELECT m.id AS id, m.started AS started, p.transcript_retention_days AS own FROM meetings m LEFT JOIN projects p ON p.id = m.project_id")
+    .all() as unknown as { id: number; own: null | number; started: string }[];
+  return rows
+    .filter((r) => {
+      const d = r.own ?? days;
+      return d > 0 && r.started < new Date(now - d * 86_400_000).toISOString();
+    })
+    .map((r) => r.id);
+};
+
+/**
  * Drop transcripts older than `days`, leaving the meeting rows behind. Returns how many
  * segment rows went. 0 days means keep forever, matching every other retention knob.
  *
@@ -636,14 +655,13 @@ export const workItems = (meetingId: number): WorkItemRow[] =>
  * the meeting rather than a copy of it.
  */
 export const pruneTranscripts = (days: number, dryRun = false): number => {
-  if (days <= 0) return 0;
-  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
-  const sql = `SELECT COUNT(*) AS n FROM meeting_segments WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)`;
-  const { n } = rawDb.prepare(sql).get(cutoff) as { n: number };
+  const ids = expiredMeetingIds(days);
+  if (!ids.length) return 0;
+  // Integer ids read from our own table, so interpolating them is not an injection path.
+  const inList = ids.join(",");
+  const { n } = rawDb.prepare(`SELECT COUNT(*) AS n FROM meeting_segments WHERE meeting_id IN (${inList})`).get() as { n: number };
   if (dryRun || n === 0) return n;
-  rawDb
-    .prepare("DELETE FROM meeting_segments WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
-    .run(cutoff);
+  rawDb.prepare(`DELETE FROM meeting_segments WHERE meeting_id IN (${inList})`).run();
   // A meeting filed "summary only" never has transcript chunks in a project, by construction. This
   // is the backstop for one that somehow does (a copy made before the choice was switched): the
   // transcript source is dropped at the same window as the transcript. A meeting filed "keep" (or
@@ -651,15 +669,15 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
   const transcriptSources = rawDb
     .prepare(
       "SELECT s.id FROM project_sources s JOIN meetings m ON s.ref = 'meeting:' || m.id " +
-        "WHERE s.kind = 'meeting' AND m.keep_transcript = 0 AND m.started < ?",
+        `WHERE s.kind = 'meeting' AND m.keep_transcript = 0 AND m.id IN (${inList})`,
     )
-    .all(cutoff) as unknown as { id: number }[];
+    .all() as unknown as { id: number }[];
   for (const src of transcriptSources) {
     rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(src.id);
     rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(src.id);
   }
   // Reviewed claims cited to these transcripts are kept and marked expired; unreviewed ones go with their evidence.
-  const aged = (rawDb.prepare("SELECT id FROM meetings WHERE started < ?").all(cutoff) as { id: number }[]).map((r) => `meeting:${r.id}`);
+  const aged = ids.map((id) => `meeting:${id}`);
   const claims = expireSources("meeting", aged);
   // A kept transcript can also be given a lifetime of its own (INDEXED_TRANSCRIPT_RETENTION_DAYS; 0 = until deleted).
   let indexed = 0;
@@ -683,24 +701,20 @@ export const pruneTranscripts = (days: number, dryRun = false): number => {
   );
   // Speaker names go with the words they labelled.
   rawDb
-    .prepare("DELETE FROM meeting_speakers WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
-    .run(cutoff);
+    .prepare(`DELETE FROM meeting_speakers WHERE meeting_id IN (${inList})`)
+    .run();
   // In-meeting chat answers quote the transcript, so they follow it out.
   rawDb
-    .prepare("DELETE FROM meeting_chat WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)")
-    .run(cutoff);
+    .prepare(`DELETE FROM meeting_chat WHERE meeting_id IN (${inList})`)
+    .run();
   rawDb
-    .prepare(
-      "UPDATE meeting_work_items SET quote = NULL WHERE meeting_id IN (SELECT id FROM meetings WHERE started < ?)",
-    )
-    .run(cutoff);
+    .prepare(`UPDATE meeting_work_items SET quote = NULL WHERE meeting_id IN (${inList})`)
+    .run();
   // Decisions carry their quotes inside a JSON blob, so this one is a read-modify-write
   // rather than an UPDATE. Only rows that actually hold a quote are touched.
   const stale = rawDb
-    .prepare(
-      "SELECT meeting_id, decisions FROM meeting_extractions WHERE decisions IS NOT NULL AND meeting_id IN (SELECT id FROM meetings WHERE started < ?)",
-    )
-    .all(cutoff) as unknown as { decisions: string; meeting_id: number }[];
+    .prepare(`SELECT meeting_id, decisions FROM meeting_extractions WHERE decisions IS NOT NULL AND meeting_id IN (${inList})`)
+    .all() as unknown as { decisions: string; meeting_id: number }[];
   const blank = rawDb.prepare("UPDATE meeting_extractions SET decisions = ? WHERE meeting_id = ?");
   for (const row of stale) {
     const decisions = parseList<Decision>(row.decisions).map((d) => ({ ...d, quote: null }));

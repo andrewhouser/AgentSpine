@@ -25,7 +25,7 @@ export const retentionRules = (): RetentionRule[] => [
   {
     artifact: "Raw transcripts",
     rule: TRANSCRIPT_RETENTION_DAYS > 0 ? `deleted ${TRANSCRIPT_RETENTION_DAYS} days after the meeting` : "kept until the meeting is deleted",
-    setting: "TRANSCRIPT_RETENTION_DAYS",
+    setting: "TRANSCRIPT_RETENTION_DAYS, or a project's own window (PATCH /api/projects/:id transcriptRetentionDays)",
   },
   {
     artifact: "A transcript indexed in a project",

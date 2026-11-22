@@ -76,6 +76,45 @@ console.log("\nDELETING IS STILL TOTAL");
   check("deleting a meeting removes even its reviewed claims", [session.deleteMeeting(recent).ok, k.getClaim(fresh)], [true, undefined]);
 }
 
+console.log("\nA PROJECT CAN HAVE ITS OWN TRANSCRIPT WINDOW (K7)");
+{
+  const segs = (id) => rawDb.prepare("SELECT COUNT(*) AS n FROM meeting_segments WHERE meeting_id = ?").get(id).n;
+  const longPid = projects.createProject("Long hold", "");
+  const shortPid = projects.createProject("Short hold", "");
+  const mk = (title, project, ageDays) => {
+    const id = meetings.startMeeting("mic", project, title);
+    meetings.addSegment(id, "final", 0, 0, 3000, `words in ${title}`, 0);
+    meetings.setStatus(id, "done", "ok");
+    rawDb.prepare("UPDATE meetings SET started = ? WHERE id = ?").run(daysAgo(ageDays), id);
+    return id;
+  };
+  const longM = mk("long", longPid, 60);
+  const shortM = mk("short", shortPid, 10);
+  const looseM = mk("loose", null, 60);
+  projects.updateProject(longPid, { transcriptRetentionDays: 90 });
+  projects.updateProject(shortPid, { transcriptRetentionDays: 7 });
+  check("the override is stored and read back", [projects.getProject(longPid).transcript_retention_days, projects.getProject(pid).transcript_retention_days], [90, null]);
+  check("a dry run counts what the windows would remove", meetings.pruneTranscripts(30, true) >= 2, true);
+  meetings.pruneTranscripts(30);
+  check("a longer project window keeps a 60 day old transcript the global 30 would drop", segs(longM), 1);
+  check("a shorter project window drops a 10 day old transcript the global 30 would keep", segs(shortM), 0);
+  check("a meeting in no project follows the global window", segs(looseM), 0);
+  // With the global window off, only a project's own window can expire anything.
+  const offM = mk("off", null, 400);
+  const ownM = mk("own", shortPid, 400);
+  const keepPid = projects.createProject("Keep", "");
+  projects.updateProject(keepPid, { transcriptRetentionDays: 0 });
+  const keptM = mk("kept", keepPid, 400);
+  meetings.pruneTranscripts(0);
+  check("global 0 keeps an unfiled meeting, and a project's own window still applies", [segs(offM), segs(ownM)], [1, 0]);
+  meetings.pruneTranscripts(30);
+  check("a project set to 0 keeps its transcripts however old, and the others follow their windows", [segs(keptM), segs(offM)], [1, 0]);
+  projects.updateProject(longPid, { transcriptRetentionDays: null });
+  check("clearing an override returns the project to the global window", projects.getProject(longPid).transcript_retention_days, null);
+  meetings.pruneTranscripts(30);
+  check("and the transcript then expires with the global window", segs(longM), 0);
+}
+
 console.log("\nTHE RULES ARE STATED FROM THE SAME NUMBERS");
 {
   const rules = retentionRules();

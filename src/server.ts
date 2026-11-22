@@ -1700,6 +1700,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             patch.instructionsFile = check.real;
           }
         }
+        // K7: this project's own raw-transcript window. null clears it; 0 keeps transcripts until the meeting
+        // is deleted. A whole number of days, capped at ten years, so a typo cannot read as "forever".
+        if ("transcriptRetentionDays" in b) {
+          if (b.transcriptRetentionDays == null || b.transcriptRetentionDays === "") patch.transcriptRetentionDays = null;
+          else {
+            const d = Number(b.transcriptRetentionDays);
+            if (!Number.isInteger(d) || d < 0 || d > 3650) return sendJson(res, 400, { error: "transcriptRetentionDays must be a whole number of days from 0 to 3650, or null" });
+            patch.transcriptRetentionDays = d;
+          }
+        }
         projects.updateProject(id, patch);
         return sendJson(res, 200, projects.getProject(id));
       }

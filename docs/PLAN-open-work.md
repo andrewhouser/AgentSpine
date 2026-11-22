@@ -437,8 +437,12 @@ baseline, and the meeting recall number is still unmeasured.
   note that the evidence has aged out), claims nobody reviewed (removed with their evidence), summaries and
   extractions (until the meeting is deleted), inbox items (until you delete them), and the deletion records
   (kept, without content). Deleting a meeting or inbox item is still total, reviewed claims included. This
-  replaces the interim F6 behaviour. Suite: `test/retention.test.mjs`. Not built: a retention screen (the API
-  states the rules; nothing shows them yet), and a per-project override.
+  replaces the interim F6 behaviour. Suite: `test/retention.test.mjs`. A project can have its own raw-transcript window
+  (2026-11-21, backend only): `PATCH /api/projects/:id {"transcriptRetentionDays": n}` (0 keeps that project's
+  transcripts until the meeting is deleted, `null` follows the global setting), enforced per meeting by
+  `expiredMeetingIds`, so with the global window off only a project's own window expires anything. The indexed
+  transcript lifetime stays global. Not built: a retention screen on web, Mac and iPhone (the API states the rules
+  and the override; nothing shows or sets them yet).
 - **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
 
 Settled 2026-11-21: OCR is a small macOS Vision helper (K3, chosen for speed; no new dependency); backups rely on
