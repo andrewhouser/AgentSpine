@@ -44,18 +44,20 @@ struct SchedulesView: View {
     private enum Editor: Identifiable {
         case create
         case edit(Schedule)
+        case history(Schedule)
 
         var id: Int {
             switch self {
             case .create: return -1
             case .edit(let schedule): return schedule.id
+            case .history(let schedule): return -2 - schedule.id
             }
         }
 
         var schedule: Schedule? {
             switch self {
             case .create: return nil
-            case .edit(let schedule): return schedule
+            case .edit(let schedule), .history(let schedule): return schedule
             }
         }
     }
@@ -85,6 +87,7 @@ struct SchedulesView: View {
                     openRun: { openRun = $0 },
                     isRunning: running == schedule.id,
                     edit: { editor = .edit(schedule) },
+                    showHistory: { editor = .history(schedule) },
                     runNow: { Task { await runNow(schedule) } },
                     toggle: { Task { await setEnabled(schedule, to: !schedule.isEnabled) } }
                 )
@@ -119,15 +122,19 @@ struct SchedulesView: View {
             }
         }
         .sheet(item: $editor) { editor in
-            ScheduleForm(schedule: editor.schedule) { name, spec, task in
-                if let existing = editor.schedule {
-                    try await APIClient.shared.updateSchedule(
-                        existing.id, name: name, spec: spec, task: task
-                    )
-                } else {
-                    _ = try await APIClient.shared.createSchedule(name: name, spec: spec, task: task)
+            if case .history(let schedule) = editor {
+                ScheduleHistoryView(schedule: schedule)
+            } else {
+                ScheduleForm(schedule: editor.schedule) { name, spec, task in
+                    if let existing = editor.schedule {
+                        try await APIClient.shared.updateSchedule(
+                            existing.id, name: name, spec: spec, task: task
+                        )
+                    } else {
+                        _ = try await APIClient.shared.createSchedule(name: name, spec: spec, task: task)
+                    }
+                    await load()
                 }
-                await load()
             }
         }
     }
@@ -188,6 +195,98 @@ struct SchedulesView: View {
     }
 }
 
+// MARK: - A job's history
+
+/// What a job's task used to say and how it has done since. Restoring only queues an approval, because the
+/// earlier text is still a prompt an unattended run will follow.
+struct ScheduleHistoryView: View {
+    let schedule: Schedule
+    @Environment(\.dismiss) private var dismiss
+    @State private var versions: [ScheduleVersion] = []
+    @State private var loaded = false
+    @State private var busy = false
+    @State private var message: String?
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let error {
+                    Text(error).foregroundStyle(Spine.Palette.danger)
+                }
+                if let message {
+                    Text(message)
+                }
+                if loaded && versions.isEmpty && error == nil {
+                    Text("No changes to this task recorded yet.")
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+                ForEach(versions) { version in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(SpineDate.relative(version.changed)) · "
+                             + (version.restored ? "Restored earlier text" : version.sourceLabel))
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
+                        if let check = version.check {
+                            Text(check.headline)
+                                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                            if let detail = check.detail {
+                                Text(detail)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                    .foregroundStyle(Spine.Palette.textDim)
+                            }
+                        }
+                        Text("It said before:")
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textFaint)
+                        Text(version.before)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .textSelection(.enabled)
+                        if version.canRestore {
+                            Button("Restore this text") { Task { await restore(version) } }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .disabled(busy)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle(schedule.name)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task { await load() }
+        }
+        #if os(macOS)
+        .frame(minWidth: 480, minHeight: 420)
+        #endif
+    }
+
+    private func load() async {
+        do {
+            versions = try await APIClient.shared.scheduleVersions(schedule.id)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loaded = true
+    }
+
+    private func restore(_ version: ScheduleVersion) async {
+        busy = true
+        defer { busy = false }
+        do {
+            message = try await APIClient.shared.restoreScheduleVersion(schedule.id, versionID: version.id).message
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
 // MARK: - One job
 
 struct ScheduleCard: View {
@@ -197,6 +296,7 @@ struct ScheduleCard: View {
     let openRun: (Int) -> Void
     let isRunning: Bool
     let edit: () -> Void
+    let showHistory: () -> Void
     let runNow: () -> Void
     let toggle: () -> Void
 
@@ -282,6 +382,10 @@ struct ScheduleCard: View {
                 .disabled(isRunning)
 
                 Spacer()
+
+                Button("History", action: showHistory)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
 
                 Button("Edit", action: edit)
                     .buttonStyle(.bordered)

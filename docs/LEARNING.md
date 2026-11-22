@@ -540,6 +540,13 @@ So: same queue, same rule, and one addition — the confirmation shows a **diff*
 new text. Approving a rewrite you can't compare against the original is the rubber stamp
 the README already refuses to build elsewhere.
 
+**Version history and after-checks (SL8, built 2026-11-22).** Approving a change is a prediction, and nothing used
+to check it. `store.updateSchedule` now records the old and new text with every task change, and
+`src/learn/versions.ts` compares calls per run and failed runs across the change after 21 days. It is arithmetic
+with no model, and it reports without acting. Going back queues an ordinary `schedule_update` naming the stored
+version, so the exact text returns, and the approval is refused if the job changed after it was offered. Restored
+text is still a prompt an unattended run will follow, so it gets the same review as any other change.
+
 ---
 
 ## Phase 6 — Memory consolidation  🚧 **6.0 BUILT 2026-11-19; 6.1 and 6.2 planned**

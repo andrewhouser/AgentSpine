@@ -54,6 +54,7 @@ import type {
   Run,
   SavedFile,
   Schedule,
+  ScheduleVersion,
   SearchHit,
   StudyDueCard,
   StudyOverview,
@@ -157,6 +158,9 @@ export const api = {
   // --- tasks, files, clients, search (the personal-assistant surface) ---
   addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; projectId?: number; title: string; waitingOn?: string }) =>
     post<Task>("/api/tasks", fields),
+  /** Keep a job's change, or queue its earlier text for approval. */
+  answerAfterCheck: (id: number, answer: "keep" | "revert") =>
+    post<{ message: string; queued: null | number }>(`/api/outbox/after-checks/${id}`, { answer }),
   answerHeadsup: (id: number, answer: "later" | "never" | "yes") =>
     post<Headsup>(`/api/headsups/${id}/answer`, { answer }),
   /** Keep or dismiss a lesson. Keeping it is the only way it reaches a later run. */
@@ -192,15 +196,15 @@ export const api = {
    */
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
-
   /** Cloud tokens against the caps (src/cloud-cap.ts). Read-only. */
   cloudUsage: () => request<CloudUsage>("/api/cloud-usage"),
-
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
 
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
+
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
+
   createSchedule: (name: string, schedule: string, task: string) =>
     post<Schedule>("/api/schedules", { name, schedule, task }),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
@@ -213,11 +217,10 @@ export const api = {
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
-
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
+  deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -230,7 +233,6 @@ export const api = {
       headers: { "Content-Type": audio.type || "application/octet-stream" },
       method: "POST",
     }),
-
   dictationStatus: () => request<DictationStatus>("/api/dictate"),
 
   dismissMeetingQuestion: (id: number) => post<{ ok: boolean }>(`/api/study/questions/${id}/dismiss`),
@@ -340,6 +342,7 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
+
   /**
    * One stretch of speech heard while idle: was it the wake word, and what followed?
    * Audio goes as the raw body, like `dictate`; the wake word and its spellings ride in the
@@ -354,29 +357,28 @@ export const api = {
 
   listFiles: () => request<SavedFile[]>("/api/files"),
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
+
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
-
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
-
   listProjects: () => request<Project[]>("/api/projects"),
 
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
 
   listRecipes: () => request<Recipe[]>("/api/recipes"),
+
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
   listSchedules: () => request<Schedule[]>("/api/schedules"),
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
+
   /** One utterance said to an assistant that is already listening. */
   listStyles: () => request<StylesState>("/api/styles"),
-
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
-
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
 
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
@@ -392,13 +394,13 @@ export const api = {
       speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
+
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
 
   /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
-
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
@@ -427,12 +429,12 @@ export const api = {
   planSpeech: (text: string) => post<{ chunks: string[] }>("/api/voice/plan", { text }),
 
   policy: () => request<Record<string, unknown>>("/api/policy"),
+
   previewHeadsups: () => request<HeadsupPreview>("/api/headsups/preview"),
 
   /** How the briefs would change. Writes nothing. */
   previewMeetingCloseout: (id: number, plan: CloseoutPlan) =>
     request<CloseoutPreview>(`/api/meetings/${id}/closeout/preview`, { body: JSON.stringify(plan), method: "POST" }),
-
   project: (id: number) =>
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,
@@ -440,35 +442,39 @@ export const api = {
 
   reindexProject: (id: number, force = false) =>
     post<{ result: IngestResult }>(`/api/projects/${id}/sources/reindex`, { force }),
+
   rejectConfirmation: (id: number, reason: string) =>
     post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/reject`, { reason }),
 
   rejectStyleProposal: (name: string) => request<{ name: string; removed: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}`, { method: "DELETE" }),
-
   removeProjectSource: (projectId: number, sourceId: number) =>
     request<{ ok: boolean }>(`/api/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
 
   renameConversation: (id: number, title: string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
+
   /** Re-make the final transcript from kept audio; `speakers` pins the head count (omit to detect). */
   reprocessMeeting: (id: number, speakers?: number) =>
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
   researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
+  /** Queue a job's earlier text for approval. It changes nothing by itself. */
+  restoreScheduleVersion: (id: number, versionId: number) =>
+    post<{ confirmationId: number; message: string }>(`/api/schedules/${id}/versions/${versionId}/restore`),
 
   retention: () => request<RetentionRule[]>("/api/retention"),
+
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
    * untouched and retrying is safe.
    */
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
-
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
-  runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 
+  runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
   /** Save the close-out, all of it or none. */
   saveMeetingCloseout: (id: number, plan: CloseoutPlan & { keepTranscript: boolean }) =>
     request<CloseoutSaved>(`/api/meetings/${id}/closeout`, { body: JSON.stringify(plan), method: "POST" }),
@@ -478,6 +484,9 @@ export const api = {
 
   saveStyle: (name: string, body: { appliesTo: StyleAppliesTo; note: string }) =>
     request<WritingStyle>(`/api/styles/${encodeURIComponent(name)}`, { body: JSON.stringify(body), method: "PUT" }),
+
+  /** A job's task changes, newest first. */
+  scheduleVersions: (id: number) => request<{ versions: ScheduleVersion[] }>(`/api/schedules/${id}/versions`),
 
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
   /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */

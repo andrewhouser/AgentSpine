@@ -138,6 +138,10 @@ struct WeeklyReviewView: View {
                     lessonSection(lessons)
                 }
 
+                if let cards = review.afterChecks, !cards.isEmpty {
+                    afterCheckSection(cards)
+                }
+
                 if let cards = review.retro, !cards.isEmpty {
                     retroSection(cards)
                 }
@@ -230,6 +234,54 @@ struct WeeklyReviewView: View {
             // The screen lists the newest few, so emptying it may reveal more waiting behind them.
             if review?.lessons?.cards.isEmpty == true, (review?.lessons?.total ?? 0) > 0 { await load() }
             message = result.message
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func afterCheckSection(_ cards: [AfterCheckCard]) -> some View {
+        Section {
+            ForEach(cards) { card in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(card.name)
+                    Text("\(card.headline), changed \(SpineDate.relative(card.changed))")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    if let detail = card.detail {
+                        Text(detail)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                    HStack {
+                        afterCheckButton("Keep change", card: card, answer: "keep")
+                        afterCheckButton("Go back", card: card, answer: "revert")
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("After a change")
+        } footer: {
+            Text("Jobs whose task changed three weeks or more ago. Going back asks for your approval first.")
+        }
+    }
+
+    private func afterCheckButton(_ label: String, card: AfterCheckCard, answer: String) -> some View {
+        Button(label) { Task { await sendAfterCheck(card, answer: answer) } }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(busy)
+    }
+
+    private func sendAfterCheck(_ card: AfterCheckCard, answer: String) async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await APIClient.shared.answerAfterCheck(card.id, answer: answer)
+            message = result.message
+            error = nil
+            // A refused restore leaves the question open on the server, so only an answered card leaves the list.
+            if answer == "keep" || result.queued != nil { review?.afterChecks?.removeAll { $0.id == card.id } }
         } catch {
             self.error = error.localizedDescription
         }

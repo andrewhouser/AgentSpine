@@ -140,8 +140,41 @@ export interface LessonCard {
   text: string;
 }
 
+/** What code measured after a job's task changed. The server writes the words, so all three clients agree. */
+export interface AfterCheck {
+  detail: null | string;
+  headline: string;
+  status: "not_enough" | "ready" | "superseded" | "waiting";
+  verdict: "better" | "mixed" | "same" | "worse" | null;
+}
+
+/** One change to a job's task. GET /api/schedules/:id/versions, newest first. */
+export interface ScheduleVersion {
+  after: string;
+  before: string;
+  canRestore: boolean;
+  changed: string;
+  check: AfterCheck | null;
+  id: number;
+  restored: boolean;
+  sourceLabel: string;
+}
+
+/** A finished after-check waiting for your answer in the weekly review. */
+export interface AfterCheckCard {
+  changed: string;
+  detail: null | string;
+  headline: string;
+  id: number;
+  name: string;
+  scheduleId: number;
+  verdict: "better" | "mixed" | "same" | "worse";
+}
+
 /** GET /api/outbox/review. */
 export interface OutboxReview {
+  /** Absent from a server older than SL8. */
+  afterChecks?: AfterCheckCard[];
   days: number;
   items: ReviewItem[];
   /** The newest few lessons and how many wait in all. Absent from a server older than lesson review. */

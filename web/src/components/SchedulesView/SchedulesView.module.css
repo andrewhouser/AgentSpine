@@ -111,3 +111,19 @@
   padding: 7px 10px;
   width: 100%;
 }
+
+.history {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.version {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

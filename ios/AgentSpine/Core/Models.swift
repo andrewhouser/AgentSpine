@@ -790,7 +790,49 @@ struct SkippedKind: Codable, Hashable {
     let topic: String
 }
 
+/// What code measured after a job's task changed. The server writes the words, so all three clients agree.
+struct ScheduleAfterCheck: Codable, Hashable {
+    let detail: String?
+    let headline: String
+    let status: String
+    let verdict: String?
+}
+
+/// One change to a job's task, from `GET /api/schedules/:id/versions`, newest first.
+struct ScheduleVersion: Codable, Identifiable, Hashable {
+    let after: String
+    let before: String
+    let canRestore: Bool
+    let changed: String
+    let check: ScheduleAfterCheck?
+    let id: Int
+    let restored: Bool
+    let sourceLabel: String
+}
+
+struct ScheduleVersions: Codable {
+    let versions: [ScheduleVersion]
+}
+
+struct ScheduleRestoreResult: Codable {
+    let confirmationId: Int
+    let message: String
+}
+
+/// A finished after-check waiting for your answer in the weekly review.
+struct AfterCheckCard: Codable, Identifiable, Hashable {
+    let changed: String
+    let detail: String?
+    let headline: String
+    let id: Int
+    let name: String
+    let scheduleId: Int
+    let verdict: String
+}
+
 struct OutboxReview: Codable {
+    /// Absent from a server older than SL8.
+    var afterChecks: [AfterCheckCard]?
     let days: Int
     var items: [ReviewItem]
     /// Absent from a server older than lesson review.

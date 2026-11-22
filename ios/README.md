@@ -18,7 +18,7 @@ Thread         turns live: every tool call with its verdict, your photos, markdo
                Approve/Reject buttons inline, and answering resumes the conversation;
                the mic is inside the message box with a live waveform while it records,
                and send turns into stop while a turn is running (Esc on the Mac)
-Schedules      jobs that run on a clock: pause, edit, run now, and how the last few went
+Schedules      jobs that run on a clock: pause, edit, run now, how the last few went, and task history
 Tasks          to-dos and follow-ups, with due times; the Mac pushes when one falls due
 Files          everything the assistant has saved for you, with a preview
 Clients        light client list, next actions, and where the last 30 days of time went

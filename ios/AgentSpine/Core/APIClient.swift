@@ -521,6 +521,27 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/schedules/\(id)", method: "DELETE"))
     }
 
+    /// A job's task changes, newest first.
+    func scheduleVersions(_ id: Int) async throws -> [ScheduleVersion] {
+        try await send(request("/api/schedules/\(id)/versions"), as: ScheduleVersions.self).versions
+    }
+
+    /// Queue a job's earlier text for approval. It changes nothing by itself.
+    func restoreScheduleVersion(_ id: Int, versionID: Int) async throws -> ScheduleRestoreResult {
+        try await send(
+            jsonRequest("/api/schedules/\(id)/versions/\(versionID)/restore", method: "POST"),
+            as: ScheduleRestoreResult.self
+        )
+    }
+
+    /// Keep a job's change, or queue its earlier text for approval.
+    func answerAfterCheck(_ id: Int, answer: String) async throws -> RetroAnswerResult {
+        try await send(
+            jsonRequest("/api/outbox/after-checks/\(id)", method: "POST", body: ["answer": answer]),
+            as: RetroAnswerResult.self
+        )
+    }
+
     /// Run a scheduled job now. Answers when the cycle finishes, not when it starts, so the
     /// caller needs a longer patience than the usual ten seconds — see `longSession`.
     func runScheduleNow(_ id: Int) async throws {

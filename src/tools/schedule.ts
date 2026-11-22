@@ -216,6 +216,8 @@ export const scheduleUpdate: Tool = {
     // The task in full, for the same reason `proposal` carries it: this is the standing
     // instruction, and a summary of it is not something you can judge.
     if (taskOf(a)) lines.push("", "New task, handed verbatim to every future run:", "", taskOf(a));
+    const restoring = a?.restore_version != null ? store.getScheduleVersion(Number(a.restore_version)) : undefined;
+    if (restoring) lines.push("", "Restored task, handed verbatim to every future run:", "", restoring.before_task);
     return { reversibility: "irreversible", target: "schedules", summary: lines.join("\n") };
   },
   checkPolicy: (p, a) => {
@@ -225,12 +227,21 @@ export const scheduleUpdate: Tool = {
     if (!Number.isFinite(id)) return { allowed: false, reason: "schedule_update needs the id of an existing job (schedule_list shows them)." };
     const cur = store.getSchedule(id);
     if (!cur) return { allowed: false, reason: `there is no scheduled job #${id}. Call schedule_list to see what exists.` };
+    // Checked again when you approve, which is the moment it matters: the diff you read was against the text
+    // the job had then, and approving it must not silently replace anything written since (SL8).
+    if (a?.restore_version != null) {
+      const version = store.getScheduleVersion(Number(a.restore_version));
+      if (!version || version.schedule_id !== id) return { allowed: false, reason: `job #${id} has no such earlier version.` };
+      if (taskOf(a)) return { allowed: false, reason: "a restore takes its text from the stored version, so it cannot also carry a task." };
+      if (a?.if_current !== store.taskFingerprint(cur.task))
+        return { allowed: false, reason: `job #${id} has changed since this restore was proposed. Open its history and choose again.` };
+    }
     const spec = specOf(a);
     if (spec) {
       const problem = specProblem(spec);
       if (problem) return { allowed: false, reason: problem };
     }
-    if (!nameOf(a) && !taskOf(a) && !spec && a?.enabled == null)
+    if (!nameOf(a) && !taskOf(a) && !spec && a?.enabled == null && a?.restore_version == null)
       return { allowed: false, reason: "schedule_update needs at least one of name, task, schedule, or enabled." };
     // A one-shot that has already fired has no time left to run at, so switching it back on
     // would either do nothing or — but for the guard in the store — fire it again on the
@@ -249,7 +260,13 @@ export const scheduleUpdate: Tool = {
     if (taskOf(a)) fields.task = taskOf(a);
     if (specOf(a)) fields.spec = specOf(a);
     if (a?.enabled != null) fields.enabled = bool(a.enabled, true);
-    store.updateSchedule(id, fields);
+    // From the row and not through `taskOf`, which trims and caps: a restore must put back the exact text.
+    if (a?.restore_version != null) {
+      const version = store.getScheduleVersion(Number(a.restore_version));
+      if (!version || version.schedule_id !== id) throw new Error(`job #${id} has no such earlier version.`);
+      fields.task = version.before_task;
+    }
+    store.updateSchedule(id, fields, "agent");
     const s = store.getSchedule(id);
     return `Updated ${describe(s!)} — ${s!.enabled ? `enabled, next run ${s!.next_run}` : "disabled"}.`;
   },

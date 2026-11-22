@@ -896,10 +896,14 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
   recent inputs and show the score beside the diff, one change per candidate. Start with watcher rewrites
   (`src/learn/rewrite.ts`). Replays run pinned local and must be unable to send, write or publish. A better score
   informs your decision and never approves a change. It has nothing to test until `runRewriter` has its trigger (SL1).
-- **SL8 Version history and after-checks (Code, not started).** Save the previous scheduled task text when a change is
-  approved, compare cost and failures a few weeks later, and offer a one-click revert. The revert changes what
-  unattended runs follow, so it goes through the same approval as any other standing-work change. The comparison
-  window is a number in code, and starts as a guess to check on real weeks.
+- **SL8 Version history and after-checks (built 2026-11-22).** `store.updateSchedule` saves the old and new task text
+  in one transaction, so no route can change a job without a record (`schedule_versions`, newest 20 per job).
+  `src/learn/versions.ts` compares tool calls per run and failed runs for 21 days on each side of a change, with at
+  least 5 runs per side, no model, and no verdict once a second change or audit pruning has spoiled the comparison.
+  Finished checks appear in the weekly review on web, Mac and iPhone, and every job's History shows its changes. Going
+  back only queues a `schedule_update` showing the diff, and that approval is refused if the job changed after it was
+  offered. The rewriter leaves text you went back to alone. All the thresholds are guesses to check on real weeks.
+  History starts with the first change after this ships, so a job has no earlier versions until then.
 
 ### Sequence and decisions
 

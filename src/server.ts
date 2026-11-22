@@ -88,6 +88,7 @@ import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
 import { answerLesson, openLessons } from "./learn/lessons.ts";
 import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
+import { answerAfterCheck, openAfterChecks, queueRestore, scheduleHistory } from "./learn/versions.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
@@ -897,7 +898,17 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
      */
     if (m === "GET" && seg[1] === "outbox" && seg[2] === "review" && seg.length === 3) {
       // Composed here so outbox-review.ts stays free of anything that imports the model router.
-      return sendJson(res, 200, { ...buildReview(), lessons: openLessons(), retro: openRetroProposals() });
+      return sendJson(res, 200, { ...buildReview(), afterChecks: openAfterChecks(), lessons: openLessons(), retro: openRetroProposals() });
+    }
+    // POST /api/outbox/after-checks/:id {answer: "keep" | "revert"}: a finished check on a job's change (SL8).
+    // Reverting only queues the earlier text for approval.
+    if (m === "POST" && seg[1] === "outbox" && seg[2] === "after-checks" && seg.length === 4) {
+      const id = Number(seg[3]);
+      if (!Number.isInteger(id) || id <= 0) return sendJson(res, 400, { error: "id must be a positive integer" });
+      const b = await readBody(req);
+      if (b?.answer !== "keep" && b?.answer !== "revert") return sendJson(res, 400, { error: 'answer must be "keep" or "revert"' });
+      const result = answerAfterCheck(id, b.answer);
+      return result ? sendJson(res, 200, result) : sendJson(res, 404, { error: "not an open after-check" });
     }
     // POST /api/outbox/lessons/:id {answer: "accept" | "reject"}: keeping a lesson is the only way one reaches a later
     // run, because the critique that wrote it may have read untrusted content (learn/lessons.ts).
@@ -2116,7 +2127,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         for (const k of ["name", "task", "enabled"]) if (k in b) patch[k] = b[k];
         if (b.schedule != null) patch.spec = String(b.schedule);
         try {
-          store.updateSchedule(Number(seg[2]), patch);
+          store.updateSchedule(Number(seg[2]), patch, "edit");
           return sendJson(res, 200, store.getSchedule(Number(seg[2])));
         } catch (e) {
           return sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
@@ -2125,6 +2136,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (m === "DELETE" && seg.length === 3) {
         store.deleteSchedule(Number(seg[2]));
         return sendJson(res, 200, { ok: true });
+      }
+      // A job's task history and its after-check (SL8).
+      if (m === "GET" && seg.length === 4 && seg[3] === "versions") {
+        const history = scheduleHistory(Number(seg[2]));
+        return history ? sendJson(res, 200, history) : sendJson(res, 404, { error: "no such schedule" });
+      }
+      // Queues the earlier text for approval. It never changes the job itself.
+      if (m === "POST" && seg.length === 6 && seg[3] === "versions" && seg[5] === "restore") {
+        const result = queueRestore(Number(seg[2]), Number(seg[4]));
+        return "error" in result ? sendJson(res, 400, result) : sendJson(res, 200, result);
       }
       if (m === "POST" && seg.length === 4 && seg[3] === "run") {
         const s = store.getSchedule(Number(seg[2]));

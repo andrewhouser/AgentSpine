@@ -111,6 +111,8 @@ export const proposeRewrite = async (scheduleId: number): Promise<null | Rewrite
     if (!REWRITE_ENABLED) return null;
     const s = store.getSchedule(scheduleId);
     if (!s || !isWatcher(s.task)) return null;
+    // You went back to this text on purpose (SL8), so offering to tighten it again would reargue that.
+    if (store.wasTaskRestored(s.id, s.task)) return null;
     // Keyed on the task as it stands, so a no holds until the task itself changes. Checked before the
     // model call, because a rewrite that could not be shown is not worth the local model's time.
     const shape = `rewrite:${scheduleId}:${taskKey(s.task)}`;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { Schedule } from "../../lib/types.ts";
+import type { Schedule, ScheduleVersion } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -29,6 +29,29 @@ export const SchedulesView = () => {
     task: "",
   });
   const [error, setError] = useState("");
+  const [historyFor, setHistoryFor] = useState<null | number>(null);
+  const [versions, setVersions] = useState<ScheduleVersion[]>([]);
+  const [historyNote, setHistoryNote] = useState("");
+
+  const toggleHistory = async (id: number): Promise<void> => {
+    setHistoryNote("");
+    if (historyFor === id) return setHistoryFor(null);
+    setVersions([]);
+    setHistoryFor(id);
+    try {
+      setVersions((await api.scheduleVersions(id)).versions);
+    } catch (err) {
+      setHistoryNote(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const restore = async (id: number, versionId: number): Promise<void> => {
+    try {
+      setHistoryNote((await api.restoreScheduleVersion(id, versionId)).message);
+    } catch (err) {
+      setHistoryNote(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const startEdit = (s: Schedule): void => {
     setDraft({ name: s.name, schedule: s.spec ?? "", task: s.task });
@@ -169,7 +192,39 @@ export const SchedulesView = () => {
                 >
                   Edit
                 </button>
+                <button
+                  aria-expanded={historyFor === s.id}
+                  className={styles.button}
+                  onClick={() => void toggleHistory(s.id)}
+                  type="button"
+                >
+                  History
+                </button>
               </div>
+              {historyFor === s.id && (
+                <div className={styles.history}>
+                  {versions.length === 0 && !historyNote && (
+                    <div className={styles.meta}>No changes to this task recorded yet.</div>
+                  )}
+                  {versions.map((v) => (
+                    <div className={styles.version} key={v.id}>
+                      <div className={styles.meta}>
+                        {new Date(v.changed).toLocaleString()} · {v.restored ? "Restored earlier text" : v.sourceLabel}
+                      </div>
+                      {v.check && <div className={styles.meta}>{v.check.headline}</div>}
+                      {v.check?.detail && <div className={styles.meta}>{v.check.detail}</div>}
+                      <div className={styles.meta}>It said before:</div>
+                      <p className={styles.task}>{v.before}</p>
+                      {v.canRestore && (
+                        <button className={styles.button} onClick={() => void restore(s.id, v.id)} type="button">
+                          Restore this text
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div aria-live="polite" className={styles.meta}>{historyNote}</div>
+                </div>
+              )}
             </>
           )}
         </div>

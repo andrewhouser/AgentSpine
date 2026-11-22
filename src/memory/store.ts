@@ -13,7 +13,7 @@
  * Long-term semantic memory (RAG) lives in ./rag.ts against the same db file.
  */
 import { DatabaseSync } from "node:sqlite";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { DB_PATH } from "../config.ts";
 import { canonicalSpec, isOneShot, nextRun, parseSpec } from "../schedule-spec.ts";
 import type { BrokerStatus, ClassifiedAction, ToolCall } from "../types.ts";
@@ -85,6 +85,19 @@ db.exec(`
     last_run TEXT,
     next_run TEXT
   );
+  -- One row per change to a job's task text (SL8). Written with the change itself, by the one function that
+  -- makes it, so no route can alter a standing instruction and leave no record of what it said before.
+  CREATE TABLE IF NOT EXISTS schedule_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL,
+    changed TEXT NOT NULL,
+    before_task TEXT NOT NULL,
+    after_task TEXT NOT NULL,
+    source TEXT NOT NULL,
+    check_answer TEXT,
+    check_answered TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_schedule_versions ON schedule_versions(schedule_id, id);
   CREATE TABLE IF NOT EXISTS attachments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created TEXT NOT NULL,
@@ -1526,7 +1539,50 @@ export interface ScheduleFields {
   spec?: string;
   enabled?: number | boolean;
 }
-export const updateSchedule = (id: number, fields: ScheduleFields): void => {
+
+/** Who changed a job's task: the agent's tool, you on a Schedules screen, or an app upgrade. */
+export type ScheduleChange = "agent" | "edit" | "system";
+
+export interface ScheduleVersionRow {
+  after_task: string;
+  before_task: string;
+  changed: string;
+  check_answer: null | string;
+  check_answered: null | string;
+  id: number;
+  schedule_id: number;
+  source: ScheduleChange;
+}
+
+/** Enough to restore a job from any recent change, without one chatty job growing the ledger for ever. */
+const SCHEDULE_VERSIONS_KEPT = 20;
+
+/** Oldest first, which is the order the after-check reads them in. */
+export const listScheduleVersions = (scheduleId: number): ScheduleVersionRow[] =>
+  db.prepare("SELECT * FROM schedule_versions WHERE schedule_id = ? ORDER BY id").all(scheduleId) as unknown as ScheduleVersionRow[];
+
+export const getScheduleVersion = (id: number): ScheduleVersionRow | undefined =>
+  db.prepare("SELECT * FROM schedule_versions WHERE id = ?").get(id) as ScheduleVersionRow | undefined;
+
+export const answerScheduleCheck = (id: number, answer: "kept" | "revert"): void => {
+  db.prepare("UPDATE schedule_versions SET check_answer = ?, check_answered = ? WHERE id = ?").run(answer, now(), id);
+};
+
+/** A short stand-in for a task's exact text, so an approval can say which text it was shown against. */
+export const taskFingerprint = (task: string): string => createHash("sha256").update(task).digest("hex").slice(0, 16);
+
+/** Whether this change put back text the job had before, however it was done. */
+export const isRestoredVersion = (version: ScheduleVersionRow, all: ScheduleVersionRow[]): boolean =>
+  all.some((v) => v.id <= version.id && v.before_task === version.after_task);
+
+/** Whether the job's current text is one it was deliberately returned to, so a learner should leave it alone. */
+export const wasTaskRestored = (scheduleId: number, task: string): boolean => {
+  const all = listScheduleVersions(scheduleId);
+  const latest = all.at(-1);
+  return Boolean(latest && latest.after_task === task && isRestoredVersion(latest, all));
+};
+
+export const updateSchedule = (id: number, fields: ScheduleFields, source: ScheduleChange = "system"): void => {
   const cur = getSchedule(id);
   if (!cur) return;
   const name = fields.name ?? cur.name;
@@ -1560,19 +1616,47 @@ export const updateSchedule = (id: number, fields: ScheduleFields): void => {
    */
   if (next == null) enabled = 0;
 
-  db.prepare("UPDATE schedules SET name=?, task=?, spec=?, interval_minutes=?, enabled=?, next_run=? WHERE id=?").run(
-    name,
-    task,
-    spec,
-    interval,
-    enabled,
-    next,
-    id,
-  );
+  const write = (): void => {
+    db.prepare("UPDATE schedules SET name=?, task=?, spec=?, interval_minutes=?, enabled=?, next_run=? WHERE id=?").run(
+      name,
+      task,
+      spec,
+      interval,
+      enabled,
+      next,
+      id,
+    );
+  };
+  if (task === cur.task) return write();
+
+  // Together or not at all: a changed task with no record of the old one is the case this table exists to rule out.
+  // A savepoint rather than BEGIN, because a caller may already be inside a transaction.
+  db.exec("SAVEPOINT schedule_version");
+  try {
+    write();
+    db.prepare("INSERT INTO schedule_versions (schedule_id, changed, before_task, after_task, source) VALUES (?,?,?,?,?)").run(
+      id,
+      now(),
+      cur.task,
+      task,
+      source,
+    );
+    db.prepare(
+      "DELETE FROM schedule_versions WHERE schedule_id = ? AND id NOT IN " +
+        "(SELECT id FROM schedule_versions WHERE schedule_id = ? ORDER BY id DESC LIMIT ?)",
+    ).run(id, id, SCHEDULE_VERSIONS_KEPT);
+    db.exec("RELEASE schedule_version");
+  } catch (err) {
+    db.exec("ROLLBACK TO schedule_version");
+    db.exec("RELEASE schedule_version");
+    throw err;
+  }
 };
 
 export const deleteSchedule = (id: number): void => {
   db.prepare("DELETE FROM schedules WHERE id = ?").run(id);
+  // The old text of a job you deleted is still that job's instructions, and nothing can restore it now.
+  db.prepare("DELETE FROM schedule_versions WHERE schedule_id = ?").run(id);
 };
 
 /** Enabled schedules whose next_run is due (or unset). */

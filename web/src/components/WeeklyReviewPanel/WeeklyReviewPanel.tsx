@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { LessonCard, OutboxReview, RetroCard, ReviewItem } from "../../lib/types.ts";
+import type { AfterCheckCard, LessonCard, OutboxReview, RetroCard, ReviewItem } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -86,6 +86,9 @@ export const WeeklyReviewPanel = () => {
   const answerCard = (card: RetroCard, value: "accept" | "reject"): Promise<void> =>
     run(async () => (await api.answerRetro(card.id, value)).message);
 
+  const answerCheck = (card: AfterCheckCard, value: "keep" | "revert"): Promise<void> =>
+    run(async () => (await api.answerAfterCheck(card.id, value)).message);
+
   const answerLesson = (card: LessonCard, value: "accept" | "reject"): Promise<void> =>
     run(async () => (await api.answerLesson(card.id, value)).message);
 
@@ -157,6 +160,29 @@ export const WeeklyReviewPanel = () => {
                 </button>
                 <button className={styles.button} disabled={busy} onClick={() => void answerLesson(card, "reject")} type="button">
                   Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {(review.afterChecks ?? []).length > 0 && (
+        <>
+          <p className={styles.note}>Jobs whose task changed three weeks or more ago. Going back asks for your approval first.</p>
+          {(review.afterChecks ?? []).map((card) => (
+            <div className={styles.item} key={card.id}>
+              <div className={styles.title}>{card.name}</div>
+              <div className={styles.meta}>
+                {card.headline}, changed {new Date(card.changed).toLocaleDateString()}
+              </div>
+              {card.detail && <p className={styles.body}>{card.detail}</p>}
+              <div className={styles.actions}>
+                <button className={styles.button} disabled={busy} onClick={() => void answerCheck(card, "keep")} type="button">
+                  Keep change
+                </button>
+                <button className={styles.button} disabled={busy} onClick={() => void answerCheck(card, "revert")} type="button">
+                  Go back
                 </button>
               </div>
             </div>

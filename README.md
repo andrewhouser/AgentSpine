@@ -679,7 +679,8 @@ Ways to give it work:
   exits. Best for one-offs; no repetition.
 - **Schedules** — a named task on a schedule. Add one on the page, or just ask for it in
   chat (see below). See Watchers below for the ones that should only speak up when
-  something changed.
+  something changed. **History** on each job shows what its task used to say and how it
+  has done since a change. Restoring earlier text waits in Approvals like any other change.
 - **`goals.md`** — the standing goal read on every `tick`/`loop` heartbeat. Keep it
   idempotent (a task left there runs every tick). With no `goals.md` it does a harmless
   low-risk check-in.
