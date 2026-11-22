@@ -1004,6 +1004,13 @@ export interface KnowledgeEntity {
   name: string;
 }
 
+/** The answer to teaching a name. `clash` means it belongs to someone else and nothing changed. */
+export interface KnowledgeAliasResult {
+  clash: KnowledgeEntity | null;
+  entity: KnowledgeEntity;
+  taught: boolean;
+}
+
 export interface KnowledgeConflict {
   claims: KnowledgeClaim[];
   kind: string;

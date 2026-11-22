@@ -599,8 +599,9 @@ final class APIClient {
     }
 
     /// Accept (optionally corrected) or reject a proposed claim, or change its status.
-    func knowledgeReview(_ id: Int, review: String? = nil, text: String? = nil, status: String? = nil) async throws {
+    func knowledgeReview(_ id: Int, review: String? = nil, text: String? = nil, status: String? = nil, sensitive: Bool? = nil) async throws {
         var body: [String: Any] = [:]
+        if let sensitive { body["sensitive"] = sensitive }
         if let review { body["review"] = review }
         if let text { body["text"] = text }
         if let status { body["status"] = status }
@@ -629,6 +630,20 @@ final class APIClient {
 
     func knowledgeEntities() async throws -> [KnowledgeEntity] {
         try await send(request("/api/knowledge/entities"), as: [KnowledgeEntity].self)
+    }
+
+    /// Teach another name. Someone else's name comes back as `clash` unless `merge` is true.
+    func knowledgeTeachAlias(_ id: Int, alias: String, merge: Bool) async throws -> KnowledgeAliasResult {
+        let req = try jsonRequest("/api/knowledge/entities/\(id)/aliases", method: "POST", body: ["alias": alias, "merge": merge])
+        return try await send(req, as: KnowledgeAliasResult.self)
+    }
+
+    /// Ask the local model for cited claims in an inbox item. Long items take several model calls.
+    func inboxExtract(_ id: Int) async throws -> InboxExtractResult {
+        var req = try request("/api/inbox/\(id)/extract")
+        req.httpMethod = "POST"
+        req.timeoutInterval = 600
+        return try await send(req, as: InboxExtractResult.self, using: longSession)
     }
 
     /// Hybrid search over every indexed document and filed meeting.

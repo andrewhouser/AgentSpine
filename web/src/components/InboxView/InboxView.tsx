@@ -40,6 +40,7 @@ export const InboxView = ({ projects }: InboxViewProps) => {
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<KnowledgeHit[] | null>(null);
+  const [extractNotes, setExtractNotes] = useState<Record<number, string>>({});
   const picker = useRef<HTMLInputElement>(null);
 
   const guard = async (label: string, work: () => Promise<unknown>): Promise<void> => {
@@ -59,6 +60,16 @@ export const InboxView = ({ projects }: InboxViewProps) => {
     if (!files?.length) return;
     void guard("Adding…", async () => {
       for (const f of Array.from(files)) await api.inboxAddFile(f, f.name);
+    });
+  };
+
+  /** Only on request: extraction is several calls to the model host. */
+  const extract = (id: number): void => {
+    void guard("Reading for decisions and commitments…", async () => {
+      const { dropped, kept } = await api.inboxExtract(id);
+      const found = kept === 0 ? "Nothing to review was found." : `Found ${kept}. Anything new is waiting in Knowledge.`;
+      const left = dropped > 0 ? ` ${dropped} left out because the quoted words were not in the text.` : "";
+      setExtractNotes((notes) => ({ ...notes, [id]: found + left }));
     });
   };
 
@@ -212,6 +223,7 @@ export const InboxView = ({ projects }: InboxViewProps) => {
                 </button>
               </p>
             )}
+            {extractNotes[it.id] && <p className={styles.meta}>{extractNotes[it.id]}</p>}
           </div>
           <div className={styles.form}>
             <select
@@ -227,6 +239,11 @@ export const InboxView = ({ projects }: InboxViewProps) => {
                 </option>
               ))}
             </select>
+            {it.status === "ready" && (
+              <button className={styles.button} disabled={busy !== ""} onClick={() => extract(it.id)} type="button">
+                Find decisions and commitments
+              </button>
+            )}
             {(it.status === "needs_ocr" || it.status === "ocr_failed" || it.status === "failed") && (
               <button className={styles.button} onClick={() => void guard("Reading…", () => api.inboxReprocess(it.id))} type="button">
                 Try reading again

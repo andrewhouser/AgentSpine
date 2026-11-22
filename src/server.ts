@@ -1037,6 +1037,12 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const num = (k: string): number | undefined => (url.searchParams.get(k) ? Number(url.searchParams.get(k)) : undefined);
         const str = (k: string): string | undefined => url.searchParams.get(k) ?? undefined;
         if (m === "GET" && seg[2] === "entities" && seg.length === 3) return sendJson(res, 200, knowledge.listEntities());
+        // POST /api/knowledge/entities/:id/aliases {alias, merge?}: a name that is someone else's returns `clash` and
+        // changes nothing unless `merge` is exactly true, because a merge cannot be undone.
+        if (m === "POST" && seg[2] === "entities" && seg[4] === "aliases" && seg.length === 5) {
+          const b = await readBody(req);
+          return sendJson(res, 200, knowledge.teachAlias(Number(seg[3]), String(b.alias ?? ""), { merge: b.merge === true }));
+        }
         // Relationships between people and teams. A person enters them; nothing infers them.
         if (seg[2] === "relations" && seg.length === 3) {
           if (m === "GET") {

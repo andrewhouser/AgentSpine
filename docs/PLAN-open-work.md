@@ -454,10 +454,12 @@ baseline, and the meeting recall number is still unmeasured.
   project, so supersession is always a person's act; conflicting information with "This one is wrong"; and a brief
   reader (a project brief, or one of the six operations). It reads the API in K4 and K6. `KnowledgeView` is in `Views/KnowledgeView.swift`, shared by both targets.
   **Not built:** the close-out as one flow at the end of a meeting (confirm participants and speaker names, assign
-  projects or topics, preview how briefs will change) rather than a review list; a correction that teaches a
-  deterministic alias for a speaker, acronym or project name from the screen (the store merges aliases; no screen
-  calls it); and running model extraction on an inbox item from a button (the API `POST /api/inbox/:id/extract`
-  exists).
+  projects or topics, preview how briefs will change) rather than a review list; and teaching an alias for a project
+  name, because projects are not knowledge entities.
+  **Added 2026-11-22 on web, iPhone and Mac (built, not seen running; extraction not run on the live model):** "Teach
+  a name" for a person, team or topic (`POST /api/knowledge/entities/:id/aliases`). A name that already belongs to
+  another entity changes nothing until you confirm the merge, because a merge cannot be undone. An Inbox button runs
+  model extraction on request, and what it finds arrives as proposed claims.
 - **K6. Briefs and synthesis operations (backend built 2026-11-21; the screens are not).** `src/knowledge/briefs.ts`:
   briefs are ASSEMBLED from reviewed claims by code, with a fixed recipe and output shape per operation, never written
   freehand by a model, so every line is a claim with its id, source, exact cited words and evidence level, and an
@@ -479,9 +481,9 @@ baseline, and the meeting recall number is still unmeasured.
   recorded items the plan does not mention, without judging agreement. The web Knowledge screen has the brief
   reader (with a person picker for person and one-on-one briefs), the plan comparison and a sensitive checkbox on
   claims awaiting review. iPhone and Mac have the same brief reader, person and one-on-one briefs and plan comparison
-  (2026-11-22, in the shared `KnowledgeView`; built but not seen running). **Not built:** the sensitive checkbox and
-  correcting a claim's text on iPhone and Mac, and a check that the plan comparison helps on a real plan (the matching
-  is plain shared words, a first guess to tune on real plans).
+  (2026-11-22, in the shared `KnowledgeView`; built but not seen running), and the sensitive switch and claim
+  correction during review. **Not built:** a check that the plan comparison helps on a real plan (the matching is
+  plain shared words, a first guess to tune on real plans).
 - **K7. Retention rules (built 2026-11-21).** Separate rules per kind of thing, stated from the same numbers the
   code enforces (`src/knowledge/retention.ts`, `GET /api/retention`): original audio (`MEETING_KEEP_AUDIO_HOURS`),
   raw transcripts (`TRANSCRIPT_RETENTION_DAYS`, 30), a transcript indexed in a project (only if you chose to keep

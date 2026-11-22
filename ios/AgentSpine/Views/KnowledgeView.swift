@@ -24,6 +24,13 @@ struct KnowledgeView: View {
     @State private var briefPerson: Int?
     @State private var plan = ""
     @State private var rules: [RetentionRule] = []
+    @State private var editingID: Int?
+    @State private var editingText = ""
+    @State private var allEntities: [KnowledgeEntity] = []
+    @State private var aliasEntity: Int?
+    @State private var aliasText = ""
+    @State private var aliasNotice = ""
+    @State private var aliasClash: KnowledgeEntity?
 
     private static let operations: [(key: String, label: String)] = [
         ("next-meeting", "Brief me for the next meeting"),
@@ -59,12 +66,34 @@ struct KnowledgeView: View {
                 ForEach(claims) { claim in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(meta(claim)).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textFaint)
-                        Text(claim.text).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                        if editingID == claim.id {
+                            TextField("Corrected text", text: $editingText, axis: .vertical)
+                                .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body))
+                                .textFieldStyle(.roundedBorder)
+                        } else {
+                            Text(claim.text).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                        }
                         Text("\u{201C}\(claim.passage)\u{201D} (\(claim.sourceText))")
                             .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                             .foregroundStyle(Spine.Palette.textDim)
+                        Toggle("Sensitive: keep it out of briefs and answers", isOn: Binding(
+                            get: { claim.sensitive == 1 },
+                            set: { value in Task { await setSensitive(claim, value) } }
+                        ))
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                         HStack {
-                            Button("Accept") { Task { await accept(claim) } }.buttonStyle(.borderedProminent)
+                            Button(editingID == claim.id ? "Accept correction" : "Accept") { Task { await accept(claim) } }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(editingID == claim.id && editingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            Button(editingID == claim.id ? "Cancel" : "Correct") {
+                                if editingID == claim.id {
+                                    editingID = nil
+                                } else {
+                                    editingID = claim.id
+                                    editingText = claim.text
+                                }
+                            }
+                            .buttonStyle(.bordered)
                             Button("Reject", role: .destructive) { Task { await review(claim, "reject") } }.buttonStyle(.bordered)
                         }
                         .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
@@ -87,6 +116,31 @@ struct KnowledgeView: View {
                         }
                     }
                 }
+            }
+            Section {
+                Picker("Who or what", selection: $aliasEntity) {
+                    Text(allEntities.isEmpty ? "Nothing recorded yet" : "Choose").tag(Int?.none)
+                    ForEach(allEntities) { entity in Text("\(entity.name) (\(entity.kind))").tag(Int?.some(entity.id)) }
+                }
+                .disabled(allEntities.isEmpty)
+                if let chosen = allEntities.first(where: { $0.id == aliasEntity }), !chosen.aliases.isEmpty {
+                    Text("Also known as \(chosen.aliases.joined(separator: ", "))")
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+                TextField("Another name, spelling or acronym", text: $aliasText)
+                    .autocorrectionDisabled()
+                Button("Teach this name") { Task { await teachAlias() } }
+                    .disabled(aliasEntity == nil || aliasText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if !aliasNotice.isEmpty {
+                    Text(aliasNotice)
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+            } header: {
+                Text("Teach a name")
+            } footer: {
+                Text("From now on this name resolves to the same person, team or topic. If it already belongs to another, you are asked before they are merged.")
             }
             Section("Read a brief") {
                 Picker("Project", selection: $briefProject) {
@@ -150,6 +204,18 @@ struct KnowledgeView: View {
         .task { await load() }
         .sheet(isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } })) { replaceSheet }
         .alert(
+            "Merge \(aliasClash?.name ?? "them")?",
+            isPresented: Binding(get: { aliasClash != nil }, set: { if !$0 { aliasClash = nil } })
+        ) {
+            Button("Merge", role: .destructive) {
+                aliasClash = nil
+                Task { await teachAlias(merge: true) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("That name already belongs to \(aliasClash?.name ?? "another entry"). Merging moves its claims and relationships here and cannot be undone.")
+        }
+        .alert(
             "That didn't work",
             isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })
         ) {
@@ -196,8 +262,10 @@ struct KnowledgeView: View {
             conflicts = await conf ?? []
             // A failed refresh keeps what is on screen, so a chosen person is not lost to a network blip.
             if let found = await entities {
+                allEntities = found
                 people = found.filter { $0.kind == "person" }
                 if let chosen = briefPerson, !people.contains(where: { $0.id == chosen }) { briefPerson = nil }
+                if let chosen = aliasEntity, !found.contains(where: { $0.id == chosen }) { aliasEntity = nil }
             }
             if let found = await kept { rules = found }
             loadError = nil
@@ -216,7 +284,9 @@ struct KnowledgeView: View {
 
     private func accept(_ claim: KnowledgeClaim) async {
         do {
-            try await APIClient.shared.knowledgeReview(claim.id, review: "accept")
+            let corrected = editingID == claim.id ? editingText : nil
+            try await APIClient.shared.knowledgeReview(claim.id, review: "accept", text: corrected)
+            if editingID == claim.id { editingID = nil }
             if claim.kind == "decision" || claim.kind == "status" {
                 var q = ["kind": claim.kind, "review": "reviewed", "status": "active"]
                 if let project = claim.projectID { q["project"] = String(project) }
@@ -257,6 +327,28 @@ struct KnowledgeView: View {
         guard let person = briefPerson else { return }
         do {
             brief = try await APIClient.shared.knowledgeBrief(kind: kind, subject: String(person))
+        } catch { actionError = error.localizedDescription }
+    }
+
+    private func setSensitive(_ claim: KnowledgeClaim, _ value: Bool) async {
+        do {
+            try await APIClient.shared.knowledgeReview(claim.id, sensitive: value)
+            await load()
+        } catch { actionError = error.localizedDescription }
+    }
+
+    private func teachAlias(merge: Bool = false) async {
+        guard let id = aliasEntity else { return }
+        let alias = aliasText.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let result = try await APIClient.shared.knowledgeTeachAlias(id, alias: alias, merge: merge)
+            if let clash = result.clash {
+                aliasClash = clash
+                return
+            }
+            aliasNotice = result.taught ? "\(result.entity.name) is now also known as \(alias)." : "\(result.entity.name) already has that name."
+            aliasText = ""
+            await load()
         } catch { actionError = error.localizedDescription }
     }
 

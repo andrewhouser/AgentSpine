@@ -153,6 +153,26 @@ console.log("\nEXTRACTION CANNOT INVENT A CITATION");
   check("a quote matches ignoring case and spacing", (await x.extractClaims({ sourceKind: "inbox", sourceRef: "inbox:79", text })).kept, 1);
 }
 
+console.log("\nTEACHING AN ALIAS: A MERGE IS NEVER SILENT");
+{
+  const sam = k.upsertEntity("person", "Sam Okafor");
+  const other = k.upsertEntity("person", "Samuel Reyes");
+  const owned = k.addClaim({ kind: "commitment", method: "manual", owner: "Samuel Reyes", passage: "Samuel will send it", sourceKind: "note", sourceRef: "alias-test", text: "Samuel sends the alias report" });
+  check("a new name is taught", k.teachAlias(sam.id, "  Sam   O. ").entity.aliases, ["Sam O."]);
+  check("a name it already has is not taught twice", k.teachAlias(sam.id, "sam o.").taught, false);
+  const refused = k.teachAlias(sam.id, "samuel reyes");
+  check("someone else's name comes back as a clash", [refused.taught, refused.clash?.id], [false, other.id]);
+  check("and nothing was merged", [k.getEntity(other.id)?.name, k.getClaim(owned).ownerName], ["Samuel Reyes", "Samuel Reyes"]);
+  check("only an explicit merge joins them", k.teachAlias(sam.id, "samuel reyes", { merge: true }).taught, true);
+  check("the claim follows the merge", [k.getEntity(other.id), k.getClaim(owned).ownerName], [undefined, "Sam Okafor"]);
+  const full = k.upsertEntity("person", "Alias Cap");
+  for (let i = 0; i < 20; i++) k.teachAlias(full.id, `Cap ${i}`);
+  const spare = k.upsertEntity("person", "Cap Spare");
+  let threw = false;
+  try { k.teachAlias(full.id, "Cap Spare", { merge: true }); } catch { threw = true; }
+  check("a merge past the name cap is refused before it changes anything", [threw, k.getEntity(spare.id)?.name], [true, "Cap Spare"]);
+}
+
 model.close();
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

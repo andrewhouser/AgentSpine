@@ -27,6 +27,7 @@ import type {
   InboxItem,
   InboxStatus,
   IngestResult,
+  KnowledgeAliasResult,
   KnowledgeClaim,
   KnowledgeConflict,
   KnowledgeEntity,
@@ -260,6 +261,9 @@ export const api = {
 
   inboxDelete: (id: number) => request<{ deleted: boolean }>(`/api/inbox/${id}`, { method: "DELETE" }),
 
+  /** Ask the local model for cited claims. `kept` can include claims already in the store. */
+  inboxExtract: (id: number) => request<{ dropped: number; kept: number }>(`/api/inbox/${id}/extract`, { method: "POST" }),
+
   inboxFile: (id: number, project: null | number) =>
     request<InboxItem>(`/api/inbox/${id}`, { body: JSON.stringify({ project }), method: "PATCH" }),
 
@@ -301,6 +305,10 @@ export const api = {
   /** The newer claim replaces the older one. Only a person does this. */
   knowledgeSupersede: (older: number, newer: number) =>
     request<KnowledgeClaim>(`/api/knowledge/claims/${older}/supersede`, { body: JSON.stringify({ by: newer }), method: "POST" }),
+
+  /** Teach another name. Someone else's name comes back as `clash` unless `merge` is true. */
+  knowledgeTeachAlias: (id: number, alias: string, merge = false) =>
+    request<KnowledgeAliasResult>(`/api/knowledge/entities/${id}/aliases`, { body: JSON.stringify({ alias, merge }), method: "POST" }),
 
   listAgents: () => request<Agent[]>("/api/agents"),
 

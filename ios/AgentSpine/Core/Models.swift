@@ -1475,6 +1475,8 @@ struct KnowledgeClaim: Codable, Identifiable, Hashable {
     let projectID: Int?
     let reviewState: String
     let saidOn: String?
+    /// 1 when a person marked it sensitive: left out of briefs and answers, never deleted.
+    let sensitive: Int?
     let sourceKind: String
     let sourceRef: String
     let sourceState: String
@@ -1484,7 +1486,7 @@ struct KnowledgeClaim: Codable, Identifiable, Hashable {
     let topic: String?
 
     enum CodingKeys: String, CodingKey {
-        case due, evidence, id, kind, ownerName, passage, speaker, status, text, topic
+        case due, evidence, id, kind, ownerName, passage, sensitive, speaker, status, text, topic
         case projectID = "project_id"
         case reviewState = "review_state"
         case saidOn = "said_on"
@@ -1507,11 +1509,31 @@ struct KnowledgeBrief: Codable, Hashable {
     let markdown: String
 }
 
-/// A person, team or topic in the knowledge store. The brief screens only need who it is.
+/// A person, team or topic in the knowledge store, with the other names it is known by.
 struct KnowledgeEntity: Codable, Identifiable, Hashable {
+    let aliases: [String]
     let id: Int
     let kind: String
     let name: String
+}
+
+/// The answer to teaching a name. `clash` means it belongs to someone else and nothing changed.
+struct KnowledgeAliasResult: Codable, Hashable {
+    let clash: KnowledgeEntity?
+    let entity: KnowledgeEntity
+    let taught: Bool
+}
+
+/// What model extraction found in an inbox item. `kept` can include claims already in the store.
+struct InboxExtractResult: Codable, Hashable {
+    let dropped: Int
+    let kept: Int
+
+    var summary: String {
+        var text = kept == 0 ? "Nothing to review was found." : "Found \(kept). Anything new is waiting in Knowledge."
+        if dropped > 0 { text += " \(dropped) left out because the quoted words were not in the text." }
+        return text
+    }
 }
 
 /// One result of GET /api/knowledge/search. `via` says which paths found it (`fts`, `vector`).

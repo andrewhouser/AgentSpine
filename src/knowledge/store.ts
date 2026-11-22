@@ -160,6 +160,8 @@ export const listEntities = (kind?: EntityKind): Entity[] =>
     : rawDb.prepare("SELECT * FROM kn_entities ORDER BY kind, name COLLATE NOCASE").all()
   ).map((r) => hydrateEntity(r as Parameters<typeof hydrateEntity>[0]));
 
+const MAX_ALIASES = 20;
+
 /** Find an entity by its name or any alias, case-insensitively, or create it. A correction teaches an alias. */
 export const upsertEntity = (kind: EntityKind, name: string): Entity => {
   const clean = name.trim().replace(/\s+/g, " ").slice(0, 120);
@@ -191,7 +193,28 @@ export const addAlias = (entityId: number, alias: string): void => {
     rawDb.prepare("DELETE FROM kn_entities WHERE id = ?").run(clash.id);
   }
   const unique = [...new Map(aliases.map((x) => [x.toLowerCase(), x])).values()].filter((x) => x.toLowerCase() !== e.name.toLowerCase());
-  rawDb.prepare("UPDATE kn_entities SET aliases = ? WHERE id = ?").run(JSON.stringify(unique.slice(0, 20)), entityId);
+  rawDb.prepare("UPDATE kn_entities SET aliases = ? WHERE id = ?").run(JSON.stringify(unique.slice(0, MAX_ALIASES)), entityId);
+};
+
+/**
+ * Teach an alias from a screen. A merge cannot be undone (the other entity's row is deleted and its claims move), so
+ * a name that already belongs to someone else changes nothing and comes back as `clash` until a person says `merge`.
+ * The cap is checked first because `addAlias` would otherwise merge and then silently cut names past it.
+ */
+export const teachAlias = (entityId: number, alias: string, opts: { merge?: boolean } = {}): { clash: Entity | null; entity: Entity; taught: boolean } => {
+  const e = getEntity(entityId);
+  if (!e) throw new Error("no such entity");
+  const clean = alias.trim().replace(/\s+/g, " ").slice(0, 120);
+  if (!clean) throw new Error("an alias needs a name");
+  const lower = clean.toLowerCase();
+  if (e.name.toLowerCase() === lower || e.aliases.some((a) => a.toLowerCase() === lower)) return { clash: null, entity: e, taught: false };
+  const clash = listEntities(e.kind).find((o) => o.id !== entityId && (o.name.toLowerCase() === lower || o.aliases.some((a) => a.toLowerCase() === lower))) ?? null;
+  if (clash && !opts.merge) return { clash, entity: e, taught: false };
+  const names = new Set([...e.aliases, clean, ...(clash ? [clash.name, ...clash.aliases] : [])].map((a) => a.toLowerCase()));
+  names.delete(e.name.toLowerCase());
+  if (names.size > MAX_ALIASES) throw new Error(`${e.name} would have more than ${MAX_ALIASES} other names`);
+  addAlias(entityId, clean);
+  return { clash: null, entity: getEntity(entityId) as Entity, taught: true };
 };
 
 // --- relationships between people and teams (K4) ---

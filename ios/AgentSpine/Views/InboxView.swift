@@ -27,6 +27,8 @@ struct InboxView: View {
     @State private var searchText = ""
     @State private var searching = false
     @State private var hits: [KnowledgeHit]?
+    @State private var extractingID: Int?
+    @State private var extractNotes: [Int: String] = [:]
 
     var body: some View {
         List {
@@ -94,6 +96,20 @@ struct InboxView: View {
                     } else if let id = item.projectID, let project = state.projects.first(where: { $0.id == id }) {
                         Label(project.name, systemImage: "folder")
                             .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                    if item.isReady {
+                        // Only on request: extraction is several calls to the model host.
+                        Button(extractingID == item.id ? "Reading…" : "Find decisions and commitments") {
+                            Task { await extract(item) }
+                        }
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                        .buttonStyle(.borderless)
+                        .disabled(extractingID != nil)
+                    }
+                    if let note = extractNotes[item.id] {
+                        Text(note)
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                             .foregroundStyle(Spine.Palette.textDim)
                     }
                 }
@@ -242,6 +258,15 @@ struct InboxView: View {
         do {
             try await APIClient.shared.inboxFile(item.id, under: projectID)
             await load()
+        } catch { actionError = error.localizedDescription }
+    }
+
+    private func extract(_ item: InboxItem) async {
+        guard extractingID == nil else { return }
+        extractingID = item.id
+        defer { extractingID = nil }
+        do {
+            extractNotes[item.id] = try await APIClient.shared.inboxExtract(item.id).summary
         } catch { actionError = error.localizedDescription }
     }
 

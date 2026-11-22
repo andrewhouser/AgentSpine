@@ -38,7 +38,10 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
   const [replacing, setReplacing] = useState<{ candidates: KnowledgeClaim[]; id: number } | null>(null);
   const [error, setError] = useState("");
   const entitiesLoad = useCallback(() => api.knowledgeEntities(), []);
-  const [entities] = useResource<KnowledgeEntity[]>(entitiesLoad, []);
+  const [entities, reloadEntities] = useResource<KnowledgeEntity[]>(entitiesLoad, []);
+  const [aliasEntity, setAliasEntity] = useState("");
+  const [aliasText, setAliasText] = useState("");
+  const [aliasNotice, setAliasNotice] = useState("");
   const people = entities.filter((e) => e.kind === "person");
   const [person, setPerson] = useState("");
   const [project, setProject] = useState("");
@@ -64,6 +67,28 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
     if (c.project_id) params.project = String(c.project_id);
     const earlier = (await api.knowledgeClaims(params)).filter((x) => x.id !== c.id);
     setReplacing({ candidates: earlier, id: c.id });
+  };
+
+  /** A name that already belongs to someone else is merged only after you say so, because a merge cannot be undone. */
+  const teachAlias = async (): Promise<void> => {
+    setError("");
+    setAliasNotice("");
+    const alias = aliasText.trim();
+    try {
+      let result = await api.knowledgeTeachAlias(Number(aliasEntity), alias);
+      if (result.clash) {
+        const ok = window.confirm(`That name already belongs to ${result.clash.name}. Merge them? Their claims and relationships move here, and this cannot be undone.`);
+        if (!ok) return;
+        result = await api.knowledgeTeachAlias(Number(aliasEntity), alias, true);
+      }
+      setAliasNotice(result.taught ? `${result.entity.name} is now also known as ${alias}.` : `${result.entity.name} already has that name.`);
+      setAliasText("");
+      reloadEntities();
+      reload();
+      reloadConflicts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const comparePlan = async (): Promise<void> => {
@@ -205,6 +230,36 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
           ))}
         </div>
       ))}
+
+      <h2 className={styles.title}>Teach a name</h2>
+      <p className={styles.meta}>
+        From now on this name resolves to the same person, team or topic. If it already belongs to another, you are asked
+        before they are merged.
+      </p>
+      <div className={styles.form}>
+        <select aria-label="Who or what" className={styles.input} disabled={entities.length === 0} onChange={(e) => setAliasEntity(e.target.value)} value={aliasEntity}>
+          <option value="">{entities.length === 0 ? "Nothing recorded yet" : "Choose"}</option>
+          {entities.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name} ({e.kind})
+            </option>
+          ))}
+        </select>
+        <input
+          aria-label="Another name"
+          className={`${styles.input} ${styles.grow}`}
+          onChange={(e) => setAliasText(e.target.value)}
+          placeholder="Another name, spelling or acronym"
+          value={aliasText}
+        />
+        <button className={styles.button} disabled={!aliasEntity || !aliasText.trim()} onClick={() => void teachAlias()} type="button">
+          Teach this name
+        </button>
+      </div>
+      {(entities.find((e) => String(e.id) === aliasEntity)?.aliases.length ?? 0) > 0 && (
+        <p className={styles.meta}>Also known as {entities.find((e) => String(e.id) === aliasEntity)?.aliases.join(", ")}</p>
+      )}
+      {aliasNotice && <p className={styles.meta}>{aliasNotice}</p>}
 
       <h2 className={styles.title}>Read a brief</h2>
       <div className={styles.form}>
