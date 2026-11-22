@@ -1,0 +1,99 @@
+/* The one-step close-out inside a finished meeting. Matches the review cards in WeeklyReviewPanel. */
+.panel {
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+  padding-top: 12px;
+}
+
+.heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 16px 0 6px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 0 0 10px;
+}
+
+.problem {
+  color: var(--danger, var(--text));
+  font-size: 0.8125rem;
+  margin: 8px 0;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.label {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  min-width: 80px;
+}
+
+.input,
+.select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  flex: 1 1 180px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.button {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 5px 11px;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.chosen {
+  border-color: var(--text);
+  font-weight: 600;
+}
+
+.claim {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.quote {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 4px 0 8px;
+}
+
+.check {
+  align-items: flex-start;
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.changes {
+  font-size: 0.8125rem;
+  margin: 4px 0 10px;
+  padding-left: 18px;
+}

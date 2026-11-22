@@ -330,6 +330,7 @@ struct MeetingDetailView: View {
     @State private var addingTag = false
     @State private var newTag = ""
     @State private var savingTags = false
+    @State private var closingOut = false
 
     private var recording: Bool { detail?.meeting.isRecording == true }
     /// The tags on offer when adding: in use somewhere, but not already on this meeting.
@@ -345,6 +346,9 @@ struct MeetingDetailView: View {
             if let detail {
                 header(detail.meeting)
                 tagsSection(detail.meeting)
+                if detail.meeting.status == "done" {
+                    Section { Button("Close out this meeting") { closingOut = true } }
+                }
                 if recording { coachSection }
                 if recording, let cards { contextSection(cards) }
                 if let extraction = detail.extraction { summarySection(extraction) }
@@ -354,6 +358,9 @@ struct MeetingDetailView: View {
         }
         .navigationTitle(detail?.meeting.displayTitle ?? "Meeting")
         .spineInlineTitle()
+        .sheet(isPresented: $closingOut) {
+            MeetingCloseoutView(meetingID: meetingID) { Task { await load() } }
+        }
         .confirmationDialog(
             "What should \(filingUnder?.name ?? "the project") keep?",
             isPresented: Binding(get: { filingUnder != nil }, set: { if !$0 { filingUnder = nil } }),
@@ -754,6 +761,250 @@ struct MeetingDetailView: View {
         do {
             try await APIClient.shared.extractMeeting(meetingID)
             await load()
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// One choice in a close-out, held on the device until it is saved.
+private struct CloseoutDraft {
+    var answer = "skip"
+    var owner: String
+    var replaces: Set<Int> = []
+    var text: String
+    var topic: String
+
+    init(_ claim: CloseoutClaim) {
+        owner = claim.ownerName ?? ""
+        text = claim.text
+        topic = claim.topic ?? ""
+    }
+}
+
+/// Close out a finished meeting in one pass: name the speakers, choose the project, answer what was extracted, and say
+/// what each decision replaces. Save stays locked until the preview has been shown for exactly these choices, because
+/// accepting a replacement takes the earlier decision out of every brief. Shared by the iPhone and Mac targets.
+struct MeetingCloseoutView: View {
+    let meetingID: Int
+    let onSaved: () -> Void
+    @Environment(AppState.self) private var state
+    @Environment(\.dismiss) private var dismiss
+    @State private var closeout: CloseoutState?
+    @State private var names: [Int: String] = [:]
+    @State private var projectID: Int?
+    @State private var keepTranscript = true
+    @State private var drafts: [Int: CloseoutDraft] = [:]
+    @State private var preview: CloseoutPreview?
+    @State private var busy = false
+    @State private var error: String?
+    @State private var saved: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let error { Section { Text(error).foregroundStyle(.red) } }
+                if let saved { Section { Text(saved) } }
+                if let closeout {
+                    speakersSection(closeout)
+                    projectSection(closeout)
+                    claimsSection(closeout)
+                    if let preview { previewSections(preview) }
+                } else if error == nil {
+                    ProgressView()
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Close out")
+            .spineInlineTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    if preview == nil {
+                        Button("Preview") { Task { await showPreview() } }.disabled(busy || closeout == nil)
+                    } else {
+                        Button("Save") { Task { await save() } }.disabled(busy)
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 520, minHeight: 560)
+        #endif
+        .task {
+            guard closeout == nil else { return }
+            do {
+                let first = try await APIClient.shared.meetingCloseout(meetingID, project: nil)
+                projectID = first.meeting.projectId
+                keepTranscript = first.meeting.keepTranscript != 0
+                await load()
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private func speakersSection(_ closeout: CloseoutState) -> some View {
+        Section("Who was there") {
+            if closeout.speakers.isEmpty { Text("No speakers were detected in this recording.") }
+            ForEach(closeout.speakers, id: \.index) { speaker in
+                TextField("Speaker \(speaker.index + 1)", text: Binding(
+                    get: { names[speaker.index] ?? speaker.name },
+                    set: { names[speaker.index] = $0; preview = nil }
+                ))
+            }
+        }
+    }
+
+    private func projectSection(_ closeout: CloseoutState) -> some View {
+        Section("Project") {
+            Picker("Project", selection: Binding(
+                get: { projectID },
+                set: { next in
+                    projectID = next
+                    preview = nil
+                    Task { await load() }
+                }
+            )) {
+                Text("No project").tag(Int?.none)
+                ForEach(state.projects) { Text($0.name).tag(Optional($0.id)) }
+            }
+            if projectID != nil, projectID != closeout.meeting.projectId {
+                Toggle("Keep the full transcript searchable", isOn: $keepTranscript)
+            }
+        }
+    }
+
+    private func claimsSection(_ closeout: CloseoutState) -> some View {
+        Section("Waiting for review (\(closeout.claims.count))") {
+            if closeout.claims.isEmpty { Text("Nothing from this meeting is waiting for review.") }
+            ForEach(closeout.claims) { claim in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(claim.kind.capitalized)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    TextField("Text", text: draftBinding(claim, \.text), axis: .vertical)
+                    Text("“\(claim.passage)”")
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    TextField("Topic", text: draftBinding(claim, \.topic))
+                    if claim.kind == "commitment" {
+                        TextField("Owner", text: draftBinding(claim, \.owner))
+                    }
+                    Picker("Answer", selection: draftBinding(claim, \.answer)) {
+                        Text("Accept").tag("accept")
+                        Text("Reject").tag("reject")
+                        Text("Later").tag("skip")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    if drafts[claim.id]?.answer == "accept", !claim.canReplace.isEmpty {
+                        Text("Does this replace an earlier one?")
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
+                        ForEach(claim.canReplace) { older in
+                            Toggle(older.saidOn.map { "\(older.text) (\($0))" } ?? older.text, isOn: replaceBinding(claim, older.id))
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func previewSections(_ preview: CloseoutPreview) -> some View {
+        Section("How the briefs will change") {
+            Text("\(preview.accepted) accepted, \(preview.rejected) rejected, \(preview.replaced) replaced, \(preview.left) left for later.")
+        }
+        ForEach(preview.briefs, id: \.subject) { brief in
+            Section("\(brief.subject): \(brief.waitingBefore) waiting now, \(brief.waitingAfter) after") {
+                if brief.added.isEmpty && brief.removed.isEmpty { Text("No lines change.") }
+                ForEach(brief.added, id: \.self) { Text("Adds to \($0.section): \($0.text) (\($0.evidence))") }
+                ForEach(brief.removed, id: \.self) { Text("Leaves \($0.section): \($0.text)") }
+            }
+        }
+    }
+
+    private func draftBinding(_ claim: CloseoutClaim, _ field: WritableKeyPath<CloseoutDraft, String>) -> Binding<String> {
+        Binding(
+            get: { (drafts[claim.id] ?? CloseoutDraft(claim))[keyPath: field] },
+            set: { value in
+                var draft = drafts[claim.id] ?? CloseoutDraft(claim)
+                draft[keyPath: field] = value
+                drafts[claim.id] = draft
+                preview = nil
+            }
+        )
+    }
+
+    private func replaceBinding(_ claim: CloseoutClaim, _ olderID: Int) -> Binding<Bool> {
+        Binding(
+            get: { drafts[claim.id]?.replaces.contains(olderID) == true },
+            set: { on in
+                var draft = drafts[claim.id] ?? CloseoutDraft(claim)
+                if on { draft.replaces.insert(olderID) } else { draft.replaces.remove(olderID) }
+                drafts[claim.id] = draft
+                preview = nil
+            }
+        )
+    }
+
+    private func load() async {
+        do {
+            let next = try await APIClient.shared.meetingCloseout(meetingID, project: projectID)
+            closeout = next
+            error = nil
+            names = Dictionary(uniqueKeysWithValues: next.speakers.map { ($0.index, names[$0.index] ?? $0.name) })
+            // The earlier claims on offer belong to the project, so a choice made for another project is dropped.
+            var kept: [Int: CloseoutDraft] = [:]
+            for claim in next.claims {
+                var draft = drafts[claim.id] ?? CloseoutDraft(claim)
+                draft.replaces.formIntersection(claim.canReplace.map(\.id))
+                kept[claim.id] = draft
+            }
+            drafts = kept
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func plan(_ closeout: CloseoutState) -> [String: Any] {
+        let claims: [[String: Any]] = closeout.claims.map { claim in
+            let draft = drafts[claim.id] ?? CloseoutDraft(claim)
+            let accepted = draft.answer == "accept"
+            var row: [String: Any] = ["answer": draft.answer, "id": claim.id, "replaces": accepted ? Array(draft.replaces) : []]
+            if accepted, draft.owner != (claim.ownerName ?? "") { row["owner"] = draft.owner }
+            if accepted, draft.text != claim.text { row["text"] = draft.text }
+            if accepted, draft.topic != (claim.topic ?? "") { row["topic"] = draft.topic }
+            return row
+        }
+        let speakers: [[String: Any]] = closeout.speakers.compactMap { speaker in
+            guard let name = names[speaker.index], name != speaker.name else { return nil }
+            return ["index": speaker.index, "name": name]
+        }
+        return ["claims": claims, "projectId": projectID ?? NSNull(), "speakers": speakers]
+    }
+
+    private func showPreview() async {
+        guard let closeout else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            preview = try await APIClient.shared.previewMeetingCloseout(meetingID, plan: plan(closeout))
+            error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func save() async {
+        guard let closeout else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            var body = plan(closeout)
+            body["keepTranscript"] = keepTranscript
+            let result = try await APIClient.shared.saveMeetingCloseout(meetingID, plan: body)
+            preview = nil
+            drafts = [:]
+            error = nil
+            saved = "Saved: \(result.accepted) accepted, \(result.rejected) rejected, \(result.replaced) replaced, \(result.left) left for later."
+                + (result.filingError.map { " The project index was not updated: \($0)" } ?? "")
+            await load()
+            onSaved()
         } catch { self.error = error.localizedDescription }
     }
 }

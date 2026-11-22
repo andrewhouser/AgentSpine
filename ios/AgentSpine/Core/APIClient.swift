@@ -1164,6 +1164,23 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/meetings/\(id)/audio", method: "DELETE"))
     }
 
+    /// What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there.
+    func meetingCloseout(_ id: Int, project: Int?) async throws -> CloseoutState {
+        try await send(request("/api/meetings/\(id)/closeout", query: ["project": project.map(String.init) ?? ""]), as: CloseoutState.self)
+    }
+
+    /// How the briefs would change. Writes nothing.
+    func previewMeetingCloseout(_ id: Int, plan: [String: Any]) async throws -> CloseoutPreview {
+        try await send(jsonRequest("/api/meetings/\(id)/closeout/preview", method: "POST", body: plan), as: CloseoutPreview.self)
+    }
+
+    /// Save the close-out, all of it or none. Filing into a project can take a while, so it gets the long session.
+    func saveMeetingCloseout(_ id: Int, plan: [String: Any]) async throws -> CloseoutSaved {
+        var req = try jsonRequest("/api/meetings/\(id)/closeout", method: "POST", body: plan)
+        req.timeoutInterval = 300
+        return try await send(req, as: CloseoutSaved.self, using: longSession)
+    }
+
     /// Name a detected speaker; an empty name goes back to "Speaker N".
     func renameSpeaker(_ meetingID: Int, index: Int, to name: String) async throws {
         try await sendRaw(

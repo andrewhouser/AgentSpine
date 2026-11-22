@@ -289,9 +289,10 @@ export const renderBrief = (b: Brief): string => {
   if (b.withheldSensitive) out.push(`${b.withheldSensitive} claim(s) marked sensitive are withheld.`);
   for (const s of b.sections) {
     out.push("", `## ${s.title}`);
-    if (!s.items.length) out.push(s.empty);
+    // "Nothing recorded" is the store not knowing, which S7 requires a brief to say in those words.
+    if (!s.items.length) out.push(s.empty === "Nothing recorded." ? "Insufficient evidence: nothing reviewed is recorded." : s.empty);
     for (const i of s.items) {
-      const meta = [i.owner && `owner ${i.owner}`, i.due && `due ${i.due}${i.overdue ? " (OVERDUE)" : ""}`, i.saidOn && `said ${i.saidOn}`, `[${i.evidence}]`].filter(Boolean).join(", ");
+      const meta = [i.owner && `owner ${i.owner}`, i.due && `due ${i.due}${i.overdue ? " (OVERDUE)" : ""}`, i.saidOn && `said ${i.saidOn}`, `[${k.EVIDENCE_WORDS[i.evidence]}]`].filter(Boolean).join(", ");
       out.push(`- ${i.text} (${meta})`);
       if (i.cite.passage) out.push(`  > "${i.cite.passage}" (${i.cite.source}${i.cite.sourceState === "expired" ? ", the source has aged out" : ""})`);
     }

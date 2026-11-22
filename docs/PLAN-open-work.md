@@ -453,9 +453,16 @@ baseline, and the meeting recall number is still unmeasured.
   decision or status, "Does this replace an earlier one?" with the earlier reviewed claims of the same kind and
   project, so supersession is always a person's act; conflicting information with "This one is wrong"; and a brief
   reader (a project brief, or one of the six operations). It reads the API in K4 and K6. `KnowledgeView` is in `Views/KnowledgeView.swift`, shared by both targets.
-  **Not built:** the close-out as one flow at the end of a meeting (confirm participants and speaker names, assign
-  projects or topics, preview how briefs will change) rather than a review list; and teaching an alias for a project
-  name, because projects are not knowledge entities.
+  **One-step close-out (built 2026-11-22 on web, iPhone and Mac; not seen running).** A finished meeting has "Close out
+  this meeting": name the speakers, choose the project and topics, accept, reject or leave each extracted item, say
+  what each decision replaces, and read how the briefs will change. `src/knowledge/closeout.ts` previews by applying the
+  plan in a transaction, building the real briefs and rolling back, and Save stays locked until that preview is shown
+  for the current choices. A save lands whole or not at all; filing into the project index follows it, and a failure
+  there is reported without undoing the save. One decision can now replace several: the trail and the undo read
+  `kn_links`, because `supersedes_id` holds one id and lost the others. Filing a meeting now moves its claims too, on
+  every path, where before they stayed out of the project's brief. Suite: `test/knowledge-closeout.test.mjs`.
+  **Not built:** attributing a claim to a named speaker from the diarized timestamp (diarization can be wrong, so that
+  needs its own review step), and teaching an alias for a project name, because projects are not knowledge entities.
   **Added 2026-11-22 on web, iPhone and Mac (built, not seen running; extraction not run on the live model):** "Teach
   a name" for a person, team or topic (`POST /api/knowledge/entities/:id/aliases`). A name that already belongs to
   another entity changes nothing until you confirm the merge, because a merge cannot be undone. An Inbox button runs
@@ -686,9 +693,9 @@ trusted instruction in the run inspector.
 **Done when:** a workspace rule changes behaviour in that project, a same-named file inside an untrusted
 document source cannot do so, and the trace identifies which instruction sources were active.
 
-### S7. Epistemic awareness joins the knowledge system (answer rules built 2026-11-21; brief screens exist, their status wording does not match yet)
+### S7. Epistemic awareness joins the knowledge system (answer rules built 2026-11-21; brief wording built 2026-11-22)
 
-**Built:** `src/knowledge/answer.ts` decides, in code, whether the store supports an answer (`supported`, `conflicting` or `insufficient`) by matching the question against reviewed claims that are still in force, and renders each claim with its id, evidence level, source, timestamp in the recording and exact words. Disagreeing reviewed claims come back as a CONFLICT to be reported with both sides; where nothing reviewed matches, the text says INSUFFICIENT EVIDENCE and not to fill the gap; unreviewed matches appear only as leads. The read-only tool `knowledge_claims` (declares `privateOutput`, so the run stays local) returns it, `asOf` answers as of a date, and `harnessContract` adds the answer rule only when the tool is visible. The match is plain shared words on purpose, since a wrong "supported" invents a fact and a wrong "insufficient" sends the person to look. Suite: `test/knowledge-answer.test.mjs`. Not built: nothing yet calls the tool unprompted (the model must choose to), no live-model check that it does, and the briefs of K6 do not use the same status wording on the screens.
+**Built:** `src/knowledge/answer.ts` decides, in code, whether the store supports an answer (`supported`, `conflicting` or `insufficient`) by matching the question against reviewed claims that are still in force, and renders each claim with its id, evidence level, source, timestamp in the recording and exact words. Disagreeing reviewed claims come back as a CONFLICT to be reported with both sides; where nothing reviewed matches, the text says INSUFFICIENT EVIDENCE and not to fill the gap; unreviewed matches appear only as leads. The read-only tool `knowledge_claims` (declares `privateOutput`, so the run stays local) returns it, `asOf` answers as of a date, and `harnessContract` adds the answer rule only when the tool is visible. The match is plain shared words on purpose, since a wrong "supported" invents a fact and a wrong "insufficient" sends the person to look. Suite: `test/knowledge-answer.test.mjs`. Briefs now say the same five things on every client, because all three render the server's Markdown: each line reads "known from reviewed evidence", "machine-extracted, not reviewed", "inferred from cited sources" or "conflicting evidence" (or says it was replaced or retracted), and an empty section says "Insufficient evidence" (`EVIDENCE_WORDS` in `src/knowledge/store.ts`). Not built: nothing yet calls the tool unprompted (the model must choose to), and no live-model check that it does.
 
 
 Operational awareness says where the agent is and what it may do. Management synthesis also needs the model to

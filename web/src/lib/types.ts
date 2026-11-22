@@ -984,6 +984,56 @@ export interface KnowledgeHit {
   via: string[];
 }
 
+/** One extracted item in a meeting close-out, with the earlier claims it could replace. */
+export interface CloseoutClaim {
+  atMs: null | number;
+  canReplace: { id: number; saidOn: null | string; text: string }[];
+  id: number;
+  kind: string;
+  ownerName: null | string;
+  passage: string;
+  text: string;
+  topic: null | string;
+}
+
+/** GET /api/meetings/:id/closeout. */
+export interface CloseoutState {
+  claims: CloseoutClaim[];
+  meeting: { id: number; keepTranscript?: null | number; projectId: null | number; status: string; title: null | string };
+  speakers: MeetingSpeaker[];
+}
+
+export interface CloseoutPlan {
+  claims: { answer: "accept" | "reject" | "skip"; id: number; owner?: string; replaces: number[]; text?: string; topic?: string }[];
+  projectId: null | number;
+  speakers: { index: number; name: string }[];
+}
+
+interface CloseoutCounts {
+  accepted: number;
+  left: number;
+  rejected: number;
+  replaced: number;
+}
+
+interface CloseoutLine {
+  evidence: string;
+  section: string;
+  text: string;
+}
+
+/** POST /api/meetings/:id/closeout/preview. */
+export interface CloseoutPreview extends CloseoutCounts {
+  briefs: { added: CloseoutLine[]; removed: CloseoutLine[]; subject: string; waitingAfter: number; waitingBefore: number }[];
+}
+
+/** POST /api/meetings/:id/closeout. `filingError` means the save held but the project index was not updated. */
+export interface CloseoutSaved extends CloseoutCounts {
+  filingError: null | string;
+  projectChanged: boolean;
+  projectId: null | number;
+}
+
 /** A cited decision, commitment, risk, question or fact in the knowledge store. */
 export interface KnowledgeClaim {
   at_ms: null | number;

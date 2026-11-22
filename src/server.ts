@@ -45,6 +45,7 @@ import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
 import * as briefs from "./knowledge/briefs.ts";
+import { closeMeeting, closeoutState, parsePlan, previewCloseout } from "./knowledge/closeout.ts";
 import * as knowledge from "./knowledge/store.ts";
 import { retentionRules } from "./knowledge/retention.ts";
 import { annotateHits } from "./knowledge/retrieval.ts";
@@ -1682,6 +1683,37 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         return sendJson(res, 200, { deleted });
       }
 
+      // The one-step close-out (K5). GET reads it, .../preview shows how the briefs would change and writes nothing,
+      // and POST saves it all or none. Filing into the project index runs after the save, because it cannot roll back.
+      if (seg[3] === "closeout") {
+        try {
+          if (m === "GET" && seg.length === 4) {
+            const raw = url.searchParams.get("project");
+            const state = closeoutState(id, raw === null ? undefined : raw === "" ? null : Number(raw));
+            return state ? sendJson(res, 200, state) : sendJson(res, 404, { error: "no such meeting" });
+          }
+          if (m === "POST" && seg.length === 5 && seg[4] === "preview") {
+            return sendJson(res, 200, previewCloseout(id, parsePlan(await readBody(req))));
+          }
+          if (m === "POST" && seg.length === 4) {
+            const b = await readBody(req);
+            const saved = closeMeeting(id, parsePlan(b));
+            let filingError: null | string = null;
+            if (saved.projectChanged && saved.projectId) {
+              try {
+                await meetings.indexIntoProject(id, saved.projectId, typeof b.keepTranscript === "boolean" ? b.keepTranscript : undefined);
+                fileQueuedItems(id, saved.projectId);
+              } catch (err) {
+                filingError = err instanceof Error ? err.message : String(err);
+              }
+            }
+            return sendJson(res, 200, { ...saved, filingError });
+          }
+        } catch (err) {
+          return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+
       // PATCH /api/meetings/:id/speakers — name a speaker ("Speaker 2" → "Priya"). An empty
       // name puts it back. Applies to the transcript view and to any later extraction.
       if (m === "PATCH" && seg.length === 4 && seg[3] === "speakers") {
@@ -1704,6 +1736,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         if (b && "projectId" in b) {
           const projectId = b.projectId == null ? null : Number(b.projectId);
           meetingStore.setProject(id, projectId);
+          knowledge.setSourceProject("meeting", `meeting:${id}`, projectId);
           // Assigning a project is what files the transcript into that project's index.
           // Doing it here rather than only at stop() is the whole point of assign-after —
           // you often don't know which project a meeting was about until it's over.

@@ -1540,6 +1540,71 @@ struct KnowledgeBrief: Codable, Hashable {
     let markdown: String
 }
 
+/// An earlier reviewed claim that a claim in a meeting close-out could replace.
+struct CloseoutOption: Codable, Identifiable, Hashable {
+    let id: Int
+    let saidOn: String?
+    let text: String
+}
+
+/// One extracted item waiting for review in a meeting close-out.
+struct CloseoutClaim: Codable, Identifiable, Hashable {
+    let canReplace: [CloseoutOption]
+    let id: Int
+    let kind: String
+    let ownerName: String?
+    let passage: String
+    let text: String
+    let topic: String?
+}
+
+struct CloseoutMeeting: Codable, Hashable {
+    let id: Int
+    let keepTranscript: Int?
+    let projectId: Int?
+    let status: String
+    let title: String?
+}
+
+/// GET /api/meetings/:id/closeout.
+struct CloseoutState: Codable, Hashable {
+    let claims: [CloseoutClaim]
+    let meeting: CloseoutMeeting
+    let speakers: [MeetingSpeaker]
+}
+
+struct CloseoutLine: Codable, Hashable {
+    let evidence: String
+    let section: String
+    let text: String
+}
+
+struct CloseoutBriefChange: Codable, Hashable {
+    let added: [CloseoutLine]
+    let removed: [CloseoutLine]
+    let subject: String
+    let waitingAfter: Int
+    let waitingBefore: Int
+}
+
+/// How the briefs would change. Nothing has been saved when this arrives.
+struct CloseoutPreview: Codable, Hashable {
+    let accepted: Int
+    let briefs: [CloseoutBriefChange]
+    let left: Int
+    let rejected: Int
+    let replaced: Int
+}
+
+/// `filingError` means the close-out saved but the project index was not updated.
+struct CloseoutSaved: Codable, Hashable {
+    let accepted: Int
+    let filingError: String?
+    let left: Int
+    let rejected: Int
+    let replaced: Int
+}
+
 /// A person, team or topic in the knowledge store, with the other names it is known by.
 struct KnowledgeEntity: Codable, Identifiable, Hashable {
     let aliases: [String]

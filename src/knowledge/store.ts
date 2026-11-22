@@ -437,15 +437,50 @@ export const supersede = (olderId: number, newerId: number): void => {
   link(newerId, olderId, "supersedes");
 };
 
-/** The ids a claim replaced, oldest last: the trail of how a decision evolved. */
+/**
+ * The ids a claim replaced, oldest last: the trail of how a decision evolved. Read from `kn_links`, because
+ * `supersedes_id` holds one id and one decision in a meeting can replace two earlier ones. Following the column lost
+ * the first from the trail, and deleting the newer claim left it superseded by nothing.
+ */
 export const chain = (id: number): number[] => {
   const out: number[] = [];
-  let cur = getClaim(id)?.supersedes_id ?? null;
-  while (cur != null && !out.includes(cur) && out.length < 50) {
-    out.push(cur);
-    cur = getClaim(cur)?.supersedes_id ?? null;
+  const next = rawDb.prepare("SELECT to_claim FROM kn_links WHERE from_claim = ? AND rel = 'supersedes' ORDER BY id DESC");
+  const queue = [id];
+  while (queue.length && out.length < 50) {
+    for (const { to_claim: older } of next.all(queue.shift() as number) as { to_claim: number }[]) {
+      if (older === id || out.includes(older)) continue;
+      out.push(older);
+      queue.push(older);
+    }
   }
   return out;
+};
+
+/**
+ * Delete one claim and its links. Anything it replaced comes back into force, unless another claim still replaces it.
+ * The one path for every removal, so a retention sweep cannot leave a decision superseded by something that is gone.
+ */
+const removeClaim = (id: number): void => {
+  const replaced = (rawDb.prepare("SELECT to_claim FROM kn_links WHERE from_claim = ? AND rel = 'supersedes'").all(id) as { to_claim: number }[]).map((r) => r.to_claim);
+  rawDb.prepare("DELETE FROM kn_links WHERE from_claim = ? OR to_claim = ?").run(id, id);
+  const stillReplaced = rawDb.prepare("SELECT 1 FROM kn_links WHERE to_claim = ? AND rel = 'supersedes' LIMIT 1");
+  const restore = rawDb.prepare("UPDATE kn_claims SET status = 'active', status_changed = ? WHERE id = ? AND status = 'superseded'");
+  for (const older of replaced) if (!stillReplaced.get(older)) restore.run(now(), older);
+  rawDb.prepare("UPDATE kn_claims SET supersedes_id = NULL WHERE supersedes_id = ?").run(id);
+  rawDb.prepare("DELETE FROM kn_claims WHERE id = ?").run(id);
+};
+
+/**
+ * Move every claim from one source to a project. Filing a meeting after the fact used to leave its claims where they
+ * started, so the project's brief never showed them. Stored briefs are dropped because they may hold the old placement.
+ */
+export const setSourceProject = (sourceKind: string, sourceRef: string, projectId: null | number): void => {
+  rawDb.prepare("UPDATE kn_claims SET project_id = ? WHERE source_kind = ? AND source_ref = ?").run(projectId, sourceKind, sourceRef);
+  try {
+    rawDb.exec("DELETE FROM kn_briefs");
+  } catch {
+    // briefs have never been built in this database: nothing stored to drop
+  }
 };
 
 export const link = (from: number, to: number, rel: string): void => {
@@ -490,6 +525,16 @@ export const evidenceLevel = (c: Claim): EvidenceLevel => {
   return c.method === "inferred" ? "inferred" : "reviewed";
 };
 
+/** The same words on every brief, on every client (S7), so a reader never has to decode an internal label. */
+export const EVIDENCE_WORDS: Record<EvidenceLevel, string> = {
+  conflicting: "conflicting evidence",
+  inferred: "inferred from cited sources",
+  "machine-extracted": "machine-extracted, not reviewed",
+  retracted: "retracted",
+  reviewed: "known from reviewed evidence",
+  superseded: "replaced by a later claim",
+};
+
 /**
  * The raw sources of these claims aged out of their retention window. Reviewed knowledge outlives its evidence: the
  * claim is kept, marked `expired`, and still shows the exact words it cited. A claim nobody reviewed (proposed or
@@ -501,10 +546,7 @@ export const expireSources = (sourceKind: string, refs: string[]): { kept: numbe
   for (const ref of refs) {
     kept += Number(rawDb.prepare("UPDATE kn_claims SET source_state = 'expired' WHERE source_kind = ? AND source_ref = ? AND review_state = 'reviewed' AND source_state != 'expired'").run(sourceKind, ref).changes);
     const gone = (rawDb.prepare("SELECT id FROM kn_claims WHERE source_kind = ? AND source_ref = ? AND review_state != 'reviewed'").all(sourceKind, ref) as { id: number }[]).map((r) => r.id);
-    for (const id of gone) {
-      rawDb.prepare("DELETE FROM kn_links WHERE from_claim = ? OR to_claim = ?").run(id, id);
-      rawDb.prepare("DELETE FROM kn_claims WHERE id = ?").run(id);
-    }
+    for (const id of gone) removeClaim(id);
     removed += gone.length;
   }
   return { kept, removed };
@@ -518,11 +560,6 @@ export const counts = (): { proposed: number; reviewed: number } => ({
 /** Remove every claim that came from one source (the source was deleted). Returns how many went. */
 export const deleteClaimsFromSource = (sourceKind: string, sourceRef: string): number => {
   const ids = (rawDb.prepare("SELECT id FROM kn_claims WHERE source_kind = ? AND source_ref = ?").all(sourceKind, sourceRef) as { id: number }[]).map((r) => r.id);
-  for (const id of ids) {
-    rawDb.prepare("DELETE FROM kn_links WHERE from_claim = ? OR to_claim = ?").run(id, id);
-    // Anything it replaced is no longer superseded by something that no longer exists.
-    rawDb.prepare("UPDATE kn_claims SET status = 'active', status_changed = ? WHERE status = 'superseded' AND id IN (SELECT supersedes_id FROM kn_claims WHERE id = ?)").run(now(), id);
-    rawDb.prepare("DELETE FROM kn_claims WHERE id = ?").run(id);
-  }
+  for (const id of ids) removeClaim(id);
   return ids.length;
 };

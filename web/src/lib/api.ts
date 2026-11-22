@@ -15,6 +15,10 @@ import type {
   BuildDiff,
   ChatMessage,
   Client,
+  CloseoutPlan,
+  CloseoutPreview,
+  CloseoutSaved,
+  CloseoutState,
   CloudUsage,
   Confirmation,
   Conversation,
@@ -391,6 +395,10 @@ export const api = {
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
 
+  /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
+  meetingCloseout: (id: number, project: null | number) =>
+    request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
+
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
@@ -419,8 +427,12 @@ export const api = {
   planSpeech: (text: string) => post<{ chunks: string[] }>("/api/voice/plan", { text }),
 
   policy: () => request<Record<string, unknown>>("/api/policy"),
-
   previewHeadsups: () => request<HeadsupPreview>("/api/headsups/preview"),
+
+  /** How the briefs would change. Writes nothing. */
+  previewMeetingCloseout: (id: number, plan: CloseoutPlan) =>
+    request<CloseoutPreview>(`/api/meetings/${id}/closeout/preview`, { body: JSON.stringify(plan), method: "POST" }),
+
   project: (id: number) =>
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,
@@ -428,24 +440,23 @@ export const api = {
 
   reindexProject: (id: number, force = false) =>
     post<{ result: IngestResult }>(`/api/projects/${id}/sources/reindex`, { force }),
-
   rejectConfirmation: (id: number, reason: string) =>
     post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/reject`, { reason }),
 
   rejectStyleProposal: (name: string) => request<{ name: string; removed: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
   removeProjectSource: (projectId: number, sourceId: number) =>
     request<{ ok: boolean }>(`/api/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
 
   renameConversation: (id: number, title: string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
-
   /** Re-make the final transcript from kept audio; `speakers` pins the head count (omit to detect). */
   reprocessMeeting: (id: number, speakers?: number) =>
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
   researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
-  retention: () => request<RetentionRule[]>("/api/retention"),
 
+  retention: () => request<RetentionRule[]>("/api/retention"),
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
@@ -454,17 +465,21 @@ export const api = {
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
 
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
-  runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 
+  runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
+
+  /** Save the close-out, all of it or none. */
+  saveMeetingCloseout: (id: number, plan: CloseoutPlan & { keepTranscript: boolean }) =>
+    request<CloseoutSaved>(`/api/meetings/${id}/closeout`, { body: JSON.stringify(plan), method: "POST" }),
 
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
     post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
+
   saveStyle: (name: string, body: { appliesTo: StyleAppliesTo; note: string }) =>
     request<WritingStyle>(`/api/styles/${encodeURIComponent(name)}`, { body: JSON.stringify(body), method: "PUT" }),
 
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
-
   /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */
   searchKnowledge: (q: string, opts: { kind?: string; project?: number } = {}) => {
     const params = new URLSearchParams({ q });
@@ -481,6 +496,7 @@ export const api = {
 
   /** "Something I wish I'd been told", stored as a preference memory. */
   sendOutboxWish: (text: string) => post<{ remembered: boolean }>("/api/outbox/wish", { text }),
+
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
 
