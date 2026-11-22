@@ -882,11 +882,16 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
   Mini's real data, and whether anything private already reached the cloud has not been checked.
 - **SL5 Know whether it is working (You).** Use the checks in LEARNING, "How to tell it is working, and what to
   delete", after four weeks of SL1. Delete a learner whose output you never accept.
-- **SL6 A small private answer key (Both, not started).** About 20 real tasks with expected results, stored outside
-  the repo because real tasks carry private material. Prefer checks in code (a required fact, a forbidden action, a
-  tool that must or must not run), because a judge on the local model would be grading its own work. SL3 signals may
-  suggest rows, and a row joins the key only when you approve it. `eval:knowledge` (K1) scores retrieval only, so this
-  is a separate set. Code builds the runner; you write and approve the tasks.
+- **SL6 A small private answer key (runner built 2026-11-22; You write the tasks).** `npm run eval:answer-key --
+  /path/to/key.json` (`src/eval/answer-key.ts`, format in its header) scores about 20 real tasks with checks in code:
+  phrases that must or must not appear, tools that must or must not be called, and a step limit. No model grades
+  anything. The key must sit outside the repo at `chmod 600`, and reports carry ids and check names, never task text.
+  A scored run uses a throwaway database, a forced dry run and no cloud key, so it cannot reach your ledger or a
+  learner, execute a tool, or leave the machine. Because no tool executes, a task that needs source material carries
+  it in the row's `context`. `--suggest` lists runs with an SL3 signal and `--draft <runId>` copies one in unapproved;
+  it counts only after you add checks and set `approved`. You: write the tasks on the Mini and record a first baseline.
+  Tested against stand-in models only, and not yet run on the real model. One pass per task, so a single flipped
+  result on a local model may be noise; SL7 must account for that before comparing two versions.
 - **SL7 Test a candidate before asking (Code, not started; needs SL6).** Replay the current and proposed versions on
   recent inputs and show the score beside the diff, one change per candidate. Start with watcher rewrites
   (`src/learn/rewrite.ts`). Replays run pinned local and must be unable to send, write or publish. A better score
@@ -914,7 +919,6 @@ Open decisions for you:
   `src/instagram/api.ts` and `src/instagram/token.ts`.
 - Whether source folders may be exempt from the local pin so the builder can use the cloud tier. Proposed: no,
   until SC1's measurement shows the local builder is not good enough.
-- Where SL6's answer key lives. Proposed: a private file on the Mini, outside the repo, read only by local runs.
 
 ---
 
