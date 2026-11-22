@@ -162,9 +162,30 @@ struct Turn: Codable, Identifiable, Hashable {
     /// What the assistant had in front of it for this turn; absent from older servers.
     let contextUsed: [String]?
     let starred: Bool?
+    /// Model calls and tokens for this turn and the child runs it started; absent from older servers.
+    let usage: RunUsage?
 
     var isRunning: Bool { status == "running" || status == "queued" }
     var isDecision: Bool { kind == "approval" }
+}
+
+/// What a turn (and its child runs) spent on the model. A call whose server reported no usage is
+/// counted in `calls` and `unreported` but adds no tokens, so the totals are a floor.
+struct RunUsage: Codable, Hashable {
+    struct ByModel: Codable, Hashable {
+        let calls: Int
+        let completionTokens: Int
+        let model: String
+        let ms: Int
+        let promptTokens: Int
+        let tier: String?
+    }
+
+    let byModel: [ByModel]
+    let calls: Int
+    let completionTokens: Int
+    let promptTokens: Int
+    let unreported: Int
 }
 
 struct Thread: Codable {

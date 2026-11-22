@@ -152,6 +152,16 @@ struct ProjectsView: View {
     }
 }
 
+/// The sections of a project, one at a time; the same four as the web project screen.
+private enum ProjectTab: String, CaseIterable, Identifiable {
+    case conversations = "Conversations"
+    case documents = "Documents"
+    case tasks = "Tasks"
+    case settings = "Settings"
+
+    var id: String { rawValue }
+}
+
 struct ProjectDetailView: View {
     let projectID: Int
     @State private var detail: ProjectDetail?
@@ -166,6 +176,7 @@ struct ProjectDetailView: View {
     @State private var note: String?
     @State private var newPath = ""
     @State private var addingSource = false
+    @State private var tab: ProjectTab = .conversations
 
     private var dirty: Bool {
         guard let project = detail?.project else { return false }
@@ -178,95 +189,113 @@ struct ProjectDetailView: View {
             if let error {
                 ErrorNotice(message: error) { Task { await load() } }
             }
-            Section("Name") {
-                TextField("Name", text: $name)
-            }
             Section {
-                TextEditor(text: $instructions).frame(minHeight: 120)
-            } header: {
-                Text("Instructions")
-            } footer: {
-                Text("Given to the assistant on every turn in this project's threads.")
+                Picker("Section", selection: $tab) {
+                    ForEach(ProjectTab.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            Section {
-                TextField("/path/to/project/AGENTSPINE.md", text: $workspaceFile)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-            } header: {
-                Text("Trusted workspace file")
-            } footer: {
-                Text("Optionally trust one file named AGENTSPINE.md as standing rules. It must sit inside one of this project's folders and outside any folder the assistant can write to. An indexed file of the same name stays untrusted. Leave empty for none.")
-            }
-            if dirty {
+            if tab == .settings {
+                Section("Name") {
+                    TextField("Name", text: $name)
+                }
                 Section {
-                    Button {
-                        Task { await save() }
-                    } label: {
-                        HStack { Text("Save changes"); Spacer(); if saving { ProgressView() } }
+                    TextEditor(text: $instructions).frame(minHeight: 120)
+                } header: {
+                    Text("Instructions")
+                } footer: {
+                    Text("Given to the assistant on every turn in this project's threads.")
+                }
+                Section {
+                    TextField("/path/to/project/AGENTSPINE.md", text: $workspaceFile)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                } header: {
+                    Text("Trusted workspace file")
+                } footer: {
+                    Text("Optionally trust one file named AGENTSPINE.md as standing rules. It must sit inside one of this project's folders and outside any folder the assistant can write to. An indexed file of the same name stays untrusted. Leave empty for none.")
+                }
+                if dirty {
+                    Section {
+                        Button {
+                            Task { await save() }
+                        } label: {
+                            HStack { Text("Save changes"); Spacer(); if saving { ProgressView() } }
+                        }
+                        .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            Section {
-                ForEach(detail?.sources ?? []) { source in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(source.ref).font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
-                        HStack(spacing: 6) {
-                            Text(source.kind)
-                            Text("·")
-                            Text("\(source.fileCount) files, \(source.chunkCount) chunks")
-                            if let indexed = source.lastIndexed {
+            if tab == .documents {
+                Section {
+                    ForEach(detail?.sources ?? []) { source in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(source.ref).font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            HStack(spacing: 6) {
+                                Text(source.kind)
                                 Text("·")
-                                Text(SpineDate.relative(indexed))
+                                Text("\(source.fileCount) files, \(source.chunkCount) chunks")
+                                if let indexed = source.lastIndexed {
+                                    Text("·")
+                                    Text(SpineDate.relative(indexed))
+                                }
+                            }
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
+                            if let status = source.status, !status.isEmpty {
+                                Text(status).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.warn)
                             }
                         }
-                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
-                        if let status = source.status, !status.isEmpty {
-                            Text(status).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.warn)
+                        .swipeActions(edge: .trailing) {
+                            Button("Remove", role: .destructive) { Task { await remove(source) } }
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button("Reindex") { Task { await reindex(source) } }.tint(Spine.Palette.accent)
+                        }
+                        .overlay(alignment: .trailing) {
+                            if busySource == source.id { ProgressView() }
                         }
                     }
-                    .swipeActions(edge: .trailing) {
-                        Button("Remove", role: .destructive) { Task { await remove(source) } }
+                    Button {
+                        Task { await reindexAll() }
+                    } label: {
+                        HStack { Text("Reindex all sources"); Spacer(); if reindexingAll { ProgressView() } }
                     }
-                    .swipeActions(edge: .leading) {
-                        Button("Reindex") { Task { await reindex(source) } }.tint(Spine.Palette.accent)
+                    .disabled(reindexingAll || (detail?.sources.isEmpty ?? true))
+                    if let note {
+                        Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
                     }
-                    .overlay(alignment: .trailing) {
-                        if busySource == source.id { ProgressView() }
+                } header: {
+                    Text("Sources")
+                } footer: {
+                    Text("Swipe right to reindex one source, left to remove it. Paths are on the "
+                         + "machine running the server.")
+                }
+                Section("Add a source") {
+                    TextField("/path/on/the/server", text: $newPath)
+                        .spineNoAutocapitalization()
+                        .autocorrectionDisabled()
+                    Button {
+                        Task { await addSource() }
+                    } label: {
+                        HStack { Text("Add and index"); Spacer(); if addingSource { ProgressView() } }
                     }
+                    .disabled(addingSource || newPath.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                Button {
-                    Task { await reindexAll() }
-                } label: {
-                    HStack { Text("Reindex all sources"); Spacer(); if reindexingAll { ProgressView() } }
-                }
-                .disabled(reindexingAll || (detail?.sources.isEmpty ?? true))
-                if let note {
-                    Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
-                }
-            } header: {
-                Text("Sources")
-            } footer: {
-                Text("Swipe right to reindex one source, left to remove it. Paths are on the "
-                     + "machine running the server.")
             }
-            Section("Add a source") {
-                TextField("/path/on/the/server", text: $newPath)
-                    .spineNoAutocapitalization()
-                    .autocorrectionDisabled()
-                Button {
-                    Task { await addSource() }
-                } label: {
-                    HStack { Text("Add and index"); Spacer(); if addingSource { ProgressView() } }
-                }
-                .disabled(addingSource || newPath.trimmingCharacters(in: .whitespaces).isEmpty)
+            if tab == .tasks {
+                ProjectTasksSection(projectID: projectID)
             }
-            ProjectTasksSection(projectID: projectID)
-            if let threads = detail?.conversations, !threads.isEmpty {
-                Section("Threads") {
-                    ForEach(threads) { thread in
+            if tab == .conversations {
+                Section("Conversations") {
+                    if (detail?.conversations ?? []).isEmpty {
+                        Text("None yet.")
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textFaint)
+                    }
+                    ForEach(detail?.conversations ?? []) { thread in
                         NavigationLink(thread.displayTitle) {
                             #if os(macOS)
                             MacThreadDetail(conversationID: thread.id)

@@ -22,6 +22,7 @@ struct MacThreadInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spine.Space.lg) {
                 tiersCard
+                tokensCard
                 if let used = contextTurn?.contextUsed { contextCard(used) }
                 toolsCard
                 childrenCard
@@ -145,6 +146,107 @@ struct MacThreadInspector: View {
             return "Cloud was asked for, but the latest such turn ran on \(model.replacingOccurrences(of: "mlx-community/", with: ""))."
         }
         return nil
+    }
+
+    // MARK: - Tokens
+
+    private struct ModelTokens: Identifiable {
+        let id: String
+        let model: String
+        let tier: String?
+        var calls: Int
+        var prompt: Int
+        var completion: Int
+    }
+
+    private var usages: [RunUsage] { turns.compactMap(\.usage) }
+    private var totalCalls: Int { usages.reduce(0) { $0 + $1.calls } }
+    private var totalIn: Int { usages.reduce(0) { $0 + $1.promptTokens } }
+    private var totalOut: Int { usages.reduce(0) { $0 + $1.completionTokens } }
+    private var totalUnreported: Int { usages.reduce(0) { $0 + $1.unreported } }
+    /// The newest turn that made any model call, for the "latest turn" line.
+    private var latestUsage: RunUsage? { usages.last { $0.calls > 0 } }
+
+    /// Tokens grouped by model and tier across the thread, in the order each first appeared.
+    private var modelTokens: [ModelTokens] {
+        var order: [String] = []
+        var rows: [String: ModelTokens] = [:]
+        for usage in usages {
+            for m in usage.byModel {
+                let key = "\(m.tier ?? "")|\(m.model)"
+                if var row = rows[key] {
+                    row.calls += m.calls
+                    row.prompt += m.promptTokens
+                    row.completion += m.completionTokens
+                    rows[key] = row
+                } else {
+                    order.append(key)
+                    rows[key] = ModelTokens(id: key, model: m.model, tier: m.tier, calls: m.calls, prompt: m.promptTokens, completion: m.completionTokens)
+                }
+            }
+        }
+        return order.compactMap { rows[$0] }
+    }
+
+    private func count(_ n: Int) -> String {
+        n.formatted(.number.grouping(.automatic))
+    }
+
+    private var tokensCard: some View {
+        card("Tokens", symbol: "number", trailing: totalCalls > 0 ? "\(count(totalCalls)) call\(totalCalls == 1 ? "" : "s")" : nil) {
+            if totalCalls == 0 {
+                empty("Not recorded for these turns")
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: Spine.Space.xl) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(count(totalIn))
+                            .font(SpineFont.mono(Spine.TypeSize.body, relativeTo: .body))
+                            .foregroundStyle(Spine.Palette.text)
+                        Text("in")
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textFaint)
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(count(totalOut))
+                            .font(SpineFont.mono(Spine.TypeSize.body, relativeTo: .body))
+                            .foregroundStyle(Spine.Palette.text)
+                        Text("out")
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textFaint)
+                    }
+                }
+                if let latest = latestUsage {
+                    Text("Latest turn: \(count(latest.promptTokens)) in, \(count(latest.completionTokens)) out")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
+                ForEach(Array(modelTokens.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 { Divider().overlay(Spine.Palette.border) }
+                    HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(row.model.replacingOccurrences(of: "mlx-community/", with: ""))
+                                .font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
+                                .foregroundStyle(Spine.Palette.text)
+                                .lineLimit(2)
+                                .help(row.model)
+                            Text("\(row.tier.map(label) ?? "tier not recorded") · \(row.calls) call\(row.calls == 1 ? "" : "s")")
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.textFaint)
+                        }
+                        Spacer(minLength: Spine.Space.sm)
+                        Text("\(count(row.prompt)) / \(count(row.completion))")
+                            .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                }
+                if totalUnreported > 0 {
+                    Text("\(totalUnreported) call\(totalUnreported == 1 ? "" : "s") reported no usage, so the totals are a floor.")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     // MARK: - Context
