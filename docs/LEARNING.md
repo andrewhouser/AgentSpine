@@ -47,7 +47,7 @@ that is the answer, not a thing to design around.
 **Provenance (Nod N1, 2026-11-21).** Every memory records the route that wrote it (`origin`) and, when there
 is one, the run (`run_id`). Both are set by code at the `remember()` call, never by the model, so a poisoned
 fact cannot claim to have come from you. `origin` is a closed set (`ORIGINS` in `src/memory/rag.ts`:
-`reflection`, `recipe`, `lesson`, `rejection`, `interrupt`, `conversation`, `profile`, `tool`, `date`,
+`reflection`, `recipe`, `reviewed_lesson`, `rejection`, `interrupt`, `conversation`, `profile`, `tool`, `date`,
 `friction`); anything else is stored as NULL. A refused duplicate returns before it writes, so the row that
 exists keeps its original provenance. Rows from before this show "before provenance", not a guess. Memories
 outlive runs (runs are pruned at 90 days by default), so the list reports `runPruned` and Settings says "run
@@ -362,8 +362,18 @@ which nobody was reading anyway):
 
 > Did this run accomplish what was asked without wasted effort?
 
-A `no` with its reason becomes a `lesson` memory. Sampling is the cost control; a
+A `no` with its reason becomes a **proposed** lesson. Sampling is the cost control; a
 `LESSON_SAMPLE_RATE` of 0.1 makes this a rounding error against the runs themselves.
+
+> **Changed 2026-11-22: a lesson waits for you.** The original wrote the reason straight into
+> `memories`, so a sentence shaped by a web page or an email in the transcript could reach later
+> runs as trusted context with nobody having read it, which broke invariant 2.
+> `src/learn/lessons.ts` now holds proposals in their own table, and the weekly review on web, Mac
+> and iPhone shows the newest 10 with Keep and Dismiss. Keeping one writes the memory with the
+> origin `reviewed_lesson`; recall refuses a `lesson` row without it, on every path. Lessons stored
+> earlier move to the same queue on the first start, unused until kept. A dismissed lesson keeps
+> only a hash, so it is never proposed again. The queue stops at 50 open. Suite:
+> `test/learn-lessons.test.mjs`.
 
 Keep `sensitivity:"private"` if the trace touched mail, files, or calendar — which means
 the sampling decision has to look at the run's audit rows first. When in doubt, local.
@@ -730,7 +740,7 @@ Settings: `docs/SPEC.md` section 5, amendment of 2026-11-21.
 |---|---|---|---|
 | `friction` | Phase 1.2, in code from error strings | appended to tool descriptions in `toolDocs` | `FRICTION_MEMORY_MAX`, per tool |
 | `recipe` | Phase 3.1, reflection pass | `buildContext`, by task similarity | `RECIPE_MEMORY_MAX` |
-| `lesson` | Phase 3.2, sampled `judge()` | `buildContext` | `LESSON_MEMORY_MAX` |
+| `lesson` | Phase 3.2, sampled `judge()`, only after you keep it in the weekly review | `buildContext` | `LESSON_MEMORY_MAX`; 50 open proposals |
 
 Each needs a line in `prune.ts` next to the existing `pruneMemories("note", …)` call.
 

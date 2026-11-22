@@ -19,11 +19,11 @@
  * strictly less than the run it was critiquing.
  */
 import { privateOutputTools } from "../sensitivity.ts";
-import { LESSON_MEMORY_MAX, LESSON_SAMPLE_RATE } from "../config.ts";
+import { LESSON_SAMPLE_RATE } from "../config.ts";
 import { judge } from "../judge.ts";
-import { countMemories, pruneMemories, remember } from "./../memory/rag.ts";
 import * as store from "./../memory/store.ts";
 import type { Msg } from "../llm.ts";
+import { proposeLesson } from "./lessons.ts";
 
 export const LESSON_KIND = "lesson";
 
@@ -93,10 +93,10 @@ export const critiqueRun = async (
     if (!reason) return null;
 
     const lesson = `On a task like "${task.slice(0, 120)}", a past run fell short: ${reason}`;
-    if (!(await remember(lesson, LESSON_KIND, { origin: "lesson", runId }))) return null; // duplicate of a known lesson
-
-    if (countMemories(LESSON_KIND) > LESSON_MEMORY_MAX) pruneMemories(LESSON_KIND, LESSON_MEMORY_MAX);
-    console.log(`[critique] lesson: ${reason}`);
+    // Proposed, never remembered: the reason can be shaped by a page in the transcript, so a person reads it before
+    // any later run can (learn/lessons.ts).
+    if (!proposeLesson(lesson, runId)) return null; // seen before, or the review queue is full
+    console.log(`[critique] lesson proposed for review (run ${runId})`);
     return lesson;
   } catch (err) {
     console.warn(`[critique] skipped: ${err instanceof Error ? err.message : String(err)}`);

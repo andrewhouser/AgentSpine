@@ -48,14 +48,21 @@ for (const col of ["run_id INTEGER", "origin TEXT"]) {
  * The routes a memory can be written by. A closed set, checked at write time: anything else is stored
  * as NULL rather than as free text, because the point of provenance is that it is trustworthy.
  *   reflection   a fact reflect.ts extracted after a run        recipe        a procedure reflect.ts learned
- *   lesson       a self-critique of a run that fell short       rejection     a rejected proposal, with or without a reason
+ *   rejection    a rejected proposal, with or without a reason
  *   interrupt    a dismissed proactive notification             conversation  a summary of a finished conversation
  *   profile      facts you approved in chat (profile_remember)  tool          the model chose to remember (memory_save)
  *   date         a date you approved for Heads-up               friction      a tool failure, recorded by the broker's error path
  *   review       something you wished you had been told, typed into the weekly review
+ *   reviewed_lesson  a self-critique you read and kept. The old unreviewed `lesson` route is gone on purpose
  */
-export const ORIGINS = ["conversation", "date", "friction", "interrupt", "lesson", "profile", "recipe", "reflection", "rejection", "review", "tool"] as const;
+export const ORIGINS = ["conversation", "date", "friction", "interrupt", "profile", "recipe", "reflection", "rejection", "review", "reviewed_lesson", "tool"] as const;
 export type Origin = (typeof ORIGINS)[number];
+
+/**
+ * SQL for "this row may reach a prompt". A lesson counts only once a person kept it (learn/lessons.ts). In every recall
+ * query rather than one, because a lesson nobody read must fail closed on any path.
+ */
+const RECALLABLE = "(kind IS NOT 'lesson' OR origin = 'reviewed_lesson')";
 
 export interface MemorySource {
   origin: Origin;
@@ -351,7 +358,7 @@ export const recallScored = async (
 
   if (!embedder && !vector) {
     const rows = rawDb
-      .prepare("SELECT text FROM memories WHERE text LIKE ? ORDER BY id DESC LIMIT ?")
+      .prepare(`SELECT text FROM memories WHERE text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
       .all(`%${query}%`, k) as { text: string }[];
     // Keyword fallback has no meaningful similarity (score is NaN), so the floor cannot apply
     // here — filtering by `NaN >= minScore` would drop every row and turn recall into nothing.
@@ -360,7 +367,7 @@ export const recallScored = async (
   }
 
   const q = vector ?? (await embedder!(query));
-  const rows = rawDb.prepare("SELECT id, text, embedding FROM memories").all() as unknown as MemRow[];
+  const rows = rawDb.prepare(`SELECT id, text, embedding FROM memories WHERE ${RECALLABLE}`).all() as unknown as MemRow[];
   return rows
     .filter((r) => r.embedding)
     .map((r) => ({ text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))
@@ -388,12 +395,12 @@ export const recallOfKind = async (kind: string, query: string, k = 3, minScore 
   const embedder = await getEmbedder();
   if (!embedder) {
     const rows = rawDb
-      .prepare("SELECT text FROM memories WHERE kind = ? AND text LIKE ? ORDER BY id DESC LIMIT ?")
+      .prepare(`SELECT text FROM memories WHERE kind = ? AND text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
       .all(kind, `%${query}%`, k) as { text: string }[];
     return rows.map((r) => r.text);
   }
   const q = await embedder(query);
-  const rows = rawDb.prepare("SELECT id, text, embedding FROM memories WHERE kind = ?").all(kind) as unknown as MemRow[];
+  const rows = rawDb.prepare(`SELECT id, text, embedding FROM memories WHERE kind = ? AND ${RECALLABLE}`).all(kind) as unknown as MemRow[];
   return rows
     .filter((r) => r.embedding)
     .map((r) => ({ score: cosine(q, fromBlob(r.embedding as Buffer)), text: r.text }))

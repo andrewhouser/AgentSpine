@@ -598,7 +598,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       }
 
       // Sampled self-critique (Phase 3.2): on roughly one in ten CHAT runs, ask whether the
-      // run did what was asked without waste; a "no" becomes a lesson. Chat only — nobody was
+      // run did what was asked without waste; a "no" proposes a lesson for review. Chat only — nobody was
       // reading a scheduled or watcher run, so critiquing it teaches against the wrong bar.
       // Never throws; runs after the result is persisted.
       if (kind === "chat" && !opts.noMemory) {

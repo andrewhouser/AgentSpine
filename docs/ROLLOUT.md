@@ -61,7 +61,8 @@ Reversal: set the knob to `0`. Nothing persists that `npm run prune` won't clear
 self-critique are already running. Both read traces and inherit `reflect.ts`'s local-only pin —
 no trace leaves the box. The job here is to check the output is worth its keep.
 
-- [ ] Inspect stored recipes and lessons (Settings → Memory, or query kinds `recipe` / `lesson`).
+- [ ] Inspect stored recipes (Settings → Memory, or query kind `recipe`). Proposed lessons wait in
+      the weekly review, and no run sees one until you keep it.
 - [ ] **Steps-per-repeat-task ↓?** (3.1 recipes working.) If not, delete them: `RECIPE_ENABLED=false`.
 - [ ] Lessons specific enough to act on? If they're vague, lower `LESSON_SAMPLE_RATE` toward `0`.
 

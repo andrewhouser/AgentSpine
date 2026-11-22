@@ -129,10 +129,21 @@ export interface RetroCard {
   why: string;
 }
 
+/** A self-critique no run can see until you keep it. */
+export interface LessonCard {
+  id: number;
+  runId: null | number;
+  /** `critique`, or `before_review` for a lesson stored before review existed. */
+  source: string;
+  text: string;
+}
+
 /** GET /api/outbox/review. */
 export interface OutboxReview {
   days: number;
   items: ReviewItem[];
+  /** The newest few lessons and how many wait in all. Absent from a server older than lesson review. */
+  lessons?: { cards: LessonCard[]; total: number };
   /** Kinds you mostly skip over 90 days. `off` ones may have a proposal to switch the schedule off waiting in Approvals. */
   quiet: { counted: number; kind: string; rate: number; sent: number; skipped: number; source: string; tier: "off" | "quiet"; topic: string }[];
   /** Absent from a server older than SL2. */

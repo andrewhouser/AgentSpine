@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { OutboxReview, RetroCard, ReviewItem } from "../../lib/types.ts";
+import type { LessonCard, OutboxReview, RetroCard, ReviewItem } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -79,6 +79,9 @@ export const WeeklyReviewPanel = () => {
   const answerCard = (card: RetroCard, value: "accept" | "reject"): Promise<void> =>
     run(async () => (await api.answerRetro(card.id, value)).message);
 
+  const answerLesson = (card: LessonCard, value: "accept" | "reject"): Promise<void> =>
+    run(async () => (await api.answerLesson(card.id, value)).message);
+
   const sendWish = (): Promise<void> =>
     run(async () => {
       const r = await api.sendOutboxWish(wish);
@@ -124,6 +127,33 @@ export const WeeklyReviewPanel = () => {
               </li>
             ))}
           </ul>
+        </>
+      )}
+
+      {(review.lessons?.cards ?? []).length > 0 && (
+        <>
+          <p className={styles.note}>
+            Lessons waiting for you ({review.lessons?.total}). No run can see these until you keep one. Keep a lesson only
+            if it is true and you want similar future runs to follow it. It was written by a model that may have read web
+            pages or mail.
+          </p>
+          {(review.lessons?.cards ?? []).map((card) => (
+            <div className={styles.item} key={card.id}>
+              <p className={styles.body}>{card.text}</p>
+              <div className={styles.meta}>
+                {card.source === "before_review" ? "Saved before lessons were reviewed" : "From a self-critique"}
+                {card.runId !== null && `, run #${card.runId}`}
+              </div>
+              <div className={styles.actions}>
+                <button className={styles.button} disabled={busy} onClick={() => void answerLesson(card, "accept")} type="button">
+                  Keep
+                </button>
+                <button className={styles.button} disabled={busy} onClick={() => void answerLesson(card, "reject")} type="button">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
         </>
       )}
 

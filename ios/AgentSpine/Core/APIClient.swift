@@ -774,6 +774,14 @@ final class APIClient {
         )
     }
 
+    /// Keep or dismiss a lesson. Keeping it is the only way it reaches a later run.
+    func answerLesson(_ id: Int, answer: String) async throws -> LessonAnswerResult {
+        try await send(
+            jsonRequest("/api/outbox/lessons/\(id)", method: "POST", body: ["answer": answer]),
+            as: LessonAnswerResult.self
+        )
+    }
+
     /// Keep or dismiss a retrospective card. Accepting a routine only queues it for approval.
     func answerRetro(_ id: Int, answer: String) async throws -> RetroAnswerResult {
         try await send(

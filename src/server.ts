@@ -85,6 +85,7 @@ import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
+import { answerLesson, openLessons } from "./learn/lessons.ts";
 import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
@@ -895,7 +896,17 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
      */
     if (m === "GET" && seg[1] === "outbox" && seg[2] === "review" && seg.length === 3) {
       // Composed here so outbox-review.ts stays free of anything that imports the model router.
-      return sendJson(res, 200, { ...buildReview(), retro: openRetroProposals() });
+      return sendJson(res, 200, { ...buildReview(), lessons: openLessons(), retro: openRetroProposals() });
+    }
+    // POST /api/outbox/lessons/:id {answer: "accept" | "reject"}: keeping a lesson is the only way one reaches a later
+    // run, because the critique that wrote it may have read untrusted content (learn/lessons.ts).
+    if (m === "POST" && seg[1] === "outbox" && seg[2] === "lessons" && seg.length === 4) {
+      const id = Number(seg[3]);
+      if (!Number.isInteger(id) || id <= 0) return sendJson(res, 400, { error: "id must be a positive integer" });
+      const b = await readBody(req);
+      if (b?.answer !== "accept" && b?.answer !== "reject") return sendJson(res, 400, { error: 'answer must be "accept" or "reject"' });
+      const result = await answerLesson(id, b.answer);
+      return result ? sendJson(res, 200, result) : sendJson(res, 404, { error: "not an open lesson" });
     }
     // POST /api/outbox/retro/:id {answer: "accept" | "reject"}: one retrospective card (SL2). Accepting a
     // routine queues a disabled job for approval. No other answer changes anything but the card's record.

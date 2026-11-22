@@ -134,6 +134,10 @@ struct WeeklyReviewView: View {
                     }
                 }
 
+                if let lessons = review.lessons, !lessons.cards.isEmpty {
+                    lessonSection(lessons)
+                }
+
                 if let cards = review.retro, !cards.isEmpty {
                     retroSection(cards)
                 }
@@ -183,6 +187,52 @@ struct WeeklyReviewView: View {
         .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
+    }
+
+    private func lessonSection(_ lessons: LessonQueue) -> some View {
+        Section {
+            ForEach(lessons.cards) { card in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(card.text)
+                    Text(card.origin)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    HStack {
+                        lessonButton("Keep", card: card, answer: "accept")
+                        lessonButton("Dismiss", card: card, answer: "reject")
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("Lessons waiting for you (\(lessons.total))")
+        } footer: {
+            Text("No run can see these until you keep one. Keep a lesson only if it is true and you want similar "
+                 + "future runs to follow it. It was written by a model that may have read web pages or mail.")
+        }
+    }
+
+    private func lessonButton(_ label: String, card: LessonCard, answer: String) -> some View {
+        Button(label) { Task { await sendLesson(card, answer: answer) } }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(busy)
+    }
+
+    private func sendLesson(_ card: LessonCard, answer: String) async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await APIClient.shared.answerLesson(card.id, answer: answer)
+            error = nil
+            review?.lessons?.cards.removeAll { $0.id == card.id }
+            review?.lessons?.total -= 1
+            // The screen lists the newest few, so emptying it may reveal more waiting behind them.
+            if review?.lessons?.cards.isEmpty == true, (review?.lessons?.total ?? 0) > 0 { await load() }
+            message = result.message
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     private func retroSection(_ cards: [RetroCard]) -> some View {

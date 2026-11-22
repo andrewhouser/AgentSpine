@@ -36,12 +36,12 @@ const ORIGIN_LABELS: Record<string, string> = {
   date: "date you approved",
   friction: "tool failure note",
   interrupt: "from a dismissed notification",
-  lesson: "lesson from a self-critique",
   profile: "profile fact you approved",
   recipe: "recipe learned from a run",
   reflection: "reflection after a run",
   rejection: "from a rejected proposal",
   review: "you said so in the weekly review",
+  reviewed_lesson: "lesson you read and kept",
   tool: "saved by the assistant",
 };
 

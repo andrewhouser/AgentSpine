@@ -155,6 +155,8 @@ export const api = {
     post<Task>("/api/tasks", fields),
   answerHeadsup: (id: number, answer: "later" | "never" | "yes") =>
     post<Headsup>(`/api/headsups/${id}/answer`, { answer }),
+  /** Keep or dismiss a lesson. Keeping it is the only way it reaches a later run. */
+  answerLesson: (id: number, answer: "accept" | "reject") => post<{ message: string }>(`/api/outbox/lessons/${id}`, { answer }),
   /** Your answer to one message in the weekly review. "skip" files a dismissal memory for its topic. */
   answerOutbox: (id: number, answer: "skip" | "useful") =>
     post<{ remembered: boolean; topic: string }>(`/api/outbox/${id}/feedback`, { answer }),

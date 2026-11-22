@@ -687,12 +687,12 @@ struct Memory: Codable, Identifiable, Hashable {
         case "date": return "date you approved"
         case "friction": return "tool failure note"
         case "interrupt": return "from a dismissed notification"
-        case "lesson": return "lesson from a self-critique"
         case "profile": return "profile fact you approved"
         case "recipe": return "recipe learned from a run"
         case "reflection": return "reflection after a run"
         case "rejection": return "from a rejected proposal"
         case "review": return "you said so in the weekly review"
+        case "reviewed_lesson": return "lesson you read and kept"
         case "tool": return "saved by the assistant"
         default: return origin
         }
@@ -792,6 +792,8 @@ struct SkippedKind: Codable, Hashable {
 struct OutboxReview: Codable {
     let days: Int
     var items: [ReviewItem]
+    /// Absent from a server older than lesson review.
+    var lessons: LessonQueue?
     /// Absent from a server older than Phase 4.
     let quiet: [SkippedKind]?
     /// Absent from a server older than SL2.
@@ -828,6 +830,29 @@ struct RetroCard: Codable, Identifiable, Hashable {
 struct RetroAnswerResult: Codable {
     let message: String
     let queued: Int?
+}
+
+/// Lessons waiting for a person. `cards` is the newest few and `total` is how many wait in all.
+struct LessonQueue: Codable {
+    var cards: [LessonCard]
+    var total: Int
+}
+
+/// A self-critique no run can see until you keep it.
+struct LessonCard: Codable, Identifiable, Hashable {
+    let id: Int
+    let runId: Int?
+    let source: String
+    let text: String
+
+    var origin: String {
+        let from = source == "before_review" ? "Saved before lessons were reviewed" : "From a self-critique"
+        return runId.map { "\(from), run #\($0)" } ?? from
+    }
+}
+
+struct LessonAnswerResult: Codable {
+    let message: String
 }
 
 /// The server's answer to a review verdict. `remembered` is false when a note like it already existed.

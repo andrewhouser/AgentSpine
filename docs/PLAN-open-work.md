@@ -862,6 +862,10 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
   A kind with at least 5 answers in 90 days and 80% rejected waits 30 days between proposals. Expiries and policy
   refusals do not count as your no. Auto-approval, style and date proposals are not covered. It takes effect only
   when the proposers run, and they still have no trigger (SL1).
+- **SL4a Lessons wait for review (built 2026-11-22).** A sampled self-critique used to reach later runs with no
+  person reading it, against LEARNING invariant 2. `src/learn/lessons.ts` holds each one until you keep it in the
+  weekly review on web, Mac and iPhone, and moves lessons already stored into that queue on the first start. Not yet
+  seen on a running app or against the Mini's real data. Learned recipes were not audited for the same gap.
 - **SL5 Know whether it is working (You).** Use the checks in LEARNING, "How to tell it is working, and what to
   delete", after four weeks of SL1. Delete a learner whose output you never accept.
 
