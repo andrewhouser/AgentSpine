@@ -229,23 +229,24 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
         </button>
       </div>
 
-      {people.length > 0 && (
-        <div className={styles.form}>
-          <select aria-label="Person" className={styles.input} onChange={(e) => setPerson(e.target.value)} value={person}>
-            <option value="">Choose a person</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button className={styles.button} disabled={!person} onClick={() => void readPerson("person")} type="button">
-            Person brief
-          </button>
-          <button className={styles.button} disabled={!person} onClick={() => void readPerson("one-on-one")} type="button">
-            One-on-one prep
-          </button>
-        </div>
+      <div className={styles.form}>
+        <select aria-label="Person" className={styles.input} disabled={people.length === 0} onChange={(e) => setPerson(e.target.value)} value={person}>
+          <option value="">{people.length === 0 ? "No people recorded yet" : "Choose a person"}</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <button className={styles.button} disabled={!person} onClick={() => void readPerson("person")} type="button">
+          Person brief
+        </button>
+        <button className={styles.button} disabled={!person} onClick={() => void readPerson("one-on-one")} type="button">
+          One-on-one prep
+        </button>
+      </div>
+      {people.length === 0 && (
+        <p className={styles.meta}>People appear here once a claim with an owner is recorded.</p>
       )}
 
       <h2 className={styles.title}>Compare a plan with the meetings</h2>
@@ -256,7 +257,7 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
       </p>
       <textarea
         aria-label="Written plan"
-        className={`${styles.input} ${styles.grow}`}
+        className={`${styles.input} ${styles.fullWidth}`}
         onChange={(e) => setPlan(e.target.value)}
         placeholder="- Launch the pricing page in March&#10;- Hire two engineers by June"
         rows={5}

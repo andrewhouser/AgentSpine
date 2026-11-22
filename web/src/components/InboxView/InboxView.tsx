@@ -107,14 +107,14 @@ export const InboxView = ({ projects }: InboxViewProps) => {
         <p className={styles.meta}>A chat or email thread keeps who said what and when. A plain note is stored as written.</p>
         <input
           aria-label="Title (optional)"
-          className={`${styles.input} ${styles.grow}`}
+          className={`${styles.input} ${styles.fullWidth}`}
           onChange={(e) => setName(e.target.value)}
           placeholder="Title (optional)"
           value={name}
         />
         <textarea
           aria-label="Text to add"
-          className={`${styles.input} ${styles.grow}`}
+          className={`${styles.input} ${styles.fullWidth}`}
           onChange={(e) => setText(e.target.value)}
           placeholder="Paste a thread, or type a note…"
           rows={5}

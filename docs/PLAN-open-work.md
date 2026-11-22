@@ -259,6 +259,12 @@ denied or errored call, a repeated call, a subagent's calls), and the event shap
   results (SwiftData or SQLite), shown marked as cached when the server is unreachable. Writes are not queued.
   Approvals are never replayed: an offline phone shows the question and says it can only be answered once
   reconnected, because a stale approval is a security problem.
+- **Web matched to Mac, Mac not yet matched back (2026-11-21).** Built on web: a thread inspector beside the chat
+  (`ThreadInspector`, toggled from the chat tab bar, remembered in `localStorage`) with the Mac inspector's four
+  cards plus a new **Tokens** card (in, out, calls, by model; from `usage` on each turn, which `usageForRuns` sums
+  from `llm_calls` for the turn and its child runs), and the project screen split into Conversations, Documents,
+  Tasks and Settings tabs. **Not built (needs Xcode):** the Tokens card in `MacThreadInspector.swift` and the
+  `usage` field on `Turn` in `Models.swift`; the same project tabs on Mac and iPhone. Until then the two differ.
 
 **Open decisions:** how many tabs the iPhone bar should allow now that Heads-up sits second (the mock shows four
 plus More); whether to cut a Swift package once there is a compiler to check the `public` changes.

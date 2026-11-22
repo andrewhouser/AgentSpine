@@ -183,3 +183,27 @@
     flex-basis: 100%;
   }
 }
+
+/* Sections of a long project page, one at a time. A tab is a button so it can be reached by keyboard. */
+.tabs {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.tab,
+.tabActive {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+}
+
+.tabActive {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}

@@ -607,6 +607,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             }
           })(),
           starred: !!r.starred,
+          // Model calls and tokens for this turn and the child runs it started (the thread inspector).
+          usage: store.usageForRuns([r.id, ...store.childRuns(r.id).map((c: any) => c.id)]),
           // Still-open approvals belong with the turn that raised them, so they survive a
           // reload and don't strand the user in a separate queue to answer them.
           confirmations: openFor(

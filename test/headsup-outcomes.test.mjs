@@ -39,7 +39,9 @@ const check = (label, actual, expected) => {
   console.log(`  ${ok ? "PASS" : "FAIL"}  ${label.padEnd(72)} ${ok ? "" : `${JSON.stringify(actual)} (expected ${JSON.stringify(expected)})`}`);
 };
 
+// Local noon, not "now": the planner returns nothing during quiet hours (21:00 to 06:00), so a run in the evening failed.
 const BASE = new Date();
+BASE.setHours(12, 0, 0, 0);
 const DAY = 86_400_000;
 const at = (daysFromBase) => new Date(BASE.getTime() + daysFromBase * DAY);
 const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

@@ -11,6 +11,7 @@ import { useVoiceSession } from "../../hooks/useVoiceSession.ts";
 import { api } from "../../lib/api.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { Composer } from "../Composer/Composer.tsx";
+import { ThreadInspector } from "../ThreadInspector/ThreadInspector.tsx";
 import { TraceView } from "../TraceView/TraceView.tsx";
 import { Turn } from "../Turn/Turn.tsx";
 import { VoiceBar } from "../VoiceBar/VoiceBar.tsx";
@@ -73,6 +74,23 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
   const load = useCallback(() => api.thread(conversationId), [conversationId]);
   const [thread, reloadThread] = useResource<null | Thread>(load, null);
   const [active, setActive] = useState<ActiveRun | null>(null);
+  // Remembered across threads and reloads, like the Mac app's inspector.
+  const [showInspector, setShowInspector] = useState(() => {
+    try {
+      return localStorage.getItem("web.threadInspector") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleInspector = (): void => {
+    const next = !showInspector;
+    setShowInspector(next);
+    try {
+      localStorage.setItem("web.threadInspector", next ? "1" : "0");
+    } catch {
+      /* a private window keeps it for this view only */
+    }
+  };
   const [tab, setTab] = useState<"chat" | "trace">("chat");
   // The last run this view watched finish. Its row can still read "running" in the thread
   // for the moment between the stream ending and the reload landing, and without this it
@@ -210,6 +228,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
   ];
 
   return (
+    <div className={styles.shell}>
     <div className={styles.view}>
       <div aria-label="Conversation view" className={styles.tabs} role="tablist">
         {(["chat", "trace"] as const).map((t) => (
@@ -224,6 +243,15 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
             {t === "chat" ? "Chat" : "Trace"}
           </button>
         ))}
+        <button
+          aria-pressed={showInspector}
+          className={styles.inspectorToggle}
+          onClick={toggleInspector}
+          title={showInspector ? "Hide the inspector" : "Show models, tokens, tool calls and child runs"}
+          type="button"
+        >
+          Inspector
+        </button>
       </div>
       {thread?.conversation.local_only === 1 && (
         <p className={styles.localNote} role="note">
@@ -353,6 +381,8 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
           />
         </div>
       </div>
+    </div>
+    {showInspector && thread && <ThreadInspector thread={thread} />}
     </div>
   );
 };

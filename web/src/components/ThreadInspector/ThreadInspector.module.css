@@ -1,0 +1,200 @@
+/* The panel beside a thread, as wide as the Mac inspector's ideal column (280) and scrolling on its own. */
+.panel {
+  background: var(--bg-inset);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-md);
+  overflow-y: auto;
+  padding: var(--space-md);
+  width: 280px;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+}
+
+.cardHead,
+.row,
+.summary {
+  align-items: center;
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: space-between;
+}
+
+.cardTitle {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.count,
+.dim {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.faint {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.warn {
+  color: var(--attention);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.mono {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.small {
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.item {
+  align-items: baseline;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+}
+
+.item:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.dot {
+  border-radius: 50%;
+  flex: none;
+  height: 8px;
+  width: 8px;
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+
+.seg {
+  border-radius: 3px;
+  flex-basis: 0;
+  min-width: 6px;
+}
+
+.totals {
+  display: flex;
+  gap: var(--space-xl);
+}
+
+.big {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+}
+
+.chip {
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  padding: 1px 8px;
+}
+
+.summary {
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.list {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  list-style: none;
+  margin: var(--space-xs) 0 0;
+  padding: 0 0 0 var(--space-md);
+}
+
+.list li {
+  border-top: 1px solid var(--border);
+  -webkit-box-orient: vertical;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  padding: var(--space-sm) 0;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolBar {
+  border-radius: 2px;
+  height: 4px;
+  opacity: 0.7;
+}
+
+.fillAccent {
+  background: var(--accent);
+}
+
+.fillOk {
+  background: var(--ok);
+}
+
+.fillAttention {
+  background: var(--attention);
+}
+
+.fillFaint {
+  background: var(--text-faint);
+}
+
+.toneAccent,
+.textAccent {
+  color: var(--accent);
+}
+
+.toneOk,
+.textOk {
+  color: var(--ok);
+}
+
+.toneAttention,
+.textAttention {
+  color: var(--attention);
+}
+
+.toneFaint,
+.textFaint {
+  color: var(--text-faint);
+}

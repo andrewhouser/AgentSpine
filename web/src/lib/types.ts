@@ -738,6 +738,23 @@ export interface SearchHit {
   task: string;
 }
 
+/** What answered a turn (runs.served); absent for turns recorded before the server kept it. */
+export interface ServedModel {
+  cloud: boolean;
+  model: string;
+  tier: string;
+  via: "cloud" | "local";
+}
+
+/** Model calls and tokens for a turn and the child runs it started. A call with no reported usage adds none. */
+export interface RunUsage {
+  byModel: { calls: number; completionTokens: number; model: string; ms: number; promptTokens: number; tier: null | string }[];
+  calls: number;
+  completionTokens: number;
+  promptTokens: number;
+  unreported: number;
+}
+
 export interface Turn {
   actions: Action[];
   /** Images the user sent with this turn. */
@@ -752,12 +769,14 @@ export interface Turn {
   id: number;
   /** "chat" for a message the user typed; "approval" for the turn their decision resumed. */
   kind?: null | string;
+  served?: null | ServedModel;
   starred?: boolean;
   started: string;
   status: string;
   summary: null | string;
   task: null | string;
   tier: null | string;
+  usage?: RunUsage;
 }
 
 export interface Thread {

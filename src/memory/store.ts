@@ -1639,6 +1639,38 @@ export const llmCallsSince = (sinceIso: string): LlmCallRow[] =>
 export const llmCallsForRun = (runId: number): LlmCallRow[] =>
   db.prepare("SELECT * FROM llm_calls WHERE run_id = ? ORDER BY id").all(runId) as unknown as LlmCallRow[];
 
+/** What a set of runs (a turn and its child runs) spent on the model, by model and in all. Tokens are null-safe:
+ * a call whose server reported no usage counts as a call but adds no tokens, and `unreported` says how many. */
+export interface RunUsage {
+  byModel: { calls: number; completionTokens: number; ms: number; model: string; promptTokens: number; tier: null | string }[];
+  calls: number;
+  completionTokens: number;
+  promptTokens: number;
+  unreported: number;
+}
+
+export const usageForRuns = (runIds: number[]): RunUsage => {
+  const out: RunUsage = { byModel: [], calls: 0, completionTokens: 0, promptTokens: 0, unreported: 0 };
+  const by = new Map<string, RunUsage["byModel"][number]>();
+  for (const id of runIds) {
+    for (const c of llmCallsForRun(id)) {
+      const key = `${c.tier ?? ""}|${c.model}`;
+      const row = by.get(key) ?? { calls: 0, completionTokens: 0, model: c.model, ms: 0, promptTokens: 0, tier: c.tier };
+      row.calls += 1;
+      row.ms += c.ms;
+      row.promptTokens += c.prompt_tokens ?? 0;
+      row.completionTokens += c.completion_tokens ?? 0;
+      by.set(key, row);
+      out.calls += 1;
+      out.promptTokens += c.prompt_tokens ?? 0;
+      out.completionTokens += c.completion_tokens ?? 0;
+      if (c.prompt_tokens == null && c.completion_tokens == null) out.unreported += 1;
+    }
+  }
+  out.byModel = [...by.values()];
+  return out;
+};
+
 /**
  * Cloud tokens spent since `sinceIso`, prompt plus completion, from the same rows the timing
  * report reads. Only the `deep` tier counts: it is the one that bills. A call that failed

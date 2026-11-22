@@ -34,6 +34,13 @@
   flex: 1 1 14rem;
 }
 
+.fullWidth {
+  box-sizing: border-box;
+  display: block;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
 .card {
   align-items: flex-start;
   background: var(--bg-elevated);
