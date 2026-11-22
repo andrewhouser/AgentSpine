@@ -184,6 +184,28 @@ struct ConversationsView: View {
             }
             .tint(.gray)
         }
+        // The swipe is easy to miss, so the same three actions are on a long press.
+        .contextMenu {
+            Button {
+                newTitle = conversation.title ?? ""
+                prompt = .rename(conversation)
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button {
+                Task {
+                    try? await APIClient.shared.archive(conversation.id)
+                    await state.refresh()
+                }
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            Button(role: .destructive) {
+                prompt = .delete(conversation)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     var body: some View {

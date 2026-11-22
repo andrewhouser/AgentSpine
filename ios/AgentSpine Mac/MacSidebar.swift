@@ -19,6 +19,27 @@ struct MacSidebar: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage("sidebarMoreExpanded") private var moreExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var prompt: ThreadPrompt?
+    @State private var newTitle = ""
+
+    /// Rename and delete share one alert: two alert modifiers on one view do not both fire reliably.
+    private enum ThreadPrompt: Identifiable {
+        case delete(Conversation)
+        case rename(Conversation)
+
+        var conversation: Conversation {
+            switch self {
+            case .delete(let c), .rename(let c): return c
+            }
+        }
+
+        var id: String {
+            switch self {
+            case .delete(let c): return "delete-\(c.id)"
+            case .rename(let c): return "rename-\(c.id)"
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,9 +63,58 @@ struct MacSidebar: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
+            // The Delete key on the selected thread asks first, like the menu item.
+            .onDeleteCommand {
+                if case .thread(let id) = selection, let c = state.conversations.first(where: { $0.id == id }) {
+                    prompt = .delete(c)
+                }
+            }
             ConnectionFooter()
         }
         .background(Spine.Palette.bgSidebar)
+        .alert(
+            alertTitle,
+            isPresented: Binding(get: { prompt != nil }, set: { if !$0 { prompt = nil } }),
+            presenting: prompt
+        ) { prompt in
+            switch prompt {
+            case .delete(let conversation):
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        try? await APIClient.shared.delete(conversation: conversation.id)
+                        if selection == .thread(conversation.id) { selection = nil }
+                        await state.refresh()
+                    }
+                }
+            case .rename(let conversation):
+                TextField("Title", text: $newTitle)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") {
+                    let title = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else { return }
+                    Task {
+                        try? await APIClient.shared.rename(conversation.id, to: title)
+                        await state.refresh()
+                    }
+                }
+            }
+        } message: { prompt in
+            switch prompt {
+            case .delete:
+                Text("The turns, the tool calls and any photographs you sent are removed from the server. This cannot be undone. Archiving keeps all of it.")
+            case .rename:
+                Text("The auto-titler names a thread from its first turn. This replaces it.")
+            }
+        }
+    }
+
+    private var alertTitle: String {
+        switch prompt {
+        case .delete: return "Delete this thread?"
+        case .rename: return "Rename thread"
+        case nil: return ""
+        }
     }
 
     // MARK: Header
@@ -148,6 +218,19 @@ struct MacSidebar: View {
                     .tag(MacSidebarItem.thread(conversation.id))
                     .contextMenu {
                         Button("Open in New Window") { openWindow(id: "thread", value: conversation.id) }
+                        Divider()
+                        Button("Rename…") {
+                            newTitle = conversation.title ?? ""
+                            prompt = .rename(conversation)
+                        }
+                        Button("Archive") {
+                            Task {
+                                try? await APIClient.shared.archive(conversation.id)
+                                if selection == .thread(conversation.id) { selection = nil }
+                                await state.refresh()
+                            }
+                        }
+                        Button("Delete…", role: .destructive) { prompt = .delete(conversation) }
                     }
             }
         }
