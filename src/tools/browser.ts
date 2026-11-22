@@ -135,6 +135,13 @@ const classify = (args: Args): ClassifiedAction => {
   }
 };
 
+/** Whether the browser can be used at all: switched on, and the project has not narrowed its domains to none. */
+const available = (policy: Policy): PolicyDecision => {
+  if (!policy.browser?.enabled) return { allowed: false, reason: "browser control is disabled in policy.json" };
+  if (policy.browser.denyAll) return { allowed: false, reason: "no domain is allowed: the project's list shares none with browser.navigateAllowlist" };
+  return { allowed: true, reason: "browser control permitted" };
+};
+
 const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
   if (!policy.browser?.enabled) return { allowed: false, reason: "browser control is disabled in policy.json" };
   if (args?.action === "navigate") {
@@ -182,6 +189,7 @@ export const browserControl: Tool = {
   argsSchema:
     '{ "action": "navigate"|"read"|"click"|"type"|"submit", "url"?: string, "selector"?: string, "text"?: string, "description"?: string }',
   classify,
+  available,
   checkPolicy,
   run: (args: Args, ctx) => run(args, ctx),
 };

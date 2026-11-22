@@ -25,6 +25,10 @@ export const readFile: Tool = {
   description: "Read the text of a file inside an allowlisted directory. Also reads Word (.doc/.docx), RTF, HTML and PDF files as text.",
   argsSchema: '{ "path": string }',
   classify: (a): ClassifiedAction => ({ reversibility: "reversible", target: expand(a?.path ?? ""), summary: `Read file ${a?.path ?? ""}` }),
+  available: (policy): PolicyDecision =>
+    (policy.fs?.readableDirs?.length ?? 0) > 0
+      ? { allowed: true, reason: "policy.fs.readableDirs is not empty" }
+      : { allowed: false, reason: "policy.fs.readableDirs is empty (deny by default)" },
   checkPolicy: (policy, a) => gate(policy, a?.path ?? ""),
   run: async (a, ctx) => {
     const p = expand(a?.path ?? "");
@@ -57,6 +61,10 @@ export const listDir: Tool = {
   description: "List the entries of a directory inside an allowlisted directory.",
   argsSchema: '{ "path": string }',
   classify: (a): ClassifiedAction => ({ reversibility: "reversible", target: expand(a?.path ?? ""), summary: `List dir ${a?.path ?? ""}` }),
+  available: (policy): PolicyDecision =>
+    (policy.fs?.readableDirs?.length ?? 0) > 0
+      ? { allowed: true, reason: "policy.fs.readableDirs is not empty" }
+      : { allowed: false, reason: "policy.fs.readableDirs is empty (deny by default)" },
   checkPolicy: (policy, a) => gate(policy, a?.path ?? ""),
   run: async (a) => {
     const p = expand(a?.path ?? "");

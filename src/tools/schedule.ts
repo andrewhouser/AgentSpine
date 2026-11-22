@@ -146,6 +146,7 @@ export const scheduleList: Tool = {
 export const scheduleCreate: Tool = {
   name: "schedule_create",
   confirmWhenUnattended: true,
+  available: gate,
   description:
     "Create a job that runs later on its own, either repeatedly or exactly once. Use this " +
     "whenever the user asks for something that is not immediate — 'every morning', 'each day " +

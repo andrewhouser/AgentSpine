@@ -166,9 +166,13 @@ export const gitWrite: Tool = {
       target: `${repo}@${currentBranch(repo) ?? "(no branch)"}`,
     };
   },
+  available: (policy): PolicyDecision =>
+    policy.build?.enabled
+      ? { allowed: true, reason: "policy.build.enabled is set" }
+      : { allowed: false, reason: "policy.build.enabled is not set — git_write is denied (deny by default)." },
   checkPolicy: (policy, a): PolicyDecision => {
-    if (!policy.build?.enabled)
-      return { allowed: false, reason: "policy.build.enabled is not set — git_write is denied (deny by default)." };
+    const on = gitWrite.available!(policy);
+    if (!on.allowed) return on;
 
     const verb = String(a?.verb ?? "");
     if (!verb) return { allowed: false, reason: `no verb given. One of: ${VERBS.join(", ")}.` };

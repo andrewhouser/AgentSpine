@@ -378,6 +378,10 @@ export const writeFile: Tool = {
     }
     return { reversibility: "reversible", summary: `${verb} file ${target || "(no path)"}`, target };
   },
+  available: (policy: Policy): PolicyDecision =>
+    (policy.fs?.writableDirs?.length ?? 0) > 0
+      ? { allowed: true, reason: "policy.fs.writableDirs is not empty" }
+      : { allowed: false, reason: "policy.fs.writableDirs is empty (deny by default)" },
   checkPolicy: (policy: Policy, a: Args): PolicyDecision => {
     const target = resolveTarget(a);
     const gate = textTargetGate(policy, target);

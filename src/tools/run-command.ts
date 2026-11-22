@@ -223,9 +223,13 @@ export const runCommand: Tool = {
     summary: `Run "${a?.name ?? ""}" in ${a?.repo || writeDefaultDir()}`,
     target: `${expand(a?.repo || writeDefaultDir())}#${a?.name ?? ""}`,
   }),
+  available: (policy): PolicyDecision =>
+    policy.build?.enabled
+      ? { allowed: true, reason: "policy.build.enabled is set" }
+      : { allowed: false, reason: "policy.build.enabled is not set — no commands may run (deny by default)." },
   checkPolicy: (policy, a): PolicyDecision => {
-    if (!policy.build?.enabled)
-      return { allowed: false, reason: "policy.build.enabled is not set — no commands may run (deny by default)." };
+    const on = runCommand.available!(policy);
+    if (!on.allowed) return on;
 
     const repoGiven = repoArg(policy, a);
     const name = String(a?.name ?? "");
@@ -238,7 +242,7 @@ export const runCommand: Tool = {
         allowed: false,
         reason:
           `${expand(repoGiven)} is not inside any repo declared in policy.build.repos (deny by default). ` +
-          `Declared: ${Object.keys(policy.build.repos ?? {}).join(", ") || "(none)"}.`,
+          `Declared: ${Object.keys(policy.build?.repos ?? {}).join(", ") || "(none)"}.`,
       };
 
     const declared = found.conf.commands?.[name];

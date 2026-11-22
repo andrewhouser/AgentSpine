@@ -139,7 +139,7 @@ export const draft: Tool = {
     summary: `${label(a)}\n\n${renderDraft(a)}`,
   }),
 
-  checkPolicy: (policy: Policy): PolicyDecision =>
+  available: (policy: Policy): PolicyDecision =>
     policy.drafts?.enabled
       ? { allowed: true, reason: "policy.drafts.enabled is true" }
       : {
@@ -148,6 +148,7 @@ export const draft: Tool = {
             "policy.drafts.enabled is not set (deny by default). Enable with " +
             '"drafts": { "enabled": true, "dir": "./drafts" } in policy.json.',
         },
+  checkPolicy: (policy: Policy): PolicyDecision => draft.available!(policy),
 
   /**
    * Runs only on approval. Writes the draft where you can open it. Still no Google call —

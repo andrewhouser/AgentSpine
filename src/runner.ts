@@ -50,7 +50,7 @@ import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
 import { watchPin } from "./sensitivity.ts";
 import { workspaceInstructions } from "./projects/workspace.ts";
-import { buildHarnessContext } from "./harness.ts";
+import { buildHarnessContext, isConversationalKind, isUnattendedKind } from "./harness.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
@@ -61,17 +61,10 @@ import { notify } from "./notify.ts";
 import * as store from "./memory/store.ts";
 import type { Policy } from "./types.ts";
 
-/**
- * Runs nobody is watching. A `do` run's failure is already on your terminal; a scheduled
- * or heartbeat run failing at 3am is the one that otherwise rots silently for days.
- */
-const isUnattended = (kind: string): boolean => kind === "schedule" || kind === "heartbeat";
-
-/**
- * A turn a person is reading: their own message ("chat"), or the turn that picks the
- * conversation back up after they answered its Approve/Reject buttons ("approval").
- */
-const isConversational = (kind: string): boolean => kind === "chat" || kind === "approval";
+// A `do` run's failure is already on your terminal; a scheduled or heartbeat run failing at 3am is
+// the one that otherwise rots silently for days. Both definitions live in harness.ts (S1).
+const isUnattended = isUnattendedKind;
+const isConversational = isConversationalKind;
 
 /**
  * What the weekly review files a scheduled run's push under: the schedule's name, which does not
@@ -511,7 +504,6 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         instructionSources,
         kind,
         memory: !opts.noMemory,
-        preApproved: isUnattended(kind),
         private: startPrivate,
         project: project ? { id: project.id, name: project.name } : null,
         projectKnowledge: Boolean(projectKnowledge),
@@ -525,10 +517,10 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         harness,
         // A chat turn ends on someone's screen and must end in an answer; every other kind
         // ends in the ledger and should end in an account of what happened.
-        conversational: isConversational(kind),
+        conversational: harness.conversational,
         // A schedule or the heartbeat was approved when the user set it up; asking again at
         // 3am would only stall it. See RunContext.preApproved.
-        preApproved: isUnattended(kind),
+        preApproved: harness.preApproved,
         context,
         history,
         // Only a thread that actually holds an image is shown look_at_image — see

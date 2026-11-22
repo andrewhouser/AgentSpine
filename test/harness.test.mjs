@@ -120,6 +120,29 @@ console.log("\nA HELPER GETS ITS OWN CONTEXT");
   check("its envelope does not say a person is reading", h.renderEnvelope(child).includes("reading your reply"), false);
 }
 
+console.log("\nS1. ONE MEANING OF CHAT AND SCHEDULED FOR THE ENVELOPE AND THE TOOLS");
+{
+  const kinds = ["chat", "approval", "schedule", "heartbeat", "subagent", "do"];
+  const ctxs = Object.fromEntries(kinds.map((k) => [k, h.buildHarnessContext({ kind: k, runId: 1, tier: "standard", tools: [] })]));
+  check("conversational: only a chat turn and an approval turn", kinds.filter((k) => ctxs[k].conversational), ["chat", "approval"]);
+  check("preApproved: only a schedule and the heartbeat", kinds.filter((k) => ctxs[k].preApproved), ["schedule", "heartbeat"]);
+  check("the mode and the shared fact never disagree", kinds.filter((k) => ctxs[k].conversational !== (ctxs[k].audience === "person")), []);
+  const child = h.childHarness(ctxs.chat, { runId: 2, tier: "fast", tools: [] });
+  check("a helper of a live chat is not conversational", child.conversational, false);
+
+  // The loop reads both facts from the context, so the broker's RunContext cannot disagree with the envelope.
+  let seen;
+  const { registry } = await import("../src/tools/index.ts");
+  registry.run_probe = { argsSchema: "{}", checkPolicy: (_p, _a, run) => { seen = run; return { allowed: true, reason: "test" }; }, classify: () => ({ reversibility: "reversible", summary: "probe", target: "probe" }), description: "test only", name: "run_probe", run: async () => "ok" };
+  script.push(JSON.stringify({ action: "tool", args: {}, tool: "run_probe" }));
+  const runId = store.startRun({});
+  store.beginRun(runId);
+  const harness = h.buildHarnessContext({ kind: "schedule", runId, tier: "standard", tools: [] });
+  await runAgent("probe", loadPolicy(), runId, { budgetRunId: runId, conversational: true, harness, tier: "standard" });
+  check("RunContext is filled from the harness, not from a second copy", [seen?.conversational, seen?.preApproved], [false, true]);
+  delete registry.run_probe;
+}
+
 console.log("\nWHAT THE MODEL IS ACTUALLY SENT");
 {
   bodies.length = 0;
@@ -241,6 +264,59 @@ console.log("\nS4. harness_status");
   h.releaseHarness(701);
 }
 
+console.log("\nS2. THE LIFECYCLE HAS ONE OWNER IN EVERY PROMPT");
+{
+  const systemFor = async (tools, conversational) => {
+    bodies.length = 0;
+    const runId = store.startRun({});
+    store.beginRun(runId);
+    await runAgent("say done", loadPolicy(), runId, { budgetRunId: runId, conversational, tier: "standard", tools });
+    // From the contract on: the tool descriptions above it may use these words about their own tool.
+    const sys = JSON.parse(bodies[0]).messages.find((m) => m.role === "system").content;
+    return sys.slice(sys.indexOf("The application you run") >= 0 ? sys.indexOf("The application you run") : sys.indexOf("You are not a chat window") >= 0 ? sys.indexOf("You are not a chat window") : sys.indexOf("How AgentSpine works"));
+  };
+  const count = (s, re) => (s.match(re) ?? []).length;
+  const full = ["state_get", "schedule_create", "draft", "notify"];
+  for (const conversational of [true, false]) {
+    const p = await systemFor(full, conversational);
+    const label = conversational ? "chat" : "unattended";
+    check(`${label}: what QUEUED means is stated once`, count(p, /QUEUED means/g), 1);
+    check(`${label}: the verbatim hand-off to a later run is stated once`, count(p, /verbatim/g), 1);
+    check(`${label}: it says where the run ends`, conversational ? /ends on the user's screen/.test(p) : /ends in the run ledger/.test(p), true);
+    check(`${label}: it never claims the other mode's ending`, conversational ? /ends in the run ledger/.test(p) : /ends on the user's screen/.test(p), false);
+  }
+  const bare = await systemFor(["state_get"], true);
+  check("without schedule_create no claim about scheduling survives, in the contract or the advice", /schedul|standing instructions|verbatim|every morning/i.test(bare), false);
+  const noDraft = await systemFor(["state_get"], false);
+  check("without draft or notify an unattended run is not lectured about either", [/never as a draft/.test(noDraft), /Information you gathered reaches/.test(noDraft)], [false, false]);
+}
+
+console.log("\nS3. THE SUMMARY ASKS THE TOOLS, AND THE TWO READINGS AGREE");
+{
+  const { registry } = await import("../src/tools/index.ts");
+  const names = ["web_search", "web_read", "browser", "write_file", "read_file", "list_dir", "gmail_search", "calendar_upcoming", "draft", "schedule_create", "subagent", "run_command", "git_write"];
+  check("every family tool defines available()", names.filter((n) => typeof registry[n]?.available !== "function"), []);
+  const base = { apps: { allow: [] }, autoExecute: { dryRun: false, irreversibleAlwaysConfirm: true, reversible: true }, web: { searchEnabled: false } };
+  const variants = [
+    base,
+    { ...base, web: { searchEnabled: true }, browser: { enabled: true }, drafts: { enabled: true }, fs: { readableDirs: ["/r"], writableDirs: ["/w"] }, google: { enabled: true }, schedules: { enabled: true }, subagents: { enabled: true }, build: { enabled: true } },
+    { ...base, browser: { denyAll: true, enabled: true, navigateAllowlist: [] } },
+    { ...base, schedules: { enabled: false } },
+  ];
+  const lines = (s) => JSON.stringify(s);
+  for (const [i, pol] of variants.entries()) {
+    const viaTools = h.summarizeCapabilities(names, pol, { availability: (n) => registry[n]?.available?.(pol).allowed, cloudPrivateBlocked: false });
+    const viaFields = h.summarizeCapabilities(names, pol, { cloudPrivateBlocked: false });
+    check(`variant ${i}: asking the tools gives the same summary as reading the policy fields`, lines(viaTools), lines(viaFields));
+  }
+  // The drift this closes: an absent schedules.enabled used to read as ON in the summary while the tool's own gate refused.
+  const s = h.summarizeCapabilities(["schedule_create"], base, { availability: (n) => registry[n]?.available?.(base).allowed, cloudPrivateBlocked: false });
+  check("no schedules section: the summary says schedules are off, as the tool's gate does", [s.cannot.some((l) => /change schedules \(switched off\)/.test(l)), registry.schedule_create.checkPolicy(base, { name: "a", task: "b", every: "1h" }).allowed], [true, false]);
+  // available() is the first half of checkPolicy: when it says no, checkPolicy says no for any arguments.
+  const denied = names.filter((n) => !registry[n].available(base).allowed && registry[n].checkPolicy(base, { path: "/r/x", name: "x", repo: "/r", verb: "status", agent: "x", url: "https://a.example", action: "navigate", query: "q" }).allowed);
+  check("a tool that is unavailable never passes checkPolicy", denied, []);
+}
+
 console.log("\nS5. WHAT A TOOL RESULT MEANS");
 {
   const d = h.describeResult;
@@ -248,6 +324,8 @@ console.log("\nS5. WHAT A TOOL RESULT MEANS");
   check("executed write: applied", d("write_file", "executed", "saved").effect, "applied");
   const q = d("schedule_create", "queued", "QUEUED", 42);
   check("queued: no effect, carries the confirmation id, says approval is pending", [q.effect, q.confirmationId, /approval is pending/.test(q.nextStep), q.retryable], ["none", 42, true, false]);
+  const ex = d("schedule_create", "executing", "", 7);
+  check("executing reads as queued: no effect, not retryable, not done", [ex.effect, ex.retryable, ex.confirmationId, /do not say it happened/.test(ex.nextStep)], ["none", false, 7, true]);
   check("dry-run: no effect, not done", [d("x", "dry-run", "").effect, /do not claim it is done/.test(d("x", "dry-run", "").nextStep)], ["none", true]);
   check("denied: no effect, do not repeat", [d("x", "denied", "").effect, d("x", "denied", "").retryable, /do not repeat/.test(d("x", "denied", "").nextStep)], ["none", false, true]);
   check("an error is unknown, and a timeout may be retried", [d("x", "error", "bad").effect, d("x", "error", "bad").retryable, d("x", "error", "request timed out").retryable], ["unknown", false, true]);

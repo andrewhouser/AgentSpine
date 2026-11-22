@@ -94,23 +94,14 @@ const toolDocs = (tools: Record<string, Tool>): string =>
 const appDocs = (tools: Record<string, Tool>): string =>
   tools.schedule_create
     ? `
-The application you run inside:
-You are not a chat window bolted onto a model. You run inside AgentSpine, a local dashboard
-with a scheduler that wakes you on its own, a queue of actions waiting on the user's
-approval, and a log of every run. So a request about how the assistant should BEHAVE is work
-you can do, not something to hand back:
+You are not a chat window bolted onto a model, so a request about how the assistant should
+BEHAVE is work you can do, not something to hand back:
 - "every morning", "each day at noon", "weekly", "keep an eye on X" means create a repeating
   job with schedule_create. Doing the thing once and describing it is the wrong answer.
 - "remind me tomorrow at 9", "check back in an hour", "on the 15th" means a job that runs
   ONCE — same tool, a one-shot schedule like "tomorrow at 9am" or "in 1 hour". It retires
   itself after it runs. Answering now for a time the user did not ask about is the wrong
   answer here too.
-- A job's task is handed VERBATIM to a future run that has none of this conversation in
-  context. Write it as complete standing instructions, never as a reference to what was just
-  discussed.
-- A schedule change either runs at once, when the user's own settings trust it in a live
-  chat, or waits for their approval. The result tells you which: QUEUED means it is only
-  proposed, so say you proposed it, never that it is running.
 `
     : "";
 
@@ -149,8 +140,7 @@ const finalDocs = (conversational: boolean): string =>
 /** Rules that only apply when a person is on the other end, reading this as it happens. */
 const chatDocs = (tools: Record<string, Tool>): string => `
 You are in a live conversation. A person asked this and is reading your reply right now.
-Your final reply is the entire answer they see — every tool call above it is shown to them
-as a collapsed card, not as your response.
+Every tool call above it is shown to them as a collapsed card, not as your response.
 - ANSWER THEM. If they asked for the weather, the reply is the weather. "I looked it up",
   "I sent you a notification", and "I have retrieved the data" are reports about you, not
   answers to them, and land as no answer at all.
@@ -198,8 +188,7 @@ as a collapsed card, not as your response.
 const jobDocs = (tools: Record<string, Tool>): string =>
   tools.draft
     ? `
-This run is unattended. Your final summary is its record, and it is how information you
-gathered reaches the user${tools.notify ? " — along with notify, when a finding should reach their phone now (a finished brief, a real change, a problem)" : ""}.
+Information you gathered reaches the user in your final summary${tools.notify ? ", and through notify when a finding should reach their phone now (a finished brief, a real change, a problem)" : ""}.
 - draft is ONLY for text the user might send onward as their own: an email, a reply, a
   calendar event. It saves a file for them to review, or queues for their approval, so a
   brief, digest, report, or answer sent as a draft is not delivered to them and may become a
@@ -526,7 +515,9 @@ const runAgentLoop = async (
   runId: number | null,
   opts: AgentOpts = {},
 ): Promise<AgentResult> => {
-  const conversational = opts.conversational ?? false;
+  // The harness context, when there is one, is the single owner of these two facts (S1); the plain
+  // options remain for callers that build no context (tests, the eval harnesses).
+  const conversational = opts.harness?.conversational ?? opts.conversational ?? false;
   const tools = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
   const tier = opts.tier ?? "standard";
   // The loop alone knows which tools this setting lets the run see, so the context is completed here
@@ -535,6 +526,7 @@ const runAgentLoop = async (
     ? {
         ...opts.harness,
         capabilities: summarizeCapabilities(Object.keys(tools), policy, {
+          availability: (name) => tools[name]?.available?.(policy).allowed,
           cloudPrivateBlocked: Boolean(opts.startPrivate || opts.harness.private),
           conversational,
         }),
@@ -731,7 +723,7 @@ const runAgentLoop = async (
       const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
         conversational,
         goal,
-        preApproved: opts.preApproved ?? false,
+        preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
         projectId: opts.projectId ?? null,
       });
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);

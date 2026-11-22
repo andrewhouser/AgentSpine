@@ -31,9 +31,15 @@ const classify = (args: Args): ClassifiedAction => ({
   summary: `Read page ${args?.url ?? ""}`,
 });
 
-const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
+const available = (policy: Policy): PolicyDecision => {
   if (!policy.browser?.enabled) return { allowed: false, reason: "browser control is disabled in policy.json" };
   if (policy.browser.denyAll) return { allowed: false, reason: "no domain is allowed: the project's list shares none with browser.navigateAllowlist" };
+  return { allowed: true, reason: "page read permitted" };
+};
+
+const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
+  const on = available(policy);
+  if (!on.allowed) return on;
   const allow = policy.browser.navigateAllowlist ?? [];
   if (allow.length) {
     const host = hostOf(args?.url ?? "");
@@ -71,6 +77,7 @@ export const webRead: Tool = {
   description: "Fetch a known URL with the headless browser and return its readable text.",
   argsSchema: '{ "url": string }',
   classify,
+  available,
   checkPolicy,
   run,
 };

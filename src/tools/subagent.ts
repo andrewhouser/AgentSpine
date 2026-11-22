@@ -96,9 +96,14 @@ export const subagent: Tool = {
     summary: `Delegate to ${a?.agent ?? "?"}: ${String(a?.task ?? "").slice(0, 80)}`,
   }),
 
+  available: (policy: Policy): PolicyDecision =>
+    policy.subagents?.enabled === true
+      ? { allowed: true, reason: "subagents are on" }
+      : { allowed: false, reason: "subagents are off (set policy.subagents.enabled)" },
+
   checkPolicy: (policy: Policy, a): PolicyDecision => {
-    if (policy.subagents?.enabled !== true)
-      return { allowed: false, reason: "subagents are off (set policy.subagents.enabled)" };
+    const on = subagent.available!(policy);
+    if (!on.allowed) return on;
     const name = String(a?.agent ?? "");
     if (!getAgent(name))
       return { allowed: false, reason: `no such unit ${JSON.stringify(name)}. Available: ${agentNames().join(", ") || "none"}` };

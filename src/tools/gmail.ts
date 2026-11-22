@@ -74,10 +74,11 @@ export const gmailSearch: Tool = {
     target: "gmail",
     summary: `Read email: "${a?.query ?? "is:unread in:inbox"}"`,
   }),
-  checkPolicy: (policy: Policy): PolicyDecision =>
+  available: (policy: Policy): PolicyDecision =>
     policy.google?.enabled
       ? { allowed: true, reason: "google reads enabled" }
       : { allowed: false, reason: "google reads are disabled in policy.json" },
+  checkPolicy: (policy: Policy): PolicyDecision => gmailSearch.available!(policy),
   run: async (a: Args) => {
     try {
       const base = String(a?.query ?? "is:unread in:inbox");

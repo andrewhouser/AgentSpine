@@ -253,9 +253,25 @@ export interface GoogleWritePolicy {
   trashOverrideSenders?: string[];
 }
 
-export interface RunContext {
+/**
+ * The two facts about a run that mean the same thing to the tools and to the model (S1). The tool-facing
+ * `RunContext` and the model-facing `HarnessContext` (src/harness.ts) both extend it, and both are
+ * filled from the run's kind by one pair of functions there, so "chat" and "scheduled" cannot come to
+ * mean different things in two type definitions.
+ */
+export interface RunFacts {
   /** A person is reading this exchange as it happens, i.e. a chat turn. */
   conversational: boolean;
+  /**
+   * The user set this run up in advance — a schedule (watchers included) or the heartbeat —
+   * and creating it was the approval. The broker runs its irreversible calls without asking
+   * again; the allowlist, budgets and dry run still apply. Inherited by subagents of such a
+   * run. Absent means a person may still be asked.
+   */
+  preApproved?: boolean;
+}
+
+export interface RunContext extends RunFacts {
   /** The user's message for this run, verbatim. */
   goal: string;
   /**
@@ -264,13 +280,6 @@ export interface RunContext {
    * stays attributed to that project without the model having to know its numeric id.
    */
   projectId?: null | number;
-  /**
-   * The user set this run up in advance — a schedule (watchers included) or the heartbeat —
-   * and creating it was the approval. The broker runs its irreversible calls without asking
-   * again; the allowlist, budgets and dry run still apply. Inherited by subagents of such a
-   * run. Absent means a person may still be asked.
-   */
-  preApproved?: boolean;
 }
 
 export interface ToolContext {
@@ -303,6 +312,15 @@ export interface Tool {
    * which is why adding the parameter changed no other tool in the registry.
    */
   checkPolicy(policy: Policy, args: any, run?: RunContext): PolicyDecision;
+  /**
+   * Whether this tool can be used AT ALL under `policy`, whatever the arguments: the switch and
+   * allowlist part of `checkPolicy`, pulled out so the capability summary in the harness envelope
+   * asks the tool instead of re-reading the same policy fields (which drifted once: the summary
+   * treated an absent `schedules.enabled` as on while the tool's gate treated it as off). A tool
+   * that defines it calls it first from its own `checkPolicy`, so there is one owner. Advice to
+   * the planner only; the broker still decides every call.
+   */
+  available?(policy: Policy): PolicyDecision;
   /**
    * Whether the user's own message, in a live chat turn, asked for exactly this call — and
    * if so, which named action it is and why. Optional; a tool without it never skips

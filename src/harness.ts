@@ -22,7 +22,7 @@
 import fs from "node:fs";
 import { tierConfig } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
-import type { Policy } from "./types.ts";
+import type { Policy, RunFacts } from "./types.ts";
 
 export type HarnessMode = "approval" | "chat" | "heartbeat" | "scheduled" | "subagent" | "task";
 
@@ -32,7 +32,7 @@ export interface CapabilitySummary {
   cannot: string[];
 }
 
-export interface HarnessContext {
+export interface HarnessContext extends RunFacts {
   /** Where the final result goes: a person's screen, the run ledger, or the run that delegated. */
   audience: "ledger" | "parent" | "person";
   /** What the visible tools can and cannot do under the effective policy; see summarizeCapabilities. */
@@ -70,6 +70,20 @@ const version = (): string => {
     return "unknown";
   }
 };
+
+/**
+ * A turn a person is reading: their own message ("chat"), or the turn that picks the conversation
+ * back up after they answered its Approve/Reject buttons ("approval"). The one definition: the
+ * runner gives it to the loop and the loop to the broker's RunContext, and the envelope's `mode`
+ * is read from the same kind.
+ */
+export const isConversationalKind = (kind: string): boolean => kind === "chat" || kind === "approval";
+
+/**
+ * Runs nobody is watching and the user approved when they set them up: a schedule (watchers
+ * included) or the heartbeat.
+ */
+export const isUnattendedKind = (kind: string): boolean => kind === "schedule" || kind === "heartbeat";
 
 /** Map a run kind (`runs.kind`) to the mode the model is told about. */
 export const modeOfKind = (kind: string): HarnessMode => {
@@ -111,12 +125,13 @@ export const buildHarnessContext = (input: HarnessInput): HarnessContext => {
     app: { name: "AgentSpine", version: version() },
     audience: mode === "chat" || mode === "approval" ? "person" : mode === "subagent" ? "parent" : "ledger",
     capabilities: { can: [], cannot: [] },
+    conversational: isConversationalKind(input.kind),
     conversationId: input.conversationId ?? null,
     history: input.history ?? false,
     instructionSources: [...(input.instructionSources ?? [])],
     memory: input.memory ?? false,
     mode,
-    preApproved: input.preApproved ?? false,
+    preApproved: input.preApproved ?? isUnattendedKind(input.kind),
     private: input.private ?? false,
     project: input.project ?? null,
     projectKnowledge: input.projectKnowledge ?? false,
@@ -140,6 +155,7 @@ export const childHarness = (
 ): HarnessContext => ({
   ...parent,
   audience: "parent",
+  conversational: false,
   conversationId: null,
   history: false,
   instructionSources: [],
@@ -173,35 +189,43 @@ export const releaseHarness = (runId: null | number): void => {
 export const summarizeCapabilities = (
   toolNames: string[],
   policy: Policy,
-  opts: { cloudPrivateBlocked: boolean; conversational?: boolean },
+  opts: { availability?: (tool: string) => boolean | undefined; cloudPrivateBlocked: boolean; conversational?: boolean },
 ): CapabilitySummary => {
   const has = (...names: string[]): boolean => names.some((n) => toolNames.includes(n));
   const can: string[] = [];
   const cannot: string[] = [];
+  // S3: a family is available when any visible tool of it says so through its OWN `available` (the
+  // same gate its `checkPolicy` starts with), so a new condition in the tool reaches the summary
+  // without a second edit here. The policy-field reading passed as `fallback` is used only for a tool
+  // that has not defined one (read-only helpers, mail through the Mac), and a test compares the two.
+  const usable = (fallback: boolean, ...names: string[]): boolean => {
+    const answers = names.filter((n) => toolNames.includes(n)).map((n) => opts.availability?.(n)).filter((a): a is boolean => a !== undefined);
+    return answers.length ? answers.some(Boolean) : fallback;
+  };
   const say = (visible: boolean, allowed: boolean, yes: string, no: string): void => {
     if (!visible) return;
     (allowed ? can : cannot).push(allowed ? yes : no);
   };
 
-  say(has("web_search"), Boolean(policy.web?.searchEnabled), "search the web", "search the web (switched off)");
+  say(has("web_search"), usable(Boolean(policy.web?.searchEnabled), "web_search"), "search the web", "search the web (switched off)");
   const browserOn = Boolean(policy.browser?.enabled) && !policy.browser?.denyAll;
   const domains = policy.browser?.navigateAllowlist?.length ?? 0;
   say(
     has("web_read", "browser"),
-    browserOn,
+    usable(browserOn, "web_read", "browser"),
     domains ? `read web pages and use the browser on ${domains} allowed domain${domains === 1 ? "" : "s"}` : "read web pages and use the browser",
     policy.browser?.denyAll ? "read web pages or use the browser (this project allows no domain)" : "read web pages or use the browser (switched off)",
   );
-  say(has("write_file"), (policy.fs?.writableDirs?.length ?? 0) > 0, "save files inside the allowed folders", "save files (no writable folder)");
-  say(has("read_file", "list_dir"), (policy.fs?.readableDirs?.length ?? 0) > 0, "read files inside the allowed folders", "read files (no readable folder)");
-  say(has("gmail_search", "calendar_upcoming"), Boolean(policy.google?.enabled), "read Gmail and Calendar (read only)", "read Gmail or Calendar (switched off)");
+  say(has("write_file"), usable((policy.fs?.writableDirs?.length ?? 0) > 0, "write_file"), "save files inside the allowed folders", "save files (no writable folder)");
+  say(has("read_file", "list_dir"), usable((policy.fs?.readableDirs?.length ?? 0) > 0, "read_file", "list_dir"), "read files inside the allowed folders", "read files (no readable folder)");
+  say(has("gmail_search", "calendar_upcoming"), usable(Boolean(policy.google?.enabled), "gmail_search", "calendar_upcoming"), "read Gmail and Calendar (read only)", "read Gmail or Calendar (switched off)");
   // What an irreversible tool does depends on the settings and the mode, not just the tool: a person
   // typing in a live chat can have named tools to run at once (`policy.trust.chatAutoTools`), and a
   // pre-approved unattended run runs them without asking, except standing work, which still queues.
   const trusted = (name: string): boolean => Boolean(opts.conversational) && (policy.trust?.chatAutoTools ?? []).includes(name);
   say(
     has("draft"),
-    Boolean(policy.drafts?.enabled),
+    usable(Boolean(policy.drafts?.enabled), "draft"),
     trusted("draft")
       ? "draft text, saved at once for the user to review (this chat trusts drafts)"
       : opts.conversational === false
@@ -211,14 +235,14 @@ export const summarizeCapabilities = (
   );
   say(
     has("schedule_create"),
-    policy.schedules?.enabled !== false,
+    usable(Boolean(policy.schedules?.enabled), "schedule_create"),
     trusted("schedule_create")
       ? "create schedules at once (this chat trusts it); an unattended run can only propose them, for the user's approval"
       : "propose schedule changes, which wait for the user's approval",
     "change schedules (switched off)",
   );
-  say(has("subagent"), Boolean(policy.subagents?.enabled), "hand work to helper units", "start helper units (switched off)");
-  say(has("run_command", "git_write"), Boolean(policy.build?.enabled), "run declared build commands", "run build commands (switched off)");
+  say(has("subagent"), usable(Boolean(policy.subagents?.enabled), "subagent"), "hand work to helper units", "start helper units (switched off)");
+  say(has("run_command", "git_write"), usable(Boolean(policy.build?.enabled), "run_command", "git_write"), "run declared build commands", "run build commands (switched off)");
   if (has("meeting_list")) can.push("read the user's recorded meetings (kept on the local model)");
   if (policy.autoExecute?.dryRun) cannot.push("make any change: this run is a dry run, so every call is only reported");
 
@@ -277,7 +301,8 @@ export const harnessContract = (tools: string[], conversational: boolean): strin
     "- You cannot edit policy, grant yourself a capability, or approve your own request.",
   ];
   if (has("schedule_create")) {
-    lines.push("- A scheduled task's text is handed verbatim to a future run that has none of this conversation, so write it as complete standing instructions.");
+    lines.push("- A scheduled task's text is handed verbatim to a future run that has none of this conversation, so write it as complete standing instructions, never as a reference to what was just discussed.");
+    lines.push("- A schedule change either runs at once, when the user's settings trust it in a live chat, or is QUEUED for their approval. The result says which, so say you proposed it, never that it is running.");
   }
   return lines.join("\n");
 };
@@ -377,6 +402,11 @@ export const describeResult = (tool: string, status: string, output: string, con
         retryable: false,
       };
     }
+    // `executing` is a confirmation row an approver has claimed but whose run has not finished
+    // (store.ts). It is not a BrokerStatus today, but a result relayed from an approval can name it,
+    // and without a case it fell to the default and read as `unknown`, which invites a retry. Until
+    // it resolves it means exactly what `queued` means: nothing has happened yet.
+    case "executing":
     case "queued":
       return {
         ...base,

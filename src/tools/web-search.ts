@@ -75,10 +75,12 @@ const classify = (args: Args): ClassifiedAction => {
   };
 };
 
-const checkPolicy = (policy: Policy, _args: Args): PolicyDecision =>
-  policy.web.searchEnabled
+const available = (policy: Policy): PolicyDecision =>
+  policy.web?.searchEnabled
     ? { allowed: true, reason: "web search enabled" }
     : { allowed: false, reason: "web search is disabled in policy.json" };
+
+const checkPolicy = (policy: Policy, _args: Args): PolicyDecision => available(policy);
 
 /** DuckDuckGo's own date filter: d / w / m / y. */
 const DDG_WINDOW: Record<Recency, string> = { day: "d", month: "m", week: "w", year: "y" };
@@ -238,6 +240,7 @@ export const webSearch: Tool = {
     "whenever the question is about a recent period (today, this week, latest news).",
   argsSchema: '{ "query": string, "recency"?: "day" | "week" | "month" | "year" }',
   classify,
+  available,
   checkPolicy,
   run,
 };

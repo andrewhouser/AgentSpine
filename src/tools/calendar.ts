@@ -22,10 +22,11 @@ export const calendarUpcoming: Tool = {
     target: "calendar",
     summary: `Read calendar (next ${a?.hours ?? 48}h)`,
   }),
-  checkPolicy: (policy: Policy): PolicyDecision =>
+  available: (policy: Policy): PolicyDecision =>
     policy.google?.enabled
       ? { allowed: true, reason: "google reads enabled" }
       : { allowed: false, reason: "google reads are disabled in policy.json" },
+  checkPolicy: (policy: Policy): PolicyDecision => calendarUpcoming.available!(policy),
   run: async (a: Args) => {
     try {
       const events = await upcomingEvents(Number(a?.hours ?? 48), Number(a?.max ?? 20));
