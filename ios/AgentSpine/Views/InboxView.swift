@@ -103,6 +103,23 @@ struct InboxView: View {
                             .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                             .foregroundStyle(Spine.Palette.textDim)
                     }
+                    // Shown, never applied: a name or word match is a hint, and only the tap adds anything.
+                    if let people = item.suggestedPeople, !people.isEmpty {
+                        Text("May mention \(people.joined(separator: ", ")).")
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                    if !item.tagsToOffer.isEmpty {
+                        Text("Tags in use that fit: \(item.tagsToOffer.joined(separator: ", ")).")
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                        Button(item.tagsToOffer.count == 1 ? "Add this tag" : "Add these tags") {
+                            Task { await addSuggestedTags(item) }
+                        }
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                        .buttonStyle(.borderless)
+                        .disabled(busy)
+                    }
                     if item.isReady {
                         // Only on request: extraction is several calls to the model host.
                         Button(extractingID == item.id ? "Reading…" : "Find decisions and commitments") {
@@ -280,6 +297,15 @@ struct InboxView: View {
     private func retry(_ item: InboxItem) async {
         do {
             try await APIClient.shared.inboxReprocess(item.id)
+            await load()
+        } catch { actionError = error.localizedDescription }
+    }
+
+    private func addSuggestedTags(_ item: InboxItem) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await APIClient.shared.inboxSetTags(item.id, to: (item.tags ?? []) + item.tagsToOffer)
             await load()
         } catch { actionError = error.localizedDescription }
     }

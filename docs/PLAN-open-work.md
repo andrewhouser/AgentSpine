@@ -419,7 +419,8 @@ baseline, and the meeting recall number is still unmeasured.
   `via: dictation`. The Mac had no dictation, so a small recorder for it lives in the shared `InboxView.swift`.
   **Not built:** the iPhone share sheet; adopting the existing Milliman
   knowledge-folder loader as one source of the Inbox (that folder is off limits to this sandbox, so it needs you or
-  a session on the Mini); the iPhone and Mac screens for the new suggestions.
+  a session on the Mini). The suggested people and tags also show on iPhone and Mac (2026-11-22, in the shared
+  `InboxView`; built, not seen running), with one tap to add the tags and nothing applied by itself.
 - **K4. Knowledge store (backend built 2026-11-21; screens are K5).** `src/knowledge/`: a layer separate from
   semantic memory. Records are `kn_claims` (kinds `decision`, `commitment`, `risk`, `question`, `goal`, `status`,
   `claim`), `kn_entities` (people, teams, topics, with aliases that merge two spellings into one) and `kn_links`.

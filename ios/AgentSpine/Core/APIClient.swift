@@ -704,6 +704,11 @@ final class APIClient {
         try await sendRaw(jsonRequest("/api/inbox/\(id)", method: "PATCH", body: ["project": projectID ?? NSNull()]))
     }
 
+    /// Replace an item's tags wholesale, as the route does, so a caller sends the ones to keep too.
+    func inboxSetTags(_ id: Int, to tags: [String]) async throws {
+        try await sendRaw(jsonRequest("/api/inbox/\(id)", method: "PATCH", body: ["tags": tags]))
+    }
+
     func inboxReprocess(_ id: Int) async throws {
         var req = try request("/api/inbox/\(id)/reprocess")
         req.httpMethod = "POST"

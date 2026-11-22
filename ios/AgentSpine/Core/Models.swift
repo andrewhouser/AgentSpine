@@ -1497,14 +1497,26 @@ struct InboxItem: Codable, Identifiable, Hashable {
     let status: String
     let suggestedProject: Int?
     let suggestedProjectName: String?
+    // Optional so a phone updated before the server still decodes the whole list.
+    let suggestedPeople: [String]?
+    let suggestedTags: [String]?
+    let tags: [String]?
     let via: String?
 
     enum CodingKeys: String, CodingKey {
-        case author, id, ingested, kind, name, note, speakers, status, via
+        case author, id, ingested, kind, name, note, speakers, status, tags, via
         case docDate = "doc_date"
         case projectID = "project_id"
+        case suggestedPeople = "suggested_people"
         case suggestedProject = "suggested_project"
         case suggestedProjectName
+        case suggestedTags = "suggested_tags"
+    }
+
+    /// Tags already in use whose words appear in this item and that it does not carry yet.
+    var tagsToOffer: [String] {
+        let have = tags ?? []
+        return (suggestedTags ?? []).filter { !have.contains($0) }
     }
 
     /// What the status means, in words. An item that was not read is never described as empty.
