@@ -704,8 +704,8 @@ Open decisions for you:
 **Not doing.** Model-judged safety checks (revisit only if N2 shows the code gates cost real approval fatigue);
 MCP connectors beyond `docs/MCP.md`; Docker workspace containers; Telegram or WhatsApp (a second place for
 approvals to be dismissed unseen); usage telemetry (local-first); auto-sending email; a live "agent thinking"
-dashboard; unsubscribing via the browser in the inbox cleanup (the summary lists senders worth unsubscribing
-from instead).
+dashboard; unsubscribing through a browser in the inbox cleanup (one-click unsubscribe is built, SPEC section 5, 2026-11-21; senders
+whose link needs a page click are listed as "unsubscribe by hand").
 
 **Standing rules for any item above.**
 - Code owns the numbers (thresholds, schedules, budgets in code, never in a prompt). The model owns the

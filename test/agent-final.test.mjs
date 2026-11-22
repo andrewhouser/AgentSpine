@@ -30,7 +30,7 @@ const check = (label, actual, expected) => {
   );
 };
 
-const { callKey, finalText, parseFailureNudge, refusedNotifyText, REPEAT_LIMIT, systemPrompt } = __test;
+const { CALL_CEILING, callKey, finalText, nextRepeat, parseFailureNudge, refusedNotifyText, REPEAT_LIMIT, systemPrompt } = __test;
 const chat = systemPrompt(true);
 const job = systemPrompt(false);
 
@@ -89,6 +89,24 @@ check("a different argument is a different call", w({ location: "Concord, NH" })
 check("a different tool is a different call", callKey({ args: {}, tool: "weather" }) === callKey({ args: {}, tool: "notify" }), false);
 check("missing args do not throw", callKey({ tool: "weather" }), 'weather:{}');
 check("the run is cut off before a fourth identical call", REPEAT_LIMIT, 3);
+
+/**
+ * Run 807: the inbox cleanup calls gmail_search twice with the same arguments for the next batch. The loop counted
+ * that as a repeat, told the model "same answer, answer now", and the model skipped gmail_triage and reported
+ * trashing it never did. A repeat is the same arguments AND the same answer.
+ */
+console.log("\nSAME ARGUMENTS, DIFFERENT ANSWER — a stateful tool is progress, not a loop");
+const first = nextRepeat(undefined, "batch one");
+check("the first call is not a repeat", first.repeats, 1);
+check("same call, different answer is not a repeat", nextRepeat(first, "batch two").repeats, 1);
+check("same call, same answer is the second repeat", nextRepeat(first, "batch one").repeats, 2);
+let st = undefined;
+for (let i = 0; i < REPEAT_LIMIT; i++) st = nextRepeat(st, "same");
+check("identical answers still reach the limit", st.repeats >= REPEAT_LIMIT, true);
+let changing = undefined;
+for (let i = 0; i < CALL_CEILING; i++) changing = nextRepeat(changing, `out ${i}`);
+check("an ever-changing answer never trips the repeat limit", changing.repeats, 1);
+check("but the call ceiling still stops a loop", changing.calls >= CALL_CEILING, true);
 
 console.log("\nTHE CHAT PROMPT — a reply, not a report");
 check("asks for a reply, not a summary", /"reply":"<your answer to the user/.test(chat), true);

@@ -88,7 +88,15 @@ const removal = (a: Action): boolean => a === "trash" || a === "spam";
 export const triageOne = async (
   id: string,
   action: Action,
-  opts: { cap: number; deps: TriageDeps; label?: string; overrides: readonly string[]; runKey: number },
+  opts: {
+    /** Runs after every protection has passed and before the change, so nothing is done for mail that would be refused. Its text joins the result line. */
+    beforeAct?: (id: string) => Promise<string>;
+    cap: number;
+    deps: TriageDeps;
+    label?: string;
+    overrides: readonly string[];
+    runKey: number;
+  },
 ): Promise<string> => {
   const { deps } = opts;
   try {
@@ -111,6 +119,8 @@ export const triageOne = async (
     // Counted before the call: a failing call still spent the allowance, like the budgets elsewhere.
     changesByRun.set(opts.runKey, used + 1);
 
+    const before = opts.beforeAct ? await opts.beforeAct(id) : "";
+
     switch (action) {
       case "archive":
         await deps.archive(id);
@@ -128,7 +138,7 @@ export const triageOne = async (
         await deps.removeLabels(id, [await deps.ensureLabel(String(opts.label))]);
         break;
     }
-    return `${tag}: ${action} done`;
+    return `${tag}: ${before ? `${before}; ` : ""}${action} done`;
   } catch (err) {
     return `${id}: ERROR ${err instanceof Error ? err.message : String(err)}`;
   }

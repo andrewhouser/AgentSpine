@@ -230,6 +230,36 @@ export const searchMessages = async (
   return Object.assign(out, { more: unreviewed.length - ids.length, skipped: listed.length - unreviewed.length });
 };
 
+export interface UnsubscribeInfo {
+  /** https links from the List-Unsubscribe header. Kept inside code: a link is the sender's text, so the model never sees or passes one. */
+  https: string[];
+  /** True when the sender also declared List-Unsubscribe-Post: List-Unsubscribe=One-Click (RFC 8058), meaning a bare POST unsubscribes. */
+  oneClick: boolean;
+  /** True when the header offers a mailto link. Using it would mean sending mail, which nothing here does. */
+  mailto: boolean;
+}
+
+/** The entries of a List-Unsubscribe header: `<https://a>, <mailto:b>`. Exported so a test can feed it a header. */
+export const parseListUnsubscribe = (header: string, post = ""): UnsubscribeInfo => {
+  const entries = [...header.matchAll(/<([^>]+)>/g)].map((m) => m[1].trim());
+  return {
+    https: entries.filter((e) => /^https:\/\//i.test(e)),
+    mailto: entries.some((e) => /^mailto:/i.test(e)),
+    oneClick: /list-unsubscribe\s*=\s*one-click/i.test(post),
+  };
+};
+
+/** How one message offers to unsubscribe, from its headers only. Read-only. */
+export const unsubscribeInfo = async (id: string): Promise<UnsubscribeInfo> => {
+  if (!/^[0-9a-zA-Z_-]+$/.test(id)) throw new Error("not a Gmail message id");
+  const msg = await apiGet(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
+      `&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Unsubscribe-Post`,
+  );
+  const h = Object.fromEntries((msg.payload?.headers ?? []).map((x: any) => [String(x.name).toLowerCase(), String(x.value)]));
+  return parseListUnsubscribe(h["list-unsubscribe"] ?? "", h["list-unsubscribe-post"] ?? "");
+};
+
 export interface SentMessage {
   date: string;
   id: string;

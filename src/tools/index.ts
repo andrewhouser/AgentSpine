@@ -16,6 +16,7 @@ import { gmailSearch } from "./gmail.ts";
 import { calendarUpcoming } from "./calendar.ts";
 import { calendarFind, calendarWrite } from "./calendar-write.ts";
 import { gmailTriage } from "./gmail-triage.ts";
+import { gmailUnsubscribe } from "./gmail-unsubscribe.ts";
 import { memorySave, memoryRecall } from "./memory.ts";
 import { conversationDetail, findPastOutput, recallOutput } from "./conversation.ts";
 import { notifyTool } from "./notify.ts";
@@ -64,6 +65,7 @@ export const tools: Tool[] = [
   scaffoldIosApp,
   gmailSearch,
   gmailTriage,
+  gmailUnsubscribe,
   calendarUpcoming,
   calendarFind,
   calendarWrite,

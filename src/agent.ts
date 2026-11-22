@@ -423,6 +423,31 @@ const callKey = (call: ToolCall): string => {
 /** Identical calls tolerated before the run is treated as stuck and closed out. */
 const REPEAT_LIMIT = 3;
 
+/** The same call this many times is stuck even if its output keeps changing (a clock, a counter, a banner). */
+const CALL_CEILING = 6;
+
+interface RepeatState {
+  /** Consecutive calls that got this same output. */
+  repeats: number;
+  calls: number;
+  output: string;
+}
+
+/**
+ * A call is a repeat only when the ANSWER is the same as last time, not merely the arguments.
+ *
+ * Observed 2026-11-21 (run 807): the inbox cleanup is told to call gmail_search a second time "with the same
+ * arguments for the next batch". Counting by arguments alone made that a repeat, so the loop told the model
+ * "you received the same answer, do NOT call it again, answer now". The model obeyed, skipped gmail_triage
+ * entirely, and wrote a summary of trashing it never did. A stateful tool (sinceKey remembers what it returned)
+ * gives a different answer to an identical call, and that is progress. CALL_CEILING keeps a backstop for a
+ * model that really is looping on a tool whose output happens to change every time.
+ */
+const nextRepeat = (prev: RepeatState | undefined, output: string): RepeatState => {
+  const calls = (prev?.calls ?? 0) + 1;
+  return { calls, output, repeats: prev && prev.output === output ? prev.repeats + 1 : 1 };
+};
+
 /**
  * One last call to the model, outside the loop's JSON protocol.
  *
@@ -552,7 +577,7 @@ const runAgentLoop = async (
   let undelivered = "";
 
   /** How many times each exact call has been made, and what the run has learned so far. */
-  const callCounts = new Map<string, number>();
+  const callCounts = new Map<string, RepeatState>();
   const gathered: string[] = [];
 
   /**
@@ -698,8 +723,7 @@ const runAgentLoop = async (
        * workflows that legitimately do the same thing twice. So nothing is suppressed; the
        * repetition is used as the signal it is, that the model is stuck rather than working.
        */
-      const repeats = (callCounts.get(callKey(call)) ?? 0) + 1;
-      callCounts.set(callKey(call), repeats);
+      const key = callKey(call);
 
       // The goal passed here is the user's own message, not anything the model has since
       // written about it — a tool gating on "did they ask for this?" must read the request,
@@ -711,6 +735,9 @@ const runAgentLoop = async (
         projectId: opts.projectId ?? null,
       });
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
+      const seen = nextRepeat(callCounts.get(key), result.output);
+      callCounts.set(key, seen);
+      const repeats = seen.repeats;
       // From here the output is in `messages`, which every later request carries. Pin before
       // the next one is built, not after.
       let pinMessage = "";
@@ -762,7 +789,7 @@ const runAgentLoop = async (
        * repetition as progress. So the run stops here and is closed out with what it found,
        * which it has now found three times.
        */
-      if (repeats >= REPEAT_LIMIT) {
+      if (repeats >= REPEAT_LIMIT || seen.calls >= CALL_CEILING) {
         return concludeStuck(step + 1, "Kept repeating the same tool call without concluding.");
       }
 
@@ -802,7 +829,9 @@ const runAgentLoop = async (
  */
 export const __test = {
   callKey,
+  CALL_CEILING,
   finalText,
+  nextRepeat,
   parseFailureNudge,
   refusedNotifyText,
   REPEAT_LIMIT,

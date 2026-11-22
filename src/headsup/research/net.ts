@@ -212,3 +212,54 @@ export const safeGet = async (rawUrl: string, opts: GetOpts = {}): Promise<GetRe
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 };
+
+export type PostResult = { ok: true; status: number } | { ok: false; reason: string };
+
+/**
+ * The RFC 8058 one-click unsubscribe: an HTTPS POST of `List-Unsubscribe=One-Click` to a URL out of a mail header.
+ * That URL is the sender's text, so it gets every protection safeGet has (public addresses only, checked at connect
+ * time) and one more: a redirect is NOT followed, because the spec sends the POST to the declared URL and a hop to
+ * somewhere else is exactly how a hostile header would aim this machine at something private. No cookies, no
+ * credentials, no user data in the request. Never throws.
+ */
+export const postOneClickUnsubscribe = (rawUrl: string, opts: { allow?: (ip: string) => boolean; timeoutMs?: number } = {}): Promise<PostResult> =>
+  new Promise((resolve) => {
+    const allow = opts.allow ?? isPublicAddress;
+    let settled = false;
+    const done = (r: PostResult): void => {
+      if (settled) return;
+      settled = true;
+      resolve(r);
+    };
+    let url: URL;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      return done({ ok: false, reason: "not a URL" });
+    }
+    if (url.protocol !== "https:") return done({ ok: false, reason: "only https links are used" });
+    if (url.username || url.password) return done({ ok: false, reason: "credentials in a URL are refused" });
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    if (net.isIP(host) && !allow(host)) return done({ ok: false, reason: `refused: ${host} is not a public address` });
+    const body = "List-Unsubscribe=One-Click";
+    const req = https.request(
+      url,
+      {
+        headers: { "Content-Length": String(Buffer.byteLength(body)), "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA },
+        lookup: guardedLookup(allow),
+        method: "POST",
+        timeout: opts.timeoutMs ?? 12_000,
+      },
+      (res) => {
+        res.resume();
+        const status = res.statusCode ?? 0;
+        done(status >= 200 && status < 300 ? { ok: true, status } : { ok: false, reason: `HTTP ${status}${status >= 300 && status < 400 ? " (redirect not followed)" : ""}` });
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      done({ ok: false, reason: "timed out" });
+    });
+    req.on("error", (e) => done({ ok: false, reason: e.message }));
+    req.end(body);
+  });

@@ -432,9 +432,30 @@ is to keep it.
 >   Sent), unless the sender is on `trashOverrideSenders` in his own `policy.json`; never starred or sent mail.
 > - Tiers: archive and label are reversible; trash and spam are irreversible, so they queue in a chat and run
 >   unattended in a schedule Andrew set up. Calendar writes are reversible and limited to one named calendar.
-> - Not carried over from the cloud task: unsubscribing through a browser. The cleanup lists senders worth
->   unsubscribing from instead. Reading remains headers and snippet only, never a full body (the one exception, your own sent mail for writing styles, is the amendment below).
+> - Not carried over from the cloud task: unsubscribing through a browser. Reading remains headers and snippet
+>   only, never a full body (the one exception, your own sent mail for writing styles, is the amendment below).
+>   Unsubscribing is the amendment below.
 > - Off unless both `policy.google.write.enabled` is true and the write token exists.
+
+---
+
+> ### Amendment — 2026-11-21: one-click unsubscribe in the inbox cleanup
+>
+> Andrew's rule for the cleanup: a message with an unsubscribe link is unsubscribed and moved to Trash, unless it is a
+> financial bill with a due date and an amount. The cloud task did this through a browser; the local one could only
+> list senders. `gmail_unsubscribe` (`src/tools/gmail-unsubscribe.ts`) does it without one, and narrows nothing above.
+>
+> - It uses the **read token only** (the `List-Unsubscribe` and `List-Unsubscribe-Post` headers) and then trashes through
+>   `gmail_triage`'s own code, so every protection there runs first, before anything is unsubscribed from.
+> - Only the RFC 8058 **one-click** form: the sender declared `List-Unsubscribe=One-Click` and gave an https link, and the
+>   action is one POST with no cookies and no personal data (`postOneClickUnsubscribe`, `src/headsup/research/net.ts`:
+>   public addresses only, checked at connect time, redirects not followed). A mailto link would mean sending mail, which
+>   nothing here does, and a link that needs a page click is not followed. Those messages are still trashed and the summary
+>   says "unsubscribe by hand".
+> - The model passes ids, never a URL. The link is read by code and never appears in a tool result (host name only).
+> - Irreversible tier, like trash: queued in a chat, run unattended in a schedule Andrew set up. Counts against
+>   `maxChangesPerRun`. The prompt keeps "no unsubscribe" for the Ameriprise, LinkedIn and Starbucks standing
+>   instructions and for mail that may be phishing, where unsubscribing would confirm the address is live.
 
 ---
 
