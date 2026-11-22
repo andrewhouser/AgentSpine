@@ -31,7 +31,7 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
         speaking = false
         current = nil
         #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        AudioSessionGate.deactivate()
         #endif
     }
 
@@ -44,6 +44,7 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
                 // macOS has no audio session to configure: AVAudioPlayer just plays.
                 #if os(iOS)
                 try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
+                AudioSessionGate.settle()
                 try AVAudioSession.sharedInstance().setActive(true)
                 #endif
                 let chunks = try await APIClient.shared.planSpeech(text)

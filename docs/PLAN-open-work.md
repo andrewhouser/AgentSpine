@@ -259,14 +259,17 @@ denied or errored call, a repeated call, a subagent's calls), and the event shap
   results (SwiftData or SQLite), shown marked as cached when the server is unreachable. Writes are not queued.
   Approvals are never replayed: an offline phone shows the question and says it can only be answered once
   reconnected, because a stale approval is a security problem.
-- **Web and Mac matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`, toggled from
-  the chat tab bar, remembered in `localStorage`) with the Mac inspector's four cards plus a **Tokens** card (in,
-  out, calls, by model; from `usage` on each turn, which `usageForRuns` sums from `llm_calls` for the turn and its
-  child runs). Mac got the same Tokens card (`MacThreadInspector.swift`, `RunUsage` in `Models.swift`). The project
-  screen is split into Conversations, Documents, Tasks and Settings on web, and by a segmented picker in the shared
-  `ProjectsView.swift` on Mac and iPhone. Both Xcode targets build. **Not done:** an inspector on iPhone, and the
-  transcript-retention override and rules on the Mac and iPhone project screen (web only so far). Not looked at on
-  a running app.
+- **Web, Mac and iPhone matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`,
+  toggled from the chat tab bar, remembered in `localStorage`) with four cards plus a **Tokens** card (in, out, calls,
+  by model; from `usage` on each turn, which `usageForRuns` sums from `llm_calls` for the turn and its child runs).
+  Mac and iPhone share one `ThreadInspectorView.swift` (the inspector column on Mac, a sheet from the thread's
+  toolbar on iPhone; it is listed in the Mac target's membership exceptions in the project file). The project
+  screen is split into Conversations, Documents, Tasks and Settings on web and, by a segmented picker in the shared
+  `ProjectsView.swift`, on Mac and iPhone. Settings on all three has the transcript-retention override with the
+  rules list, and a delete-project button. Both Xcode targets build. The three AVAudioSession deactivations Xcode
+  flagged as hang risks now go through `AudioSessionGate` (a serial queue; activations wait for a pending one).
+  **Not done:** looking at any of it on a running app; on Mac, deleting the project shown in the detail pane
+  leaves the pane to be changed by hand.
 
 **Open decisions:** how many tabs the iPhone bar should allow now that Heads-up sits second (the mock shows four
 plus More); whether to cut a Swift package once there is a compiler to check the `public` changes.

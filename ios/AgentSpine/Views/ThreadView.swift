@@ -12,6 +12,7 @@ struct ThreadView: View {
 
     @Environment(AppState.self) private var state
     @State private var thread: Thread?
+    @State private var showInspector = false
     @State private var stream = RunStream()
     @State private var draft = ""
     /// The thread failing to arrive, shown at the top of an empty scroll.
@@ -97,10 +98,26 @@ struct ThreadView: View {
         .navigationTitle(state.conversations.first { $0.id == conversationID }?.displayTitle ?? thread?.conversation.displayTitle ?? "Thread")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showInspector = true } label: { Label("Inspector", systemImage: "sidebar.right") }
+                    .disabled(thread == nil)
+                    .accessibilityHint("Shows models, tokens, tool calls and child runs")
+            }
             ToolbarItem(placement: .topBarTrailing) { tierMenu }
             ToolbarItem(placement: .topBarTrailing) { handsFreeButton }
         }
         .safeAreaInset(edge: .bottom) { composer }
+        .sheet(isPresented: $showInspector) {
+            NavigationStack {
+                if let thread {
+                    ThreadInspectorView(thread: thread)
+                        .navigationTitle("Inspector")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showInspector = false } } }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .refreshable { await load() }
         .task { await load() }
         .onChange(of: stream.phase) { _, phase in

@@ -68,7 +68,7 @@ final class HandsFree {
         loop = nil
         phase = .off
         UIApplication.shared.isIdleTimerDisabled = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        AudioSessionGate.deactivate()
     }
 
     /// Back to waiting for the wake word, after a command has been dealt with.
@@ -139,6 +139,7 @@ final class HandsFree {
         let recorder: AVAudioRecorder
         do {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            AudioSessionGate.settle()
             try session.setActive(true)
             recorder = try AVAudioRecorder(url: url, settings: [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,

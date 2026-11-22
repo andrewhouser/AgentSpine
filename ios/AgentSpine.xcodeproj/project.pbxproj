@@ -68,6 +68,7 @@
 				Views/SchedulesView.swift,
 				Views/StudyView.swift,
 				Views/TasksView.swift,
+				Views/ThreadInspectorView.swift,
 			);
 			target = 36D8177030AE5E1E007D6CFE /* AgentSpine Mac */;
 		};

@@ -322,11 +322,22 @@ struct Project: Codable, Identifiable, Hashable {
     let chunks: Int?
     /// The one file (AGENTSPINE.md) the owner vouches for as trusted instructions. Absent from older servers.
     let instructionsFile: String?
+    /// Days to keep this project's raw meeting transcripts; nil follows the global setting, 0 keeps
+    /// them until the meeting is deleted. Absent from older servers.
+    let transcriptRetentionDays: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name, instructions, chunks
         case instructionsFile = "instructions_file"
+        case transcriptRetentionDays = "transcript_retention_days"
     }
+}
+
+/// One line of GET /api/retention: what is kept for how long, stated from the numbers the code enforces.
+struct RetentionRule: Codable, Hashable {
+    let artifact: String
+    let rule: String
+    let setting: String?
 }
 
 struct ProjectSource: Codable, Identifiable, Hashable {

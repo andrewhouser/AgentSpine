@@ -43,6 +43,7 @@ final class Dictation {
             .appendingPathComponent("dictation-\(UUID().uuidString).m4a")
         do {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            AudioSessionGate.settle()
             try session.setActive(true)
             let recorder = try AVAudioRecorder(url: url, settings: [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -92,7 +93,7 @@ final class Dictation {
         timer = nil
         recorder?.stop()
         recorder = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        AudioSessionGate.deactivate()
         defer { fileURL = nil }
         return fileURL
     }

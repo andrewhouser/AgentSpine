@@ -2,6 +2,24 @@ import AVFoundation
 import Foundation
 import Observation
 
+#if os(iOS)
+/// Deactivating an AVAudioSession can block for a long while, and every caller here is on the main thread,
+/// so Xcode flags it as a hang risk. Deactivation goes to one serial queue instead. `settle()` is called
+/// before each activation so a late deactivation can never land after the next take has started: it waits
+/// only if one is still pending, which is the wait the old synchronous call imposed anyway.
+enum AudioSessionGate {
+    private static let queue = DispatchQueue(label: "agentspine.audio-session")
+
+    static func deactivate() {
+        queue.async { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+    }
+
+    static func settle() {
+        queue.sync {}
+    }
+}
+#endif
+
 // Recording a meeting from the iPhone's own microphone, so you can walk into a room without the
 // Mac Mini's microphone. The same path as the Mac app (`MacRecorder`): microphone -> 16 kHz mono
 // s16le chunks spooled to disk every three seconds -> POST to the server, oldest first, deleting
@@ -80,6 +98,7 @@ final class PhoneRecorder {
             // The built-in microphone unless headphones with one are connected; Bluetooth is
             // allowed so AirPods work, but nothing here selects it over the phone's own.
             try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP, .defaultToSpeaker])
+            AudioSessionGate.settle()
             try session.setActive(true)
             let folder = try Self.spoolFolder(for: started.meetingID)
             let spooler = PCMSpooler(dir: folder, startSeq: started.nextSeq)
@@ -93,7 +112,7 @@ final class PhoneRecorder {
         } catch {
             // Don't leave the server recording silence.
             try? await APIClient.shared.stopMeeting()
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            AudioSessionGate.deactivate()
             phase = .idle
             throw error
         }
@@ -131,6 +150,7 @@ final class PhoneRecorder {
                 if raw == AVAudioSession.InterruptionType.began.rawValue {
                     self.notice = "Recording paused: something else is using the microphone (a call, say)."
                 } else if raw == AVAudioSession.InterruptionType.ended.rawValue {
+                    AudioSessionGate.settle()
                     try? AVAudioSession.sharedInstance().setActive(true)
                     self.resume()
                 }
@@ -198,7 +218,7 @@ final class PhoneRecorder {
         }
         engine = nil
         spooler = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        AudioSessionGate.deactivate()
     }
 
     private func reset(meetingID: Int) {

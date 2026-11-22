@@ -177,6 +177,25 @@ struct ProjectDetailView: View {
     @State private var newPath = ""
     @State private var addingSource = false
     @State private var tab: ProjectTab = .conversations
+    @State private var retentionDays = ""
+    @State private var retentionSeeded = false
+    @State private var retentionSaving = false
+    @State private var rules: [RetentionRule] = []
+    @State private var confirmDelete = false
+    @Environment(\.dismiss) private var dismiss
+
+    /// Empty means follow the global setting; otherwise a whole number of days from 0 to 3650.
+    private var retentionValue: Int?? {
+        let text = retentionDays.trimmingCharacters(in: .whitespaces)
+        if text.isEmpty { return .some(nil) }
+        guard text.allSatisfy(\.isNumber), let n = Int(text), n <= 3650 else { return nil }
+        return .some(n)
+    }
+
+    private var retentionDirty: Bool {
+        guard let project = detail?.project else { return false }
+        return retentionDays.trimmingCharacters(in: .whitespaces) != (project.transcriptRetentionDays.map(String.init) ?? "")
+    }
 
     private var dirty: Bool {
         guard let project = detail?.project else { return false }
@@ -229,6 +248,40 @@ struct ProjectDetailView: View {
                     }
                 }
             }
+                Section {
+                    TextField("Follow the global setting", text: $retentionDays)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                    Button {
+                        Task { await saveRetention() }
+                    } label: {
+                        HStack { Text("Save retention"); Spacer(); if retentionSaving { ProgressView() } }
+                    }
+                    .disabled(retentionSaving || !retentionDirty || retentionValue == nil)
+                    ForEach(rules, id: \.artifact) { rule in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.artifact).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                            Text(rule.rule)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.textDim)
+                        }
+                    }
+                } header: {
+                    Text("Meeting transcript retention")
+                } footer: {
+                    Text(retentionValue == nil
+                        ? "Enter a whole number of days from 0 to 3650, or leave it empty."
+                        : "How long the raw transcripts of this project's meetings are kept. Leave empty to follow the global setting, enter 0 to keep them until the meeting is deleted, or a number of days. What you reviewed (decisions, commitments) is kept either way, with its cited words and a note that the original has aged out.")
+                }
+                Section {
+                    Button("Delete project", role: .destructive) { confirmDelete = true }
+                } header: {
+                    Text("Danger zone")
+                } footer: {
+                    Text("Removes the project and everything indexed for it. Its conversations and their audit trail are kept: the record of what the assistant did is not something a tidy-up should erase.")
+                }
             if tab == .documents {
                 Section {
                     ForEach(detail?.sources ?? []) { source in
@@ -307,10 +360,45 @@ struct ProjectDetailView: View {
                 }
             }
         }
+        .confirmationDialog("Delete this project?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete project", role: .destructive) { Task { await deleteProject() } }
+        } message: {
+            Text("This removes the project and everything indexed for it. It cannot be undone.")
+        }
         .navigationTitle(detail?.project.name ?? "Project")
         .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
+        .task { rules = (try? await APIClient.shared.retentionRules()) ?? [] }
+    }
+
+    private func saveRetention() async {
+        guard case .some(let days) = retentionValue else { return }
+        retentionSaving = true
+        defer { retentionSaving = false }
+        do {
+            try await APIClient.shared.setProjectRetention(projectID, days: days)
+            await load()
+            retentionSeeded = false
+            seedRetention()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func deleteProject() async {
+        do {
+            try await APIClient.shared.deleteProject(projectID)
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func seedRetention() {
+        guard !retentionSeeded, let project = detail?.project else { return }
+        retentionDays = project.transcriptRetentionDays.map(String.init) ?? ""
+        retentionSeeded = true
     }
 
     private func load() async {
@@ -324,6 +412,7 @@ struct ProjectDetailView: View {
                 workspaceFile = fresh.project.instructionsFile ?? ""
                 seeded = true
             }
+            seedRetention()
             error = nil
         } catch {
             self.error = error.localizedDescription

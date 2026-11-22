@@ -96,7 +96,7 @@ struct MacThreadDetail: View {
         .inspector(isPresented: $showInspector) {
             Group {
                 if let thread {
-                    MacThreadInspector(thread: thread)
+                    ThreadInspectorView(thread: thread)
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

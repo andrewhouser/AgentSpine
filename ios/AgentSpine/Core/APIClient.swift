@@ -875,6 +875,19 @@ final class APIClient {
         )
     }
 
+    /// Keep this project's raw meeting transcripts for `days` days; nil follows the global setting, 0 keeps them
+    /// until the meeting is deleted. Sent alone so it cannot touch the instructions.
+    func setProjectRetention(_ id: Int, days: Int?) async throws {
+        try await sendRaw(
+            jsonRequest("/api/projects/\(id)", method: "PATCH", body: ["transcriptRetentionDays": days ?? NSNull()])
+        )
+    }
+
+    /// What is kept, and for how long, per kind of thing. Read-only.
+    func retentionRules() async throws -> [RetentionRule] {
+        try await send(request("/api/retention"), as: [RetentionRule].self)
+    }
+
     /// Rename only. The PATCH route updates just the fields it is sent, so this cannot touch
     /// the project's instructions the way `updateProject` would if they were stale.
     func renameProject(_ id: Int, to name: String) async throws {

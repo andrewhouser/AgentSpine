@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Shared by the Mac app (the inspector column beside a thread) and the iPhone (a sheet from the thread's toolbar).
+///
 /// The panel beside a thread: what ran and what it ran on, as a read-only summary of the ledger
 /// the thread view already holds, so it costs no request of its own.
 ///
@@ -7,7 +9,7 @@ import SwiftUI
 /// kind, because the server's list is a run of free-text lines), every tool call by tool, and the
 /// child runs. It describes finished turns; the run in flight appears when it ends and the
 /// thread reloads.
-struct MacThreadInspector: View {
+struct ThreadInspectorView: View {
     let thread: Thread
 
     @Environment(AppState.self) private var state
