@@ -441,7 +441,13 @@ baseline, and the meeting recall number is still unmeasured.
   words, so a passage with no reviewed claims is not read as a fact. It annotates and never re-ranks. Suites:
   `test/knowledge-store.test.mjs`, `test/knowledge-retrieval.test.mjs`. **Not built:** the review and
   close-out screens (K5), model extraction on ingest by default (it runs on request, to spare the model host),
-  topic entities in use, and nothing yet that RANKS by evidence (K2 ranking is unchanged). Added 2026-11-21: a
+  and nothing yet that RANKS by evidence (K2 ranking is unchanged). **Topic entities in use (built 2026-11-22; web,
+  iPhone and Mac screens not seen running):** a claim keeps the words it used and links to one topic (`topic_id`), so
+  a taught alias or merge now changes conflicts, recurring risks, answers and briefs. Only a person's acceptance creates
+  a topic; a model's proposal can join an existing one and cannot add to the list. A topic whose last claim is deleted
+  goes with it unless a person taught it another name. `GET /api/knowledge/briefs/topic/:id` and "Topic brief" on all
+  three clients show one subject across projects; `GET /api/knowledge/claims?topic=` filters by it. Existing reviewed
+  claims are linked on the next start. Suite: `test/knowledge-topics.test.mjs`. Added 2026-11-21: a
   `measure` claim kind (linked to the goal it measures with `link(measure, goal, "measures")`, shown under
   "Measures" in the project brief), and relationships a person enters between people and teams (`member_of`,
   `reports_to`, `works_with`; `relate`, `unrelate`, `relationsOf`; `GET/POST/DELETE /api/knowledge/relations`),

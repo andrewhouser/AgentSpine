@@ -291,8 +291,8 @@ export const api = {
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
    */
-  /** A brief assembled from reviewed claims, as Markdown with each citation. kind: project | person | op | trace. */
-  knowledgeBrief: (kind: "one-on-one" | "op" | "person" | "project" | "trace", subject: string, params: Record<string, string> = {}) =>
+  /** A brief assembled from reviewed claims, as Markdown with each citation. kind: project | person | topic | op | trace. */
+  knowledgeBrief: (kind: "one-on-one" | "op" | "person" | "project" | "topic" | "trace", subject: string, params: Record<string, string> = {}) =>
     request<{ markdown: string }>(`/api/knowledge/briefs/${kind}/${encodeURIComponent(subject)}?${new URLSearchParams({ ...params, format: "md" })}`),
 
   knowledgeClaims: (params: Record<string, string> = {}) => request<KnowledgeClaim[]>(`/api/knowledge/claims?${new URLSearchParams(params)}`),

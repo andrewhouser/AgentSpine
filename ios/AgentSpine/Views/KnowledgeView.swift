@@ -22,6 +22,8 @@ struct KnowledgeView: View {
     @State private var brief = ""
     @State private var people: [KnowledgeEntity] = []
     @State private var briefPerson: Int?
+    @State private var topics: [KnowledgeEntity] = []
+    @State private var briefTopic: Int?
     @State private var plan = ""
     @State private var rules: [RetentionRule] = []
     @State private var editingID: Int?
@@ -160,6 +162,12 @@ struct KnowledgeView: View {
                 .disabled(people.isEmpty)
                 Button("Person brief") { Task { await readPerson("person") } }.disabled(briefPerson == nil)
                 Button("One-on-one prep") { Task { await readPerson("one-on-one") } }.disabled(briefPerson == nil)
+                Picker("Topic", selection: $briefTopic) {
+                    Text(topics.isEmpty ? "No topics recorded yet" : "Choose a topic").tag(Int?.none)
+                    ForEach(topics) { topic in Text(topic.name).tag(Int?.some(topic.id)) }
+                }
+                .disabled(topics.isEmpty)
+                Button("Topic brief") { Task { await readTopic() } }.disabled(briefTopic == nil)
             }
             Section {
                 TextEditor(text: $plan)
@@ -265,6 +273,8 @@ struct KnowledgeView: View {
                 allEntities = found
                 people = found.filter { $0.kind == "person" }
                 if let chosen = briefPerson, !people.contains(where: { $0.id == chosen }) { briefPerson = nil }
+                topics = found.filter { $0.kind == "topic" }
+                if let chosen = briefTopic, !topics.contains(where: { $0.id == chosen }) { briefTopic = nil }
                 if let chosen = aliasEntity, !found.contains(where: { $0.id == chosen }) { aliasEntity = nil }
             }
             if let found = await kept { rules = found }
@@ -327,6 +337,14 @@ struct KnowledgeView: View {
         guard let person = briefPerson else { return }
         do {
             brief = try await APIClient.shared.knowledgeBrief(kind: kind, subject: String(person))
+        } catch { actionError = error.localizedDescription }
+    }
+
+    /// One subject across every project: what is in force, what is open, and what it replaced.
+    private func readTopic() async {
+        guard let topic = briefTopic else { return }
+        do {
+            brief = try await APIClient.shared.knowledgeBrief(kind: "topic", subject: String(topic))
         } catch { actionError = error.localizedDescription }
     }
 

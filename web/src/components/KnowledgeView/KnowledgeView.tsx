@@ -44,6 +44,10 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
   const [aliasNotice, setAliasNotice] = useState("");
   const people = entities.filter((e) => e.kind === "person");
   const [person, setPerson] = useState("");
+  const topics = entities.filter((e) => e.kind === "topic");
+  const [topicChoice, setTopicChoice] = useState("");
+  // A merge removes one of the two topics, so a stale choice reads as nothing chosen.
+  const topic = topics.some((t) => String(t.id) === topicChoice) ? topicChoice : "";
   const [project, setProject] = useState("");
   const [operation, setOperation] = useState("next-meeting");
   const [plan, setPlan] = useState("");
@@ -106,6 +110,17 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
     setError("");
     try {
       const r = await api.knowledgeBrief(kind, person);
+      setBrief(r.markdown);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  /** One subject across every project: what is in force, what is open, and what it replaced. */
+  const readTopic = async (): Promise<void> => {
+    setError("");
+    try {
+      const r = await api.knowledgeBrief("topic", topic);
       setBrief(r.markdown);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -303,6 +318,23 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
       </div>
       {people.length === 0 && (
         <p className={styles.meta}>People appear here once a claim with an owner is recorded.</p>
+      )}
+
+      <div className={styles.form}>
+        <select aria-label="Topic" className={styles.input} disabled={topics.length === 0} onChange={(e) => setTopicChoice(e.target.value)} value={topic}>
+          <option value="">{topics.length === 0 ? "No topics recorded yet" : "Choose a topic"}</option>
+          {topics.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <button className={styles.button} disabled={!topic} onClick={() => void readTopic()} type="button">
+          Topic brief
+        </button>
+      </div>
+      {topics.length === 0 && (
+        <p className={styles.meta}>Topics appear here once you accept a claim that has one.</p>
       )}
 
       <h2 className={styles.title}>Compare a plan with the meetings</h2>

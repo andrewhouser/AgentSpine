@@ -115,7 +115,10 @@ export interface Claim {
   status_changed: null | string;
   supersedes_id: null | number;
   text: string;
+  /** The words the source or reviewer used. `topicName` is the one name those words resolve to. */
   topic: null | string;
+  topic_id: null | number;
+  topicName?: null | string;
 }
 
 // Whether the passage a claim cites can still be opened: `available`, or `expired` when the retention window
@@ -133,6 +136,23 @@ try {
 } catch {
   // already there
 }
+
+// The topic a claim resolves to. The free-text `topic` stays as the words used; this link is what lets "ship date"
+// and "launch date" count as one subject once a person teaches that they are.
+try {
+  rawDb.exec("ALTER TABLE kn_claims ADD COLUMN topic_id INTEGER");
+} catch {
+  // already there
+}
+rawDb.exec("CREATE INDEX IF NOT EXISTS idx_kn_claims_topic ON kn_claims (topic_id)");
+
+const dropStoredBriefs = (): void => {
+  try {
+    rawDb.exec("DELETE FROM kn_briefs");
+  } catch {
+    // briefs have never been built in this database: nothing stored to drop
+  }
+};
 
 // --- entities ---
 const hydrateEntity = (r: { aliases: null | string; created: string; id: number; kind: string; name: string }): Entity => ({
@@ -186,6 +206,7 @@ export const addAlias = (entityId: number, alias: string): void => {
   const aliases = [...e.aliases, a, ...(clash ? [clash.name, ...clash.aliases] : [])];
   if (clash) {
     rawDb.prepare("UPDATE kn_claims SET owner_id = ? WHERE owner_id = ?").run(entityId, clash.id);
+    rawDb.prepare("UPDATE kn_claims SET topic_id = ? WHERE topic_id = ?").run(entityId, clash.id);
     // Relations follow the merge. A row that would now duplicate one, or relate an entity to itself, is dropped.
     rawDb.prepare("UPDATE OR IGNORE kn_relations SET from_entity = ? WHERE from_entity = ?").run(entityId, clash.id);
     rawDb.prepare("UPDATE OR IGNORE kn_relations SET to_entity = ? WHERE to_entity = ?").run(entityId, clash.id);
@@ -194,7 +215,48 @@ export const addAlias = (entityId: number, alias: string): void => {
   }
   const unique = [...new Map(aliases.map((x) => [x.toLowerCase(), x])).values()].filter((x) => x.toLowerCase() !== e.name.toLowerCase());
   rawDb.prepare("UPDATE kn_entities SET aliases = ? WHERE id = ?").run(JSON.stringify(unique.slice(0, MAX_ALIASES)), entityId);
+  if (e.kind === "topic") {
+    linkTopicWords(getEntity(entityId) as Entity);
+    // A stored brief was grouped under the old names.
+    dropStoredBriefs();
+  }
 };
+
+/** Point every claim still unlinked at this topic if its words are the topic's name or one of its aliases. */
+const linkTopicWords = (e: Entity): void => {
+  const names = new Set([e.name, ...e.aliases].map(norm));
+  const unlinked = rawDb.prepare("SELECT DISTINCT topic FROM kn_claims WHERE topic IS NOT NULL AND topic_id IS NULL").all() as { topic: string }[];
+  const set = rawDb.prepare("UPDATE kn_claims SET topic_id = ? WHERE topic = ? AND topic_id IS NULL");
+  for (const { topic } of unlinked) if (names.has(norm(topic))) set.run(e.id, topic);
+};
+
+/** The existing topic these words name, without creating one: a model's proposal must not grow the topic list. */
+const existingTopicId = (words: null | string | undefined): null | number => {
+  const lower = words ? norm(words) : "";
+  if (!lower) return null;
+  return listEntities("topic").find((e) => norm(e.name) === lower || e.aliases.some((a) => norm(a) === lower))?.id ?? null;
+};
+
+/** A person accepted these words as a topic. Other claims already using them join it, so their count is right. */
+const acceptedTopicId = (words: null | string | undefined): null | number => {
+  if (!words?.trim()) return null;
+  const e = upsertEntity("topic", words);
+  linkTopicWords(e);
+  return e.id;
+};
+
+/**
+ * A topic's name can come straight from a meeting, so it must not outlive the last claim that used it when that source
+ * is deleted. A topic a person taught another name to is their own record and stays.
+ */
+const pruneTopic = (id: null | number): void => {
+  if (id == null || rawDb.prepare("SELECT 1 FROM kn_claims WHERE topic_id = ? LIMIT 1").get(id)) return;
+  const e = getEntity(id);
+  if (e?.kind === "topic" && e.aliases.length === 0) rawDb.prepare("DELETE FROM kn_entities WHERE id = ?").run(id);
+};
+
+/** What groups claims about one subject: the topic when there is one, otherwise the words. */
+export const topicKey = (c: Pick<Claim, "topic" | "topic_id">): string => (c.topic_id == null ? `words:${norm(c.topic ?? "")}` : `topic:${c.topic_id}`);
 
 /**
  * Teach an alias from a screen. A merge cannot be undone (the other entity's row is deleted and its claims move), so
@@ -287,12 +349,13 @@ const iso = (s: null | string | undefined): null | string => {
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
 };
 
-const hydrateClaim = (r: Claim & { owner_name?: null | string }): Claim => ({ ...r, ownerName: r.owner_name ?? null });
+type ClaimRow = Claim & { owner_name?: null | string; topic_name?: null | string };
+const hydrateClaim = (r: ClaimRow): Claim => ({ ...r, ownerName: r.owner_name ?? null, topicName: r.topic_name ?? null });
 
-const SELECT = "SELECT c.*, e.name AS owner_name FROM kn_claims c LEFT JOIN kn_entities e ON e.id = c.owner_id";
+const SELECT = "SELECT c.*, e.name AS owner_name, t.name AS topic_name FROM kn_claims c LEFT JOIN kn_entities e ON e.id = c.owner_id LEFT JOIN kn_entities t ON t.id = c.topic_id";
 
 export const getClaim = (id: number): Claim | undefined => {
-  const r = rawDb.prepare(`${SELECT} WHERE c.id = ?`).get(id) as undefined | (Claim & { owner_name?: null | string });
+  const r = rawDb.prepare(`${SELECT} WHERE c.id = ?`).get(id) as ClaimRow | undefined;
   return r ? hydrateClaim(r) : undefined;
 };
 
@@ -311,14 +374,16 @@ export const addClaim = (c: NewClaim): number => {
   if (existing) return existing.id;
   const owner = c.owner?.trim() ? upsertEntity("person", c.owner).id : null;
   const state: ReviewState = c.reviewState ?? "proposed";
+  const topic = c.topic?.trim().slice(0, 120) || null;
+  const topicId = state === "reviewed" ? acceptedTopicId(topic) : existingTopicId(topic);
   return Number(
     rawDb
       .prepare(
-        `INSERT INTO kn_claims (kind, text, topic, review_state, reviewed, owner_id, due, said_on, period_from, period_to, speaker,
-           source_kind, source_ref, passage, at_ms, method, project_id, fingerprint, created) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO kn_claims (kind, text, topic, topic_id, review_state, reviewed, owner_id, due, said_on, period_from, period_to, speaker,
+           source_kind, source_ref, passage, at_ms, method, project_id, fingerprint, created) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
-        c.kind, text.slice(0, 1000), c.topic?.trim().slice(0, 120) || null, state, state === "reviewed" ? now() : null, owner, iso(c.due), iso(c.saidOn),
+        c.kind, text.slice(0, 1000), topic, topicId, state, state === "reviewed" ? now() : null, owner, iso(c.due), iso(c.saidOn),
         iso(c.periodFrom), iso(c.periodTo), c.speaker?.trim() || null, c.sourceKind, c.sourceRef, passage.slice(0, 2000), c.atMs ?? null, c.method,
         c.projectId ?? null, fingerprint, now(),
       ).lastInsertRowid,
@@ -341,6 +406,7 @@ export interface ClaimFilter {
   sourceKind?: string;
   sourceRef?: string;
   status?: ClaimStatus;
+  topicId?: number;
 }
 
 export const listClaims = (f: ClaimFilter = {}): Claim[] => {
@@ -361,6 +427,7 @@ export const listClaims = (f: ClaimFilter = {}): Claim[] => {
   add("c.project_id = ?", f.projectId);
   add("c.source_kind = ?", f.sourceKind);
   add("c.source_ref = ?", f.sourceRef);
+  add("c.topic_id = ?", f.topicId);
   add("COALESCE(c.said_on, substr(c.created,1,10)) >= ?", f.since);
   if (f.asOf) {
     c.push("COALESCE(c.said_on, substr(c.created,1,10)) <= ?");
@@ -371,7 +438,7 @@ export const listClaims = (f: ClaimFilter = {}): Claim[] => {
   }
   const rows = rawDb
     .prepare(`${SELECT} ${c.length ? `WHERE ${c.join(" AND ")}` : ""} ORDER BY c.id DESC LIMIT ?`)
-    .all(...a, Math.min(500, f.limit ?? 100)) as unknown as (Claim & { owner_name?: null | string })[];
+    .all(...a, Math.min(500, f.limit ?? 100)) as unknown as ClaimRow[];
   return rows.map(hydrateClaim);
 };
 
@@ -387,13 +454,17 @@ export const reviewClaim = (id: number, decision: "accept" | "reject", edit: Cla
   const cur = getClaim(id);
   if (!cur) return undefined;
   if (decision === "reject") {
-    rawDb.prepare("UPDATE kn_claims SET review_state = 'rejected', reviewed = ? WHERE id = ?").run(now(), id);
+    rawDb.prepare("UPDATE kn_claims SET review_state = 'rejected', reviewed = ?, topic_id = NULL WHERE id = ?").run(now(), id);
+    pruneTopic(cur.topic_id);
     return getClaim(id);
   }
   const owner = edit.owner === undefined ? cur.owner_id : edit.owner?.trim() ? upsertEntity("person", edit.owner).id : null;
+  const topic = edit.topic === undefined ? cur.topic : edit.topic?.trim().slice(0, 120) || null;
+  const topicId = acceptedTopicId(topic);
   rawDb
-    .prepare("UPDATE kn_claims SET review_state = 'reviewed', reviewed = ?, text = ?, topic = ?, due = ?, owner_id = ? WHERE id = ?")
-    .run(now(), (edit.text ?? cur.text).trim().slice(0, 1000), edit.topic === undefined ? cur.topic : edit.topic, edit.due === undefined ? cur.due : iso(edit.due), owner, id);
+    .prepare("UPDATE kn_claims SET review_state = 'reviewed', reviewed = ?, text = ?, topic = ?, topic_id = ?, due = ?, owner_id = ? WHERE id = ?")
+    .run(now(), (edit.text ?? cur.text).trim().slice(0, 1000), topic, topicId, edit.due === undefined ? cur.due : iso(edit.due), owner, id);
+  if (cur.topic_id !== topicId) pruneTopic(cur.topic_id);
   return getClaim(id);
 };
 
@@ -467,7 +538,9 @@ const removeClaim = (id: number): void => {
   const restore = rawDb.prepare("UPDATE kn_claims SET status = 'active', status_changed = ? WHERE id = ? AND status = 'superseded'");
   for (const older of replaced) if (!stillReplaced.get(older)) restore.run(now(), older);
   rawDb.prepare("UPDATE kn_claims SET supersedes_id = NULL WHERE supersedes_id = ?").run(id);
+  const topicId = (rawDb.prepare("SELECT topic_id FROM kn_claims WHERE id = ?").get(id) as undefined | { topic_id: null | number })?.topic_id ?? null;
   rawDb.prepare("DELETE FROM kn_claims WHERE id = ?").run(id);
+  pruneTopic(topicId);
 };
 
 /**
@@ -502,12 +575,12 @@ export const findConflicts = (): { claims: Claim[]; kind: ClaimKind; topic: stri
   const groups = new Map<string, Claim[]>();
   for (const c of listClaims({ limit: 500, reviewState: "reviewed", status: "active" })) {
     if (!c.topic) continue;
-    const key = `${c.kind}|${norm(c.topic)}|${c.project_id ?? ""}`;
+    const key = `${c.kind}|${topicKey(c)}|${c.project_id ?? ""}`;
     groups.set(key, [...(groups.get(key) ?? []), c]);
   }
   return [...groups.values()]
     .filter((g) => new Set(g.map((c) => norm(c.text))).size > 1)
-    .map((g) => ({ claims: g, kind: g[0].kind, topic: g[0].topic as string }));
+    .map((g) => ({ claims: g, kind: g[0].kind, topic: g[0].topicName ?? (g[0].topic as string) }));
 };
 
 export type EvidenceLevel = "conflicting" | "inferred" | "machine-extracted" | "reviewed" | "retracted" | "superseded";
@@ -563,3 +636,10 @@ export const deleteClaimsFromSource = (sourceKind: string, sourceRef: string): n
   for (const id of ids) removeClaim(id);
   return ids.length;
 };
+
+// Claims reviewed before topics were linked. Only reviewed words become topics, for the same reason as `addClaim`.
+// Safe to repeat: it touches unlinked rows only, so a start that dies part way finishes on the next one.
+for (const { topic } of rawDb.prepare("SELECT DISTINCT topic FROM kn_claims WHERE topic IS NOT NULL AND topic_id IS NULL AND review_state = 'reviewed'").all() as { topic: string }[]) {
+  acceptedTopicId(topic);
+}
+for (const e of listEntities("topic")) linkTopicWords(e);

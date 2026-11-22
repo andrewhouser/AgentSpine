@@ -60,7 +60,7 @@ const item = (c: Claim, asOf: string): BriefItem => ({
   owner: c.ownerName ?? null,
   saidOn: c.said_on,
   text: c.text,
-  topic: c.topic,
+  topic: c.topicName ?? c.topic,
 });
 
 /** Every brief leaves out what a person marked sensitive, and says how many it withheld. */
@@ -78,7 +78,7 @@ const reviewedActive = (f: k.ClaimFilter): Claim[] =>
   list({ ...f, limit: 500, reviewState: "reviewed", status: f.asOf && f.asOf < today() ? undefined : "active" });
 const byDue = (a: Claim, b: Claim): number => (a.due ?? "9999").localeCompare(b.due ?? "9999");
 
-type Scope = null | { ownerId?: number; projectId?: number };
+type Scope = null | { ownerId?: number; projectId?: number; topicId?: number };
 
 /** A line that is not a claim (a stakeholder, a relationship): shown with the source it really has. */
 const plainItem = (kind: string, text: string, source: string): BriefItem => ({ claimId: 0, cite: { atMs: null, passage: "", source, sourceState: "available" }, due: null, evidence: "reviewed", kind, overdue: false, owner: null, saidOn: null, text, topic: null });
@@ -95,7 +95,7 @@ const measureItems = (measures: Claim[], asOf: string): BriefItem[] =>
   measures.map((c) => {
     const goalId = k.linksOf(c.id).find((l) => l.rel === "measures" && l.from_claim === c.id)?.to_claim;
     const goal = goalId ? k.getClaim(goalId) : undefined;
-    return { ...item(c, asOf), topic: goal ? `measures goal: ${goal.text}` : c.topic };
+    return { ...item(c, asOf), topic: goal ? `measures goal: ${goal.text}` : (c.topicName ?? c.topic) };
   });
 
 const make = (kind: string, subject: string, asOf: string, sections: BriefSection[], scope: Scope): Brief => ({
@@ -152,6 +152,32 @@ export const personBrief = (entityId: number, opts: { asOf?: string } = {}): Bri
   ], { ownerId: entityId });
 };
 
+/** One subject across every project and source: what is in force, what is open, and what it replaced. */
+export const topicBrief = (entityId: number, opts: { asOf?: string } = {}): Brief => {
+  const asOf = opts.asOf ?? today();
+  const e = k.getEntity(entityId);
+  if (e?.kind !== "topic") throw new Error("no such topic");
+  const all = (kind: k.ClaimKind): Claim[] => reviewedActive({ asOf, kind, topicId: entityId });
+  // The as-of filter keeps only what was still open then, so what had already closed by that date is read separately.
+  const closed = list({ limit: 500, reviewState: "reviewed", topicId: entityId }).filter(
+    (c) => (c.status === "resolved" || c.status === "superseded") && (c.status_changed ?? "").slice(0, 10) <= asOf && (c.said_on ?? c.created.slice(0, 10)) <= asOf,
+  );
+  const conflicts = k
+    .findConflicts()
+    .map((g) => ({ ...g, claims: g.claims.filter((c) => !c.sensitive) }))
+    .filter((g) => g.claims.length > 1 && g.claims[0].topic_id === entityId);
+  return make("topic", e.name, asOf, [
+    section("Active decisions", all("decision"), asOf, "No decisions recorded."),
+    section("Current status", all("status"), asOf),
+    section("Risks", all("risk"), asOf),
+    section("Commitments, by due date", all("commitment").sort(byDue), asOf),
+    section("Open questions", all("question"), asOf),
+    section("Goals, measures and other facts", [...all("goal"), ...all("measure"), ...all("claim")], asOf),
+    { empty: "No conflicts.", items: conflicts.flatMap((g) => g.claims.map((c) => item(c, asOf))), title: "Conflicting information" },
+    section("Resolved or replaced", closed, asOf, "Nothing closed yet."),
+  ], { topicId: entityId });
+};
+
 export type Operation = "commitments" | "next-meeting" | "recurring-risks" | "stale-topics" | "what-changed" | "weekly-summary";
 export const OPERATIONS: Operation[] = ["next-meeting", "what-changed", "commitments", "recurring-risks", "stale-topics", "weekly-summary"];
 
@@ -188,7 +214,7 @@ export const operation = (name: Operation, opts: { asOf?: string; days?: number;
       // A risk topic that shows up in two or more projects, or in two or more sources, is one worth a look.
       const risks = reviewedActive({ asOf, kind: "risk" }).filter((c) => c.topic);
       const groups = new Map<string, Claim[]>();
-      for (const c of risks) groups.set((c.topic as string).toLowerCase(), [...(groups.get((c.topic as string).toLowerCase()) ?? []), c]);
+      for (const c of risks) groups.set(k.topicKey(c), [...(groups.get(k.topicKey(c)) ?? []), c]);
       const recurring = [...groups.values()].filter((g) => new Set(g.map((c) => `${c.project_id ?? ""}|${c.source_ref}`)).size >= 2).flat();
       return make("recurring-risks", "all projects", asOf, [section("Risks stated more than once", recurring, asOf, "No risk recurs.")], {});
     }

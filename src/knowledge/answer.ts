@@ -33,9 +33,10 @@ const STOP = new Set(["about", "after", "again", "also", "and", "any", "are", "w
 
 export const words = (s: string): string[] => [...new Set(s.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])].filter((w) => !STOP.has(w));
 
-/** How many of the question's words a claim's text, topic or cited passage shares. */
+/** How many of the question's words a claim's text, topic (any of its names) or cited passage shares. */
 export const overlap = (q: string[], c: Claim): number => {
-  const have = new Set(words(`${c.text} ${c.topic ?? ""} ${c.passage}`));
+  const topic = c.topic_id == null ? undefined : k.getEntity(c.topic_id);
+  const have = new Set(words(`${c.text} ${c.topic ?? ""} ${topic?.name ?? ""} ${topic?.aliases.join(" ") ?? ""} ${c.passage}`));
   return q.filter((w) => have.has(w)).length;
 };
 

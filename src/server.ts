@@ -1088,6 +1088,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
               asOf: str("asOf"), kind: str("kind") as knowledge.ClaimKind | undefined, limit: num("limit"), ownerId: num("owner"),
               projectId: num("project"), reviewState: str("review") as knowledge.ReviewState | undefined, since: str("since"),
               sourceKind: str("sourceKind"), sourceRef: str("sourceRef"), status: str("status") as knowledge.ClaimStatus | undefined,
+              topicId: num("topic"),
             }).map(present));
           }
           // POST /api/knowledge/claims: a claim entered by hand. A person entering it is the review.
@@ -1119,7 +1120,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             }
           }
         }
-        // GET /api/knowledge/briefs/{project|person|op|trace}/...: assembled from reviewed claims, never free text.
+        // GET /api/knowledge/briefs/{project|person|topic|op|trace}/...: assembled from reviewed claims, never free text.
         // ?format=md returns Markdown with each line's citation; ?refresh=1 rebuilds a stored brief.
         if (m === "GET" && seg[2] === "briefs" && seg.length >= 5) {
           const asOf = str("asOf");
@@ -1134,6 +1135,10 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           } else if (seg[3] === "person") {
             const eid = Number(seg[4]);
             brief = asOf ? briefs.personBrief(eid, { asOf }) : briefs.materialize({ kind: "person", subject: String(eid) }, () => briefs.personBrief(eid), maxAge);
+          } else if (seg[3] === "topic") {
+            const eid = Number(seg[4]);
+            if (knowledge.getEntity(eid)?.kind !== "topic") return sendJson(res, 404, { error: "no such topic" });
+            brief = asOf ? briefs.topicBrief(eid, { asOf }) : briefs.materialize({ kind: "topic", subject: String(eid) }, () => briefs.topicBrief(eid), maxAge);
           } else if (seg[3] === "op") {
             const name = seg[4] as briefs.Operation;
             if (!briefs.OPERATIONS.includes(name)) return sendJson(res, 404, { error: `unknown operation; one of ${briefs.OPERATIONS.join(", ")}` });
