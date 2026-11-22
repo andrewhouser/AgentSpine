@@ -18,11 +18,11 @@
 import crypto from "node:crypto";
 import { rawDb } from "../memory/store.ts";
 
-export type ClaimKind = "claim" | "commitment" | "decision" | "goal" | "question" | "risk" | "status";
+export type ClaimKind = "claim" | "commitment" | "decision" | "goal" | "measure" | "question" | "risk" | "status";
 export type ReviewState = "proposed" | "rejected" | "reviewed";
 export type ClaimStatus = "active" | "resolved" | "retracted" | "superseded";
 export type EntityKind = "person" | "team" | "topic";
-export const CLAIM_KINDS: ClaimKind[] = ["claim", "commitment", "decision", "goal", "question", "risk", "status"];
+export const CLAIM_KINDS: ClaimKind[] = ["claim", "commitment", "decision", "goal", "measure", "question", "risk", "status"];
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS kn_entities (
@@ -60,6 +60,14 @@ rawDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_kn_claims_state ON kn_claims (review_state, status);
   CREATE INDEX IF NOT EXISTS idx_kn_claims_source ON kn_claims (source_kind, source_ref);
+  CREATE TABLE IF NOT EXISTS kn_relations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_entity INTEGER NOT NULL,
+    to_entity INTEGER NOT NULL,
+    rel TEXT NOT NULL,
+    created TEXT NOT NULL,
+    UNIQUE (from_entity, to_entity, rel)
+  );
   CREATE TABLE IF NOT EXISTS kn_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_claim INTEGER NOT NULL,
@@ -96,6 +104,8 @@ export interface Claim {
   review_state: ReviewState;
   reviewed: null | string;
   said_on: null | string;
+  /** 1 when a person marked it sensitive: withheld from briefs and answers, never deleted. */
+  sensitive: 0 | 1;
   source_kind: string;
   source_ref: string;
   /** `available`, or `expired` once retention removed the raw source (the quote above is what remains). */
@@ -112,6 +122,14 @@ export interface Claim {
 // removed the raw source while the reviewed claim was kept (K7). The claim's own quote stays as its citation.
 try {
   rawDb.exec("ALTER TABLE kn_claims ADD COLUMN source_state TEXT NOT NULL DEFAULT 'available'");
+} catch {
+  // already there
+}
+
+// A person can mark a claim sensitive (K6): it stays in the store and on the review screens, but briefs, their
+// Markdown export and answers built from the store leave it out and count it as withheld.
+try {
+  rawDb.exec("ALTER TABLE kn_claims ADD COLUMN sensitive INTEGER NOT NULL DEFAULT 0");
 } catch {
   // already there
 }
@@ -166,11 +184,51 @@ export const addAlias = (entityId: number, alias: string): void => {
   const aliases = [...e.aliases, a, ...(clash ? [clash.name, ...clash.aliases] : [])];
   if (clash) {
     rawDb.prepare("UPDATE kn_claims SET owner_id = ? WHERE owner_id = ?").run(entityId, clash.id);
+    // Relations follow the merge. A row that would now duplicate one, or relate an entity to itself, is dropped.
+    rawDb.prepare("UPDATE OR IGNORE kn_relations SET from_entity = ? WHERE from_entity = ?").run(entityId, clash.id);
+    rawDb.prepare("UPDATE OR IGNORE kn_relations SET to_entity = ? WHERE to_entity = ?").run(entityId, clash.id);
+    rawDb.prepare("DELETE FROM kn_relations WHERE from_entity = ? OR to_entity = ? OR from_entity = to_entity").run(clash.id, clash.id);
     rawDb.prepare("DELETE FROM kn_entities WHERE id = ?").run(clash.id);
   }
   const unique = [...new Map(aliases.map((x) => [x.toLowerCase(), x])).values()].filter((x) => x.toLowerCase() !== e.name.toLowerCase());
   rawDb.prepare("UPDATE kn_entities SET aliases = ? WHERE id = ?").run(JSON.stringify(unique.slice(0, 20)), entityId);
 };
+
+// --- relationships between people and teams (K4) ---
+/** What one entity is to another. A person is in a team, reports to a person, or works with one. */
+export const RELATIONS = ["member_of", "reports_to", "works_with"] as const;
+export type Relation = (typeof RELATIONS)[number];
+
+export interface RelationRow {
+  from: Entity;
+  rel: Relation;
+  to: Entity;
+}
+
+/**
+ * Record that `from` is `rel` to `to`. Only a person does this (it is read, never inferred): `member_of` needs a
+ * team on the right, `reports_to` and `works_with` need people on both sides, and nothing relates to itself.
+ */
+export const relate = (fromId: number, toId: number, rel: Relation): void => {
+  if (!RELATIONS.includes(rel)) throw new Error(`unknown relation "${rel}"`);
+  const from = getEntity(fromId);
+  const to = getEntity(toId);
+  if (!from || !to) throw new Error("no such entity");
+  if (fromId === toId) throw new Error("an entity cannot relate to itself");
+  if (rel === "member_of" && !(from.kind === "person" && to.kind === "team")) throw new Error("member_of relates a person to a team");
+  if (rel !== "member_of" && !(from.kind === "person" && to.kind === "person")) throw new Error(`${rel} relates a person to a person`);
+  rawDb.prepare("INSERT OR IGNORE INTO kn_relations (from_entity, to_entity, rel, created) VALUES (?,?,?,?)").run(fromId, toId, rel, now());
+};
+
+export const unrelate = (fromId: number, toId: number, rel: Relation): void => {
+  rawDb.prepare("DELETE FROM kn_relations WHERE from_entity = ? AND to_entity = ? AND rel = ?").run(fromId, toId, rel);
+};
+
+/** Every relation an entity is part of, in either direction. */
+export const relationsOf = (entityId: number): RelationRow[] =>
+  (rawDb.prepare("SELECT from_entity, to_entity, rel FROM kn_relations WHERE from_entity = ? OR to_entity = ? ORDER BY id").all(entityId, entityId) as { from_entity: number; rel: string; to_entity: number }[])
+    .map((r) => ({ from: getEntity(r.from_entity) as Entity, rel: r.rel as Relation, to: getEntity(r.to_entity) as Entity }))
+    .filter((r) => r.from && r.to);
 
 // --- claims ---
 export interface NewClaim {
@@ -245,6 +303,10 @@ export const addClaim = (c: NewClaim): number => {
 };
 
 export interface ClaimFilter {
+  /** Leave out claims a person marked sensitive. Briefs and answers always set this. */
+  excludeSensitive?: boolean;
+  /** Only the sensitive ones, so a brief can say how many it withheld. */
+  onlySensitive?: boolean;
   /** Claims as they stood on this date (YYYY-MM-DD): said by then, and not yet superseded or retracted. */
   asOf?: string;
   kind?: ClaimKind;
@@ -267,6 +329,8 @@ export const listClaims = (f: ClaimFilter = {}): Claim[] => {
       a.push(v);
     }
   };
+  if (f.excludeSensitive) c.push("c.sensitive = 0");
+  if (f.onlySensitive) c.push("c.sensitive = 1");
   add("c.kind = ?", f.kind);
   add("c.status = ?", f.status);
   add("c.review_state = ?", f.reviewState);
@@ -307,6 +371,19 @@ export const reviewClaim = (id: number, decision: "accept" | "reject", edit: Cla
   rawDb
     .prepare("UPDATE kn_claims SET review_state = 'reviewed', reviewed = ?, text = ?, topic = ?, due = ?, owner_id = ? WHERE id = ?")
     .run(now(), (edit.text ?? cur.text).trim().slice(0, 1000), edit.topic === undefined ? cur.topic : edit.topic, edit.due === undefined ? cur.due : iso(edit.due), owner, id);
+  return getClaim(id);
+};
+
+/** Mark a claim sensitive, or clear it. Only a person does this; it hides, never deletes. */
+export const setClaimSensitive = (id: number, sensitive: boolean): Claim | undefined => {
+  if (!getClaim(id)) return undefined;
+  rawDb.prepare("UPDATE kn_claims SET sensitive = ? WHERE id = ?").run(sensitive ? 1 : 0, id);
+  // A stored brief may already hold the claim (or have left it out). Rebuild them rather than wait out the hour.
+  try {
+    rawDb.exec("DELETE FROM kn_briefs");
+  } catch {
+    // briefs have never been built in this database: nothing stored to drop
+  }
   return getClaim(id);
 };
 

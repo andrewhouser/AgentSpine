@@ -22,9 +22,13 @@
 import { tagUntrusted } from "../audit.ts";
 import { cosine, fromBlob, getEmbedder } from "../memory/rag.ts";
 import * as projects from "./store.ts";
+import { annotateHits, describeEvidence } from "../knowledge/retrieval.ts";
+import type { SourceEvidence } from "../knowledge/retrieval.ts";
 import { searchKnowledge } from "./search.ts";
 
 export interface Retrieved {
+  /** What the source is backed by in the claim store; absent for a caller that scores chunks itself. */
+  evidence?: SourceEvidence;
   /** `path` for an indexed file, `meeting` for a transcript. */
   kind: string;
   path: string;
@@ -84,7 +88,7 @@ export const scoreChunks = async (
  * most two from any one source. With no embedder the full-text path alone still finds exact terms.
  */
 export const recallChunks = async (projectId: number, query: string, k = 6): Promise<Retrieved[]> =>
-  (await searchKnowledge(query, { k, projectId })).map((h) => ({ kind: h.kind, path: h.path, score: h.score, text: h.text }));
+  annotateHits(await searchKnowledge(query, { k, projectId })).map((h) => ({ evidence: h.evidence, kind: h.kind, path: h.path, score: h.score, text: h.text }));
 
 /**
  * The knowledge block for a run, already UNTRUSTED-tagged and ready to be passed as
@@ -103,7 +107,7 @@ export const knowledgeFor = async (projectId: number, task: string, k = 6): Prom
   if (!hits.length) return "";
 
   const body = hits
-    .map((h, i) => `--- excerpt ${i + 1} (${h.path}) ---\n${h.text}`)
+    .map((h, i) => `--- excerpt ${i + 1} (${h.path}${h.evidence ? `; ${describeEvidence(h.evidence)}` : ""}) ---\n${h.text}`)
     .join("\n\n");
 
   return tagUntrusted(

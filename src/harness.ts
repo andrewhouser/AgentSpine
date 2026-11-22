@@ -244,6 +244,7 @@ export const summarizeCapabilities = (
   say(has("subagent"), usable(Boolean(policy.subagents?.enabled), "subagent"), "hand work to helper units", "start helper units (switched off)");
   say(has("run_command", "git_write"), usable(Boolean(policy.build?.enabled), "run_command", "git_write"), "run declared build commands", "run build commands (switched off)");
   if (has("meeting_list")) can.push("read the user's recorded meetings (kept on the local model)");
+  if (has("knowledge_claims")) can.push("look up reviewed claims with their citations (kept on the local model)");
   if (policy.autoExecute?.dryRun) cannot.push("make any change: this run is a dry run, so every call is only reported");
 
   // Mail can leave the machine through the Mac's Mail app, so it is not "never": say what actually applies.
@@ -300,6 +301,12 @@ export const harnessContract = (tools: string[], conversational: boolean): strin
     "- Private material (meetings, mail, calendar, files, project documents) is kept on the local model. The application pins a run to it for you, and you cannot change that.",
     "- You cannot edit policy, grant yourself a capability, or approve your own request.",
   ];
+  if (has("knowledge_claims")) {
+    // S7: the status comes from code (src/knowledge/answer.ts); this says how an answer may use it.
+    lines.push(
+      "- Answers about what was decided, promised or said rest on knowledge_claims. A reviewed claim may be stated as fact with its #id and source. An unreviewed or inferred one is a lead and must be called that. A CONFLICT is reported as a conflict, with both sides. INSUFFICIENT EVIDENCE is said plainly, and the gap is not filled from memory.",
+    );
+  }
   if (has("schedule_create")) {
     lines.push("- A scheduled task's text is handed verbatim to a future run that has none of this conversation, so write it as complete standing instructions, never as a reference to what was just discussed.");
     lines.push("- A schedule change either runs at once, when the user's settings trust it in a live chat, or is QUEUED for their approval. The result says which, so say you proposed it, never that it is running.");
@@ -378,7 +385,7 @@ export interface ResultEnvelope {
  */
 export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "calendar_find", "calendar_upcoming", "client_list", "task_list", "time_report", "digest", "conversation_detail", "find_past_output", "gmail_search",
-  "harness_status", "headsup_status", "list_dir", "look_at_file", "look_at_image", "meeting_list", "memory_recall",
+  "harness_status", "headsup_status", "knowledge_claims", "list_dir", "look_at_file", "look_at_image", "meeting_list", "memory_recall",
   "read_file", "read_more", "recall_output", "schedule_list", "source_read", "sources_list", "state_get", "weather",
   "web_read", "web_search",
 ]);

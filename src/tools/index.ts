@@ -37,6 +37,7 @@ import { clientList, clientUpsert, timeLog, timeReportTool } from "./clients.ts"
 import { sourceRead, sourcesList } from "./sources.ts";
 import { taskAdd, taskDone, taskList, taskUpdate } from "./tasks.ts";
 import { meetingList, meetingTag } from "./meetings.ts";
+import { knowledgeClaims } from "./knowledge.ts";
 import { scaffoldIosApp } from "./scaffold-ios.ts";
 import { generateImage } from "./generate-image.ts";
 import { studyTools } from "./study.ts";
@@ -95,6 +96,7 @@ export const tools: Tool[] = [
   taskList,
   meetingList,
   meetingTag,
+  knowledgeClaims,
   taskUpdate,
   taskDone,
   clientUpsert,

@@ -41,6 +41,14 @@ rawDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_inbox_status ON inbox_items (status);
 `);
+// People and tags the text appears to mention (K3): suggestions for a person to accept, never applied by themselves.
+for (const col of ["suggested_people", "suggested_tags"]) {
+  try {
+    rawDb.exec(`ALTER TABLE inbox_items ADD COLUMN ${col} TEXT`);
+  } catch {
+    // already there
+  }
+}
 
 export interface ItemRow {
   author: null | string;
@@ -61,11 +69,15 @@ export interface ItemRow {
   stored_path: null | string;
   /** A guess at the project, for review. Never applied without a person. */
   suggested_project: null | number;
+  /** Known people whose names appear in the text. For review; naming them anywhere is a person's call. */
+  suggested_people: string[];
+  /** Tags already in use whose words appear in the text. For review. */
+  suggested_tags: string[];
   tags: string[];
   via: null | string;
 }
 
-type Raw = Omit<ItemRow, "speakers" | "tags"> & { speakers: null | string; tags: null | string };
+type Raw = Omit<ItemRow, "speakers" | "suggested_people" | "suggested_tags" | "tags"> & { speakers: null | string; suggested_people: null | string; suggested_tags: null | string; tags: null | string };
 
 const parse = (list: null | string): string[] => {
   try {
@@ -75,7 +87,7 @@ const parse = (list: null | string): string[] => {
     return [];
   }
 };
-const hydrate = (r: Raw | undefined): ItemRow | undefined => (r ? { ...r, speakers: parse(r.speakers), tags: parse(r.tags) } : undefined);
+const hydrate = (r: Raw | undefined): ItemRow | undefined => (r ? { ...r, speakers: parse(r.speakers), suggested_people: parse(r.suggested_people), suggested_tags: parse(r.suggested_tags), tags: parse(r.tags) } : undefined);
 
 export const getItem = (id: number): ItemRow | undefined => hydrate(rawDb.prepare("SELECT * FROM inbox_items WHERE id = ?").get(id) as Raw | undefined);
 export const getItemByHash = (hash: string): ItemRow | undefined => hydrate(rawDb.prepare("SELECT * FROM inbox_items WHERE hash = ?").get(hash) as Raw | undefined);
@@ -134,7 +146,9 @@ export interface ItemPatch {
   sourceId?: null | number;
   speakers?: string[];
   status?: ItemStatus;
+  suggestedPeople?: string[];
   suggestedProject?: null | number;
+  suggestedTags?: string[];
   tags?: string[];
 }
 
@@ -143,7 +157,7 @@ export const updateItem = (id: number, p: ItemPatch): void => {
   if (!cur) return;
   rawDb
     .prepare(
-      "UPDATE inbox_items SET status=?, note=?, doc_date=?, author=?, speakers=?, chars=?, project_id=?, suggested_project=?, tags=?, private=?, source_id=? WHERE id=?",
+      "UPDATE inbox_items SET status=?, note=?, doc_date=?, author=?, speakers=?, chars=?, project_id=?, suggested_project=?, tags=?, private=?, source_id=?, suggested_people=?, suggested_tags=? WHERE id=?",
     )
     .run(
       p.status ?? cur.status,
@@ -157,6 +171,8 @@ export const updateItem = (id: number, p: ItemPatch): void => {
       JSON.stringify(p.tags ?? cur.tags),
       (p.private ?? cur.private === 1) ? 1 : 0,
       p.sourceId !== undefined ? p.sourceId : cur.source_id,
+      JSON.stringify(p.suggestedPeople ?? cur.suggested_people),
+      JSON.stringify(p.suggestedTags ?? cur.suggested_tags),
       id,
     );
 };

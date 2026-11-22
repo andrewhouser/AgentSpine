@@ -104,5 +104,76 @@ console.log("\nMARKDOWN AND MATERIALIZATION");
   check("a zero age rebuilds it", builds, 2);
 }
 
+console.log("\nSENSITIVE CLAIMS ARE WITHHELD, NOT DELETED (K6)");
+{
+  const secret = add({ kind: "commitment", owner: "Dana", text: "Negotiate the severance terms", due: day(-3) });
+  const before = b.projectBrief(A, "Platform");
+  const lines = (br) => br.sections.flatMap((x) => x.items.map((i) => i.text));
+  check("before it is marked, the claim is in the brief", lines(before).includes("Negotiate the severance terms"), true);
+  b.materialize({ kind: "project", subject: String(A) }, () => before, 60);
+  k.setClaimSensitive(secret, true);
+  const after = b.projectBrief(A, "Platform");
+  check("marked sensitive, it leaves the brief and the brief says how many it withheld", [lines(after).includes("Negotiate the severance terms"), after.withheldSensitive], [false, 1]);
+  check("the Markdown export says so too", /1 claim\(s\) marked sensitive are withheld/.test(b.renderBrief(after)), true);
+  check("a stored brief is dropped when a claim is marked, so nothing leaks for the hour", b.materialize({ kind: "project", subject: String(A) }, () => after, 60).withheldSensitive, 1);
+  check("the claim is still in the store for the review screens", [k.getClaim(secret).sensitive, k.listClaims({ projectId: A, limit: 500 }).some((c) => c.id === secret)], [1, true]);
+  check("operations leave it out as well", lines(b.operation("commitments", { projectId: A })).includes("Negotiate the severance terms"), false);
+  check("so does a person's brief", lines(b.personBrief(k.getClaim(secret).owner_id)).includes("Negotiate the severance terms"), false);
+  k.setClaimSensitive(secret, false);
+  check("clearing the flag brings it back", lines(b.projectBrief(A, "Platform")).includes("Negotiate the severance terms"), true);
+}
+
+console.log("\nA ONE-ON-ONE IS RECORDED FACTS ONLY (K6)");
+{
+  const priya = k.listEntities("person").find((e) => e.name === "Priya");
+  const brief = b.oneOnOne(priya.id);
+  const sec = (t) => brief.sections.find((x) => x.title.startsWith(t));
+  check("it lists what they owe, overdue flagged", sec("Their commitments").items.map((i) => [i.text, i.overdue]), [["Send the vendor contract", true]]);
+  check("what they raised that is still open comes from what they said", sec("Open questions").items.map((i) => i.text), ["Who owns QA?"]);
+  check("what others owe them is stated as not recorded", sec("Owed to them").empty.startsWith("Not recorded"), true);
+  check("every item still carries its citation", brief.sections.every((x) => x.items.every((i) => i.cite.passage || i.kind === "stakeholder")), true);
+}
+
+console.log("\nA PLAN AGAINST THE MEETINGS (K6)");
+{
+  const plan = "# Q4 plan\n- Go with option B for the approach\n- Send the vendor contract to legal\n- Launch the loyalty programme in Q4\n";
+  const cmp = b.comparePlan(plan, { projectId: A, projectName: "Platform" });
+  const sec = (t) => cmp.sections.find((x) => x.title.startsWith(t));
+  check("a plan line with a recorded decision shows the claim and the plan line it matched", sec("Recorded for these").items.some((i) => i.text === "Go with option B" && /plan line: Go with option B/.test(i.topic)), true);
+  check("a plan line with nothing recorded is listed as such", sec("Plan lines with nothing").items.map((i) => i.text), ["Launch the loyalty programme in Q4"]);
+  check("recorded commitments the plan does not mention are listed, and ones it does mention are not", [sec("Recorded decisions and commitments the plan does not").items.map((i) => i.text).includes("Draft the memo"), sec("Recorded decisions and commitments the plan does not").items.map((i) => i.text).includes("Send the vendor contract")], [true, false]);
+  check("it never claims the two agree", /not agreement/.test(sec("Recorded for these").title), true);
+  check("an empty plan compares nothing", b.comparePlan("", { projectId: A }).sections[1].items, []);
+}
+
+console.log("\nGOALS WITH MEASURES, AND WHO IS ON WHICH TEAM (K4)");
+{
+  const goal = add({ kind: "goal", text: "Cut onboarding time in half" });
+  const measure = add({ kind: "measure", text: "Median onboarding under 5 days" });
+  k.link(measure, goal, "measures");
+  const sec = (br, t) => br.sections.find((x) => x.title === t);
+  const mine = sec(b.projectBrief(A, "Platform"), "Measures").items.find((i) => i.text === "Median onboarding under 5 days");
+  check("a measure appears with the goal it measures", mine?.topic, "measures goal: Cut onboarding time in half");
+  check("a measure with no goal linked is still listed", (add({ kind: "measure", text: "NPS above 40" }), sec(b.projectBrief(A, "Platform"), "Measures").items.some((i) => i.text === "NPS above 40")), true);
+
+  const priya = k.listEntities("person").find((e) => e.name === "Priya");
+  const sam = k.listEntities("person").find((e) => e.name === "Sam");
+  const team = k.upsertEntity("team", "Platform team");
+  k.relate(priya.id, team.id, "member_of");
+  k.relate(priya.id, sam.id, "reports_to");
+  k.relate(priya.id, sam.id, "reports_to");
+  check("relations are stored once, in either direction", [k.relationsOf(priya.id).length, k.relationsOf(sam.id).length], [2, 1]);
+  const lines = sec(b.personBrief(priya.id), "Team and reporting line").items.map((i) => i.text);
+  check("a person brief says them in words, from what a person entered", lines, ["Priya member of Platform team", "Priya reports to Sam"]);
+  check("a one-on-one carries the same section", sec(b.oneOnOne(priya.id), "Team and reporting line").items.length, 2);
+  check("a person cannot be a member of a person, or relate to themselves", [(() => { try { k.relate(priya.id, sam.id, "member_of"); } catch (e) { return String(e.message); } })(), (() => { try { k.relate(priya.id, priya.id, "works_with"); } catch (e) { return String(e.message); } })()], ["member_of relates a person to a team", "an entity cannot relate to itself"]);
+  const samAlias = k.upsertEntity("person", "Samuel");
+  k.relate(samAlias.id, priya.id, "works_with");
+  k.addAlias(sam.id, "Samuel");
+  check("merging two spellings of a person carries their relations over", [k.relationsOf(sam.id).map((r) => r.rel).sort(), k.getEntity(samAlias.id)], [["reports_to", "works_with"], undefined]);
+  k.unrelate(priya.id, team.id, "member_of");
+  check("a relation can be removed", k.relationsOf(priya.id).some((r) => r.rel === "member_of"), false);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

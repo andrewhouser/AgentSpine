@@ -29,6 +29,7 @@ import type {
   IngestResult,
   KnowledgeClaim,
   KnowledgeConflict,
+  KnowledgeEntity,
   KnowledgeHit,
   LiveStatus,
   Meeting,
@@ -44,6 +45,7 @@ import type {
   ProjectSource,
   PromotionProposal,
   Recipe,
+  RetentionRule,
   Run,
   SavedFile,
   Schedule,
@@ -267,20 +269,30 @@ export const api = {
 
   inboxStatus: () => request<InboxStatus>("/api/inbox/status"),
 
+  inboxTags: (id: number, tags: string[]) =>
+    request<InboxItem>(`/api/inbox/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
+
   /**
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
    */
   /** A brief assembled from reviewed claims, as Markdown with each citation. kind: project | person | op | trace. */
-  knowledgeBrief: (kind: "op" | "person" | "project" | "trace", subject: string, params: Record<string, string> = {}) =>
+  knowledgeBrief: (kind: "one-on-one" | "op" | "person" | "project" | "trace", subject: string, params: Record<string, string> = {}) =>
     request<{ markdown: string }>(`/api/knowledge/briefs/${kind}/${encodeURIComponent(subject)}?${new URLSearchParams({ ...params, format: "md" })}`),
 
   knowledgeClaims: (params: Record<string, string> = {}) => request<KnowledgeClaim[]>(`/api/knowledge/claims?${new URLSearchParams(params)}`),
 
   knowledgeConflicts: () => request<KnowledgeConflict[]>("/api/knowledge/conflicts"),
 
+  /** People, teams and topics the knowledge layer has resolved; the person picker reads this. */
+  knowledgeEntities: () => request<KnowledgeEntity[]>("/api/knowledge/entities"),
+
+  /** A written plan against what the meetings recorded, as Markdown. Matching words is not agreement; it says so. */
+  knowledgePlanBrief: (plan: string, project: null | number) =>
+    request<{ markdown: string }>("/api/knowledge/briefs/plan?format=md", { body: JSON.stringify({ plan, project }), method: "POST" }),
+
   /** Accept (optionally corrected) or reject a proposed claim, or change its status. */
-  knowledgeReview: (id: number, body: { due?: null | string; owner?: null | string; review?: "accept" | "reject"; status?: string; text?: string }) =>
+  knowledgeReview: (id: number, body: { due?: null | string; owner?: null | string; review?: "accept" | "reject"; sensitive?: boolean; status?: string; text?: string }) =>
     request<KnowledgeClaim>(`/api/knowledge/claims/${id}`, { body: JSON.stringify(body), method: "PATCH" }),
 
   /** The newer claim replaces the older one. Only a person does this. */
@@ -419,6 +431,8 @@ export const api = {
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
   researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
+  retention: () => request<RetentionRule[]>("/api/retention"),
+
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
@@ -427,15 +441,15 @@ export const api = {
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
 
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
-
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
+
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
 
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
     post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
-
   saveStyle: (name: string, body: { appliesTo: StyleAppliesTo; note: string }) =>
     request<WritingStyle>(`/api/styles/${encodeURIComponent(name)}`, { body: JSON.stringify(body), method: "PUT" }),
+
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
 
   /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */
@@ -454,9 +468,9 @@ export const api = {
 
   /** "Something I wish I'd been told", stored as a preference memory. */
   sendOutboxWish: (text: string) => post<{ remembered: boolean }>("/api/outbox/wish", { text }),
-
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
+
   setDefaultStyle: (name: string) => request<{ defaultStyle: string }>("/api/style-default", { body: JSON.stringify({ name }), method: "PUT" }),
 
   setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
@@ -497,8 +511,8 @@ export const api = {
   },
 
   starRun: (runId: number, starred: boolean) => post<{ ok: boolean }>(`/api/runs/${runId}/star`, { starred }),
-
   startDictation: () => post<{ device: string }>("/api/dictate/start"),
+
   startMeeting: (device: string, projectId: null | number, title?: string) =>
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
 
@@ -517,7 +531,7 @@ export const api = {
   toggleSchedule: (id: number, enabled: boolean) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify({ enabled }), method: "PATCH" }),
 
-  updateProject: (id: number, fields: { instructions?: string; instructionsFile?: null | string; name?: string }) =>
+  updateProject: (id: number, fields: { instructions?: string; instructionsFile?: null | string; name?: string; transcriptRetentionDays?: null | number }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
 
   /**

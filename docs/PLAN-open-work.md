@@ -379,9 +379,14 @@ baseline, and the meeting recall number is still unmeasured.
   the path that found each hit shown, items with an honest status, the suggested project with a one-click file,
   a project picker, try again, delete); iPhone and Mac share one `InboxView` (add files, paste text, context menu
   and swipe actions) and an Inbox tab or sidebar row. `InboxView` is in `Views/InboxView.swift`, shared by both targets. I looked at the web screen through the page's own DOM (the pane
-  was not on screen), not by eye. **Not built:** the iPhone share sheet and dictated notes; adopting the existing Milliman
-  knowledge-folder loader as one source of the Inbox; people and tag suggestions beyond a project; "document date"
-  inference from a PDF's own metadata.
+  was not on screen), not by eye. A PDF's own date is now read from its Info dictionary or XMP (`src/inbox/metadata.ts`)
+  when nobody gave one, and each ready item records known people whose names appear in it and tags already in use
+  whose words appear in it (`suggested_people`, `suggested_tags`); the web Inbox shows them, with one click to add
+  the tags, and nothing is applied by itself (2026-11-21; a PDF whose metadata sits in a compressed object stream
+  gives no date, and the item keeps the day it was added). **Not built:** the iPhone share sheet and dictated notes
+  (the backend takes a note with `via: "dictation"`; the capture is a Swift screen); adopting the existing Milliman
+  knowledge-folder loader as one source of the Inbox (that folder is off limits to this sandbox, so it needs you or
+  a session on the Mini); the iPhone and Mac screens for the new suggestions.
 - **K4. Knowledge store (backend built 2026-11-21; screens are K5).** `src/knowledge/`: a layer separate from
   semantic memory. Records are `kn_claims` (kinds `decision`, `commitment`, `risk`, `question`, `goal`, `status`,
   `claim`), `kn_entities` (people, teams, topics, with aliases that merge two spellings into one) and `kn_links`.
@@ -399,10 +404,19 @@ baseline, and the meeting recall number is still unmeasured.
   inbox item removes the claims cited to it and the audit row says how many. API: `GET/POST /api/knowledge/claims`,
   `GET/PATCH .../claims/:id` (review, correct, resolve, retract), `POST .../claims/:id/supersede`,
   `GET /api/knowledge/conflicts`, `/entities`, `/summary`, `POST /api/inbox/:id/extract`, and
-  `POST /api/knowledge/meetings/:id`. Suite: `test/knowledge-store.test.mjs`. **Not built:** the review and
+  `POST /api/knowledge/meetings/:id`. Retrieval carries the evidence level (2026-11-21, `src/knowledge/retrieval.ts`):
+  each hit from `GET /api/knowledge/search` has `evidence {level, claims, reviewed, unreviewed}` read from the claims
+  cited to its source (`none` when nobody analysed it, then `machine-extracted`, `inferred`, `reviewed`, or
+  `conflicting`; retracted and superseded claims do not count), and a project run's excerpt header says the same in
+  words, so a passage with no reviewed claims is not read as a fact. It annotates and never re-ranks. Suites:
+  `test/knowledge-store.test.mjs`, `test/knowledge-retrieval.test.mjs`. **Not built:** the review and
   close-out screens (K5), model extraction on ingest by default (it runs on request, to spare the model host),
-  records for goals and measures beyond the `goal` kind, topic entities in use, relationships between people and
-  teams, and the "evidence level" in retrieval results (K2 will carry it once there is something reviewed to rank).
+  topic entities in use, and nothing yet that RANKS by evidence (K2 ranking is unchanged). Added 2026-11-21: a
+  `measure` claim kind (linked to the goal it measures with `link(measure, goal, "measures")`, shown under
+  "Measures" in the project brief), and relationships a person enters between people and teams (`member_of`,
+  `reports_to`, `works_with`; `relate`, `unrelate`, `relationsOf`; `GET/POST/DELETE /api/knowledge/relations`),
+  followed through an alias merge and shown in person and one-on-one briefs. Model extraction on ingest stays
+  on request: turning it on by default spends the model host on every item and is your call, not a default I chose.
 - **K5. Review and close-out screens (built 2026-11-21; not seen rendered on the native apps).** A Knowledge
   screen on web (sidebar), iPhone (a tab, under More by default) and Mac (sidebar): claims waiting for review with
   their cited words and source, Accept (web also lets you correct the text first), Reject, and after accepting a
@@ -425,10 +439,17 @@ baseline, and the meeting recall number is still unmeasured.
   `weekly-summary`, plus `decisionTrace` (how a decision evolved). Any brief can be asked as of an earlier date,
   rendered as Markdown with each citation (`?format=md`), and is materialized in `kn_briefs` so it is the same
   document until refreshed. API: `GET /api/knowledge/briefs/{project|person|op|trace}/...`. Suite:
-  `test/knowledge-briefs.test.mjs`. **Not built:** the brief screens on web, iPhone and Mac; "compare what the
-  written plan says with what recent meetings say" (needs document claims at scale, K3's extraction run over a real
-  plan); a brief that tells the person what to ask in a one-on-one beyond what is recorded; and visibility and
-  retention tighter than the rest for notes marked sensitive (there is no sensitivity flag on a claim yet).
+  `test/knowledge-briefs.test.mjs`. Added 2026-11-21: a claim can be marked sensitive
+  (`PATCH .../claims/:id {"sensitive": true}`), which keeps it in the store and on the review screen but leaves it
+  out of every brief, its Markdown, `knowledge_claims` answers and decision traces, with the count withheld stated,
+  and drops stored briefs so nothing lingers; `oneOnOne` (`GET .../briefs/one-on-one/:person`) assembles a person's
+  commitments, open raised items, recent words and team line from recorded facts only, with no invented talking
+  points; `comparePlan` (`POST .../briefs/plan {plan, project?}`) matches each plan line to reviewed decisions and
+  commitments by shared words and lists what is recorded for it, which plan lines have nothing recorded, and which
+  recorded items the plan does not mention, without judging agreement. The web Knowledge screen has the brief
+  reader (with a person picker for person and one-on-one briefs), the plan comparison and a sensitive checkbox on
+  claims awaiting review. **Not built:** the brief screens on iPhone and Mac, and a check that the plan comparison
+  helps on a real plan (the matching is plain shared words, a first guess to tune on real plans).
 - **K7. Retention rules (built 2026-11-21).** Separate rules per kind of thing, stated from the same numbers the
   code enforces (`src/knowledge/retention.ts`, `GET /api/retention`): original audio (`MEETING_KEEP_AUDIO_HOURS`),
   raw transcripts (`TRANSCRIPT_RETENTION_DAYS`, 30), a transcript indexed in a project (only if you chose to keep
@@ -441,8 +462,8 @@ baseline, and the meeting recall number is still unmeasured.
   (2026-11-21, backend only): `PATCH /api/projects/:id {"transcriptRetentionDays": n}` (0 keeps that project's
   transcripts until the meeting is deleted, `null` follows the global setting), enforced per meeting by
   `expiredMeetingIds`, so with the global window off only a project's own window expires anything. The indexed
-  transcript lifetime stays global. Not built: a retention screen on web, Mac and iPhone (the API states the rules
-  and the override; nothing shows or sets them yet).
+  transcript lifetime stays global. The web project page shows the rules and sets the override. Not built: the same on Mac and iPhone,
+  and a screen for the global rules outside a project.
 - **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
 
 Settled 2026-11-21: OCR is a small macOS Vision helper (K3, chosen for speed; no new dependency); backups rely on
@@ -630,7 +651,10 @@ trusted instruction in the run inspector.
 **Done when:** a workspace rule changes behaviour in that project, a same-named file inside an untrusted
 document source cannot do so, and the trace identifies which instruction sources were active.
 
-### S7. Epistemic awareness joins the knowledge system (Code, depends on K4)
+### S7. Epistemic awareness joins the knowledge system (answer rules built 2026-11-21; briefs wait for K6 screens)
+
+**Built:** `src/knowledge/answer.ts` decides, in code, whether the store supports an answer (`supported`, `conflicting` or `insufficient`) by matching the question against reviewed claims that are still in force, and renders each claim with its id, evidence level, source, timestamp in the recording and exact words. Disagreeing reviewed claims come back as a CONFLICT to be reported with both sides; where nothing reviewed matches, the text says INSUFFICIENT EVIDENCE and not to fill the gap; unreviewed matches appear only as leads. The read-only tool `knowledge_claims` (declares `privateOutput`, so the run stays local) returns it, `asOf` answers as of a date, and `harnessContract` adds the answer rule only when the tool is visible. The match is plain shared words on purpose, since a wrong "supported" invents a fact and a wrong "insufficient" sends the person to look. Suite: `test/knowledge-answer.test.mjs`. Not built: nothing yet calls the tool unprompted (the model must choose to), no live-model check that it does, and the briefs of K6 do not use the same status wording on the screens.
+
 
 Operational awareness says where the agent is and what it may do. Management synthesis also needs the model to
 state what kind of knowledge supports an answer. K4 records and K6 briefs should distinguish:

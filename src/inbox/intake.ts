@@ -23,6 +23,7 @@ import * as projects from "../projects/store.ts";
 import { ocrAvailable, ocrFile } from "./ocr.ts";
 import { deleteClaimsFromSource } from "../knowledge/store.ts";
 import * as items from "./store.ts";
+import { pdfDate, suggestPeople, suggestTags } from "./metadata.ts";
 import { parseThread } from "./thread.ts";
 
 export const IMAGE_EXTENSIONS = new Set([".bmp", ".gif", ".heic", ".jpeg", ".jpg", ".png", ".tif", ".tiff"]);
@@ -141,7 +142,9 @@ const finish = async (id: number, text: string, ex: Extraction, meta: IngestMeta
     sourceId,
     speakers: ex.speakers,
     status: ex.status,
+    suggestedPeople: ex.status === "ready" ? suggestPeople(text) : undefined,
     suggestedProject: suggested,
+    suggestedTags: ex.status === "ready" ? suggestTags(text) : undefined,
   });
 };
 
@@ -161,9 +164,11 @@ export const ingestFile = async (data: Buffer, meta: IngestMeta = {}): Promise<I
   }
   const kind: items.ItemKind = IMAGE_EXTENSIONS.has(ext) ? "image" : "file";
   const stored = keep(hash, ext, data);
-  const id = items.insertItem({ chars: 0, docDate: meta.docDate, hash, ingested: now(), kind, name, status: "empty", storedPath: stored, via: meta.via });
+  // A PDF carries the date it was made. A date a person gave wins; with neither, the day it was added.
+  const docDate = meta.docDate ?? (ext === ".pdf" ? pdfDate(data) : null) ?? undefined;
+  const id = items.insertItem({ chars: 0, docDate, hash, ingested: now(), kind, name, status: "empty", storedPath: stored, via: meta.via });
   const ex = await extract(stored, ext, kind);
-  await finish(id, ex.text, ex, meta, meta.docDate ?? now());
+  await finish(id, ex.text, ex, meta, docDate ?? now());
   return { duplicate: false, item: items.getItem(id) as items.ItemRow };
 };
 

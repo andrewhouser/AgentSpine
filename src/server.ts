@@ -47,6 +47,7 @@ import * as inboxStore from "./inbox/store.ts";
 import * as briefs from "./knowledge/briefs.ts";
 import * as knowledge from "./knowledge/store.ts";
 import { retentionRules } from "./knowledge/retention.ts";
+import { annotateHits } from "./knowledge/retrieval.ts";
 import { extractClaims, inboxItemText, normalizeMeeting } from "./knowledge/extract.ts";
 import { ocrAvailable } from "./inbox/ocr.ts";
 import {
@@ -1013,6 +1014,19 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const num = (k: string): number | undefined => (url.searchParams.get(k) ? Number(url.searchParams.get(k)) : undefined);
         const str = (k: string): string | undefined => url.searchParams.get(k) ?? undefined;
         if (m === "GET" && seg[2] === "entities" && seg.length === 3) return sendJson(res, 200, knowledge.listEntities());
+        // Relationships between people and teams. A person enters them; nothing infers them.
+        if (seg[2] === "relations" && seg.length === 3) {
+          if (m === "GET") {
+            const id = num("entity");
+            if (id === undefined) return sendJson(res, 400, { error: "entity is required" });
+            return sendJson(res, 200, knowledge.relationsOf(id));
+          }
+          if (m === "POST" || m === "DELETE") {
+            const b = await readBody(req);
+            (m === "POST" ? knowledge.relate : knowledge.unrelate)(Number(b.from), Number(b.to), b.rel);
+            return sendJson(res, 200, knowledge.relationsOf(Number(b.from)));
+          }
+        }
         if (m === "GET" && seg[2] === "conflicts" && seg.length === 3) return sendJson(res, 200, knowledge.findConflicts());
         if (m === "GET" && seg[2] === "summary" && seg.length === 3) return sendJson(res, 200, knowledge.counts());
         if (seg[2] === "claims") {
@@ -1046,6 +1060,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             }
             if (m === "PATCH" && seg.length === 4) {
               const b = await readBody(req);
+              if (typeof b.sensitive === "boolean") knowledge.setClaimSensitive(claimId, b.sensitive);
               if (b.review === "accept" || b.review === "reject") knowledge.reviewClaim(claimId, b.review, { due: b.due, owner: b.owner, text: b.text, topic: b.topic });
               if (b.status) knowledge.setClaimStatus(claimId, b.status);
               return sendJson(res, 200, present(knowledge.getClaim(claimId) as knowledge.Claim));
@@ -1072,11 +1087,22 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             if (!briefs.OPERATIONS.includes(name)) return sendJson(res, 404, { error: `unknown operation; one of ${briefs.OPERATIONS.join(", ")}` });
             const pid = num("project");
             brief = briefs.operation(name, { asOf, days: num("days"), ownerId: num("owner"), projectId: pid, projectName: pid ? projects.getProject(pid)?.name : undefined });
+          } else if (seg[3] === "one-on-one") {
+            brief = briefs.oneOnOne(Number(seg[4]), { asOf });
           } else if (seg[3] === "trace") {
             brief = briefs.decisionTrace(Number(seg[4]));
           } else return sendJson(res, 404, { error: "unknown brief" });
           if (str("format") === "md") return sendJson(res, 200, { markdown: briefs.renderBrief(brief) });
           return sendJson(res, 200, brief);
+        }
+        // POST /api/knowledge/briefs/plan {plan, project?}: a written plan against what the meetings recorded.
+        if (m === "POST" && seg[2] === "briefs" && seg[3] === "plan" && seg.length === 4) {
+          const b = await readBody(req);
+          const plan = String(b.plan ?? "");
+          if (!plan.trim()) return sendJson(res, 400, { error: "plan is required" });
+          const pid = b.project != null ? Number(b.project) : undefined;
+          const brief = briefs.comparePlan(plan, { projectId: pid, projectName: pid ? projects.getProject(pid)?.name : undefined });
+          return sendJson(res, 200, str("format") === "md" ? { markdown: briefs.renderBrief(brief) } : brief);
         }
         // POST /api/knowledge/meetings/:id: carry a meeting's extraction into the store (idempotent).
         if (m === "POST" && seg[2] === "meetings" && seg.length === 4) return sendJson(res, 200, { claims: normalizeMeeting(Number(seg[3])) });
@@ -1102,7 +1128,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         since: url.searchParams.get("since") ?? undefined,
         until: url.searchParams.get("until") ?? undefined,
       });
-      return sendJson(res, 200, hits);
+      // Each hit says what its source is backed by (src/knowledge/retrieval.ts); ranking is unchanged.
+      return sendJson(res, 200, annotateHits(hits));
     }
 
     // /api/data-events — the deletion and retention audit trail (ids, names and counts, never content).

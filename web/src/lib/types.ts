@@ -293,6 +293,13 @@ export interface Agent {
   tools: string[];
 }
 
+/** What is kept and for how long, per kind of thing (GET /api/retention). */
+export interface RetentionRule {
+  artifact: string;
+  rule: string;
+  setting: null | string;
+}
+
 export interface Project {
   archived: number;
   chunks?: number;
@@ -303,6 +310,8 @@ export interface Project {
   instructions_file?: null | string;
   name: string;
   policy_overlay: null | string;
+  /** This project's own raw-transcript window in days; null follows the global setting, 0 keeps them until the meeting is deleted. */
+  transcript_retention_days?: null | number;
 }
 
 /** What one indexing pass actually did. */
@@ -888,7 +897,11 @@ export interface InboxItem {
   speakers: string[];
   /** ready, needs_ocr (not read yet), ocr_failed, empty (no text) or failed. */
   status: "empty" | "failed" | "needs_ocr" | "ocr_failed" | "ready";
+  /** Known people whose names appear in the text. For review only. */
+  suggested_people: string[];
   suggested_project: null | number;
+  /** Tags already in use whose words appear in the text. Applied only when a person accepts them. */
+  suggested_tags: string[];
   suggestedProjectName: null | string;
   tags: string[];
   via: null | string;
@@ -926,6 +939,8 @@ export interface KnowledgeClaim {
   project_id: null | number;
   review_state: "proposed" | "rejected" | "reviewed";
   said_on: null | string;
+  /** 1 when marked sensitive: left out of briefs and answers, never deleted. */
+  sensitive?: 0 | 1;
   source_kind: string;
   source_ref: string;
   source_state: "available" | "expired";
@@ -933,6 +948,14 @@ export interface KnowledgeClaim {
   status: "active" | "resolved" | "retracted" | "superseded";
   text: string;
   topic: null | string;
+}
+
+export interface KnowledgeEntity {
+  aliases: string[];
+  created: string;
+  id: number;
+  kind: "person" | "team" | "topic";
+  name: string;
 }
 
 export interface KnowledgeConflict {

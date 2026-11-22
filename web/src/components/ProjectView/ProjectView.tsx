@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { Conversation, Project, ProjectSource } from "../../lib/types.ts";
+import type { Conversation, Project, ProjectSource, RetentionRule } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -38,12 +38,16 @@ export const ProjectView = ({
   const [error, setError] = useState("");
   // Which converters this machine actually has, so the page states the truth rather than
   // promising formats that will silently be skipped.
+  const [retentionDays, setRetentionDays] = useState<null | string>(null);
+  const [rules] = useResource(api.retention, null as null | RetentionRule[]);
   const [formats] = useResource(api.formats, null as { pdf: boolean; rich: boolean } | null);
 
   if (!detail) return <div className={styles.page}>Loading…</div>;
 
   const value = instructions ?? detail.project.instructions ?? "";
   const fileValue = workspaceFile ?? detail.project.instructions_file ?? "";
+  const daysValue = retentionDays ?? (detail.project.transcript_retention_days == null ? "" : String(detail.project.transcript_retention_days));
+  const daysValid = daysValue.trim() === "" || (/^\d+$/.test(daysValue.trim()) && Number(daysValue) <= 3650);
 
   const addSource = async (): Promise<void> => {
     const path = newPath.trim();
@@ -98,6 +102,49 @@ export const ProjectView = ({
         >
           Save
         </button>
+      </section>
+
+      <section>
+        <h2 className={styles.subhead}>Meeting transcript retention</h2>
+        <p className={styles.note}>
+          How long the raw transcripts of this project&apos;s meetings are kept. Leave empty to follow the
+          global setting, enter <code>0</code> to keep them until the meeting is deleted, or a number of days
+          to keep them for that long. What a person reviewed (decisions, commitments) is kept either way, with
+          its exact cited words and a note that the original has aged out.
+        </p>
+        <input
+          aria-label="Days to keep this project's raw transcripts"
+          className={styles.textarea}
+          inputMode="numeric"
+          onChange={(e) => setRetentionDays(e.target.value)}
+          placeholder="Follow the global setting"
+          value={daysValue}
+        />
+        {!daysValid && <p className={styles.note}>Enter a whole number of days from 0 to 3650, or leave it empty.</p>}
+        <button
+          className={styles.primary}
+          disabled={retentionDays === null || !daysValid}
+          onClick={() => {
+            void api
+              .updateProject(projectId, { transcriptRetentionDays: daysValue.trim() === "" ? null : Number(daysValue) })
+              .then(() => {
+                setRetentionDays(null);
+                reload();
+              });
+          }}
+          type="button"
+        >
+          Save
+        </button>
+        {rules && (
+          <ul className={styles.note}>
+            {rules.map((r) => (
+              <li key={r.artifact}>
+                <strong>{r.artifact}:</strong> {r.rule}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section>

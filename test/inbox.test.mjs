@@ -158,5 +158,33 @@ console.log("\nREPROCESSING");
   check("an item that failed can be reprocessed without error", (await intake.reprocess(odd.id)).id, odd.id);
 }
 
+console.log("\nWHAT CAN BE READ WITHOUT A MODEL (K3)");
+{
+  const { pdfDate: pd, suggestPeople: people, suggestTags: tags } = await import("../src/inbox/metadata.ts");
+  const kn = await import("../src/knowledge/store.ts");
+  const pdf = (info) => Buffer.from(`%PDF-1.4\n1 0 obj\n<< ${info} >>\nendobj\ntrailer\n%%EOF`, "latin1");
+  check("a PDF's creation date is read from its Info dictionary", pd(pdf("/CreationDate (D:20240315102233+00'00')")), "2024-03-15");
+  check("the modification date is the fallback", pd(pdf("/ModDate (D:20231101000000Z)")), "2023-11-01");
+  check("the XMP create date is read too", pd(Buffer.from("<xmp:CreateDate>2022-07-04T09:00:00</xmp:CreateDate>")), "2022-07-04");
+  check("creation wins over modification", pd(pdf("/ModDate (D:20250101000000Z) /CreationDate (D:20240315000000Z)")), "2024-03-15");
+  check("an impossible date is not trusted", pd(pdf("/CreationDate (D:19000101000000Z)")), null);
+  check("a PDF with no date gives nothing, so the day it was added is used", pd(pdf("/Title (x)")), null);
+
+  kn.upsertEntity("person", "Priya Natarajan");
+  kn.upsertEntity("person", "Al");
+  kn.addAlias(kn.upsertEntity("person", "Samuel Okafor").id, "Sam O");
+  check("a known person is suggested when their name appears as whole words", people("Notes: Priya Natarajan will send the contract."), ["Priya Natarajan"]);
+  check("not from part of another word, and not from a very short name", [people("Priyanka Natarajanova called"), people("Al said hello to everyone").includes("Al")], [[], false]);
+  check("an alias suggests the person by their main name", people("Spoke with Samuel Okafor yesterday"), ["Samuel Okafor"]);
+
+  const first = (await intake.ingestPaste("Vendor review for the platform migration", { kind: "note" })).item;
+  itemsStore.updateItem(first.id, { tags: ["vendor", "migration"] });
+  const second = (await intake.ingestPaste("The vendor sent a revised quote. Priya Natarajan owns the reply.", { kind: "note" })).item;
+  check("tags already in use are suggested when their word appears", second.suggested_tags, ["vendor"]);
+  check("people are suggested on the item and nothing is applied", [second.suggested_people, second.tags, second.project_id], [["Priya Natarajan"], [], null]);
+  check("a tag the item already has is not suggested again", tags("vendor quote", ["Vendor"]), []);
+  check("suggestions survive a reload", itemsStore.getItem(second.id).suggested_people, ["Priya Natarajan"]);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -198,6 +198,20 @@ export const InboxView = ({ projects }: InboxViewProps) => {
                 </button>
               </p>
             )}
+            {it.suggested_people.length > 0 && <p className={styles.meta}>May mention {it.suggested_people.join(", ")}.</p>}
+            {it.tags.length > 0 && <p className={styles.meta}>Tags: {it.tags.join(", ")}</p>}
+            {it.suggested_tags.filter((t) => !it.tags.includes(t)).length > 0 && (
+              <p className={styles.meta}>
+                Tags in use that fit: {it.suggested_tags.filter((t) => !it.tags.includes(t)).join(", ")}.{" "}
+                <button
+                  className={styles.button}
+                  onClick={() => void guard("Tagging…", () => api.inboxTags(it.id, [...it.tags, ...it.suggested_tags.filter((t) => !it.tags.includes(t))]))}
+                  type="button"
+                >
+                  Add them
+                </button>
+              </p>
+            )}
           </div>
           <div className={styles.form}>
             <select

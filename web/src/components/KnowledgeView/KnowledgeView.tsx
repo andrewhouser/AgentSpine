@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { KnowledgeClaim, KnowledgeConflict, Project } from "../../lib/types.ts";
+import type { KnowledgeClaim, KnowledgeConflict, KnowledgeEntity, Project } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -37,8 +37,13 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
   const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
   const [replacing, setReplacing] = useState<{ candidates: KnowledgeClaim[]; id: number } | null>(null);
   const [error, setError] = useState("");
+  const entitiesLoad = useCallback(() => api.knowledgeEntities(), []);
+  const [entities] = useResource<KnowledgeEntity[]>(entitiesLoad, []);
+  const people = entities.filter((e) => e.kind === "person");
+  const [person, setPerson] = useState("");
   const [project, setProject] = useState("");
   const [operation, setOperation] = useState("next-meeting");
+  const [plan, setPlan] = useState("");
   const [brief, setBrief] = useState("");
 
   const act = async (work: () => Promise<unknown>): Promise<void> => {
@@ -58,6 +63,27 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
     if (c.project_id) params.project = String(c.project_id);
     const earlier = (await api.knowledgeClaims(params)).filter((x) => x.id !== c.id);
     setReplacing({ candidates: earlier, id: c.id });
+  };
+
+  const comparePlan = async (): Promise<void> => {
+    setError("");
+    try {
+      const r = await api.knowledgePlanBrief(plan, project ? Number(project) : null);
+      setBrief(r.markdown);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  /** A person's brief, or the one-on-one prep for them (what you owe each other, what is open between you). */
+  const readPerson = async (kind: "one-on-one" | "person"): Promise<void> => {
+    setError("");
+    try {
+      const r = await api.knowledgeBrief(kind, person);
+      setBrief(r.markdown);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const readBrief = async (): Promise<void> => {
@@ -102,6 +128,14 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
           <p className={styles.snippet}>
             &ldquo;{c.passage}&rdquo; ({source(c)})
           </p>
+          <label className={styles.meta}>
+            <input
+              checked={c.sensitive === 1}
+              onChange={(e) => void act(() => api.knowledgeReview(c.id, { sensitive: e.target.checked }))}
+              type="checkbox"
+            />{" "}
+            Sensitive: keep it out of briefs and answers
+          </label>
           <div className={styles.form}>
             <button
               className={styles.primary}
@@ -192,6 +226,45 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
         )}
         <button className={styles.primary} onClick={() => void readBrief()} type="button">
           {project ? "Project brief" : "Show"}
+        </button>
+      </div>
+
+      {people.length > 0 && (
+        <div className={styles.form}>
+          <select aria-label="Person" className={styles.input} onChange={(e) => setPerson(e.target.value)} value={person}>
+            <option value="">Choose a person</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button className={styles.button} disabled={!person} onClick={() => void readPerson("person")} type="button">
+            Person brief
+          </button>
+          <button className={styles.button} disabled={!person} onClick={() => void readPerson("one-on-one")} type="button">
+            One-on-one prep
+          </button>
+        </div>
+      )}
+
+      <h2 className={styles.title}>Compare a plan with the meetings</h2>
+      <p className={styles.meta}>
+        Paste a written plan. Each line is matched to reviewed decisions and commitments that share its words, and you
+        see what is recorded, what is not, and what the plan leaves out. Matching words is not agreement, so read each pair.
+        Uses the project chosen above, or everything.
+      </p>
+      <textarea
+        aria-label="Written plan"
+        className={`${styles.input} ${styles.grow}`}
+        onChange={(e) => setPlan(e.target.value)}
+        placeholder="- Launch the pricing page in March&#10;- Hire two engineers by June"
+        rows={5}
+        value={plan}
+      />
+      <div className={styles.form}>
+        <button className={styles.primary} disabled={!plan.trim()} onClick={() => void comparePlan()} type="button">
+          Compare
         </button>
       </div>
       {brief && <pre className={styles.preview}>{brief}</pre>}
