@@ -1,0 +1,101 @@
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 8px 0;
+  padding: 12px 14px;
+}
+
+.step {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  font-size: 0.875rem;
+  gap: 10px;
+}
+
+.step[data-status="active"] {
+  color: var(--text);
+}
+
+.step[data-status="failed"] .label {
+  color: var(--danger);
+}
+
+.step[data-status="waiting"] .label {
+  color: var(--warn);
+}
+
+/* Pending: a dashed ring. Active: a ring with a turning gap. Done: a filled check disc.
+   Failed: a filled red disc. Waiting on approval: a hollow amber ring, as on the spine. */
+.mark {
+  border: 1.5px dashed var(--text-faint);
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex: none;
+  height: 14px;
+  position: relative;
+  width: 14px;
+}
+
+.step[data-status="active"] .mark {
+  animation: spin 0.9s linear infinite;
+  border: 1.5px solid var(--text-faint);
+  border-top-color: transparent;
+}
+
+.step[data-status="done"] .mark {
+  background: var(--ok);
+  border: 0;
+}
+
+.step[data-status="done"] .mark::after {
+  border: solid var(--bg-elevated);
+  border-width: 0 1.5px 1.5px 0;
+  content: "";
+  height: 6px;
+  left: 5px;
+  position: absolute;
+  top: 2.5px;
+  transform: rotate(45deg);
+  width: 3px;
+}
+
+.step[data-status="failed"] .mark {
+  background: var(--danger);
+  border: 0;
+}
+
+.step[data-status="waiting"] .mark {
+  border: 1.5px solid var(--warn);
+}
+
+.count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.srOnly {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step[data-status="active"] .mark {
+    animation: none;
+  }
+}

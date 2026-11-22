@@ -331,6 +331,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               kind={persistedKind(turns, live.runId)}
               live={live.status === "queued" || live.status === "running"}
               onConfirmationResolved={onDecided}
+              plan={live.plan}
               startedAt={turns.find((t) => t.id === live.runId)?.started ?? sentAt[live.runId]}
               step={live.step}
               summary={live.summary}

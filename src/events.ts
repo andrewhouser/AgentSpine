@@ -23,10 +23,13 @@
  */
 import { EventEmitter } from "node:events";
 
+import { emptyPlan, foldPlan, type PlanState, planSnapshot } from "./plan.ts";
+
 export type RunEventType =
   | "confirmation"
   | "error"
   | "final"
+  | "plan"
   | "queue_wait"
   | "run_end"
   | "run_start"
@@ -66,6 +69,8 @@ interface RunBuffer {
   /** Set when the run has ended, so a late subscriber knows not to wait for more. */
   endedAt: number | null;
   events: RunEvent[];
+  /** The plan card's state, folded from this run's own events (src/plan.ts). */
+  plan: PlanState;
   seq: number;
 }
 
@@ -79,7 +84,7 @@ const buffers = new Map<number, RunBuffer>();
 const bufferFor = (runId: number): RunBuffer => {
   let b = buffers.get(runId);
   if (!b) {
-    b = { endedAt: null, events: [], seq: 0 };
+    b = { endedAt: null, events: [], plan: emptyPlan(), seq: 0 };
     buffers.set(runId, b);
   }
   return b;
@@ -92,6 +97,14 @@ const sweep = (): void => {
 };
 setInterval(sweep, 60_000).unref();
 
+const emit = (runId: number, b: RunBuffer, event: RunEventInput): void => {
+  const full: RunEvent = { ...event, seq: b.seq++, ts: new Date().toISOString() };
+  b.events.push(full);
+  if (b.events.length > MAX_BUFFERED) b.events.shift();
+  if (event.type === "run_end") b.endedAt = Date.now();
+  bus.emit(String(runId), full);
+};
+
 /**
  * Publish an event for a run. Never throws — a listener that blows up must not be able to
  * take an agent cycle down with it, and a run whose events nobody is watching is normal
@@ -101,11 +114,15 @@ export const publish = (runId: number | null, event: RunEventInput): void => {
   if (runId == null) return;
   try {
     const b = bufferFor(runId);
-    const full: RunEvent = { ...event, seq: b.seq++, ts: new Date().toISOString() };
-    b.events.push(full);
-    if (b.events.length > MAX_BUFFERED) b.events.shift();
-    if (event.type === "run_end") b.endedAt = Date.now();
-    bus.emit(String(runId), full);
+    const plan = event.type === "plan" ? b.plan : foldPlan(b.plan, event);
+    const snapshot: null | RunEventInput =
+      plan !== b.plan && plan.steps.length > 0 ? { items: planSnapshot(plan), type: "plan" } : null;
+    b.plan = plan;
+    // The snapshot follows the event that moved it, except for run_end: a client closes its
+    // stream on run_end, so the card's last state (a stopped step marked failed) goes first.
+    if (snapshot && event.type === "run_end") emit(runId, b, snapshot);
+    emit(runId, b, event);
+    if (snapshot && event.type !== "run_end") emit(runId, b, snapshot);
   } catch (err) {
     console.warn(`[events] publish failed: ${err instanceof Error ? err.message : String(err)}`);
   }

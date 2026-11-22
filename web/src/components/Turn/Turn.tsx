@@ -1,4 +1,4 @@
-import type { Attachment, LiveToolCall, VisionPass } from "../../lib/types.ts";
+import type { Attachment, LiveToolCall, PlanStep, VisionPass } from "../../lib/types.ts";
 
 import { describeActivity } from "../../lib/activity.ts";
 import { recoveredCalls } from "../../lib/recovery.ts";
@@ -7,6 +7,7 @@ import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
+import { PlanCard } from "../PlanCard/PlanCard.tsx";
 import { ReplyActions } from "../ReplyActions/ReplyActions.tsx";
 import { SpineCalls } from "../SpineCalls/SpineCalls.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
@@ -34,6 +35,8 @@ interface TurnProps {
   onEdit?: () => void;
   /** Send the message again as a new turn. Offered only on a finished turn. */
   onRetry?: () => void;
+  /** Live turns only: the plan card's newest snapshot (src/plan.ts). */
+  plan?: PlanStep[];
   projectId?: null | number;
   runId?: number;
   starred?: boolean;
@@ -71,6 +74,7 @@ export const Turn = ({
   onConfirmationResolved,
   onEdit,
   onRetry,
+  plan = [],
   projectId = null,
   runId,
   starred = false,
@@ -138,6 +142,10 @@ export const Turn = ({
         ))}
       </div>
     )}
+
+    {/* While the turn runs, the steps it is working through. After it ends the call strip
+        above is the record and this would repeat it. */}
+    {live && <PlanCard steps={plan} />}
 
     {summary && (
       <>

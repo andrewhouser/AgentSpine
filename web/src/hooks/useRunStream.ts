@@ -21,6 +21,7 @@ const blank = (runId: number, task: string, attachments: Attachment[]): LiveTurn
   confirmations: [],
   delegations: [],
   error: null,
+  plan: [],
   runId,
   status: "queued",
   step: 0,
@@ -122,6 +123,10 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
           },
         ],
       };
+
+    // The server sends the whole plan each time; the newest one wins.
+    case "plan":
+      return { ...turn, plan: event.items ?? [] };
 
     case "tool_result":
       return {

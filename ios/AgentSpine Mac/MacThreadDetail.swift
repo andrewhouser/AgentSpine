@@ -265,6 +265,7 @@ struct MacThreadDetail: View {
             MacTurnSpine(
                 calls: stream.calls.map { MacTurnSpine.Call($0) },
                 phase: stream.phase,
+                plan: stream.isLive ? stream.plan : [],
                 summary: liveSummary,
                 failure: liveFailure,
                 note: stream.transportNote,

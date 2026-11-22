@@ -42,6 +42,8 @@ struct MacTurnSpine: View {
     var calls: [Call] = []
     /// The run's own progress line while it streams; `.idle` for a finished turn.
     var phase: RunStream.Phase = .idle
+    /// The plan card while the turn runs (src/plan.ts); empty for a finished turn.
+    var plan: [PlanStep] = []
     var summary: String?
     /// Shown in the danger colour: a failed turn, or the stream's failure message.
     var failure: String?
@@ -52,6 +54,7 @@ struct MacTurnSpine: View {
 
     private enum Row: Identifiable {
         case call(Call)
+        case plan([PlanStep])
         case progress(String)
         case text(String)
         case weather(WeatherCard)
@@ -62,6 +65,7 @@ struct MacTurnSpine: View {
         var id: String {
             switch self {
             case .call(let call): return call.id
+            case .plan: return "plan"
             case .progress: return "progress"
             case .text: return "text"
             case .weather: return "weather"
@@ -105,6 +109,7 @@ struct MacTurnSpine: View {
     private var rows: [Row] {
         let (paired, unmatched) = pairing
         var rows = paired
+        if !plan.isEmpty { rows.append(.plan(plan)) }
         switch phase {
         case .queued(let behind):
             // Agent cycles are serialised on the server, so this run may genuinely be waiting
@@ -146,7 +151,7 @@ struct MacTurnSpine: View {
             SpineRow(node: .verdict(.error), isFirst: isFirst, isLast: isLast) { content(for: row) }
         case .waiting:
             SpineRow(node: .waiting, isFirst: isFirst, isLast: isLast) { content(for: row) }
-        case .progress, .text, .note, .weather:
+        case .plan, .progress, .text, .note, .weather:
             SpineRow(node: .plain, isFirst: isFirst, isLast: isLast) { content(for: row) }
         }
     }
@@ -155,6 +160,8 @@ struct MacTurnSpine: View {
         switch row {
         case .call(let call):
             ToolCallRow(tool: call.tool, target: call.target, args: call.args, output: call.output, status: call.status, flat: true, recovered: call.recovered)
+        case .plan(let steps):
+            PlanCardView(steps: steps)
         case .progress(let text):
             HStack(spacing: 7) {
                 ProgressView().controlSize(.small)

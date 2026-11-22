@@ -803,6 +803,8 @@ export interface RunEvent {
   elapsedMs?: number;
   /** `vision`: why the images could not be read, when they could not be. */
   error?: string;
+  /** `plan`: the whole plan card, newest state (src/plan.ts). */
+  items?: PlanStep[];
   message?: string;
   /** `vision`: which model did the looking. */
   model?: string;
@@ -822,6 +824,7 @@ export interface RunEvent {
     | "confirmation"
     | "error"
     | "final"
+    | "plan"
     | "queue_wait"
     | "run_end"
     | "run_start"
@@ -861,6 +864,13 @@ export interface VisionPass {
   error: null | string;
 }
 
+/** One row of the plan card. Mirrors PlanStep in src/plan.ts; the server owns the status. */
+export interface PlanStep {
+  count: number;
+  label: string;
+  status: "active" | "done" | "failed" | "pending" | "waiting";
+}
+
 /** What a turn looks like while it is still running. */
 export interface LiveTurn {
   /** Images the user attached, echoed locally so the turn renders them before it finishes. */
@@ -869,6 +879,8 @@ export interface LiveTurn {
   /** Units delegated to during this turn, as they start and finish. */
   delegations: { agent: string; childRunId: number; status: null | string; summary: null | string; tier: string }[];
   error: null | string;
+  /** The plan card's newest snapshot; empty until the turn's first tool call. */
+  plan: PlanStep[];
   runId: number;
   /** "stopped": the user pressed stop (POST /api/runs/:id/stop) and the run ended early. */
   status: "failed" | "ok" | "queued" | "running" | "stopped";

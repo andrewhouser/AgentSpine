@@ -48,6 +48,8 @@ final class RunStream {
     private(set) var calls: [LiveCall] = []
     private(set) var phase: Phase = .idle
     private(set) var pendingConfirmationIDs: [Int] = []
+    /// The plan card's newest snapshot; empty until the turn's first tool call (src/plan.ts).
+    private(set) var plan: [PlanStep] = []
     /// Set when the stream itself cannot be held open, as opposed to the run failing.
     private(set) var transportNote: String?
 
@@ -71,6 +73,7 @@ final class RunStream {
         self.runID = runID
         lastSeq = -1
         calls = []
+        plan = []
         pendingConfirmationIDs = []
         transportNote = nil
         phase = .queued(behind: 0)
@@ -185,6 +188,10 @@ final class RunStream {
             else { return }
             calls[index].output = event.output
             calls[index].status = BrokerStatus(rawValue: event.status ?? "") ?? .error
+
+        case "plan":
+            // The server sends the whole list each time; the newest one wins.
+            plan = event.items ?? []
 
         case "confirmation":
             if let id = event.confirmationID, !pendingConfirmationIDs.contains(id) {

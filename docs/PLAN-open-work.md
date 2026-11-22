@@ -229,23 +229,30 @@ inside the box, the waveform while dictating, and the gap above the tab bar; on 
 three against a real slow turn (the server half is covered by `test/stop-run.test.mjs`, the screens are not seen
 running). This list is the same check that sections 2, 3 and 4 ask for, in one pass.
 
-**A plan card for a running task (Code, then a look by you).** Show the steps a run is working through as a card
-in the conversation, each marked waiting, in progress or done, the way Claude Code does. Runs already publish
-typed events (`step_start`, `tool_call`, `tool_result`, `final` in `src/events.ts`), and the web client
-(`web/src/hooks/useRunStream.ts`) and the iPhone app (`ios/AgentSpine/Core/RunStream.swift`) both consume them, so
-the shape is a new `plan` event plus a card on web, Mac and iPhone together. Code owns the step state, as it
-owns every number; the model never marks its own progress.
-Two sources for the steps, built in this order:
-1. A checklist derived from the tool calls themselves ("Searching the web", "Reading a meeting", "Drafting"),
-   which costs no model tokens and cannot get the protocol wrong. It also works for scheduled runs in the
-   Activity view.
-2. Only if the first feels thin: a model-written plan of 3 to 7 steps on multi-step chat runs on the `deep` tier,
-   as one more action in the JSON protocol. Prefill is the expensive part on the model host, and a small local
-   model is the least reliable at extra protocol, so this stays off the `fast` and `standard` tiers until
-   measured.
-Decide while building: whether the card collapses when the run ends, and whether a plan is shown for a run that
-only answers in one step (proposed: no). Tests: the pure state machine (what advances a step, what happens on a
-denied or errored call, a repeated call, a subagent's calls), and the event shape both clients decode.
+**The plan card: look at it running, then decide on a model-written plan (You, then Code).** Built 2026-11-22:
+the run's own tool calls become the steps, so it costs no model tokens. `src/plan.ts` is the pure state
+machine. `src/events.ts` folds every event a run publishes through it and publishes a `plan` event with the
+whole list each time the list changes. Web (`PlanCard`), iPhone (`LiveTurnView`) and Mac (`MacTurnSpine`) draw
+only the newest list, so there is one set of rules, in TypeScript, covered by `test/plan.test.mjs`.
+Decided while building:
+- Consecutive calls with the same label merge into one step ("Searching the web ×3"). A label that comes back
+  after a different step becomes a new step, so a step shown as done never reopens.
+- A trailing "Writing the reply" step is waiting until the answer lands. A run that answers without calling any
+  tool gets no plan, so the card never shows for a one-step reply.
+- A denied or errored call fails its step, unless another call in the same step succeeded. A queued call shows
+  the step as waiting on your approval. A stop or a failure marks whatever was still running as failed.
+- A subagent is one step ("Handing off to researcher"). The child's own calls stay under the child's run id.
+- The card shows only while the turn runs. After that, the tool-call strip is the record, and the card would
+  only repeat it. On Mac and iPhone it goes when the answer arrives; on web it goes when the run ends.
+Left to do:
+1. Watch it on a real multi-step turn on all three clients (You). Not yet seen running: the Swift targets build
+   and the web typechecks, but no screen has been looked at.
+2. Labels for remote MCP tools read "Using <tool name>". Give them better ones if that looks raw.
+3. The Activity view doesn't stream runs, so scheduled runs don't show the card yet. Add it there if that
+   view starts following a live run.
+4. Only if the tool-call steps feel thin: a 3 to 7 step plan written by the model, on the `deep` tier only, as one more
+   action in the JSON protocol. Prefill is the expensive part on the model host, and a small local model is
+   the least reliable at extra protocol, so it stays off `fast` and `standard` until measured.
 
 **Not verified or not done:**
 - A VoiceOver pass by actually using it, Increase Contrast and Dynamic Type on the device, light-mode

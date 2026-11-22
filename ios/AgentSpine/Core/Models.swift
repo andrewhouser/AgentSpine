@@ -402,6 +402,8 @@ struct RunEvent: Codable {
     let depth: Int?
     let elapsedMs: Int?
     let error: String?
+    /// `plan`: the whole plan card, newest state (src/plan.ts).
+    let items: [PlanStep]?
     let message: String?
     let output: String?
     let reason: String?
@@ -416,7 +418,7 @@ struct RunEvent: Codable {
     let type: String
 
     enum CodingKeys: String, CodingKey {
-        case agent, count, depth, elapsedMs, error, message, output, reason, seq
+        case agent, count, depth, elapsedMs, error, items, message, output, reason, seq
         case status, step, summary, target, tier, tool, ts, type
         case callID = "callId"
         case childRunID = "childRunId"
@@ -426,6 +428,34 @@ struct RunEvent: Codable {
     /// `args` is deliberately absent. The server types it as `unknown` — it is whatever the
     /// model passed — so decoding it into a Swift type is a losing game. The thread shows the
     /// *resolved* call from `/api/conversations/:id`, which carries args as a JSON string.
+}
+
+/// One row of the plan card. Mirrors `PlanStep` in src/plan.ts; the server owns the status.
+struct PlanStep: Codable, Hashable {
+    enum Status: String, Codable {
+        case active, done, failed, pending, waiting
+    }
+
+    let count: Int
+    let label: String
+    let status: Status
+
+    enum CodingKeys: String, CodingKey { case count, label, status }
+
+    /// A status this build doesn't know (the server gained one) reads as pending rather than
+    /// failing the whole event, the same tolerance RunEvent has for unknown types.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        count = (try? c.decode(Int.self, forKey: .count)) ?? 1
+        label = try c.decode(String.self, forKey: .label)
+        status = (try? c.decode(Status.self, forKey: .status)) ?? .pending
+    }
+
+    init(count: Int, label: String, status: Status) {
+        self.count = count
+        self.label = label
+        self.status = status
+    }
 }
 
 // MARK: - Devices
