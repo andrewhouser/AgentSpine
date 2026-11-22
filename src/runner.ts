@@ -58,6 +58,7 @@ import { setFrame } from "./tools/subagent.ts";
 import { projectWriteDir, setWriteDefault, writeDefaultDir } from "./tools/write-file.ts";
 import { CloudCapError } from "./cloud-cap.ts";
 import { notify } from "./notify.ts";
+import { clearStop, isStopRequested, StoppedError, throwIfStopped } from "./stop.ts";
 import * as store from "./memory/store.ts";
 import type { Policy } from "./types.ts";
 
@@ -308,6 +309,32 @@ export interface StartedTask {
  * as long as it takes. `runTask` below is the same thing for callers that just want the
  * result (the CLI, the scheduler).
  */
+/** What a stopped turn says in the thread, where the reply would have been. */
+export const STOPPED_NOTE = "Stopped before it finished.";
+
+/**
+ * Run a queued body, ending it as "stopped" if the user asked for that — while it was still
+ * queued (it never begins), or anywhere inside it (sizing, vision, the loop). A run that had
+ * already finished keeps its result: a stop that lands during the reflection that follows a
+ * finished turn must not relabel an answer the user has already seen.
+ */
+const stoppable = async (runId: number, body: () => Promise<RunResult>): Promise<RunResult> => {
+  try {
+    throwIfStopped(runId);
+    return await body();
+  } catch (err) {
+    if (!(err instanceof StoppedError) && !isStopRequested(runId)) throw err;
+    const row = store.getRun(runId);
+    if (!row?.finished) {
+      store.finishRun(runId, "stopped", STOPPED_NOTE);
+      publish(runId, { status: "stopped", type: "run_end" });
+    }
+    return { runId, steps: 0, summary: row?.finished ? String(row.note ?? "") : STOPPED_NOTE };
+  } finally {
+    clearStop(runId);
+  }
+};
+
 export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   const kind = opts.kind ?? "do";
   const conversationId = opts.conversationId ?? null;
@@ -339,7 +366,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   const { depth } = queueStatus();
   if (depth > 0) publish(runId, { depth, type: "queue_wait" });
 
-  const done = enqueue(async () => {
+  const done = enqueue(() => stoppable(runId, async () => {
     // Whatever we were waiting behind is done; the first step_start from the loop is what
     // tells a watching client to drop its "waiting" state.
     store.beginRun(runId);
@@ -624,6 +651,8 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
 
       return { runId, summary, steps };
     } catch (err) {
+      // A stop is recorded by `stoppable`, as "stopped" — not as a failure, and with no failure push.
+      if (err instanceof StoppedError || isStopRequested(runId)) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       store.finishRun(runId, "failed", msg);
       publish(runId, { message: msg, type: "error" });
@@ -649,7 +678,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       }
       throw err;
     }
-  });
+  }));
 
   return { done, runId };
 };

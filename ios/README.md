@@ -15,7 +15,9 @@ Thread         turns live: every tool call with its verdict, your photos, markdo
                under each reply: star, save to file, and the context it was written from;
                on your own message (hover on the Mac, long press here): copy, retry, edit and
                resend; a failed call a later one got past is shown muted as "recovered";
-               Approve/Reject buttons inline, and answering resumes the conversation
+               Approve/Reject buttons inline, and answering resumes the conversation;
+               the mic is inside the message box with a live waveform while it records,
+               and send turns into stop while a turn is running (Esc on the Mac)
 Schedules      jobs that run on a clock: pause, edit, run now, and how the last few went
 Tasks          to-dos and follow-ups, with due times; the Mac pushes when one falls due
 Files          everything the assistant has saved for you, with a preview

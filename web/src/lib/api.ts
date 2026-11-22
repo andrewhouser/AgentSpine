@@ -512,7 +512,6 @@ export const api = {
 
   starRun: (runId: number, starred: boolean) => post<{ ok: boolean }>(`/api/runs/${runId}/star`, { starred }),
   startDictation: () => post<{ device: string }>("/api/dictate/start"),
-
   startMeeting: (device: string, projectId: null | number, title?: string) =>
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
 
@@ -522,6 +521,9 @@ export const api = {
   stopDictation: () => post<{ text: string }>("/api/dictate/stop"),
 
   stopMeeting: () => post<{ meetingId: number }>("/api/meetings/stop"),
+
+  /** Stop a running turn. It ends at its next safe point; the stream's run_end says "stopped". */
+  stopRun: (runId: number) => post<{ ok: boolean }>(`/api/runs/${runId}/stop`),
 
   /** Cards due now, question only. `topic` narrows to one topic. */
   studyOverview: () => request<StudyOverview>("/api/study"),

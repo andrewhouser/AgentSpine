@@ -16,6 +16,11 @@ final class Dictation {
 
     private(set) var phase: Phase = .idle
     private(set) var elapsed: TimeInterval = 0
+    /// The last few microphone levels, 0...1, newest last: the waveform drawn while recording, so
+    /// you can see the phone is hearing you before you have said enough to check the transcript.
+    private(set) var levels: [Float] = []
+    /// Bars in the waveform. At one sample per tick that is about two seconds of history.
+    static let levelCount = 40
     /// Seconds the server will accept, from `GET /api/dictate`; recording stops itself here.
     private var maxSeconds: Int = 120
     private var recorder: AVAudioRecorder?
@@ -51,6 +56,7 @@ final class Dictation {
                 AVNumberOfChannelsKey: 1,
                 AVEncoderBitRateKey: 32_000,
             ])
+            recorder.isMeteringEnabled = true
             guard recorder.record() else { return "The microphone could not start." }
             self.recorder = recorder
             fileURL = url
@@ -59,11 +65,16 @@ final class Dictation {
         }
 
         elapsed = 0
+        levels = Array(repeating: 0, count: Self.levelCount)
         phase = .recording
-        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+        // 20 Hz: fast enough that the bars move with syllables, slow enough to stay off the CPU.
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let recorder = self.recorder else { return }
                 self.elapsed = recorder.currentTime
+                recorder.updateMeters()
+                let level = MicLevel.normalized(decibels: recorder.averagePower(forChannel: 0))
+                self.levels = MicLevel.push(level, onto: self.levels, count: Self.levelCount)
             }
         }
         return nil
@@ -93,6 +104,7 @@ final class Dictation {
         timer = nil
         recorder?.stop()
         recorder = nil
+        levels = []
         AudioSessionGate.deactivate()
         defer { fileURL = nil }
         return fileURL

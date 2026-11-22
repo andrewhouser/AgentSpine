@@ -26,6 +26,10 @@ import type { DictationStatus } from "../lib/types.ts";
 
 import { api } from "../lib/api.ts";
 import { browserMicReason } from "../lib/mic.ts";
+import { micLevel, pushLevel, rmsDecibels } from "../lib/micLevel.ts";
+
+/** Bars in the waveform; at 20 samples a second, about two seconds of history (as on the phone). */
+export const LEVEL_COUNT = 40;
 
 export type DictationSource = "browser" | "server";
 
@@ -34,6 +38,11 @@ export interface Dictation {
   browserReason: null | string;
   busy: boolean;
   error: null | string;
+  /**
+   * The live microphone level while the browser mic records, 0..1 per bar, newest last — the
+   * waveform. Empty otherwise: the server's microphone reports no levels to the page.
+   */
+  levels: number[];
   listening: boolean;
   setSource: (source: DictationSource) => void;
   source: DictationSource;
@@ -49,6 +58,9 @@ export const useDictation = (onText: (text: string) => void): Dictation => {
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<null | string>(null);
+  const [levels, setLevels] = useState<number[]>([]);
+  /** Ends the level meter: closes its AudioContext and stops its timer. */
+  const stopMeter = useRef<(() => void) | null>(null);
 
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
@@ -91,6 +103,9 @@ export const useDictation = (onText: (text: string) => void): Dictation => {
           if (e.data.size) chunks.current.push(e.data);
         };
         rec.onstop = () => {
+          stopMeter.current?.();
+          stopMeter.current = null;
+          setLevels([]);
           // Release the device as soon as the take ends. Leaving the track live keeps the
           // browser's recording indicator on, which is alarming and correct to avoid.
           for (const track of stream.getTracks()) track.stop();
@@ -107,6 +122,7 @@ export const useDictation = (onText: (text: string) => void): Dictation => {
         };
         rec.start();
         recorder.current = rec;
+        stopMeter.current = startMeter(stream, setLevels);
         setListening(true);
       } catch (err) {
         setError((err as Error).message || "microphone refused");
@@ -140,9 +156,34 @@ export const useDictation = (onText: (text: string) => void): Dictation => {
   useEffect(
     () => () => {
       if (recorder.current?.state === "recording") recorder.current.stop();
+      stopMeter.current?.();
     },
     [],
   );
 
-  return { browserReason, busy, error, listening, setSource, source, start, status, stop };
+  return { browserReason, busy, error, levels, listening, setSource, source, start, status, stop };
+};
+
+/**
+ * Sample the stream's level 20 times a second into `setLevels`, through an AnalyserNode that
+ * only listens — it is never connected to the speakers, so there is no echo. Returns the stop.
+ * Where Web Audio is missing the waveform is simply absent; recording still works.
+ */
+const startMeter = (stream: MediaStream, setLevels: (update: (prev: number[]) => number[]) => void): (() => void) => {
+  if (typeof AudioContext === "undefined") return () => {};
+  const context = new AudioContext();
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  context.createMediaStreamSource(stream).connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  setLevels(() => Array.from({ length: LEVEL_COUNT }, () => 0));
+  const timer = window.setInterval(() => {
+    analyser.getFloatTimeDomainData(samples);
+    const level = micLevel(rmsDecibels(samples));
+    setLevels((prev) => pushLevel(prev, level, LEVEL_COUNT));
+  }, 50);
+  return () => {
+    window.clearInterval(timer);
+    void context.close();
+  };
 };

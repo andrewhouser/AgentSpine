@@ -59,6 +59,7 @@ import {
   UnsupportedImageError,
 } from "./attachments.ts";
 import { runTask, startTask } from "./runner.ts";
+import { requestStop } from "./stop.ts";
 import {
   AUDIT_RETENTION_DAYS,
   CONFIRM_EXPIRE_AFTER_MIN,
@@ -1828,6 +1829,20 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         };
       });
       return sendJson(res, 200, hits);
+    }
+
+    /**
+     * POST /api/runs/:id/stop — the user no longer wants this turn. 202, because the run ends
+     * at its next safe point (src/stop.ts), not inside this request; the stream's run_end with
+     * status "stopped" is what tells the client it is over. A run already finished is a 409,
+     * so a late tap cannot relabel an answer that arrived first.
+     */
+    if (m === "POST" && seg[1] === "runs" && seg.length === 4 && seg[3] === "stop") {
+      const run = store.getRun(Number(seg[2]));
+      if (!run) return sendJson(res, 404, { error: "no such run" });
+      if (run.finished) return sendJson(res, 409, { error: "that turn has already finished", status: run.status });
+      requestStop(run.id);
+      return sendJson(res, 202, { ok: true });
     }
 
     // /api/starred, POST /api/runs/:id/star {starred}

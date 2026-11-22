@@ -17,6 +17,10 @@ struct MacComposer: View {
     var removeStaged: (Attachment) -> Void = { _ in }
     /// Bump this to put the cursor in the box (after "Edit and resend" fills it).
     var focusRequest = 0
+    /// Set while a turn is running: the send button becomes stop, and Escape presses it. Stays
+    /// enabled while the rest of the box is disabled, since stopping is the one thing to do then.
+    var stop: (() -> Void)?
+    var isStopping = false
     let send: () -> Void
 
     @State private var choosing = false
@@ -88,6 +92,22 @@ struct MacComposer: View {
                     .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))
                     .overlay(RoundedRectangle(cornerRadius: Spine.Radius.lg).strokeBorder(Spine.Palette.borderStrong, lineWidth: 0.5))
 
+                if let stop {
+                    Button(action: stop) {
+                        if isStopping {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "stop.circle.fill").font(.system(size: 26))
+                        }
+                    }
+                    .frame(height: firstLine)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Spine.Palette.text)
+                    .disabled(isStopping)
+                    .keyboardShortcut(.escape, modifiers: [])
+                    .help("Stop this turn (Esc)")
+                    .accessibilityLabel("Stop this turn")
+                } else {
                 Button(action: send) {
                     if isBusy {
                         ProgressView().controlSize(.small)
@@ -101,6 +121,7 @@ struct MacComposer: View {
                 .disabled(!canSend)
                 .help("Send (Return)")
                 .accessibilityLabel("Send")
+                }
             }
         }
         .padding(Spine.Space.md)

@@ -22,6 +22,7 @@ import { LLM_RETRIES, LLM_RETRY_BASE_MS } from "./config.ts";
 import { chatReply, clientFor, LLMError } from "./llm.ts";
 import type { ChatOpts, Msg } from "./llm.ts";
 import * as store from "./memory/store.ts";
+import { StoppedError } from "./stop.ts";
 import { resolveTier, tierConfig } from "./tiers.ts";
 import type { Tier, TierConfig } from "./tiers.ts";
 
@@ -162,6 +163,8 @@ export const route = async (messages: Msg[], opts: RouteOpts = {}): Promise<Rout
     // answering from a local tier would run an unattended loop on a model nobody picked for it.
     // Reached as a fallback leg below, it is only one more tier that could not answer.
     if (err instanceof CloudCapError) throw err;
+    // A stop is the user's decision too; another tier must not pick the turn back up.
+    if (err instanceof StoppedError) throw err;
     // The chosen tier could not answer — down, or unable to finish inside its window. Try
     // standard, then — only if this isn't private — deep. Each fallback tier gets its own retry budget for the same reason: the
     // fallback is worth nothing if a single blip on it fails the run too.

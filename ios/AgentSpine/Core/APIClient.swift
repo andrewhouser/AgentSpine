@@ -695,6 +695,16 @@ final class APIClient {
         return try await send(jsonRequest("/api/files/save", method: "POST", body: body), as: SavedPath.self)
     }
 
+    /// Ask the server to stop a running turn. A 409 means it finished first, which is what the
+    /// user wanted anyway, so that is not an error here.
+    func stopRun(_ runID: Int) async throws {
+        do {
+            try await sendRaw(jsonRequest("/api/runs/\(runID)/stop", method: "POST", body: [:]))
+        } catch APIError.server(409, _) {
+            return
+        }
+    }
+
     func star(runID: Int, starred: Bool) async throws {
         try await sendRaw(jsonRequest("/api/runs/\(runID)/star", method: "POST", body: ["starred": starred]))
     }

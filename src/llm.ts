@@ -19,6 +19,7 @@ import {
   LLM_TIMEOUT_MIN_MS,
   LLM_TIMEOUT_OVERHEAD_MS,
 } from "./config.ts";
+import { isStopRequested, StoppedError, stopSignal } from "./stop.ts";
 import { record as recordTiming } from "./timing.ts";
 
 /**
@@ -289,7 +290,7 @@ export const chatReply = async (
         ...(maxTokens ? { max_tokens: maxTokens } : {}),
         ...(isCloud ? {} : NO_THINKING),
       } as ChatCompletionCreateParamsNonStreaming,
-      { timeout: budgetMs },
+      { signal: stopSignal(runId), timeout: budgetMs },
     );
     // Timed before the shape checks below: the server did the work and we waited for it,
     // whether or not what came back is usable. A reply that burned 40 seconds and then
@@ -318,6 +319,9 @@ export const chatReply = async (
     // but only when the request itself failed. The two throws above have already timed
     // their call, and double-counting would inflate every total they appear in.
     if (!(err instanceof LLMError)) timed(false, null);
+    // Aborted because the user pressed stop: not an outage, so nothing may retry it or fall
+    // back to another tier. See src/stop.ts.
+    if (isStopRequested(runId)) throw new StoppedError();
     // Our own deterministic errors (unexpected shape, reasoning-no-content) are already
     // non-retryable by construction — pass them through untouched.
     if (err instanceof LLMError) throw err;

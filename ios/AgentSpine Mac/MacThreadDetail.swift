@@ -26,6 +26,8 @@ struct MacThreadDetail: View {
     @State private var focusRequest = 0
     @State private var draft = ""
     @State private var isSending = false
+    /// A stop was asked for and the turn has not ended yet.
+    @State private var isStopping = false
     @State private var composerError: String?
     @State private var staged: [Attachment] = []
     @State private var uploading = 0
@@ -86,6 +88,8 @@ struct MacThreadDetail: View {
                 attach: { urls in Task { await upload(urls) } },
                 removeStaged: { gone in staged.removeAll { $0.id == gone.id } },
                 focusRequest: focusRequest,
+                stop: stream.isLive ? { Task { await stopTurn() } } : nil,
+                isStopping: isStopping,
                 send: { Task { await send() } }
             )
         }
@@ -111,6 +115,7 @@ struct MacThreadDetail: View {
         .onChange(of: stream.phase) { _, phase in
             // The turn is over: reload so it is drawn from the ledger, which also picks up what
             // the stream does not carry (the tier it ran at, child runs).
+            if !stream.isLive { isStopping = false }
             switch phase {
             case .failed, .finished:
                 Task {
@@ -363,6 +368,19 @@ struct MacThreadDetail: View {
         }
         draft = turn.task ?? ""
         focusRequest += 1
+    }
+
+    /// Ask the server to end the running turn; the stream then ends with status "stopped" and
+    /// the thread reloads as it does after any turn.
+    private func stopTurn() async {
+        guard let runID = stream.runID, !isStopping else { return }
+        isStopping = true
+        do {
+            try await APIClient.shared.stopRun(runID)
+        } catch {
+            isStopping = false
+            composerError = error.localizedDescription
+        }
     }
 
     /// Send the same text again as a NEW turn. The earlier reply and its tool calls stay, since

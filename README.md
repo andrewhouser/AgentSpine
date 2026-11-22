@@ -85,6 +85,18 @@ say the thing, press again. Whisper transcribes it locally and drops the words i
 composer **for you to read and edit** — nothing is ever sent automatically, because the text is
 about to become an instruction to an agent that can call tools and Whisper mishears names.
 Dictated text is inserted at the cursor, so it never overwrites what you had already typed.
+While the browser's microphone records, a live waveform takes the text box's place, so you can
+see it is hearing you (the server's microphone reports no levels, so it keeps the pulsing dot).
+On the iPhone the mic sits inside the message box on the right; tap it, watch the waveform, and
+tap the red stop to transcribe, or the × to throw the take away.
+
+**You can stop a turn.** While a turn is running, the send button becomes **stop** (■) on the
+web, the Mac and the iPhone; Escape presses it on the web and the Mac. The turn ends at its next
+safe point: the model call in flight is aborted, a tool already running is allowed to finish
+(a half-applied label is worse than a few seconds' wait), and nothing after it runs. Subagents
+stop with it. The turn stays in the thread as "Stopped before it finished." with status
+`stopped` (`POST /api/runs/:id/stop`; see `src/stop.ts`). On the phone, typing a new message
+turns the button back into send, so a follow-up can still be queued behind the running turn.
 
 There are two microphones, and which ones you can use depends on how you reached the page:
 

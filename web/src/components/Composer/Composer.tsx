@@ -18,6 +18,11 @@ interface ComposerProps {
    */
   draft?: { text: string } | null;
   onSend: (task: string, attachments: Attachment[]) => void;
+  /**
+   * Stop the running turn. Given while `busy`, it turns the send button into stop (Escape
+   * presses it too), the same as the stop button on the Mac and the phone.
+   */
+  onStop?: () => Promise<void> | void;
   onTierChange?: (tier: null | string) => void;
   placeholder?: string;
   /** Pinned tier for this thread, or null for automatic sizing. */
@@ -31,6 +36,7 @@ export const Composer = ({
   conversationId,
   draft = null,
   onSend,
+  onStop,
   onTierChange,
   placeholder,
   tier = null,
@@ -40,6 +46,24 @@ export const Composer = ({
   const ref = useRef<HTMLTextAreaElement>(null);
   const filePicker = useRef<HTMLInputElement>(null);
   const images = useAttachments(conversationId);
+  // A stop was asked for and the turn has not ended yet. Cleared during render once `busy`
+  // goes false (the ChatView adopts runs the same way), which settles after one extra render.
+  const [stopping, setStopping] = useState(false);
+  if (!busy && stopping) setStopping(false);
+  const showsStop = busy && !!onStop;
+  const stop = useCallback((): void => {
+    if (!onStop || stopping) return;
+    setStopping(true);
+    void Promise.resolve(onStop()).catch(() => setStopping(false));
+  }, [onStop, stopping]);
+  useEffect(() => {
+    if (!showsStop) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape" && !e.defaultPrevented) stop();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showsStop, stop]);
 
   // Depends only on `draft`, so it runs when a NEW draft arrives and not on every keystroke
   // (which would ask the replace question each time). What is typed is read from the box itself
@@ -177,9 +201,18 @@ export const Composer = ({
         )}
 
         <div className={styles.inputRow}>
+          {voice.listening && voice.levels.length > 0 && (
+            <div aria-label="Recording" className={styles.wave} role="img">
+              {voice.levels.map((level, i) => (
+                // Index keys are right here: the bars are positions, not items that move.
+                <span className={styles.bar} key={i} style={{ height: `${Math.max(8, level * 100)}%` }} />
+              ))}
+            </div>
+          )}
           <textarea
             className={styles.input}
             disabled={busy}
+            hidden={voice.listening && voice.levels.length > 0}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               // Enter sends; Shift+Enter is a newline. Standard, and worth matching exactly.
@@ -241,9 +274,22 @@ export const Composer = ({
             </button>
           )}
 
-          <button aria-label="Send" className={styles.send} disabled={!canSend} onClick={send} type="button">
-            ↑
-          </button>
+          {showsStop ? (
+            <button
+              aria-label="Stop this turn"
+              className={styles.stop}
+              disabled={stopping}
+              onClick={stop}
+              title="Stop this turn (Esc)"
+              type="button"
+            >
+              ■
+            </button>
+          ) : (
+            <button aria-label="Send" className={styles.send} disabled={!canSend} onClick={send} type="button">
+              ↑
+            </button>
+          )}
         </div>
       </div>
 

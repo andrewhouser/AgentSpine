@@ -224,8 +224,10 @@ Section 0 is the priority in this area. What is left of the Nod items:
 and look at each, on web, iPhone and Mac where the feature exists: Styles (N4), the lead-time rows (D), the
 Preview row (C), Weekly review with "Kinds you mostly skip" (Phase 3 and 4), the Cloud usage panel (N3), the
 provenance links in Settings, Memory (N1), the Heads-up outcome lines in Settings, and the "Local only" note
-on a thread that has touched private material (F7). This list is the same
-check that sections 2, 3 and 4 ask for, in one pass.
+on a thread that has touched private material (F7), and the new composer (2026-11-22): on the iPhone the mic
+inside the box, the waveform while dictating, and the gap above the tab bar; on web the waveform; and stop on all
+three against a real slow turn (the server half is covered by `test/stop-run.test.mjs`, the screens are not seen
+running). This list is the same check that sections 2, 3 and 4 ask for, in one pass.
 
 **A plan card for a running task (Code, then a look by you).** Show the steps a run is working through as a card
 in the conversation, each marked waiting, in progress or done, the way Claude Code does. Runs already publish

@@ -870,7 +870,8 @@ export interface LiveTurn {
   delegations: { agent: string; childRunId: number; status: null | string; summary: null | string; tier: string }[];
   error: null | string;
   runId: number;
-  status: "failed" | "ok" | "queued" | "running";
+  /** "stopped": the user pressed stop (POST /api/runs/:id/stop) and the run ended early. */
+  status: "failed" | "ok" | "queued" | "running" | "stopped";
   step: number;
   summary: null | string;
   task: string;

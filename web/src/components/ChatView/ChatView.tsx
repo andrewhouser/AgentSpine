@@ -374,6 +374,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
             conversationId={conversationId}
             draft={draft}
             onSend={(task, attachments) => void send(task, attachments)}
+            onStop={active ? () => api.stopRun(active.runId).then(() => undefined) : undefined}
             onTierChange={(t) => {
               void api.setConversationTier(conversationId, t).then(reloadThread);
             }}

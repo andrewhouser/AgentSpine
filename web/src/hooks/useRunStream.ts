@@ -84,7 +84,7 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
       return { ...turn, waitingBehind: event.depth ?? 0 };
 
     case "run_end":
-      return { ...turn, status: event.status === "ok" ? "ok" : "failed" };
+      return { ...turn, status: event.status === "ok" || event.status === "stopped" ? event.status : "failed" };
 
     // Any step beginning means the queue has released this run, so the waiting state clears.
     case "step_start":

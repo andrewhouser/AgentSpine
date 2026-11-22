@@ -20,6 +20,7 @@ import { describeResult, harnessContract, pinNotice, renderResultEnvelope, regis
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
 import { frictionDocs } from "./learn/friction.ts";
+import { linkRun, throwIfStopped } from "./stop.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
 /** The tools this loop may see. A subagent's registry is a subset of its parent's. */
@@ -558,6 +559,8 @@ const runAgentLoop = async (
   // A run that starts inside a project, or in a thread that has already touched private
   // material, is local from its first request, not only after a tool has run.
   if (opts.startPrivate) pinRun(rootId);
+  // A subagent's model calls carry its own run id; linking it lets a stop on the turn reach them.
+  linkRun(runId, rootId);
 
   let tierCorrected = false;
 
@@ -587,6 +590,9 @@ const runAgentLoop = async (
   let parseFailures = 0;
 
   for (let step = 0; step < maxSteps; step++) {
+    // The user pressed stop. Checked here, between steps, so a tool that was already running
+    // finished cleanly rather than being cut off halfway (see src/stop.ts).
+    throwIfStopped(rootId);
     publish(runId, { step: step + 1, type: "step_start" });
 
     let { text, parsed, actualTier, via, truncated } = await parseOr(messages, {

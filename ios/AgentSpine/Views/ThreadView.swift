@@ -22,6 +22,8 @@ struct ThreadView: View {
     /// sit at the bottom wondering why nothing happened.
     @State private var composerError: String?
     @State private var isSending = false
+    /// A stop was asked for and the turn has not ended yet; keeps a second tap from re-sending it.
+    @State private var isStopping = false
     @State private var liveTask: String?
     @State private var picked: [PhotosPickerItem] = []
     /// Uploaded and waiting to be sent with the next message. Uploading happens when the
@@ -124,6 +126,7 @@ struct ThreadView: View {
             // The turn is over: reload so it is rendered from the ledger rather than from a
             // stream that is about to be discarded. The reload is also what picks up anything
             // the stream does not carry — the tier it was sized to, the child runs.
+            if !stream.isLive { isStopping = false }
             switch phase {
             case .failed, .finished:
                 Task {
@@ -284,30 +287,105 @@ struct ThreadView: View {
         }
     }
 
+    /// Inside the message box on the right, as in most chat apps: a mic while idle; while
+    /// recording, a red stop that finishes the take and puts its transcript in the box.
     private var dictationButton: some View {
         Button {
             Task { await toggleDictation() }
         } label: {
             switch dictation.phase {
             case .idle:
-                Image(systemName: "mic").font(.system(size: 22))
+                Image(systemName: "mic")
+                    .font(.system(size: 19))
+                    .foregroundStyle(Spine.Palette.textDim)
             case .recording:
-                HStack(spacing: 4) {
-                    Image(systemName: "stop.circle.fill").font(.system(size: 22))
-                    Text(Duration.seconds(Int(dictation.elapsed)).formatted(.time(pattern: .minuteSecond)))
-                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit())
-                }
-                .foregroundStyle(Spine.Palette.danger)
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(Spine.Palette.danger)
             case .transcribing:
                 ProgressView()
             }
         }
+        .frame(width: 34, height: 34)
         .disabled(dictation.phase == .transcribing)
-        .accessibilityLabel(dictation.phase == .recording ? "Stop dictation" : "Dictate")
-        .onChange(of: dictation.atLimit) { _, hit in
-            if hit { Task { await toggleDictation() } }
+        .accessibilityLabel(dictation.phase == .recording ? "Finish dictation" : "Dictate")
+    }
+
+    /// Where the text field was, while the mic is open: cancel, the live waveform, the clock.
+    private var recordingStrip: some View {
+        HStack(spacing: 8) {
+            Button {
+                dictation.cancel()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Spine.Palette.textDim)
+                    .frame(width: 30, height: 30)
+            }
+            .disabled(dictation.phase != .recording)
+            .accessibilityLabel("Discard dictation")
+
+            if dictation.phase == .transcribing {
+                Text("Transcribing…")
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body))
+                    .foregroundStyle(Spine.Palette.textDim)
+                Spacer(minLength: 0)
+            } else {
+                DictationWaveform(levels: dictation.levels)
+                    .frame(height: 22)
+                Text(Duration.seconds(Int(dictation.elapsed)).formatted(.time(pattern: .minuteSecond)))
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).monospacedDigit())
+                    .foregroundStyle(Spine.Palette.textDim)
+            }
         }
-        .onDisappear { dictation.cancel() }
+        .frame(minHeight: 36)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(dictation.phase == .transcribing ? "Transcribing" : "Recording")
+    }
+
+    /// While a turn is running and there is nothing new to send, the send button becomes stop.
+    /// With a draft it stays send, so a follow-up can still be queued behind the running turn.
+    private var showsStop: Bool {
+        stream.isLive && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && staged.isEmpty
+    }
+
+    private var sendOrStopButton: some View {
+        Group {
+            if showsStop {
+                Button {
+                    Task { await stopTurn() }
+                } label: {
+                    Image(systemName: "stop.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(Spine.Palette.text)
+                }
+                .disabled(isStopping)
+                .accessibilityLabel("Stop this turn")
+            } else {
+                Button {
+                    Task { await send() }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                }
+                .disabled(!canSend || dictation.phase != .idle)
+                .accessibilityLabel("Send")
+            }
+        }
+        .frame(width: 34, height: 34)
+    }
+
+    /// Ask the server to end the running turn. It stops at its next safe point and the stream
+    /// ends with status "stopped", which reloads the thread like any other finished turn.
+    private func stopTurn() async {
+        guard let runID = stream.runID, !isStopping else { return }
+        isStopping = true
+        do {
+            try await APIClient.shared.stopRun(runID)
+        } catch {
+            isStopping = false
+            composerError = error.localizedDescription
+        }
     }
 
     private func toggleDictation() async {
@@ -386,35 +464,45 @@ struct ThreadView: View {
                 .frame(height: 64)
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
-                PhotosPicker(selection: $picked, maxSelectionCount: 4, matching: .images) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 22))
+            // One rounded box holding everything, mic and send on the right inside it.
+            HStack(alignment: .bottom, spacing: 4) {
+                if dictation.phase == .idle {
+                    PhotosPicker(selection: $picked, maxSelectionCount: 4, matching: .images) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Spine.Palette.textDim)
+                            .frame(width: 34, height: 34)
+                    }
+                    .accessibilityLabel("Attach photos")
+
+                    TextField("Reply", text: $draft, axis: .vertical)
+                        .focused($composerFocused)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 4)
+                        .lineLimit(1...5)
+                        .frame(minHeight: 34)
+                } else {
+                    recordingStrip
                 }
-                .accessibilityLabel("Attach photos")
 
                 dictationButton
-
-                TextField("Reply", text: $draft, axis: .vertical)
-                    .focused($composerFocused)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 20))
-                    .lineLimit(1...5)
-
-                Button {
-                    Task { await send() }
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                }
-                .disabled(!canSend)
-                .accessibilityLabel("Send")
+                sendOrStopButton
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 22))
+            .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Spine.Palette.border, lineWidth: 0.5))
             .padding(.horizontal)
+            .onChange(of: dictation.atLimit) { _, hit in
+                if hit { Task { await toggleDictation() } }
+            }
+            .onDisappear { dictation.cancel() }
         }
-        .padding(.vertical, 8)
+        // The extra room at the bottom keeps the box off the floating tab bar, which it used to
+        // all but touch.
+        .padding(.top, 8)
+        .padding(.bottom, 14)
         .background(.bar)
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }

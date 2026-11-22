@@ -46,3 +46,21 @@ enum MessageTime {
         return "\(day), \(time)"
     }
 }
+
+/// One bar of the dictation waveform: a microphone level in decibels (0 is full scale) mapped to
+/// 0...1. Below the floor is silence; the square root lifts quiet speech, which sits around -35 dB
+/// on a phone held at arm's length and would otherwise draw as a flat line. The same rule as
+/// `web/src/lib/micLevel.ts`, tested against the same cases.
+enum MicLevel {
+    static let floor: Float = -50
+
+    static func normalized(decibels: Float) -> Float {
+        guard decibels.isFinite, decibels > floor else { return 0 }
+        return min(1, (1 - decibels / floor).squareRoot())
+    }
+
+    /// Keep the last `count` levels, newest last, so the waveform scrolls from right to left.
+    static func push(_ level: Float, onto levels: [Float], count: Int) -> [Float] {
+        Array((levels + [level]).suffix(count))
+    }
+}
