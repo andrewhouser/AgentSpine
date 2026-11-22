@@ -882,11 +882,25 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
   Mini's real data, and whether anything private already reached the cloud has not been checked.
 - **SL5 Know whether it is working (You).** Use the checks in LEARNING, "How to tell it is working, and what to
   delete", after four weeks of SL1. Delete a learner whose output you never accept.
+- **SL6 A small private answer key (Both, not started).** About 20 real tasks with expected results, stored outside
+  the repo because real tasks carry private material. Prefer checks in code (a required fact, a forbidden action, a
+  tool that must or must not run), because a judge on the local model would be grading its own work. SL3 signals may
+  suggest rows, and a row joins the key only when you approve it. `eval:knowledge` (K1) scores retrieval only, so this
+  is a separate set. Code builds the runner; you write and approve the tasks.
+- **SL7 Test a candidate before asking (Code, not started; needs SL6).** Replay the current and proposed versions on
+  recent inputs and show the score beside the diff, one change per candidate. Start with watcher rewrites
+  (`src/learn/rewrite.ts`). Replays run pinned local and must be unable to send, write or publish. A better score
+  informs your decision and never approves a change. It has nothing to test until `runRewriter` has its trigger (SL1).
+- **SL8 Version history and after-checks (Code, not started).** Save the previous scheduled task text when a change is
+  approved, compare cost and failures a few weeks later, and offer a one-click revert. The revert changes what
+  unattended runs follow, so it goes through the same approval as any other standing-work change. The comparison
+  window is a number in code, and starts as a guess to check on real weeks.
 
 ### Sequence and decisions
 
 Order: SL1 (nearest to done, and N2 gates the rest); LP1, LP2 and LP5; SC2, SC4, SC5 and SC6, then SC1's
-three-change measurement; SL2 feeding SC5; LP3, LP4 and LP6; the CP items as each decision is made.
+three-change measurement; SL2 feeding SC5; LP3, LP4 and LP6; the CP items as each decision is made. Within SL, the
+answer key (SL6) comes first because candidate testing (SL7) depends on it. SL8 can follow in either order.
 
 Open decisions for you:
 
@@ -900,6 +914,7 @@ Open decisions for you:
   `src/instagram/api.ts` and `src/instagram/token.ts`.
 - Whether source folders may be exempt from the local pin so the builder can use the cloud tier. Proposed: no,
   until SC1's measurement shows the local builder is not good enough.
+- Where SL6's answer key lives. Proposed: a private file on the Mini, outside the repo, read only by local runs.
 
 ---
 
