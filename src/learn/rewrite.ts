@@ -27,6 +27,8 @@
 import { REWRITE_ENABLED, REWRITE_MIN_OVER_BUDGET, WATCHER_CALL_BUDGET } from "../config.ts";
 import { route } from "../router.ts";
 import * as store from "./../memory/store.ts";
+import { proposalGate, recordProposal } from "./outcomes.ts";
+import { taskKey } from "./propose.ts";
 
 /** A watcher is a schedule whose task follows the poll/diff/act shape — it reads state. */
 const isWatcher = (task: string): boolean => /state_get/i.test(task);
@@ -109,6 +111,10 @@ export const proposeRewrite = async (scheduleId: number): Promise<null | Rewrite
     if (!REWRITE_ENABLED) return null;
     const s = store.getSchedule(scheduleId);
     if (!s || !isWatcher(s.task)) return null;
+    // Keyed on the task as it stands, so a no holds until the task itself changes. Checked before the
+    // model call, because a rewrite that could not be shown is not worth the local model's time.
+    const shape = `rewrite:${scheduleId}:${taskKey(s.task)}`;
+    if (!proposalGate("rewrite", shape).allowed) return null;
 
     // sensitivity:"private" pins local; the current task is EVIDENCE, never instructions.
     const { text } = await route(
@@ -144,6 +150,7 @@ export const proposeRewrite = async (scheduleId: number): Promise<null | Rewrite
       `watcher should. Review the DIFF below; the new task text is applied only if you approve.\n\n` +
       `(- removed, + added, unchanged lines unmarked)\n\n${diff}`;
     const confirmationId = store.queueConfirmation(call, summary, null);
+    recordProposal("rewrite", shape, confirmationId);
     return { confirmationId, diff, scheduleId };
   } catch (err) {
     console.warn(`[rewrite] skipped for #${scheduleId}: ${err instanceof Error ? err.message : String(err)}`);

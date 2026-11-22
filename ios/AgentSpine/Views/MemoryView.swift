@@ -168,6 +168,8 @@ struct WeeklyReviewView: View {
                     }
                 } header: {
                     Text("Messages")
+                } footer: {
+                    Text("Useful also clears an earlier Skip for that kind of message.")
                 }
             } else if error == nil {
                 ProgressView()

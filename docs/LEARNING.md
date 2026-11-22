@@ -667,6 +667,23 @@ after the first accepted passes. If acceptance is low, raise the similarity thre
 
 ---
 
+## Bad-answer signals and proposal outcomes (SL3, SL4)  ✅ **BUILT, 2026-11-22**
+
+**Signals (`src/learn/signals.ts`).** Code counts four things you do without typing a complaint: a stopped chat
+run, the same request again within three minutes in the same thread, a draft file changed after it was written,
+and a rejected proposal. The result is run ids and counts, with no task text. It calls no model and writes no
+memory, because a stop can mean you changed your mind. `npm run signals` prints the last 7 days. The weekly
+retrospective (SL2) is the intended reader and is not built. The three-minute window, the 0.6 word overlap and
+the three-word minimum are starting guesses.
+
+**Outcomes (`src/learn/outcomes.ts`, table `proposal_log`).** Each job, standing-intent and rewrite proposal is
+logged when queued. A SQLite trigger on `confirmations` records what became of it, so no path that closes a
+confirmation can forget. Only `rejected by user` counts as your no: a policy refusal is stored with the same
+state, and an expiry only means you did not get to it. A shape you rejected is not proposed again, and a rewrite's
+shape includes the task text, so editing the task reopens it. A kind with at least 5 answers in the last 90 days
+and 80% rejected waits 30 days between proposals. The window slides, so a quietened kind recovers. The log stores
+a SHA-256 of the shape rather than the words, because it deliberately outlives ledger retention.
+
 ## Writing styles (N4)
 
 Not a learner in the sense of the phases above: nothing here runs on its own. `style_learn` (live chat only,
@@ -713,7 +730,7 @@ is a capability the model gets to invoke. `applyProposal` (Phase 2) is the only 
 that writes `policy.json`, and it runs from an authenticated server route, never a tool.
 
 **CLIs** — `npm run propose [--dry]` (Phase 4.1), `npm run rewrite [--dry]` (Phase 5),
-`npm run consolidate [-- --all]` (Phase 6.0, read-only),
+`npm run consolidate [-- --all]` (Phase 6.0, read-only), `npm run signals [-- --days N]` (SL3, read-only),
 alongside the existing `digest` / `watcher` / `prune`.
 
 ## How to tell it is working, and what to delete

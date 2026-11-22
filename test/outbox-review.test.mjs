@@ -141,6 +141,7 @@ check("not on a Monday", (await review.sendWeeklyReview(send, monday), sent.leng
 check("not on Sunday morning", (await review.sendWeeklyReview(send, sundayMorning), sent.length), 0);
 check("not in quiet hours", (await review.sendWeeklyReview(send, sundayLate), sent.length), 0);
 check("Sunday evening, with a week to review, it goes", await review.sendWeeklyReview(send, SUNDAY_EVENING), true);
+check("a tap on it opens the review screen", sent.at(-1)?.opts?.push?.screen ?? sent.at(-1)?.[2]?.push?.screen, "review");
 check("as a review-source push at normal priority, naming how many and where to look", [sent[0].opts.source, sent[0].opts.priority, /\d+ messages? from the last week/.test(sent[0].body), sent[0].body.includes("Weekly review")], ["review", 3, true, true]);
 check("the outbox never holds or counts that source", [rules.GOVERNED_SOURCES.has("review"), rules.COUNTED_SOURCES.has("review"), rules.REVIEWED_SOURCES.has("review")], [false, false, false]);
 const row = outbox.admit({ body: "b", source: "review", title: "Your weekly review is ready" }, SUNDAY_EVENING);

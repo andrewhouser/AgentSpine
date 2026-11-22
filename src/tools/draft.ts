@@ -105,7 +105,7 @@ const slug = (s: string): string =>
     .replace(/^-|-$/g, "")
     .slice(0, 50) || "draft";
 
-const draftsDir = (policy: Policy): string => expand(policy.drafts?.dir || "./drafts");
+export const draftsDir = (policy: Policy): string => expand(policy.drafts?.dir || "./drafts");
 
 export const draft: Tool = {
   name: "draft",

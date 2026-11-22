@@ -385,8 +385,8 @@ export interface ResultEnvelope {
  */
 export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "calendar_find", "calendar_upcoming", "client_list", "task_list", "time_report", "digest", "conversation_detail", "find_past_output", "gmail_search",
-  "harness_status", "headsup_status", "knowledge_claims", "list_dir", "look_at_file", "look_at_image", "meeting_list", "memory_recall",
-  "read_file", "read_more", "recall_output", "schedule_list", "source_read", "sources_list", "state_get", "weather",
+  "harness_status", "headsup_status", "knowledge_claims", "knowledge_search", "list_dir", "look_at_file", "look_at_image", "meeting_list", "memory_recall",
+  "read_file", "read_more", "recall_output", "schedule_list", "search_files", "source_read", "sources_list", "state_get", "weather",
   "web_read", "web_search",
 ]);
 

@@ -10,6 +10,7 @@ import { webSearch } from "./web-search.ts";
 import { webRead } from "./web-read.ts";
 import { browserControl } from "./browser.ts";
 import { readFile, listDir } from "./read-file.ts";
+import { searchFiles } from "./search-files.ts";
 import { readMoreTool } from "./read-more.ts";
 import { editFile, makeDir, moveFile, writeFile } from "./write-file.ts";
 import { gmailSearch } from "./gmail.ts";
@@ -37,7 +38,7 @@ import { clientList, clientUpsert, timeLog, timeReportTool } from "./clients.ts"
 import { sourceRead, sourcesList } from "./sources.ts";
 import { taskAdd, taskDone, taskList, taskUpdate } from "./tasks.ts";
 import { meetingList, meetingTag } from "./meetings.ts";
-import { knowledgeClaims } from "./knowledge.ts";
+import { knowledgeClaims, knowledgeSearch } from "./knowledge.ts";
 import { scaffoldIosApp } from "./scaffold-ios.ts";
 import { generateImage } from "./generate-image.ts";
 import { studyTools } from "./study.ts";
@@ -59,6 +60,7 @@ export const tools: Tool[] = [
   browserControl,
   readFile,
   listDir,
+  searchFiles,
   readMoreTool,
   writeFile,
   editFile,
@@ -98,6 +100,7 @@ export const tools: Tool[] = [
   meetingList,
   meetingTag,
   knowledgeClaims,
+  knowledgeSearch,
   taskUpdate,
   taskDone,
   clientUpsert,

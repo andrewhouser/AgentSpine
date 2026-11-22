@@ -32,7 +32,7 @@ export const LESSON_KIND = "lesson";
  * read mail or a file may carry that content in its trace, and a critique is a second pass
  * over the same text — so it inherits the same local-only constraint reflection has.
  */
-const SENSITIVE_TOOLS = new Set(["gmail_search", "calendar_upcoming", "read_file", "list_dir", "browser", "web_read", "draft"]);
+const SENSITIVE_TOOLS = new Set(["gmail_search", "calendar_upcoming", "read_file", "list_dir", "search_files", "browser", "web_read", "draft"]);
 
 /** True if any call this run made was to a sensitive tool. Read from the audit log. */
 const touchedSensitive = (runId: number): boolean => {

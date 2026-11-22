@@ -135,6 +135,7 @@ export const WeeklyReviewPanel = () => {
       </div>
       {error && <div className={styles.error}>{error}</div>}
       {review.items.length === 0 && <div className={styles.empty}>Nothing to review yet.</div>}
+      {review.items.length > 0 && <p className={styles.note}>Useful also clears an earlier Skip for that kind of message.</p>}
 
       {review.items.map((item) => (
         <div className={styles.item} key={item.id}>

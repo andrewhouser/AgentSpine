@@ -145,6 +145,33 @@ db.exec(`
     used INTEGER NOT NULL,
     cap_limit INTEGER NOT NULL
   );
+  -- What became of each learner's proposal (LEARNING, SL4). It outlives the confirmation on purpose, so
+  -- "you said no to this" survives retention, and it holds a hash of the proposal's shape, never its text.
+  CREATE TABLE IF NOT EXISTS proposal_log (
+    confirmation_id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    made TEXT NOT NULL,
+    outcome TEXT,
+    decided TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_proposal_log_key ON proposal_log(key_hash);
+  CREATE INDEX IF NOT EXISTS idx_proposal_log_kind ON proposal_log(kind, made);
+  -- A trigger because a confirmation closes along many code paths, and a new one must not forget this.
+  -- A policy refusal is also stored as state 'rejected', so only the user's own wording counts as a no.
+  CREATE TRIGGER IF NOT EXISTS proposal_log_outcome AFTER UPDATE OF state ON confirmations
+  WHEN NEW.state <> OLD.state AND NEW.state <> 'pending'
+  BEGIN
+    UPDATE proposal_log SET
+      outcome = CASE
+        WHEN NEW.state = 'rejected' AND NEW.result LIKE 'rejected by user%' THEN 'rejected'
+        WHEN NEW.state = 'rejected' THEN 'refused'
+        WHEN NEW.state = 'expired' THEN 'expired'
+        ELSE 'accepted'
+      END,
+      decided = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE confirmation_id = NEW.id AND outcome IS NULL;
+  END;
 `);
 
 // Best-effort migrations for DBs created before these columns existed.

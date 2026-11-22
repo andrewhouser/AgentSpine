@@ -90,12 +90,12 @@ reports) is proven on a phone. What is left is verification and data.
 
 **Phase 3, the weekly review.** Done when a real week has produced one real review and one *Skip this kind*
 that yields exactly one `preference` memory which recall picks up the next day.
-- Code: a deep link from the Sunday push to the review screen. A tap only opens the app today, and the iOS
-  `screen` handler knows `study` and `headsup` only.
+- Built 2026-11-22: the Sunday push carries `screen: "review"`, and a tap opens the review as a sheet on iPhone.
+  Not yet tapped on a real push.
 - Decided and built 2026-11-21: answering Useful about a message of a kind you skipped retires that kind's
   "Skip this kind" note (it deletes only the exact interrupt-origin dismissal memory, never one you wrote), and the
-  kind can be skipped again afterwards. Tested in `test/outbox-review.test.mjs`. The screens do not yet say so
-  next to the Useful button.
+  kind can be skipped again afterwards. Tested in `test/outbox-review.test.mjs`. The review screens on web, iPhone
+  and Mac say so under the list (2026-11-22).
 - You: the push has never gone to a phone, and the three review screens (web `WeeklyReviewPanel`, iPhone and Mac
   `WeeklyReviewView`) have not been seen rendered.
 
@@ -387,7 +387,8 @@ baseline, and the meeting recall number is still unmeasured.
   threshold on it. `GET /api/knowledge/search` exposes it. Suite: `test/knowledge-search.test.mjs`. The vector
   floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. Not built: the structured path (people,
   decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
-  a person and team filter, a UI for global search, and an agent tool for it (it would need `privateOutput`).
+  a person and team filter, and a UI for global search. The agent tool is built (2026-11-22): `knowledge_search`
+  declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.
 - **K3. Knowledge Inbox (built 2026-11-21: backend and screens on web, iPhone and Mac; the screens have been built but not seen on the native apps).** `src/inbox/`:
   every file, screenshot, scan, pasted thread and typed note becomes a source artifact (`inbox_items`) before it
@@ -809,9 +810,9 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
   read pins the run local and `deep` becomes `standard`. LP2 and LP3 are therefore the first work for
   self-change, not an extra. Then measure: give the builder three real changes from this file and record how
   many end with a passing suite. Do not exempt source folders from the pin until that number is known.
-- **SC2 Code search (Code).** There is no search tool; the builder finds things with `list_dir` and
-  `read_file`. Add a read-only `search_files` (plain Node, no new dependency, same allowlist and
-  `privateOutput` as `read_file`). "How does the outbox decide quiet hours?" cannot be answered well without it.
+- **SC2 Code search (built 2026-11-22).** `search_files` is read-only plain Node with the same allowlist and
+  `privateOutput` as `read_file`. The query is literal, because a model-written regex could stall the server's
+  event loop. It skips symlinks, dot-folders and credential files, and says when a capped search is incomplete.
 - **SC3 A map of its own code in trusted context.** Claude works in this repo from the area table in
   `CLAUDE.md`. AgentSpine has no equivalent: S6's `AGENTSPINE.md` cannot be used here, because `policy.json`
   makes `~/Developer` writable and the file must sit outside every writable folder. Either narrow
@@ -846,11 +847,14 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
   proposals, each of a closed kind: routine (a schedule, created disabled), recipe, auto-approval, memory
   correction, missing capability, or code change (which becomes an SC5 card). Each lists the runs it rests on,
   as Phase 2 proposals do. It arrives with the weekly review and counts against the daily cap.
-- **SL3 Signals of a bad answer (Code).** Reflection learns only from your own words, and that stays. Add the
-  signals you already give without typing: a stop, an immediate re-ask, an edited draft, a rejected proposal.
-  They are counted by code and feed SL2; none writes a memory by itself.
-- **SL4 Proposals that learn from their own outcomes (Code).** Record accept and reject per proposal kind. A
-  rejected proposal is not made again, and a kind you mostly reject is made less often, by a threshold in code.
+- **SL3 Signals of a bad answer (built 2026-11-22).** `src/learn/signals.ts` counts stops, immediate re-asks,
+  edited drafts and rejected proposals, by run id and without task text. `npm run signals` prints them. Nothing
+  consumes them until SL2, and none writes a memory. The re-ask window and overlap are guesses to check on real weeks.
+- **SL4 Proposals that learn from their own outcomes (built 2026-11-22).** `src/learn/outcomes.ts` and the
+  `proposal_log` table cover job, standing-intent and rewrite proposals. A proposal you rejected is not made again.
+  A kind with at least 5 answers in 90 days and 80% rejected waits 30 days between proposals. Expiries and policy
+  refusals do not count as your no. Auto-approval, style and date proposals are not covered. It takes effect only
+  when the proposers run, and they still have no trigger (SL1).
 - **SL5 Know whether it is working (You).** Use the checks in LEARNING, "How to tell it is working, and what to
   delete", after four weeks of SL1. Delete a learner whose output you never accept.
 

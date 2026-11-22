@@ -26,6 +26,8 @@
  */
 import { PROPOSE_MIN_RECURRENCE } from "../config.ts";
 import * as store from "./../memory/store.ts";
+import { adoptPastJobProposals, proposalGate, recordProposal } from "./outcomes.ts";
+import type { ProposalKind } from "./outcomes.ts";
 
 /** Collapse a task to a clustering key — lowercased, whitespace-flattened, depunctuated tail. */
 export const taskKey = (task: string): string =>
@@ -34,6 +36,9 @@ export const taskKey = (task: string): string =>
     .replace(/\s+/g, " ")
     .replace(/[.!?…\s]+$/, "")
     .trim();
+
+/** The identity a job proposal is remembered by in the outcome log. */
+const intentShape = (task: string): string => `task:${taskKey(task)}`;
 
 export interface IntentProposal {
   /** The normalized shape that recurred. */
@@ -76,13 +81,21 @@ export const recurringIntent = (): IntentProposal[] => {
  * before the user has watched it once.
  *
  * Deduped against the pending queue by task shape, so running the proposer repeatedly does
- * not pile up identical cards.
+ * not pile up identical cards. A shape you rejected, or a kind you mostly reject, is held back by
+ * `proposalGate` (SL4). Mined and standing proposals share a shape, so a no to one covers the other.
  */
-export const queueIntentProposal = (p: IntentProposal, schedule = "every day at 9:00am"): null | number => {
+export const queueIntentProposal = (
+  p: IntentProposal,
+  schedule = "every day at 9:00am",
+  kind: ProposalKind = "schedule",
+): null | number => {
   const alreadyPending = store
     .listConfirmations("pending")
     .some((c) => c.tool === "schedule_create" && taskKey(JSON.parse(c.args ?? "{}")?.task ?? "") === p.key);
   if (alreadyPending) return null;
+  adoptPastJobProposals(intentShape);
+  const shape = `task:${p.key}`;
+  if (!proposalGate(kind, shape).allowed) return null;
 
   const call = {
     tool: "schedule_create",
@@ -97,7 +110,9 @@ export const queueIntentProposal = (p: IntentProposal, schedule = "every day at 
     `PROPOSED JOB from a request you have made ${p.count} times.\n\n` +
     `Runs (disabled until you enable it): ${schedule}\n\n` +
     `Task, handed verbatim to each run:\n\n${p.sample}`;
-  return store.queueConfirmation(call, summary, null);
+  const id = store.queueConfirmation(call, summary, null);
+  recordProposal(kind, shape, id);
+  return id;
 };
 
 /**
@@ -128,7 +143,7 @@ export const runProposer = (): number[] => {
 export const queueStandingIntent = (task: string, schedule = "every day at 9:00am"): null | number => {
   const trimmed = String(task ?? "").trim();
   if (!trimmed) return null;
-  return queueIntentProposal({ count: 1, key: taskKey(trimmed), sample: trimmed }, schedule);
+  return queueIntentProposal({ count: 1, key: taskKey(trimmed), sample: trimmed }, schedule, "standing");
 };
 
 // --- CLI: npm run propose  (dry run: npm run propose -- --dry) ---
@@ -141,8 +156,13 @@ if (import.meta.filename === process.argv[1]) {
   if (!found.length) {
     console.log("No recurring chat intent above the threshold. Nothing to propose.");
   } else if (dry) {
-    console.log(`Would propose ${found.length} job(s):`);
-    for (const p of found) console.log(`  ${p.count}×  ${p.sample.slice(0, 100)}`);
+    // Bookkeeping only: without it a dry run would list a job you already turned down.
+    adoptPastJobProposals(intentShape);
+    console.log(`Found ${found.length} recurring job(s):`);
+    for (const p of found) {
+      const gate = proposalGate("schedule", intentShape(p.sample));
+      console.log(`  ${p.count}×  ${p.sample.slice(0, 100)}${gate.allowed ? "" : `  (held: ${gate.reason})`}`);
+    }
   } else {
     const ids = runProposer();
     console.log(`Queued ${ids.length} proposal(s) for review: ${ids.map((i) => `#${i}`).join(", ") || "(none new)"}`);

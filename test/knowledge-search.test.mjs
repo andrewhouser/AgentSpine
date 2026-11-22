@@ -116,5 +116,23 @@ console.log("\nRUN-LEVEL RECALL USES IT");
   check("and the knowledge block is still untrusted-tagged", block.includes("UNTRUSTED") && block.includes("CAND-7788"), true);
 }
 
+console.log("\nTHE AGENT TOOL");
+{
+  const { knowledgeSearch: t } = await import("../src/tools/knowledge.ts");
+  const { READ_ONLY_TOOLS } = await import("../src/harness.ts");
+  check("read-only, reversible, private output", [READ_ONLY_TOOLS.has("knowledge_search"), t.classify({}).reversibility, t.privateOutput], [true, "reversible", true]);
+  const out = await t.run({ query: "CAND-7788" }, {});
+  check("finds the passage and tags it untrusted", out.includes("CAND-7788") && out.includes("UNTRUSTED"), true);
+  check("says what the passage is backed by", out.includes("no reviewed claims"), true);
+  const inOther = await t.run({ query: "CAND-7788" }, { run: { projectId: A } });
+  check("a run in another project cannot see it", inOther.includes("Offer approved"), false);
+  const widen = await t.run({ projectId: B, query: "CAND-7788" }, { run: { projectId: A } });
+  check("and cannot ask for that project by id", widen.startsWith("ERROR"), true);
+  const own = await t.run({ query: "CAND-7788" }, { run: { projectId: B } });
+  check("a run in its own project can", own.includes("Offer approved"), true);
+  check("a bad date is refused", (await t.run({ query: "x", since: "last week" }, {})).startsWith("ERROR"), true);
+  check("no query is refused", (await t.run({}, {})).startsWith("ERROR"), true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

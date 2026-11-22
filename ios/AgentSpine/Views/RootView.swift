@@ -13,6 +13,7 @@ struct RootView: View {
 
     @State private var tab: AppTab = .threads
     @State private var threadPath: [Int] = []
+    @State private var showingWeeklyReview = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -61,6 +62,10 @@ struct RootView: View {
             case .headsup:
                 // The morning summary, or "gift ideas ready".
                 tab = .headsup
+            case .weeklyReview:
+                // A sheet, because the review lives two levels into Settings and the Settings tab
+                // may be folded under More, where pushing onto its stack is not ours to do.
+                showingWeeklyReview = true
             case .conversation(let id):
                 tab = .threads
                 // Replace rather than push: tapping two notifications should not build a stack
@@ -68,6 +73,16 @@ struct RootView: View {
                 threadPath = [id]
             }
             push.pendingDeepLink = nil
+        }
+        .sheet(isPresented: $showingWeeklyReview) {
+            NavigationStack {
+                WeeklyReviewView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingWeeklyReview = false }
+                        }
+                    }
+            }
         }
     }
 

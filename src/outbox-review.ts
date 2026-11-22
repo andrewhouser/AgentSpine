@@ -221,7 +221,8 @@ export const sendWeeklyReview = async (
     let body = `${count === 1 ? "1 message" : `${count} messages`} from the last week. Open Settings, then Weekly review, to say which were useful and which to skip.`;
     const skipped = safeQuiet(now).length;
     if (skipped) body += ` ${skipped === 1 ? "1 kind" : `${skipped} kinds`} you mostly skip ${skipped === 1 ? "is" : "are"} listed there too.`;
-    return (await send(title, body, { priority: 3, source: "review" })).ok;
+    // `screen` is what lets a tap land on the review rather than only opening the app.
+    return (await send(title, body, { priority: 3, push: { screen: "review" }, source: "review" })).ok;
   } catch (err) {
     console.warn(`[review] could not send the weekly push: ${err instanceof Error ? err.message : String(err)}`);
     return false;

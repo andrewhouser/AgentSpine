@@ -65,7 +65,7 @@ export const VECTOR_MIN_SIMILARITY = ((): number => {
  * matches on its few distinctive words and bm25 ranks the passages that hold most of them. A quoted phrase stays a phrase, and any token
  * with a digit or a hyphen (ABC-123, Q3, 2026-04) is quoted, because FTS5 would otherwise split it.
  */
-const STOPWORDS = new Set(
+export const STOPWORDS = new Set(
   ("a an and are as at be been but by can could did do does for from had has have how i if in into is it its me my of on or our so " +
     "than that the their them then there these they this to us was we were what when where which who whom why will with would you your about " +
     "any all some much many more most not no yes out up down over just also tell show give find get got let make").split(" "),
