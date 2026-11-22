@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { KnowledgeClaim, KnowledgeConflict, KnowledgeEntity, Project } from "../../lib/types.ts";
+import type { KnowledgeClaim, KnowledgeConflict, KnowledgeEntity, Project, RetentionRule } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -45,6 +45,7 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
   const [operation, setOperation] = useState("next-meeting");
   const [plan, setPlan] = useState("");
   const [brief, setBrief] = useState("");
+  const [rules] = useResource(api.retention, null as null | RetentionRule[]);
 
   const act = async (work: () => Promise<unknown>): Promise<void> => {
     setError("");
@@ -269,6 +270,21 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
         </button>
       </div>
       {brief && <pre className={styles.preview}>{brief}</pre>}
+
+      {rules && rules.length > 0 && (
+        <>
+          <h2 className={styles.title}>What is kept, and for how long</h2>
+          <p className={styles.meta}>
+            These are the server&apos;s global rules. A project can keep its raw transcripts for a different time in its
+            Settings.
+          </p>
+          {rules.map((r) => (
+            <p className={styles.meta} key={r.artifact}>
+              <strong>{r.artifact}:</strong> {r.rule}
+            </p>
+          ))}
+        </>
+      )}
     </div>
   );
 };

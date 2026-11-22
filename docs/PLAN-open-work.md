@@ -387,7 +387,8 @@ baseline, and the meeting recall number is still unmeasured.
   threshold on it. `GET /api/knowledge/search` exposes it. Suite: `test/knowledge-search.test.mjs`. The vector
   floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. Not built: the structured path (people,
   decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
-  a person and team filter, and a UI for global search. The agent tool is built (2026-11-22): `knowledge_search`
+  and a person and team filter. Search everything is on the Inbox screen on web, iPhone and Mac (native added
+  2026-11-22, built but not seen running). The agent tool is built (2026-11-22): `knowledge_search`
   declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.
 - **K3. Knowledge Inbox (built 2026-11-21: backend and screens on web, iPhone and Mac; the screens have been built but not seen on the native apps).** `src/inbox/`:
@@ -477,8 +478,10 @@ baseline, and the meeting recall number is still unmeasured.
   commitments by shared words and lists what is recorded for it, which plan lines have nothing recorded, and which
   recorded items the plan does not mention, without judging agreement. The web Knowledge screen has the brief
   reader (with a person picker for person and one-on-one briefs), the plan comparison and a sensitive checkbox on
-  claims awaiting review. **Not built:** the brief screens on iPhone and Mac, and a check that the plan comparison
-  helps on a real plan (the matching is plain shared words, a first guess to tune on real plans).
+  claims awaiting review. iPhone and Mac have the same brief reader, person and one-on-one briefs and plan comparison
+  (2026-11-22, in the shared `KnowledgeView`; built but not seen running). **Not built:** the sensitive checkbox and
+  correcting a claim's text on iPhone and Mac, and a check that the plan comparison helps on a real plan (the matching
+  is plain shared words, a first guess to tune on real plans).
 - **K7. Retention rules (built 2026-11-21).** Separate rules per kind of thing, stated from the same numbers the
   code enforces (`src/knowledge/retention.ts`, `GET /api/retention`): original audio (`MEETING_KEEP_AUDIO_HOURS`),
   raw transcripts (`TRANSCRIPT_RETENTION_DAYS`, 30), a transcript indexed in a project (only if you chose to keep
@@ -491,8 +494,9 @@ baseline, and the meeting recall number is still unmeasured.
   (2026-11-21, backend only): `PATCH /api/projects/:id {"transcriptRetentionDays": n}` (0 keeps that project's
   transcripts until the meeting is deleted, `null` follows the global setting), enforced per meeting by
   `expiredMeetingIds`, so with the global window off only a project's own window expires anything. The indexed
-  transcript lifetime stays global. The web project page shows the rules and sets the override. Not built: the same on Mac and iPhone,
-  and a screen for the global rules outside a project.
+  transcript lifetime stays global. Project Settings on web, iPhone and Mac shows the rules and sets the override.
+  The Knowledge screen on all three shows the global rules (2026-11-22, not seen running on the native apps); they
+  are read-only there because the numbers are server config.
 - **After K6: selected proactive notifications**, drawing on the knowledge store, and only then.
 
 Settled 2026-11-21: OCR is a small macOS Vision helper (K3, chosen for speed; no new dependency); backups rely on
@@ -680,7 +684,7 @@ trusted instruction in the run inspector.
 **Done when:** a workspace rule changes behaviour in that project, a same-named file inside an untrusted
 document source cannot do so, and the trace identifies which instruction sources were active.
 
-### S7. Epistemic awareness joins the knowledge system (answer rules built 2026-11-21; briefs wait for K6 screens)
+### S7. Epistemic awareness joins the knowledge system (answer rules built 2026-11-21; brief screens exist, their status wording does not match yet)
 
 **Built:** `src/knowledge/answer.ts` decides, in code, whether the store supports an answer (`supported`, `conflicting` or `insufficient`) by matching the question against reviewed claims that are still in force, and renders each claim with its id, evidence level, source, timestamp in the recording and exact words. Disagreeing reviewed claims come back as a CONFLICT to be reported with both sides; where nothing reviewed matches, the text says INSUFFICIENT EVIDENCE and not to fill the gap; unreviewed matches appear only as leads. The read-only tool `knowledge_claims` (declares `privateOutput`, so the run stays local) returns it, `asOf` answers as of a date, and `harnessContract` adds the answer rule only when the tool is visible. The match is plain shared words on purpose, since a wrong "supported" invents a fact and a wrong "insufficient" sends the person to look. Suite: `test/knowledge-answer.test.mjs`. Not built: nothing yet calls the tool unprompted (the model must choose to), no live-model check that it does, and the briefs of K6 do not use the same status wording on the screens.
 

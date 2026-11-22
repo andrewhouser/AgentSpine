@@ -20,6 +20,10 @@ struct KnowledgeView: View {
     @State private var briefProject: Int?
     @State private var operation = "next-meeting"
     @State private var brief = ""
+    @State private var people: [KnowledgeEntity] = []
+    @State private var briefPerson: Int?
+    @State private var plan = ""
+    @State private var rules: [RetentionRule] = []
 
     private static let operations: [(key: String, label: String)] = [
         ("next-meeting", "Brief me for the next meeting"),
@@ -31,6 +35,19 @@ struct KnowledgeView: View {
     ]
 
     var body: some View {
+        ScrollViewReader { proxy in
+            content.onChange(of: brief) { _, text in
+                guard !text.isEmpty else { return }
+                // The result sits below the plan box, off screen on a phone. Yield so its row exists before scrolling.
+                Task { @MainActor in
+                    await Task.yield()
+                    withAnimation { proxy.scrollTo("brief-result", anchor: .top) }
+                }
+            }
+        }
+    }
+
+    private var content: some View {
         List {
             if let loadError {
                 ErrorNotice(message: loadError) { Task { await load() } }
@@ -82,8 +99,49 @@ struct KnowledgeView: View {
                     }
                 }
                 Button(briefProject == nil ? "Show" : "Project brief") { Task { await readBrief() } }
-                if !brief.isEmpty {
-                    Text(brief).font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote)).textSelection(.enabled)
+                Picker("Person", selection: $briefPerson) {
+                    Text(people.isEmpty ? "No people recorded yet" : "Choose a person").tag(Int?.none)
+                    ForEach(people) { person in Text(person.name).tag(Int?.some(person.id)) }
+                }
+                .disabled(people.isEmpty)
+                Button("Person brief") { Task { await readPerson("person") } }.disabled(briefPerson == nil)
+                Button("One-on-one prep") { Task { await readPerson("one-on-one") } }.disabled(briefPerson == nil)
+            }
+            Section {
+                TextEditor(text: $plan)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .frame(minHeight: 110)
+                    .accessibilityLabel("Written plan")
+                Button("Compare") { Task { await comparePlan() } }
+                    .disabled(plan.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } header: {
+                Text("Compare a plan with the meetings")
+            } footer: {
+                Text("Paste a written plan. Each line is matched to reviewed decisions and commitments that share its words, and you see what is recorded, what is not, and what the plan leaves out. Matching words is not agreement, so read each pair. Uses the project chosen above, or everything.")
+            }
+            if !brief.isEmpty {
+                Section("Result") {
+                    Text(brief)
+                        .font(SpineFont.mono(Spine.TypeSize.footnote, relativeTo: .footnote))
+                        .textSelection(.enabled)
+                        .id("brief-result")
+                }
+            }
+            if !rules.isEmpty {
+                Section {
+                    ForEach(rules, id: \.artifact) { rule in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rule.artifact)
+                                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                            Text(rule.rule)
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.textDim)
+                        }
+                    }
+                } header: {
+                    Text("What is kept, and for how long")
+                } footer: {
+                    Text("These are the server's global rules. A project can keep its raw transcripts for a different time in its Settings.")
                 }
             }
         }
@@ -132,8 +190,16 @@ struct KnowledgeView: View {
         do {
             async let list = APIClient.shared.knowledgeClaims(query: ["review": "proposed", "status": "active"])
             async let conf = try? APIClient.shared.knowledgeConflicts()
+            async let entities = try? APIClient.shared.knowledgeEntities()
+            async let kept = try? APIClient.shared.retentionRules()
             claims = try await list
             conflicts = await conf ?? []
+            // A failed refresh keeps what is on screen, so a chosen person is not lost to a network blip.
+            if let found = await entities {
+                people = found.filter { $0.kind == "person" }
+                if let chosen = briefPerson, !people.contains(where: { $0.id == chosen }) { briefPerson = nil }
+            }
+            if let found = await kept { rules = found }
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -183,6 +249,20 @@ struct KnowledgeView: View {
             } else {
                 brief = try await APIClient.shared.knowledgeBrief(kind: "op", subject: operation)
             }
+        } catch { actionError = error.localizedDescription }
+    }
+
+    /// A person's brief, or the one-on-one prep for them (what you owe each other, what is open between you).
+    private func readPerson(_ kind: String) async {
+        guard let person = briefPerson else { return }
+        do {
+            brief = try await APIClient.shared.knowledgeBrief(kind: kind, subject: String(person))
+        } catch { actionError = error.localizedDescription }
+    }
+
+    private func comparePlan() async {
+        do {
+            brief = try await APIClient.shared.knowledgePlanBrief(plan, project: briefProject)
         } catch { actionError = error.localizedDescription }
     }
 }

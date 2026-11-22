@@ -1506,3 +1506,18 @@ struct KnowledgeConflict: Codable, Hashable {
 struct KnowledgeBrief: Codable, Hashable {
     let markdown: String
 }
+
+/// A person, team or topic in the knowledge store. The brief screens only need who it is.
+struct KnowledgeEntity: Codable, Identifiable, Hashable {
+    let id: Int
+    let kind: String
+    let name: String
+}
+
+/// One result of GET /api/knowledge/search. `via` says which paths found it (`fts`, `vector`).
+struct KnowledgeHit: Codable, Identifiable, Hashable {
+    let id: Int
+    let path: String
+    let text: String
+    let via: [String]
+}

@@ -24,6 +24,9 @@ struct InboxView: View {
     @State private var pasteTitle = ""
     @State private var pasteAsNote = false
     @State private var deleting: InboxItem?
+    @State private var searchText = ""
+    @State private var searching = false
+    @State private var hits: [KnowledgeHit]?
 
     var body: some View {
         List {
@@ -37,6 +40,33 @@ struct InboxView: View {
                     .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                     .foregroundStyle(Spine.Palette.textDim)
                     .listRowBackground(Color.clear)
+            }
+            Section("Search everything") {
+                HStack {
+                    TextField("A name, a ticket number, a phrase in quotes, or a question", text: $searchText)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .onSubmit { Task { await search() } }
+                    // Borderless, or a tap anywhere in the row would run the search.
+                    Button("Search") { Task { await search() } }
+                        .buttonStyle(.borderless)
+                        .disabled(searching)
+                }
+                if hits?.isEmpty == true {
+                    Text("Nothing found.")
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+                ForEach(hits ?? []) { hit in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(hit.path) · found by \(hit.via.joined(separator: " and "))")
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textFaint)
+                        Text(String(hit.text.prefix(280)))
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .textSelection(.enabled)
+                    }
+                }
             }
             if items.isEmpty && loadError == nil {
                 EmptyNotice(
@@ -164,6 +194,19 @@ struct InboxView: View {
             loadError = error.localizedDescription
         }
         loaded = true
+    }
+
+    private func search() async {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else { hits = nil; return }
+        guard !searching else { return }
+        searching = true
+        defer { searching = false }
+        do {
+            hits = try await APIClient.shared.searchKnowledge(query)
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private func add(_ urls: [URL]) async {

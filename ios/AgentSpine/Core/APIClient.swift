@@ -139,9 +139,10 @@ final class APIClient {
     private func jsonRequest(
         _ path: String,
         method: String,
-        body: [String: Any] = [:]
+        body: [String: Any] = [:],
+        query: [String: String] = [:]
     ) throws -> URLRequest {
-        var req = try request(path)
+        var req = try request(path, query: query)
         req.httpMethod = method
         if !body.isEmpty {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -616,6 +617,23 @@ final class APIClient {
         var q = query
         q["format"] = "md"
         return try await send(request("/api/knowledge/briefs/\(kind)/\(subject)", query: q), as: KnowledgeBrief.self).markdown
+    }
+
+    /// A written plan against what the meetings recorded, for one project or everything.
+    func knowledgePlanBrief(_ plan: String, project: Int?) async throws -> String {
+        var body: [String: Any] = ["plan": plan]
+        if let project { body["project"] = project }
+        let req = try jsonRequest("/api/knowledge/briefs/plan", method: "POST", body: body, query: ["format": "md"])
+        return try await send(req, as: KnowledgeBrief.self).markdown
+    }
+
+    func knowledgeEntities() async throws -> [KnowledgeEntity] {
+        try await send(request("/api/knowledge/entities"), as: [KnowledgeEntity].self)
+    }
+
+    /// Hybrid search over every indexed document and filed meeting.
+    func searchKnowledge(_ query: String) async throws -> [KnowledgeHit] {
+        try await send(request("/api/knowledge/search", query: ["q": query]), as: [KnowledgeHit].self)
     }
 
     // MARK: - Knowledge Inbox
