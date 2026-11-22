@@ -39,10 +39,17 @@ struct MacTurnSpine: View {
         }
     }
 
+    /// Chat draws the step checklist and the reply, with no call-by-call rows (twenty rows of
+    /// URLs buried the answer); Trace draws every call and nothing else. A queued call that is
+    /// waiting on you is an approval card in chat either way: it is a question, not a trace.
+    enum Mode { case chat, trace }
+
+    var mode: Mode = .chat
     var calls: [Call] = []
     /// The run's own progress line while it streams; `.idle` for a finished turn.
     var phase: RunStream.Phase = .idle
-    /// The plan card while the turn runs (src/plan.ts); empty for a finished turn.
+    /// The plan card: the stream's snapshot while the turn runs, the ledger's once it ends
+    /// (src/plan.ts folds both the same way).
     var plan: [PlanStep] = []
     var summary: String?
     /// Shown in the danger colour: a failed turn, or the stream's failure message.
@@ -107,8 +114,16 @@ struct MacTurnSpine: View {
     }
 
     private var rows: [Row] {
+        if mode == .trace {
+            let recovered = RecoveredCalls.flags(calls.map { $0.status?.rawValue }, turnFailed: failure != nil)
+            return calls.enumerated().map { index, call -> Row in
+                var call = call
+                call.recovered = recovered[index]
+                return .call(call)
+            }
+        }
         let (paired, unmatched) = pairing
-        var rows = paired
+        var rows = paired.filter { if case .waiting = $0 { return true } else { return false } }
         if !plan.isEmpty { rows.append(.plan(plan)) }
         switch phase {
         case .queued(let behind):

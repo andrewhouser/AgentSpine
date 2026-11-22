@@ -164,6 +164,9 @@ struct Turn: Codable, Identifiable, Hashable {
     let starred: Bool?
     /// Model calls and tokens for this turn and the child runs it started; absent from older servers.
     let usage: RunUsage?
+    /// The finished step checklist, folded server-side from `actions` (src/plan.ts); absent
+    /// from older servers.
+    let plan: [PlanStep]?
 
     var isRunning: Bool { status == "running" || status == "queued" }
     var isDecision: Bool { kind == "approval" }

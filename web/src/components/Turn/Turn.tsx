@@ -1,7 +1,6 @@
 import type { Attachment, LiveToolCall, PlanStep, VisionPass } from "../../lib/types.ts";
 
 import { describeActivity } from "../../lib/activity.ts";
-import { recoveredCalls } from "../../lib/recovery.ts";
 import { weatherCardOf } from "../../lib/weatherCard.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
@@ -9,10 +8,8 @@ import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
 import { PlanCard } from "../PlanCard/PlanCard.tsx";
 import { ReplyActions } from "../ReplyActions/ReplyActions.tsx";
-import { SpineCalls } from "../SpineCalls/SpineCalls.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
 import { TierBadge } from "../TierBadge/TierBadge.tsx";
-import { ToolTrace } from "../ToolTrace/ToolTrace.tsx";
 import { UserMessage } from "../UserMessage/UserMessage.tsx";
 import { VisionNote } from "../VisionNote/VisionNote.tsx";
 import { WeatherCard } from "../WeatherCard/WeatherCard.tsx";
@@ -60,8 +57,8 @@ interface TurnProps {
  * Tool calls sit BEFORE the answer rather than being hidden behind it, because in this
  * system what it touched is part of the answer — an assistant that read your calendar to
  * reply is telling you something an assistant that guessed is not. They are folded into
- * one summary strip once the turn finishes (see ToolTrace), which keeps that promise
- * without making a twelve-step research turn twelve rows tall.
+ * the step checklist (PlanCard), which keeps that promise without making a twenty-call
+ * research turn twenty rows tall; the Trace tab has every call.
  */
 export const Turn = ({
   attachments = [],
@@ -88,8 +85,6 @@ export const Turn = ({
   vision = null,
   waitingBehind,
 }: TurnProps) => {
-  // A failure the turn went on to get past reads as a quiet step, not an alarm (lib/recovery.ts).
-  const recovered = recoveredCalls(toolCalls, !!error);
   const weather = weatherCardOf(toolCalls);
   // Images bind to one run, once, so a message that carried any cannot be sent again: a retry
   // would quietly drop them and answer a different question. Copy and the time still show.
@@ -118,14 +113,10 @@ export const Turn = ({
         turn is reasoning from. */}
     {vision && <VisionNote pass={vision} />}
 
-    {/* Each call is a node on the spine. When one was denied or failed, the full trace opens
-        instead (see ToolTrace): those are never incidental. Arguments and results for the rest
-        live in the chat's Trace tab. */}
-    {toolCalls.some((c, i) => c.status === "denied" || (c.status === "error" && !recovered[i])) ? (
-      <ToolTrace calls={toolCalls} live={false} recovered={recovered} />
-    ) : (
-      <SpineCalls calls={toolCalls} recovered={recovered} />
-    )}
+    {/* The chat shows what the turn did as its step checklist (PlanCard, below), not call by
+        call: twenty rows of URLs buried the reply. Every call, its arguments, result and the
+        broker's verdict, live in the Trace tab; a denied or failed call still shows as a
+        failed step here. */}
 
     {delegations.length > 0 && (
       <div className={styles.tools}>
@@ -143,9 +134,9 @@ export const Turn = ({
       </div>
     )}
 
-    {/* While the turn runs, the steps it is working through. After it ends the call strip
-        above is the record and this would repeat it. */}
-    {live && <PlanCard steps={plan} />}
+    {/* The steps the turn worked through: live while it runs, then the record once it ends
+        (the server folds a finished turn's stored calls the same way, src/plan.ts). */}
+    <PlanCard steps={plan} />
 
     {summary && (
       <>

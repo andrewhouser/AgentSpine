@@ -14,18 +14,26 @@
 }
 
 .inspectorToggle {
+  align-items: center;
   background: none;
   border: 0;
   border-bottom: 2px solid transparent;
+  border-radius: 6px;
   color: var(--text-faint);
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
   font-size: 0.8125rem;
   margin-left: auto;
-  padding: 4px 12px;
+  padding: 4px 8px;
+}
+
+.inspectorToggle:hover {
+  color: var(--text);
 }
 
 .inspectorToggle[aria-pressed="true"] {
+  background: var(--bg-inset);
   color: var(--text);
 }
 

@@ -193,3 +193,31 @@ export const planSnapshot = (plan: PlanState): PlanStep[] =>
         ...plan.steps.map((s) => ({ count: s.inFlight + s.ok + s.failed + s.queued, label: s.label, status: stepStatus(s) })),
         { count: 1, label: ANSWER_LABEL, status: plan.answer },
       ];
+
+/**
+ * The finished plan of a stored run, rebuilt from its action rows. A reloaded thread has no
+ * event stream to replay, and the chat now draws this card on every turn (the call-by-call
+ * spine moved to the Trace tab), so the same fold runs over what the broker recorded. Each row
+ * is one call and its verdict, so it is replayed as a call followed by its result.
+ */
+export const planFromActions = (
+  actions: readonly { args: string; decision: string; id: number; tool: string }[],
+  runStatus: string,
+): PlanStep[] => {
+  let plan = emptyPlan();
+  for (const a of actions) {
+    let args: unknown = a.args;
+    try {
+      args = JSON.parse(a.args);
+    } catch {
+      // Kept as the raw string; labelFor only peeks at it.
+    }
+    const callId = String(a.id);
+    plan = foldPlan(plan, { args, callId, tool: a.tool, type: "tool_call" });
+    plan = foldPlan(plan, { callId, status: a.decision, type: "tool_result" });
+  }
+  if (runStatus !== "running" && runStatus !== "queued") {
+    plan = foldPlan(plan, { status: runStatus, type: "run_end" });
+  }
+  return planSnapshot(plan);
+};

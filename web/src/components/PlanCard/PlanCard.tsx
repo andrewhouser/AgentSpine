@@ -15,11 +15,11 @@ const STATUS_LABEL: Record<PlanStep["status"], string> = {
 };
 
 /**
- * The steps the running turn is working through, each waiting, in progress or done.
+ * The steps a turn works through, each waiting, in progress or done.
  *
  * The server owns every status (src/plan.ts folds the run's own tool calls), so this only
- * draws the newest `plan` snapshot. It is shown while the turn runs; once it finishes, the
- * call strip on the spine is the record, and the card would only repeat it.
+ * draws the newest `plan` snapshot, from the stream while the turn runs and from the thread
+ * once it ends. It is the chat's record of what the turn did; each call is in the Trace tab.
  */
 export const PlanCard = ({ steps }: PlanCardProps) => {
   if (steps.length === 0) return null;

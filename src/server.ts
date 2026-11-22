@@ -91,6 +91,7 @@ import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
 import { INBOX_MAX_BYTES, INBOX_WATCH_DIR } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
+import { planFromActions } from "./plan.ts";
 import { isDeliverable, listDeliverables } from "./deliverables.ts";
 import { projectWriteDir, writeFile, WRITE_EXTENSIONS } from "./tools/write-file.ts";
 import { addTask, deleteTask, getTask, listTasks, updateTask } from "./tasks/store.ts";
@@ -563,8 +564,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           for (const c of mine) claimed.add(c.id);
           return mine;
         };
-        const turns = runs.map((r: any) => ({
-          actions: store.listActions(r.id),
+        const turns = runs.map((r: any) => {
+          const actions = store.listActions(r.id);
+          return {
+          actions,
+          // The step checklist the chat draws under each turn (src/plan.ts), folded from the
+          // same rows the Trace tab lists call by call.
+          plan: planFromActions(actions, r.status),
           // Images the user sent with this turn. Metadata only — the bytes come from
           // /api/attachments/:id, so a thread of twenty photographs is still one small JSON
           // response and the browser caches each image once.
@@ -626,7 +632,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           status: r.status,
           summary: r.note,
           task: r.task,
-        }));
+          };
+        });
         return sendJson(res, 200, {
           confirmations: open.filter((c) => !claimed.has(c.id)),
           conversation: store.getConversation(id),

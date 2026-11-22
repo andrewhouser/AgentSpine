@@ -9,7 +9,7 @@
  *
  * Run with: node test/plan.test.mjs
  */
-const { ANSWER_LABEL, emptyPlan, foldPlan, labelFor, planSnapshot } = await import("../src/plan.ts");
+const { ANSWER_LABEL, emptyPlan, foldPlan, labelFor, planFromActions, planSnapshot } = await import("../src/plan.ts");
 const events = await import("../src/events.ts");
 
 let passed = 0;
@@ -120,6 +120,25 @@ check("on run_end the plan goes first", eq(tail, ["plan", "run_end"]), tail);
 check("stopped run's last plan shows nothing busy", seen[seen.length - 2].items.every((s) => s.status !== "active"));
 check("replay includes the plan events", events.replay(runId).filter((e) => e.type === "plan").length === 2);
 off();
+
+console.log("stored turns (planFromActions)");
+{
+  const row = (id, tool, decision = "executed", args = "{}") => ({ args, decision, id, tool });
+  const done = planFromActions(
+    [row(1, "web_search"), row(2, "web_search"), row(3, "web_read", "error"), row(4, "web_search", "executed", "not json")],
+    "ok",
+  ).map((s) => `${s.label}:${s.status}:${s.count}`);
+  check(
+    "a finished turn folds like the live one",
+    eq(done, ["Searching the web:done:2", `${labelFor("web_read", {})}:failed:1`, "Searching the web:done:1", `${ANSWER_LABEL}:done:1`]),
+    done,
+  );
+  check("a turn with no calls has no plan", planFromActions([], "ok").length === 0);
+  const failedRun = planFromActions([row(1, "web_search")], "failed");
+  check("a failed turn fails the unwritten reply", failedRun[failedRun.length - 1].status === "failed", JSON.stringify(failedRun));
+  const running = planFromActions([row(1, "web_search")], "running");
+  check("a running turn's reply is still pending", running[running.length - 1].status === "pending", JSON.stringify(running));
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

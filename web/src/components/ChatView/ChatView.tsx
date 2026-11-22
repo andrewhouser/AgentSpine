@@ -243,14 +243,20 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
             {t === "chat" ? "Chat" : "Trace"}
           </button>
         ))}
+        {/* The same mark as the Mac app's toolbar button (SF Symbol sidebar.right), so the two
+            read as one control. The word stays as the accessible name. */}
         <button
+          aria-label="Inspector"
           aria-pressed={showInspector}
           className={styles.inspectorToggle}
           onClick={toggleInspector}
           title={showInspector ? "Hide the inspector" : "Show models, tokens, tool calls and child runs"}
           type="button"
         >
-          Inspector
+          <svg aria-hidden fill="none" height="18" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 20 20" width="18">
+            <rect height="14" rx="3" width="17" x="1.5" y="3" />
+            <line x1="13" x2="13" y1="3" y2="17" />
+          </svg>
         </button>
       </div>
       {thread?.conversation.local_only === 1 && (
@@ -302,6 +308,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               onConfirmationResolved={onDecided}
               onEdit={active ? undefined : () => setDraft({ text: turn.task ?? "" })}
               onRetry={active ? undefined : () => void send(turn.task ?? "", [])}
+              plan={turn.plan}
               projectId={thread?.conversation.project_id ?? null}
               runId={turn.id}
               starred={turn.starred}

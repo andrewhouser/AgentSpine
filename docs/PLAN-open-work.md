@@ -242,8 +242,11 @@ Decided while building:
 - A denied or errored call fails its step, unless another call in the same step succeeded. A queued call shows
   the step as waiting on your approval. A stop or a failure marks whatever was still running as failed.
 - A subagent is one step ("Handing off to researcher"). The child's own calls stay under the child's run id.
-- The card shows only while the turn runs. After that, the tool-call strip is the record, and the card would
-  only repeat it. On Mac and iPhone it goes when the answer arrives; on web it goes when the run ends.
+- Changed 2026-11-22 (Andrew: the call-by-call rows buried the reply): on web and Mac the card is the chat's
+  whole record of what a turn did, live and after it ends. The thread API sends a finished turn's `plan`, folded
+  from its stored actions by `planFromActions` with the same rules. Every call, with its arguments and result,
+  is in the Trace tab (web) or the new Chat/Trace switch (Mac). An approval still shows in chat. The iPhone is
+  unchanged: the card while the turn runs, the tool-call rows after.
 Left to do:
 1. Watch it on a real multi-step turn on all three clients (You). Not yet seen running: the Swift targets build
    and the web typechecks, but no screen has been looked at.

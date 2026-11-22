@@ -769,6 +769,8 @@ export interface Turn {
   id: number;
   /** "chat" for a message the user typed; "approval" for the turn their decision resumed. */
   kind?: null | string;
+  /** The finished step checklist, folded server-side from `actions` (src/plan.ts). */
+  plan?: PlanStep[];
   served?: null | ServedModel;
   starred?: boolean;
   started: string;

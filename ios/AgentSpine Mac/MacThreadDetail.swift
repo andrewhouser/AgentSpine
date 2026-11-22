@@ -35,15 +35,30 @@ struct MacThreadDetail: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Kept across threads and launches: you either want the panel or you do not.
     @AppStorage("mac.threadInspector") private var showInspector = false
+    /// Chat (the reply and its step checklist) or Trace (every tool call, expandable), as on the
+    /// web. Per window and not kept: Trace is somewhere you look, not somewhere you live.
+    @State private var tab: MacTurnSpine.Mode = .chat
 
     var body: some View {
         VStack(spacing: 0) {
+            Picker("View", selection: $tab) {
+                Text("Chat").tag(MacTurnSpine.Mode.chat)
+                Text("Trace").tag(MacTurnSpine.Mode.trace)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spine.Space.xl)
+            .padding(.top, Spine.Space.sm)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spine.Space.lg) {
                         if thread?.conversation.isLocalOnly == true { LocalOnlyNotice() }
                         if let loadError {
                             ErrorNotice(message: loadError) { Task { await load() } }
+                        } else if thread != nil, tab == .trace {
+                            MacTraceList(turns: ledgerTurns, live: showsLiveTurn ? (liveTask, stream) : nil)
                         } else if let thread {
                             ForEach(ledgerTurns) { turn in
                                 TurnBlock(
@@ -460,11 +475,48 @@ private struct TurnBlock: View {
 
             MacTurnSpine(
                 calls: turn.actions.map { MacTurnSpine.Call($0) },
+                plan: turn.plan ?? [],
                 summary: turn.summary,
                 failure: (turn.summary ?? "").isEmpty && turn.status == "failed" ? "This turn failed." : nil,
                 confirmations: turn.confirmations,
                 onDecided: onDecided
             )
+        }
+    }
+}
+
+/// The Trace tab: each turn's message, then every tool call it made, each expanding to its
+/// exact arguments and output (web: TraceView). Approvals are answered in Chat, not here.
+private struct MacTraceList: View {
+    let turns: [Turn]
+    /// The turn in flight, drawn from the stream until the ledger has it.
+    let live: (task: String?, stream: RunStream)?
+
+    var body: some View {
+        if turns.allSatisfy({ $0.actions.isEmpty }) && (live?.stream.calls.isEmpty ?? true) {
+            Text("No tool calls in this chat yet.")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.textDim)
+        }
+        ForEach(turns) { turn in
+            if !turn.actions.isEmpty {
+                section(task: turn.task, calls: turn.actions.map { MacTurnSpine.Call($0) }, failed: turn.status == "failed", running: false)
+            }
+        }
+        if let live, !live.stream.calls.isEmpty {
+            section(task: live.task, calls: live.stream.calls.map { MacTurnSpine.Call($0) }, failed: false, running: live.stream.isLive)
+        }
+    }
+
+    private func section(task: String?, calls: [MacTurnSpine.Call], failed: Bool, running: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Spine.Space.sm) {
+            HStack(spacing: 8) {
+                Text(task?.isEmpty == false ? task! : "Turn")
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.medium))
+                    .lineLimit(2)
+                if running { ProgressView().controlSize(.small) }
+            }
+            MacTurnSpine(mode: .trace, calls: calls, failure: failed ? "failed" : nil)
         }
     }
 }

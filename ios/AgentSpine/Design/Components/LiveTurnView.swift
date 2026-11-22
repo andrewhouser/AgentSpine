@@ -81,8 +81,8 @@ struct LiveTurnView: View {
 ///
 /// The server owns every status: `src/plan.ts` folds the run's own tool calls and publishes a
 /// `plan` event with the whole list each time it changes, so this only draws the newest one
-/// (web: `PlanCard.tsx`). Shown while the turn runs; once it ends, the tool-call rows are the
-/// record and the card would only repeat them. Shared by the iPhone and Mac targets.
+/// (web: `PlanCard.tsx`). On iPhone it shows while the turn runs and the tool-call rows are the
+/// record after; on Mac it stays as the chat's record and the calls are in Trace. Shared by both.
 struct PlanCardView: View {
     let steps: [PlanStep]
 
