@@ -44,10 +44,18 @@ that is the answer, not a thing to design around.
    `NOTE_MEMORY_MAX` exist so one weird run cannot flood recall. Three new kinds means
    three new caps, wired into `prune.ts` alongside the others.
 
+**Learned memory and the cloud (2026-11-22).** Invariant 4 used to stop at the learner's own model call. Measured:
+a fact and a recipe learned in a private project run were recalled into a later ordinary `deep` run, and the cloud
+stand-in received both. A memory now has `cloud_safe`, set to 1 only when code saw the writing run stay off private
+material. Every other row is local-only, including every row from before the column. A run that recalls a local-only
+memory starts pinned to the local model, and so does its thread. `memory_recall` declares `privateOutput` for the
+same reason. This costs cloud quality on runs that recall older memories, which is the right way round for a
+local-first system. Suite: `test/memory-privacy.test.mjs`.
+
 **Provenance (Nod N1, 2026-11-21).** Every memory records the route that wrote it (`origin`) and, when there
 is one, the run (`run_id`). Both are set by code at the `remember()` call, never by the model, so a poisoned
 fact cannot claim to have come from you. `origin` is a closed set (`ORIGINS` in `src/memory/rag.ts`:
-`reflection`, `recipe`, `reviewed_lesson`, `rejection`, `interrupt`, `conversation`, `profile`, `tool`, `date`,
+`reflection`, `reviewed_recipe`, `reviewed_lesson`, `rejection`, `interrupt`, `conversation`, `profile`, `tool`, `date`,
 `friction`); anything else is stored as NULL. A refused duplicate returns before it writes, so the row that
 exists keeps its original provenance. Rows from before this show "before provenance", not a guess. Memories
 outlive runs (runs are pruned at 90 days by default), so the list reports `runPruned` and Settings says "run
@@ -295,6 +303,10 @@ have to reason about.
 >   the whole design:** `runner.ts` passes `allowRecipe` only when `store.runIsClean(runId)` —
 >   the run finished with no errored calls and nothing rejected, read from its own audit rows.
 >   A run that went badly cannot teach its method.
+>   **Changed 2026-11-22: a recipe waits for you.** A clean run can still have read a hostile page, so eligibility alone
+>   broke invariant 2. A learned recipe now joins the lesson queue in `src/learn/lessons.ts`, with its own ceiling of 50.
+>   Keeping it writes the memory with the origin `reviewed_recipe`, and recall refuses a `recipe` row without that origin.
+>   Recipes stored earlier move to the queue on the first start and stay local-only if kept.
 > - **3.2 Sampled self-critique.** `src/learn/critique.ts` runs on roughly `LESSON_SAMPLE_RATE`
 >   of **chat** runs (never scheduled/watcher — nobody was reading those), asks `judge()`
 >   whether the run did the job without waste, and turns a "no" into a `lesson` memory recalled

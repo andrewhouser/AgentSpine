@@ -69,6 +69,7 @@ export const critiqueRun = async (
   trace: Msg[],
   summary: string,
   sampleOverride?: boolean,
+  runPrivate = false,
 ): Promise<null | string> => {
   try {
     if (LESSON_SAMPLE_RATE <= 0) return null;
@@ -80,12 +81,15 @@ export const critiqueRun = async (
       `What the assistant concluded: ${summary}\n\n` +
       `--- transcript ---\n${renderTrace(trace)}`;
 
+    // The audit log cannot see a run pinned by its project or by a recalled memory, so the runner's answer counts too.
+    const isPrivate = runPrivate || touchedSensitive(runId);
+
     // "yes = the run was fine" — so a NO is the thing worth recording. Fallback true, so an
     // unreachable model produces no false lesson.
     const verdict = await judge(
       "Did this run accomplish what the user asked without wasted effort or wrong turns?",
       context,
-      { fallback: true, sensitivity: touchedSensitive(runId) ? "private" : "normal" },
+      { fallback: true, sensitivity: isPrivate ? "private" : "normal" },
     );
 
     if (verdict.yes) return null; // nothing to learn from a run that went fine
@@ -95,7 +99,7 @@ export const critiqueRun = async (
     const lesson = `On a task like "${task.slice(0, 120)}", a past run fell short: ${reason}`;
     // Proposed, never remembered: the reason can be shaped by a page in the transcript, so a person reads it before
     // any later run can (learn/lessons.ts).
-    if (!proposeLesson(lesson, runId)) return null; // seen before, or the review queue is full
+    if (!proposeLesson(lesson, runId, !isPrivate)) return null; // seen before, or the review queue is full
     console.log(`[critique] lesson proposed for review (run ${runId})`);
     return lesson;
   } catch (err) {

@@ -22,7 +22,8 @@ import { route } from "./router.ts";
 import { extractJson } from "./llm.ts";
 import type { Msg } from "./llm.ts";
 import { remember, countMemories, pruneMemories } from "./memory/rag.ts";
-import { RECIPE_MEMORY_MAX, REFLECT_MAX_FACTS, REFLECT_MEMORY_MAX } from "./config.ts";
+import { proposeRecipe } from "./learn/lessons.ts";
+import { REFLECT_MAX_FACTS, REFLECT_MEMORY_MAX } from "./config.ts";
 
 export const REFLECTION_KIND = "reflection";
 export const RECIPE_KIND = "recipe";
@@ -117,7 +118,7 @@ const looksLikeSecret = (f: string): boolean =>
 export interface ReflectResult {
   saved: string[];
   skipped: number;
-  /** The recipe text stored this pass, if any (Phase 3.1). */
+  /** The recipe text queued for review this pass, if any (Phase 3.1). */
   recipe?: string;
   /** Standing intent the user expressed, if any (Phase 4.2). The caller proposes a job. */
   standing?: string;
@@ -130,6 +131,8 @@ export interface ReflectOpts {
    * calls. A run that went badly must not have its method learned, so this defaults false.
    */
   allowRecipe?: boolean;
+  /** True only when the runner saw this run stay off private material. Defaults to local-only. */
+  cloudSafe?: boolean;
   /** The run being reflected on, recorded as the provenance of whatever is saved (Nod N1). */
   runId?: number;
 }
@@ -201,7 +204,7 @@ export const reflect = async (task: string, trace: Msg[], opts: ReflectOpts = {}
       // The dedupe this loop used to do by hand now lives inside `remember`, so every
       // writer gets it rather than only this one — see the note there about the 20 copies
       // the `memory_save` tool managed to store by not asking. `false` means already known.
-      if (await remember(fact, REFLECTION_KIND, { origin: "reflection", runId: opts.runId })) saved.push(fact);
+      if (await remember(fact, REFLECTION_KIND, { cloudSafe: opts.cloudSafe === true, origin: "reflection", runId: opts.runId })) saved.push(fact);
       else skipped++;
     }
 
@@ -211,14 +214,14 @@ export const reflect = async (task: string, trace: Msg[], opts: ReflectOpts = {}
     }
 
     // Recipe (Phase 3.1). Only when eligible, and only when the model actually produced a
-    // usable procedure. Deduped and capped like every other auto-generated kind.
+    // usable procedure. Proposed, never remembered: a clean run can still have read a hostile
+    // page, and a recipe is handed to later runs as their own notes (LEARNING invariant 2).
     let recipe: string | undefined;
     if (allowRecipe) {
       const text = renderRecipe(parsed?.recipe);
-      if (text && (await remember(text, RECIPE_KIND, { origin: "recipe", runId: opts.runId }))) {
+      if (text && proposeRecipe(text, opts.runId ?? null, opts.cloudSafe === true)) {
         recipe = text;
-        if (countMemories(RECIPE_KIND) > RECIPE_MEMORY_MAX) pruneMemories(RECIPE_KIND, RECIPE_MEMORY_MAX);
-        console.log(`[reflect] learned a recipe: ${text.split("\n")[0]}`);
+        console.log(`[reflect] proposed a recipe for review: ${text.split("\n")[0]}`);
       }
     }
 

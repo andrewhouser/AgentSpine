@@ -693,6 +693,7 @@ struct Memory: Codable, Identifiable, Hashable {
         case "rejection": return "from a rejected proposal"
         case "review": return "you said so in the weekly review"
         case "reviewed_lesson": return "lesson you read and kept"
+        case "reviewed_recipe": return "recipe you read and kept"
         case "tool": return "saved by the assistant"
         default: return origin
         }
@@ -832,21 +833,26 @@ struct RetroAnswerResult: Codable {
     let queued: Int?
 }
 
-/// Lessons waiting for a person. `cards` is the newest few and `total` is how many wait in all.
+/// Lessons and learned recipes waiting for a person. `cards` is the newest few and `total` is how many wait in all.
 struct LessonQueue: Codable {
     var cards: [LessonCard]
     var total: Int
 }
 
-/// A self-critique no run can see until you keep it.
+/// A self-critique or learned recipe no run can see until you keep it.
 struct LessonCard: Codable, Identifiable, Hashable {
     let id: Int
+    /// Absent from a server older than recipe review, where every card is a lesson.
+    let kind: String?
     let runId: Int?
     let source: String
     let text: String
 
     var origin: String {
-        let from = source == "before_review" ? "Saved before lessons were reviewed" : "From a self-critique"
+        let saved = source == "before_review"
+        let from = kind == "recipe"
+            ? (saved ? "Recipe saved before review existed" : "Recipe from a finished run")
+            : (saved ? "Saved before lessons were reviewed" : "From a self-critique")
         return runId.map { "\(from), run #\($0)" } ?? from
     }
 }

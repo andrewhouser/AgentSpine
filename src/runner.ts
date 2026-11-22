@@ -38,6 +38,7 @@ import type { Tier } from "./tiers.ts";
 import { enqueue, queueStatus } from "./queue.ts";
 import { profileMessage } from "./memory/profile.ts";
 import { recall, recallOfKind } from "./memory/rag.ts";
+import type { RecallSeen } from "./memory/rag.ts";
 import { CONVERSATION_KIND } from "./memory/summarize.ts";
 import { threadSummaryContext, updateThreadSummary } from "./memory/thread.ts";
 import { deniedContext } from "./learn/denials.ts";
@@ -129,7 +130,7 @@ export interface RunOpts {
  * Profile first, then the k memories most relevant to this specific task.
  * Never throws: if embeddings are down, a run with no recall beats no run at all.
  */
-const buildContext = async (task: string, used: string[] = []): Promise<string[]> => {
+const buildContext = async (task: string, used: string[] = [], seen?: RecallSeen): Promise<string[]> => {
   const context: string[] = [];
 
   const profile = profileMessage();
@@ -153,7 +154,7 @@ const buildContext = async (task: string, used: string[] = []): Promise<string[]
 
   if (MEMORY_RECALL_K > 0) {
     try {
-      const hits = await recall(task, MEMORY_RECALL_K, MEMORY_RECALL_MIN_SCORE);
+      const hits = await recall(task, MEMORY_RECALL_K, MEMORY_RECALL_MIN_SCORE, seen);
       if (hits.length) {
         context.push(
           "Relevant things you already know from previous runs. These are your own past " +
@@ -185,7 +186,7 @@ const buildContext = async (task: string, used: string[] = []): Promise<string[]
   // avoid, and neither is a fact about the user. Both are the assistant's own trusted notes.
   // Wrapped so a learner can never fail a run.
   try {
-    const recipes = await recallOfKind(RECIPE_KIND, task, 2);
+    const recipes = await recallOfKind(RECIPE_KIND, task, 2, 0, seen);
     if (recipes.length) {
       context.push(
         "You have done something like this before. Your own notes on how — reuse them if they " +
@@ -199,7 +200,7 @@ const buildContext = async (task: string, used: string[] = []): Promise<string[]
   }
 
   try {
-    const lessons = await recallOfKind(LESSON_KIND, task, 2);
+    const lessons = await recallOfKind(LESSON_KIND, task, 2, 0, seen);
     if (lessons.length) {
       context.push(
         "Lessons from past runs that went less well than they should have. Avoid repeating " +
@@ -217,7 +218,7 @@ const buildContext = async (task: string, used: string[] = []): Promise<string[]
   // week is recalled here rather than re-litigated. The user's own past threads, so trusted
   // standing context; recalled by task similarity and its own heading like recipes/lessons.
   try {
-    const priorThreads = await recallOfKind(CONVERSATION_KIND, task, 2);
+    const priorThreads = await recallOfKind(CONVERSATION_KIND, task, 2, 0, seen);
     if (priorThreads.length) {
       context.push(
         "Earlier conversations of yours on a related subject, summarised. Use them for " +
@@ -423,7 +424,8 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     const used: string[] = [];
     /** Where this run's trusted instructions came from, for the envelope and the run inspector. */
     const instructionSources: string[] = [];
-    const context = opts.noMemory ? [] : await buildContext(task, used);
+    const recalled: RecallSeen = { private: false };
+    const context = opts.noMemory ? [] : await buildContext(task, used, recalled);
     // Project instructions join the TRUSTED system context (they are yours, like
     // profile.md); project documents do not — see the knowledge block below.
     if (project) {
@@ -521,8 +523,13 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // Local-only from the first request when the run is in a project or its thread has already
       // touched private material. Either way, once the run is pinned the thread is marked, so a
       // later turn starts pinned too (earlier replies are history and may quote what was read).
-      const startPrivate = project != null || (conversationId != null && store.getConversation(conversationId)?.local_only === 1);
+      // A recalled memory that cannot show it is cloud-safe counts too: it is already in this run's system messages.
+      const startPrivate =
+        project != null || recalled.private || (conversationId != null && store.getConversation(conversationId)?.local_only === 1);
+      // Kept here because the loop releases its pin when it ends, before the learners below ask what this run saw.
+      let runWasPrivate = startPrivate;
       watchPin(runId, () => {
+        runWasPrivate = true;
         if (conversationId != null) store.setConversationLocalOnly(conversationId);
       });
       const harness = buildHarnessContext({
@@ -584,7 +591,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // calls (Phase 3.1) — read from the run's own audit rows, never assumed.
       if (REFLECT_ENABLED && !opts.noMemory) {
         const allowRecipe = RECIPE_ENABLED && store.runIsClean(runId);
-        const result = await reflect(task, trace, { allowRecipe, runId });
+        const result = await reflect(task, trace, { allowRecipe, cloudSafe: !runWasPrivate, runId });
         // Standing intent caught in conversation (Phase 4.2) becomes a PROPOSED recurring
         // job — queued for approval, never installed. Chat only: a scheduled run restating
         // its own standing task would propose itself forever.
@@ -602,7 +609,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       // reading a scheduled or watcher run, so critiquing it teaches against the wrong bar.
       // Never throws; runs after the result is persisted.
       if (kind === "chat" && !opts.noMemory) {
-        await critiqueRun(runId, task, trace, summary);
+        await critiqueRun(runId, task, trace, summary, undefined, runWasPrivate);
       }
 
       // Keep the thread's running summary current. Chat only, and only for a turn that

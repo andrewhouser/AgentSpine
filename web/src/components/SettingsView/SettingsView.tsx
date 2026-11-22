@@ -42,6 +42,7 @@ const ORIGIN_LABELS: Record<string, string> = {
   rejection: "from a rejected proposal",
   review: "you said so in the weekly review",
   reviewed_lesson: "lesson you read and kept",
+  reviewed_recipe: "recipe you read and kept",
   tool: "saved by the assistant",
 };
 

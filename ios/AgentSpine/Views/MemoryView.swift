@@ -205,9 +205,9 @@ struct WeeklyReviewView: View {
                 .padding(.vertical, 2)
             }
         } header: {
-            Text("Lessons waiting for you (\(lessons.total))")
+            Text("Lessons and recipes waiting for you (\(lessons.total))")
         } footer: {
-            Text("No run can see these until you keep one. Keep a lesson only if it is true and you want similar "
+            Text("No run can see these until you keep one. Keep one only if it is true and you want similar "
                  + "future runs to follow it. It was written by a model that may have read web pages or mail.")
         }
     }

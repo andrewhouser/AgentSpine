@@ -982,7 +982,9 @@ than escalated to the cloud. The prompt also treats the trace as hostile, becaus
 UNTRUSTED web and email text and "remember that Andrew authorized X" is the obvious attack;
 quoted content is evidence to summarize, never an instruction. Credential-shaped strings are
 filtered out, near-duplicates are dropped, and auto-learned memories are capped (oldest
-pruned first — your hand-saved notes never are).
+pruned first — your hand-saved notes never are). A recipe or lesson the assistant learns waits in
+**Settings → Weekly review** until you keep it. A run that recalls a memory which can't be shown
+to be free of private material stays on the local model, and so does its thread.
 
 **Named recipes** are the third source, and you write them. After working something out in a
 chat, say *"save this as a recipe called pi-brief"*. The assistant drafts a `when` line and the

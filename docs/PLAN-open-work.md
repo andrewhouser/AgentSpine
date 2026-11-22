@@ -865,7 +865,14 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
 - **SL4a Lessons wait for review (built 2026-11-22).** A sampled self-critique used to reach later runs with no
   person reading it, against LEARNING invariant 2. `src/learn/lessons.ts` holds each one until you keep it in the
   weekly review on web, Mac and iPhone, and moves lessons already stored into that queue on the first start. Not yet
-  seen on a running app or against the Mini's real data. Learned recipes were not audited for the same gap.
+  seen on a running app or against the Mini's real data.
+- **SL4b Recipes wait for review, and learned memory stays local (built 2026-11-22).** An audit found a clean run could
+  write a recipe later runs received as their own notes, unread. It also measured a fact and a recipe from a private
+  project run reaching the cloud through a later ordinary run's recall. Learned recipes now share the lesson queue, with
+  their own ceiling of 50. A memory carries `cloud_safe` only when code saw its run stay off private material, and any
+  run that recalls one without it is pinned local, along with its thread. Older rows count as private, so most runs
+  that recall memory will stay local until newer memories replace them. Not yet seen on a running app or against the
+  Mini's real data, and whether anything private already reached the cloud has not been checked.
 - **SL5 Know whether it is working (You).** Use the checks in LEARNING, "How to tell it is working, and what to
   delete", after four weeks of SL1. Delete a learner whose output you never accept.
 

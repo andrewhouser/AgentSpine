@@ -129,11 +129,13 @@ export interface RetroCard {
   why: string;
 }
 
-/** A self-critique no run can see until you keep it. */
+/** A self-critique or learned recipe no run can see until you keep it. */
 export interface LessonCard {
   id: number;
+  /** Absent from a server older than recipe review, where every card is a lesson. */
+  kind?: "lesson" | "recipe";
   runId: null | number;
-  /** `critique`, or `before_review` for a lesson stored before review existed. */
+  /** `critique`, `reflection`, or `before_review` for one stored before review existed. */
   source: string;
   text: string;
 }

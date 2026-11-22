@@ -25,6 +25,8 @@ export const memorySave: Tool = {
 
 export const memoryRecall: Tool = {
   name: "memory_recall",
+  // Whole tool, not per row: what it returns can come from a private run, and the declaration is read before the result.
+  privateOutput: true,
   description: "Retrieve relevant facts from long-term memory.",
   argsSchema: '{ "query": string, "k"?: number }',
   classify: (a): ClassifiedAction => ({

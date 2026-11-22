@@ -36,7 +36,11 @@ try {
 // Provenance (Nod N1): which run wrote a memory, and by which route. Both are set by code, never by
 // the model, so a poisoned fact cannot claim to have come from you. NULL means the row predates this
 // column, which is why the UI says "before provenance" and does not guess.
-for (const col of ["run_id INTEGER", "origin TEXT"]) {
+//
+// `cloud_safe` is 1 only when code could show the writer saw nothing private. NULL means local-only, which is what every
+// row from before this column gets: a fact learned in a project run was measured reaching the cloud tier through a later
+// ordinary run's recall (2026-11-22), and an old row cannot prove it did not come from one.
+for (const col of ["run_id INTEGER", "origin TEXT", "cloud_safe INTEGER"]) {
   try {
     rawDb.exec(`ALTER TABLE memories ADD COLUMN ${col}`);
   } catch {
@@ -47,7 +51,7 @@ for (const col of ["run_id INTEGER", "origin TEXT"]) {
 /**
  * The routes a memory can be written by. A closed set, checked at write time: anything else is stored
  * as NULL rather than as free text, because the point of provenance is that it is trustworthy.
- *   reflection   a fact reflect.ts extracted after a run        recipe        a procedure reflect.ts learned
+ *   reflection   a fact reflect.ts extracted after a run        reviewed_recipe  a learned procedure you read and kept
  *   rejection    a rejected proposal, with or without a reason
  *   interrupt    a dismissed proactive notification             conversation  a summary of a finished conversation
  *   profile      facts you approved in chat (profile_remember)  tool          the model chose to remember (memory_save)
@@ -55,20 +59,31 @@ for (const col of ["run_id INTEGER", "origin TEXT"]) {
  *   review       something you wished you had been told, typed into the weekly review
  *   reviewed_lesson  a self-critique you read and kept. The old unreviewed `lesson` route is gone on purpose
  */
-export const ORIGINS = ["conversation", "date", "friction", "interrupt", "profile", "recipe", "reflection", "rejection", "review", "reviewed_lesson", "tool"] as const;
+export const ORIGINS = ["conversation", "date", "friction", "interrupt", "profile", "reflection", "rejection", "review", "reviewed_lesson", "reviewed_recipe", "tool"] as const;
 export type Origin = (typeof ORIGINS)[number];
 
 /**
- * SQL for "this row may reach a prompt". A lesson counts only once a person kept it (learn/lessons.ts). In every recall
- * query rather than one, because a lesson nobody read must fail closed on any path.
+ * SQL for "this row may reach a prompt". A lesson or learned recipe counts only once a person kept it (learn/lessons.ts).
+ * In every recall query rather than one, because a procedure nobody read must fail closed on any path.
  */
-const RECALLABLE = "(kind IS NOT 'lesson' OR origin = 'reviewed_lesson')";
+const RECALLABLE = "(kind IS NOT 'lesson' OR origin = 'reviewed_lesson') AND (kind IS NOT 'recipe' OR origin = 'reviewed_recipe')";
 
 export interface MemorySource {
+  /** True only when code showed the writer saw nothing private. Anything else is stored as local-only. */
+  cloudSafe?: boolean;
   origin: Origin;
   /** The run that wrote it, when there is one. Many writers (a summary, a dismissal) have none. */
   runId?: null | number;
 }
+
+/** Filled in by recall for a caller that must pin itself local when a returned memory is not cloud-safe. */
+export interface RecallSeen {
+  private: boolean;
+}
+
+const noteRecalled = (rows: { cloud_safe?: null | number }[], seen?: RecallSeen): void => {
+  if (seen && rows.some((r) => r.cloud_safe !== 1)) seen.private = true;
+};
 
 const sourceColumns = (source?: MemorySource): { origin: null | string; runId: null | number } => ({
   origin: source && (ORIGINS as readonly string[]).includes(source.origin) ? source.origin : null,
@@ -225,8 +240,8 @@ export const remember = async (text: string, kind = "note", source?: MemorySourc
 
   const { origin, runId } = sourceColumns(source);
   rawDb
-    .prepare("INSERT INTO memories (ts, kind, text, embedding, origin, run_id) VALUES (?,?,?,?,?,?)")
-    .run(now(), kind, trimmed, vec ? toBlob(vec) : null, origin, runId);
+    .prepare("INSERT INTO memories (ts, kind, text, embedding, origin, run_id, cloud_safe) VALUES (?,?,?,?,?,?,?)")
+    .run(now(), kind, trimmed, vec ? toBlob(vec) : null, origin, runId, source?.cloudSafe === true ? 1 : null);
   return true;
 };
 
@@ -353,13 +368,15 @@ export const recallScored = async (
   k = 5,
   vector?: Float32Array,
   minScore = 0,
+  seen?: RecallSeen,
 ): Promise<Recalled[]> => {
   const embedder = vector ? null : await getEmbedder();
 
   if (!embedder && !vector) {
     const rows = rawDb
-      .prepare(`SELECT text FROM memories WHERE text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
-      .all(`%${query}%`, k) as { text: string }[];
+      .prepare(`SELECT text, cloud_safe FROM memories WHERE text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
+      .all(`%${query}%`, k) as { cloud_safe: null | number; text: string }[];
+    noteRecalled(rows, seen);
     // Keyword fallback has no meaningful similarity (score is NaN), so the floor cannot apply
     // here — filtering by `NaN >= minScore` would drop every row and turn recall into nothing.
     // A weak keyword match still beats no recall at all.
@@ -367,23 +384,25 @@ export const recallScored = async (
   }
 
   const q = vector ?? (await embedder!(query));
-  const rows = rawDb.prepare(`SELECT id, text, embedding FROM memories WHERE ${RECALLABLE}`).all() as unknown as MemRow[];
-  return rows
+  const rows = rawDb.prepare(`SELECT id, text, embedding, cloud_safe FROM memories WHERE ${RECALLABLE}`).all() as unknown as (MemRow & { cloud_safe: null | number })[];
+  const hits = rows
     .filter((r) => r.embedding)
-    .map((r) => ({ text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))
+    .map((r) => ({ cloud_safe: r.cloud_safe, text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))
     // Drop matches below the floor BEFORE the top-k cut, so a weak hit does not take a slot a
     // stronger one could have used. `minScore <= 0` is a fast no-op that keeps rank-only order.
     .filter((r) => minScore <= 0 || r.score >= minScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
+  noteRecalled(hits, seen);
+  return hits.map(({ text, score }) => ({ text, score }));
 };
 
 /**
  * Recall the k most relevant memories for a query, optionally dropping anything below
  * `minScore` (cosine). The floor is ignored under the keyword fallback — see `recallScored`.
  */
-export const recall = async (query: string, k = 5, minScore = 0): Promise<string[]> =>
-  (await recallScored(query, k, undefined, minScore)).map((r) => r.text);
+export const recall = async (query: string, k = 5, minScore = 0, seen?: RecallSeen): Promise<string[]> =>
+  (await recallScored(query, k, undefined, minScore, seen)).map((r) => r.text);
 
 /**
  * Recall the k most relevant memories OF ONE KIND for a query (LEARNING Phase 3). Recipes
@@ -391,23 +410,25 @@ export const recall = async (query: string, k = 5, minScore = 0): Promise<string
  * heading and capped independently of the general recall budget. Same embedder, same cosine;
  * the only difference is the `WHERE kind = ?` filter, and the keyword fallback honours it too.
  */
-export const recallOfKind = async (kind: string, query: string, k = 3, minScore = 0): Promise<string[]> => {
+export const recallOfKind = async (kind: string, query: string, k = 3, minScore = 0, seen?: RecallSeen): Promise<string[]> => {
   const embedder = await getEmbedder();
   if (!embedder) {
     const rows = rawDb
-      .prepare(`SELECT text FROM memories WHERE kind = ? AND text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
-      .all(kind, `%${query}%`, k) as { text: string }[];
+      .prepare(`SELECT text, cloud_safe FROM memories WHERE kind = ? AND text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
+      .all(kind, `%${query}%`, k) as { cloud_safe: null | number; text: string }[];
+    noteRecalled(rows, seen);
     return rows.map((r) => r.text);
   }
   const q = await embedder(query);
-  const rows = rawDb.prepare(`SELECT id, text, embedding FROM memories WHERE kind = ? AND ${RECALLABLE}`).all(kind) as unknown as MemRow[];
-  return rows
+  const rows = rawDb.prepare(`SELECT id, text, embedding, cloud_safe FROM memories WHERE kind = ? AND ${RECALLABLE}`).all(kind) as unknown as (MemRow & { cloud_safe: null | number })[];
+  const hits = rows
     .filter((r) => r.embedding)
-    .map((r) => ({ score: cosine(q, fromBlob(r.embedding as Buffer)), text: r.text }))
+    .map((r) => ({ cloud_safe: r.cloud_safe, score: cosine(q, fromBlob(r.embedding as Buffer)), text: r.text }))
     .filter((r) => r.score >= minScore)
     .sort((a, b) => b.score - a.score)
-    .slice(0, k)
-    .map((r) => r.text);
+    .slice(0, k);
+  noteRecalled(hits, seen);
+  return hits.map((r) => r.text);
 };
 
 /**

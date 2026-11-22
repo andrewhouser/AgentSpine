@@ -44,7 +44,7 @@ console.log("\nTHE CRITIQUE CANNOT WRITE A MEMORY");
 {
   const source = fs.readFileSync(new URL("../src/learn/critique.ts", import.meta.url), "utf8");
   check("critique.ts does not call remember()", /\bremember\s*\(/.test(source), false);
-  check("critique.ts proposes instead", source.includes("proposeLesson(lesson, runId)"), true);
+  check("critique.ts proposes instead", source.includes("proposeLesson(lesson, runId, !isPrivate)"), true);
 }
 
 console.log("\nKEEPING IS WHAT MAKES IT USABLE");
@@ -58,7 +58,7 @@ console.log("\nKEEPING IS WHAT MAKES IT USABLE");
   check("its origin says a person kept it, and it keeps its run", [row.origin, row.runId], ["reviewed_lesson", 7]);
   check("a second answer changes nothing", await l.answerLesson(card.id, "reject"), null);
   check("the card no longer holds the words", rawDb.prepare("SELECT text FROM lesson_proposals WHERE id = ?").get(card.id).text, "");
-  check("the next start does not pull a kept lesson back", l.holdStoredLessons(), 0);
+  check("the next start does not pull a kept lesson back", l.holdUnreviewed(), 0);
   check("and it is still there", lessonRows(), 1);
 }
 
@@ -80,12 +80,12 @@ console.log("\nLESSONS STORED BEFORE REVIEW EXISTED");
   insertOld("On a task like cobalt audit, a past run fell short: old lesson two", null);
   check("before the move, recall already ignores them", await rag.recall("cobalt", 3), []);
   check("recall by kind ignores them too", await rag.recallOfKind("lesson", "cobalt", 3), []);
-  check("both are moved, including one with no origin", l.holdStoredLessons(), 2);
+  check("both are moved, including one with no origin", l.holdUnreviewed(), 2);
   check("only the kept lesson stays in memories", lessonRows(), 1);
   check("they wait for review, marked as old", cardFor("On a task like cobalt audit, a past run fell short: old lesson one")?.source, "before_review");
   const event = rawDb.prepare("SELECT detail FROM data_events WHERE kind = 'lessons_held_for_review' ORDER BY id DESC").get();
   check("the move is audited, with a count and no content", event?.detail, "2 moved to the review queue");
-  check("running it again moves nothing", l.holdStoredLessons(), 0);
+  check("running it again moves nothing", l.holdUnreviewed(), 0);
 }
 
 console.log("\nA BACKLOG STAYS BOUNDED");

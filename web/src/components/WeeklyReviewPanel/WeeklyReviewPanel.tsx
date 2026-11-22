@@ -31,6 +31,13 @@ const RETRO_LABELS: Record<RetroCard["kind"], string> = {
   routine: "Routine",
 };
 
+/** Where a card waiting for review came from. A server older than recipe review sends no kind, and every card is a lesson. */
+const cardOrigin = (card: LessonCard): string => {
+  const saved = card.source === "before_review";
+  if (card.kind === "recipe") return saved ? "Recipe saved before review existed" : "Recipe from a finished run";
+  return saved ? "Saved before lessons were reviewed" : "From a self-critique";
+};
+
 const OUTCOME_LABELS: Record<ReviewItem["outcome"], string> = {
   dismissed: "you swiped it away",
   ignored: "not opened",
@@ -133,15 +140,15 @@ export const WeeklyReviewPanel = () => {
       {(review.lessons?.cards ?? []).length > 0 && (
         <>
           <p className={styles.note}>
-            Lessons waiting for you ({review.lessons?.total}). No run can see these until you keep one. Keep a lesson only
-            if it is true and you want similar future runs to follow it. It was written by a model that may have read web
-            pages or mail.
+            Lessons and recipes waiting for you ({review.lessons?.total}). No run can see these until you keep one. Keep
+            one only if it is true and you want similar future runs to follow it. It was written by a model that may have
+            read web pages or mail.
           </p>
           {(review.lessons?.cards ?? []).map((card) => (
             <div className={styles.item} key={card.id}>
               <p className={styles.body}>{card.text}</p>
               <div className={styles.meta}>
-                {card.source === "before_review" ? "Saved before lessons were reviewed" : "From a self-critique"}
+                {cardOrigin(card)}
                 {card.runId !== null && `, run #${card.runId}`}
               </div>
               <div className={styles.actions}>
