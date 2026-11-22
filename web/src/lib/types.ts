@@ -119,12 +119,24 @@ export interface ReviewItem {
   topic: string;
 }
 
+/** One card from the weekly retrospective. Code chose it; the local model only worded it. */
+export interface RetroCard {
+  id: number;
+  kind: "auto_approval" | "code_change" | "memory_correction" | "missing_capability" | "recipe" | "routine";
+  runIds: number[];
+  title: string;
+  week: string;
+  why: string;
+}
+
 /** GET /api/outbox/review. */
 export interface OutboxReview {
   days: number;
   items: ReviewItem[];
   /** Kinds you mostly skip over 90 days. `off` ones may have a proposal to switch the schedule off waiting in Approvals. */
   quiet: { counted: number; kind: string; rate: number; sent: number; skipped: number; source: string; tier: "off" | "quiet"; topic: string }[];
+  /** Absent from a server older than SL2. */
+  retro?: RetroCard[];
   tally: {
     deduped: number;
     dismissed: number;

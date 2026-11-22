@@ -142,7 +142,10 @@ export const badAnswerSignals = (since: Date, policy?: Policy): BadAnswerSignals
   const rejectedProposals = (
     rawDb
       .prepare(
-        "SELECT confirmation_id, kind FROM proposal_log WHERE outcome = 'rejected' AND decided >= ? ORDER BY confirmation_id",
+        // Above zero: a dismissed retrospective card is already handled by its own gate, and counting it
+        // here would let the retrospective feed on its own output.
+        "SELECT confirmation_id, kind FROM proposal_log WHERE outcome = 'rejected' AND decided >= ? " +
+          "AND confirmation_id > 0 ORDER BY confirmation_id",
       )
       .all(sinceIso) as unknown as { confirmation_id: number; kind: string }[]
   ).map((r) => ({ confirmationId: r.confirmation_id, kind: r.kind }));

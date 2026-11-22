@@ -14,7 +14,16 @@
 import { createHash } from "node:crypto";
 import { rawDb } from "../memory/store.ts";
 
-export type ProposalKind = "rewrite" | "schedule" | "standing";
+export type ProposalKind =
+  | "retro_auto_approval"
+  | "retro_code_change"
+  | "retro_memory_correction"
+  | "retro_missing_capability"
+  | "retro_recipe"
+  | "retro_routine"
+  | "rewrite"
+  | "schedule"
+  | "standing";
 
 /**
  * Starting values, not measurements: the same shape as Heads-up B's quieting, which also waits for enough
@@ -35,6 +44,16 @@ export const recordProposal = (kind: ProposalKind, shape: string, confirmationId
   rawDb
     .prepare("INSERT OR IGNORE INTO proposal_log (confirmation_id, kind, key_hash, made) VALUES (?,?,?,?)")
     .run(confirmationId, kind, proposalHash(shape), at.toISOString());
+};
+
+/**
+ * Close a proposal that has no confirmation row, which is every retrospective card (SL2). Those are logged
+ * under the negative of their own id, so they can never collide with a confirmation or fire its trigger.
+ */
+export const recordProposalOutcome = (logId: number, outcome: "accepted" | "rejected", at: Date = new Date()): void => {
+  rawDb
+    .prepare("UPDATE proposal_log SET outcome = ?, decided = ? WHERE confirmation_id = ? AND outcome IS NULL")
+    .run(outcome, at.toISOString(), logId);
 };
 
 export interface KindRecord {

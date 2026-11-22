@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { OutboxReview, ReviewItem } from "../../lib/types.ts";
+import type { OutboxReview, RetroCard, ReviewItem } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -20,6 +20,15 @@ const SOURCE_LABELS: Record<string, string> = {
 const sayTopic = (topic: string): string => {
   const at = topic.lastIndexOf(": ");
   return at < 0 ? topic : `${topic.slice(0, at)} (${topic.slice(at + 2)})`;
+};
+
+const RETRO_LABELS: Record<RetroCard["kind"], string> = {
+  auto_approval: "Auto-approval",
+  code_change: "Code change",
+  memory_correction: "Memory correction",
+  missing_capability: "Missing capability",
+  recipe: "Recipe",
+  routine: "Routine",
 };
 
 const OUTCOME_LABELS: Record<ReviewItem["outcome"], string> = {
@@ -67,6 +76,9 @@ export const WeeklyReviewPanel = () => {
         : `Already noted: I am quieter about ${sayTopic(r.topic)}.`;
     });
 
+  const answerCard = (card: RetroCard, value: "accept" | "reject"): Promise<void> =>
+    run(async () => (await api.answerRetro(card.id, value)).message);
+
   const sendWish = (): Promise<void> =>
     run(async () => {
       const r = await api.sendOutboxWish(wish);
@@ -112,6 +124,29 @@ export const WeeklyReviewPanel = () => {
               </li>
             ))}
           </ul>
+        </>
+      )}
+
+      {(review.retro ?? []).length > 0 && (
+        <>
+          <p className={styles.note}>Ideas from your week. Nothing here has been changed.</p>
+          {(review.retro ?? []).map((card) => (
+            <div className={styles.item} key={card.id}>
+              <div className={styles.title}>{card.title}</div>
+              <div className={styles.meta}>
+                {RETRO_LABELS[card.kind]}, from runs {card.runIds.map((id) => `#${id}`).join(", ")}
+              </div>
+              <p className={styles.body}>{card.why}</p>
+              <div className={styles.actions}>
+                <button className={styles.button} disabled={busy} onClick={() => void answerCard(card, "accept")} type="button">
+                  {card.kind === "routine" ? "Queue for approval" : "Keep"}
+                </button>
+                <button className={styles.button} disabled={busy} onClick={() => void answerCard(card, "reject")} type="button">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
         </>
       )}
 

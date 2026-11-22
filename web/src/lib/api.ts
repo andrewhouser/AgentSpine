@@ -157,6 +157,9 @@ export const api = {
   /** Your answer to one message in the weekly review. "skip" files a dismissal memory for its topic. */
   answerOutbox: (id: number, answer: "skip" | "useful") =>
     post<{ remembered: boolean; topic: string }>(`/api/outbox/${id}/feedback`, { answer }),
+  /** Keep or dismiss a retrospective card. Accepting a routine only queues it for approval. */
+  answerRetro: (id: number, answer: "accept" | "reject") =>
+    post<{ message: string; queued: null | number }>(`/api/outbox/retro/${id}`, { answer }),
   /**
    * Accept one auto-approval proposal.
    *

@@ -327,6 +327,10 @@ export const REWRITE_MIN_OVER_BUDGET = Number(env.REWRITE_MIN_OVER_BUDGET ?? "3"
 // standing one. Off by default: this is the phase with teeth.
 export const REWRITE_ENABLED = (env.REWRITE_ENABLED ?? "false") === "true";
 
+// The weekly retrospective (docs/LEARNING.md, SL2). A model call over the week's requests, so it stays
+// off until N2's live injection eval has a baseline, like every other learner that reads a trace.
+export const RETRO_ENABLED = (env.RETRO_ENABLED ?? "false") === "true";
+
 // --- Memory consolidation (docs/LEARNING.md Phase 6) ---
 // Two memories whose stored embeddings score at or above this are CANDIDATES for being a
 // duplicate, a rephrasing, or an older version of one another. It sits below

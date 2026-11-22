@@ -841,12 +841,13 @@ task-text rewriter. Most of "self-learning" is switching these on, which section
 - **SL1 Switch on what is built (You).** In order: N2 live half, ROLLOUT step 3, then step 5. This settles the
   open decision in 4a: yes to a weekly trigger for `runProposer`, and for `runRewriter` once step 5 is done.
   Run consolidation 6.0 on the Mini as 4a says.
-- **SL2 A weekly retrospective (Code).** One local pass, pinned `private`, over the week's ledger. Code counts
-  the candidates: repeated requests, rejections with their reasons, corrections, stops, runs that hit a cap,
-  denied calls, and things you asked for that no tool could do. The model words at most a fixed number of
-  proposals, each of a closed kind: routine (a schedule, created disabled), recipe, auto-approval, memory
-  correction, missing capability, or code change (which becomes an SC5 card). Each lists the runs it rests on,
-  as Phase 2 proposals do. It arrives with the weekly review and counts against the daily cap.
+- **SL2 A weekly retrospective (built 2026-11-22, off until `RETRO_ENABLED=true`).** `src/learn/retro.ts`: one
+  local pass, pinned `private`. Code finds the candidates and fixes each card's kind, runs and action; the model
+  only picks from the list and words at most 5. Cards appear in the weekly review on web, Mac and iPhone, with one
+  push that counts against the daily cap. Accepting a routine queues a disabled job for approval. Every other kind
+  records your answer only, and a code-change card starts nothing until SC5 exists. You: run N2's live eval, add
+  this surface to it, then switch it on. Not yet run against the real model or a real week. The step cap is
+  inferred from a run's tool-call count, because it leaves no marker on the run.
 - **SL3 Signals of a bad answer (built 2026-11-22).** `src/learn/signals.ts` counts stops, immediate re-asks,
   edited drafts and rejected proposals, by run id and without task text. `npm run signals` prints them. Nothing
   consumes them until SL2, and none writes a memory. The re-ask window and overlap are guesses to check on real weeks.

@@ -134,6 +134,10 @@ struct WeeklyReviewView: View {
                     }
                 }
 
+                if let cards = review.retro, !cards.isEmpty {
+                    retroSection(cards)
+                }
+
                 Section("Something I wish I'd been told") {
                     TextField("For example: a snow day notice", text: $wish, axis: .vertical)
                     Button("Save") { Task { await sendWish() } }
@@ -179,6 +183,51 @@ struct WeeklyReviewView: View {
         .spineInlineTitle()
         .refreshable { await load() }
         .task { await load() }
+    }
+
+    private func retroSection(_ cards: [RetroCard]) -> some View {
+        Section {
+            ForEach(cards) { card in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(card.title)
+                    Text(card.source)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    Text(card.why)
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    HStack {
+                        retroButton(card.kind == "routine" ? "Queue for approval" : "Keep", card: card, answer: "accept")
+                        retroButton("Dismiss", card: card, answer: "reject")
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("Ideas from your week")
+        } footer: {
+            Text("Nothing here has been changed.")
+        }
+    }
+
+    private func retroButton(_ label: String, card: RetroCard, answer: String) -> some View {
+        Button(label) { Task { await sendRetro(card, answer: answer) } }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(busy)
+    }
+
+    private func sendRetro(_ card: RetroCard, answer: String) async {
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await APIClient.shared.answerRetro(card.id, answer: answer)
+            message = result.message
+            error = nil
+            review?.retro?.removeAll { $0.id == card.id }
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     private func verdictButton(_ label: String, item: ReviewItem, answer: String) -> some View {

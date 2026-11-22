@@ -684,6 +684,33 @@ shape includes the task text, so editing the task reopens it. A kind with at lea
 and 80% rejected waits 30 days between proposals. The window slides, so a quietened kind recovers. The log stores
 a SHA-256 of the shape rather than the words, because it deliberately outlives ledger retention.
 
+## The weekly retrospective (SL2)  ✅ **BUILT, 2026-11-22; off until `RETRO_ENABLED=true`**
+
+`src/learn/retro.ts` runs once, on Sunday at the review hour, outside quiet hours. **Code decides, the model
+words.** Code finds each candidate from the last 7 days and fixes its kind, the runs it rests on and any action:
+
+| Kind | What raises it | What accepting does |
+|---|---|---|
+| Routine | the same request on 3 or more days | queues a disabled `schedule_create` for approval |
+| Recipe | 3 or more times in fewer days, median 6+ steps | records your answer |
+| Auto-approval | a shape that already earned a Phase 2 proposal | records it; you apply it in Settings |
+| Memory correction | 2+ reasoned rejections of a tool, or 3+ SL3 bad-answer runs | records your answer |
+| Missing capability | 2+ calls to a tool that does not exist, or 3+ policy denials | records your answer |
+| Code change | 2+ runs that hit a step or token limit | records it; nothing starts until SC5 |
+
+The local model sees those facts plus your own words (requests and rejection reasons, tagged UNTRUSTED), and
+returns a candidate id, a title and one sentence. Code drops an unknown id, a repeat, an empty field or anything
+with a link, and keeps at most 5. So a quoted hostile page can produce an odd sentence, but cannot create an action,
+change a kind or attach itself to other runs. A failed reply leaves the week open for up to 3 tries.
+
+Cards are answered in the weekly review, and SL4's rules apply: a dismissed card is not raised again, and a kind you
+mostly dismiss waits. The push is source `tool`, so it counts against the daily cap, and it carries a count, never
+content. `outbox-review.ts` stays free of the model; the server composes the two. `npm run retro` lists this week's
+candidates with no model call, and `npm run retro -- --run` words and stores them without a push.
+
+**Before switching it on:** run N2's live eval and add this surface to it. The thresholds are starting guesses.
+The step cap leaves no marker on a run, so a run with at least `MAX_STEPS` tool calls is the proxy.
+
 ## Writing styles (N4)
 
 Not a learner in the sense of the phases above: nothing here runs on its own. `style_learn` (live chat only,
@@ -730,7 +757,7 @@ is a capability the model gets to invoke. `applyProposal` (Phase 2) is the only 
 that writes `policy.json`, and it runs from an authenticated server route, never a tool.
 
 **CLIs** — `npm run propose [--dry]` (Phase 4.1), `npm run rewrite [--dry]` (Phase 5),
-`npm run consolidate [-- --all]` (Phase 6.0, read-only), `npm run signals [-- --days N]` (SL3, read-only),
+`npm run consolidate [-- --all]` (Phase 6.0, read-only), `npm run signals [-- --days N]` (SL3, read-only), `npm run retro [-- --run]` (SL2, dry unless `--run`),
 alongside the existing `digest` / `watcher` / `prune`.
 
 ## How to tell it is working, and what to delete

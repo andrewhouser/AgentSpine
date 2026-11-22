@@ -85,6 +85,7 @@ import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
+import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
@@ -893,7 +894,18 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
      *   POST /api/outbox/wish            {text}: something you wish you had been told, stored as a preference memory.
      */
     if (m === "GET" && seg[1] === "outbox" && seg[2] === "review" && seg.length === 3) {
-      return sendJson(res, 200, buildReview());
+      // Composed here so outbox-review.ts stays free of anything that imports the model router.
+      return sendJson(res, 200, { ...buildReview(), retro: openRetroProposals() });
+    }
+    // POST /api/outbox/retro/:id {answer: "accept" | "reject"}: one retrospective card (SL2). Accepting a
+    // routine queues a disabled job for approval. No other answer changes anything but the card's record.
+    if (m === "POST" && seg[1] === "outbox" && seg[2] === "retro" && seg.length === 4) {
+      const id = Number(seg[3]);
+      if (!Number.isInteger(id) || id <= 0) return sendJson(res, 400, { error: "id must be a positive integer" });
+      const b = await readBody(req);
+      if (b?.answer !== "accept" && b?.answer !== "reject") return sendJson(res, 400, { error: 'answer must be "accept" or "reject"' });
+      const result = answerRetro(id, b.answer);
+      return result ? sendJson(res, 200, result) : sendJson(res, 404, { error: "not an open card" });
     }
     if (m === "POST" && seg[1] === "outbox" && seg[2] === "wish" && seg.length === 3) {
       const b = await readBody(req);
@@ -2279,6 +2291,8 @@ setInterval(() => void sweepOutbox(), 5 * 60_000).unref();
 // at most once per schedule per 90 days, so running it every few minutes costs one query.
 const sweepReview = (): Promise<boolean> => {
   proposeSchedulesOff();
+  // Not awaited: a slow local model must not delay the review's own push. A no-op unless RETRO_ENABLED.
+  void runRetro((t, b, o) => notify(t, b, o));
   return sendWeeklyReview((t, b, o) => notify(t, b, o));
 };
 setInterval(() => void sweepReview(), 5 * 60_000).unref();

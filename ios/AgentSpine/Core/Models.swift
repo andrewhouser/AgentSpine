@@ -794,7 +794,40 @@ struct OutboxReview: Codable {
     var items: [ReviewItem]
     /// Absent from a server older than Phase 4.
     let quiet: [SkippedKind]?
+    /// Absent from a server older than SL2.
+    var retro: [RetroCard]?
     let tally: [ReviewTally]
+}
+
+/// One card from the weekly retrospective. Code chose it; the local model only worded it.
+struct RetroCard: Codable, Identifiable, Hashable {
+    let id: Int
+    let kind: String
+    let runIds: [Int]
+    let title: String
+    let week: String
+    let why: String
+
+    var kindLabel: String {
+        switch kind {
+        case "auto_approval": return "Auto-approval"
+        case "code_change": return "Code change"
+        case "memory_correction": return "Memory correction"
+        case "missing_capability": return "Missing capability"
+        case "recipe": return "Recipe"
+        case "routine": return "Routine"
+        default: return kind
+        }
+    }
+
+    var source: String {
+        "\(kindLabel), from runs " + runIds.map { "#\($0)" }.joined(separator: ", ")
+    }
+}
+
+struct RetroAnswerResult: Codable {
+    let message: String
+    let queued: Int?
 }
 
 /// The server's answer to a review verdict. `remembered` is false when a note like it already existed.

@@ -741,6 +741,14 @@ final class APIClient {
         )
     }
 
+    /// Keep or dismiss a retrospective card. Accepting a routine only queues it for approval.
+    func answerRetro(_ id: Int, answer: String) async throws -> RetroAnswerResult {
+        try await send(
+            jsonRequest("/api/outbox/retro/\(id)", method: "POST", body: ["answer": answer]),
+            as: RetroAnswerResult.self
+        )
+    }
+
     /// Something you wish you had been told, stored as a preference memory.
     func sendOutboxWish(_ text: String) async throws -> ReviewWishResult {
         try await send(
