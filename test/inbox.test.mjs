@@ -186,5 +186,16 @@ console.log("\nWHAT CAN BE READ WITHOUT A MODEL (K3)");
   check("suggestions survive a reload", itemsStore.getItem(second.id).suggested_people, ["Priya Natarajan"]);
 }
 
+console.log("\nA DICTATED NOTE");
+{
+  check("a dictated note says so", intake.pasteVia({ kind: "note", via: "dictation" }), "dictation");
+  check("a thread cannot claim to be dictated", intake.pasteVia({ kind: "paste", via: "dictation" }), "paste");
+  check("a client cannot write its own label", intake.pasteVia({ kind: "note", via: "anything else" }), "paste");
+  check("no body is a paste", intake.pasteVia(null), "paste");
+  const r = await intake.ingestPaste("Dictated: call about renewal DICTNOTE-4417", { kind: "note", via: intake.pasteVia({ kind: "note", via: "dictation" }) });
+  check("it is stored as a note that records how it arrived", [r.item.kind, r.item.via, r.item.speakers], ["note", "dictation", []]);
+  check("and is searchable", await found("DICTNOTE-4417"), 1);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

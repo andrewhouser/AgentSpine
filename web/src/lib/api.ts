@@ -277,7 +277,7 @@ export const api = {
 
   inboxList: () => request<InboxItem[]>("/api/inbox"),
 
-  inboxPaste: (text: string, opts: { kind?: "note" | "paste"; name?: string } = {}) =>
+  inboxPaste: (text: string, opts: { kind?: "note" | "paste"; name?: string; via?: "dictation" } = {}) =>
     request<{ duplicate: boolean; item: InboxItem }>("/api/inbox/paste", { body: JSON.stringify({ text, ...opts }), method: "POST" }),
 
   inboxReprocess: (id: number) => request<InboxItem>(`/api/inbox/${id}/reprocess`, { method: "POST" }),

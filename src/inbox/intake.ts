@@ -172,6 +172,13 @@ export const ingestFile = async (data: Buffer, meta: IngestMeta = {}): Promise<I
   return { duplicate: false, item: items.getItem(id) as items.ItemRow };
 };
 
+/**
+ * Where a typed-in item came from. Only a note can be dictated, and only this one value is taken from the request, so
+ * a client cannot write an arbitrary label onto the item. It matters later: a dictated name may be a Whisper mishearing.
+ */
+export const pasteVia = (b: { kind?: unknown; via?: unknown } | null | undefined): "dictation" | "paste" =>
+  b?.kind === "note" && b.via === "dictation" ? "dictation" : "paste";
+
 /** Take in pasted text. With `thread` (the default) a chat or email is parsed for speakers and times. */
 export const ingestPaste = async (text: string, meta: IngestMeta & { kind?: "note" | "paste"; thread?: boolean } = {}): Promise<IngestResult> => {
   const body = text.trim();

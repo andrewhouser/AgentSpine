@@ -413,8 +413,11 @@ baseline, and the meeting recall number is still unmeasured.
   when nobody gave one, and each ready item records known people whose names appear in it and tags already in use
   whose words appear in it (`suggested_people`, `suggested_tags`); the web Inbox shows them, with one click to add
   the tags, and nothing is applied by itself (2026-11-21; a PDF whose metadata sits in a compressed object stream
-  gives no date, and the item keeps the day it was added). **Not built:** the iPhone share sheet and dictated notes
-  (the backend takes a note with `via: "dictation"`; the capture is a Swift screen); adopting the existing Milliman
+  gives no date, and the item keeps the day it was added). **Dictated notes (built 2026-11-22; the microphone path
+  not run on any client):** web has Dictate in the Inbox's text card, and iPhone and Mac have "Dictate a note…". The
+  transcript waits in an editable box and nothing is stored until Add, because Whisper mishears names; the item records
+  `via: dictation`. The Mac had no dictation, so a small recorder for it lives in the shared `InboxView.swift`.
+  **Not built:** the iPhone share sheet; adopting the existing Milliman
   knowledge-folder loader as one source of the Inbox (that folder is off limits to this sandbox, so it needs you or
   a session on the Mini); the iPhone and Mac screens for the new suggestions.
 - **K4. Knowledge store (backend built 2026-11-21; screens are K5).** `src/knowledge/`: a layer separate from

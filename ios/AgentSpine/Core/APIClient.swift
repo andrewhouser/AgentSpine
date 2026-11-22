@@ -693,9 +693,10 @@ final class APIClient {
     }
 
     /// Paste a thread (`kind` "paste", parsed for speakers and times) or type a note (`kind` "note").
-    func inboxPaste(text: String, kind: String, name: String?) async throws -> InboxAddResult {
+    func inboxPaste(text: String, kind: String, name: String?, via: String? = nil) async throws -> InboxAddResult {
         var body: [String: Any] = ["kind": kind, "text": text]
         if let name, !name.isEmpty { body["name"] = name }
+        if let via { body["via"] = via }
         return try await send(jsonRequest("/api/inbox/paste", method: "POST", body: body), as: InboxAddResult.self)
     }
 

@@ -42,7 +42,7 @@ import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { checkWorkspaceFile } from "./projects/workspace.ts";
 import { searchKnowledge } from "./projects/search.ts";
-import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
+import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, pasteVia, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
 import * as briefs from "./knowledge/briefs.ts";
 import { closeMeeting, closeoutState, parsePlan, previewCloseout } from "./knowledge/closeout.ts";
@@ -1004,7 +1004,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           const r = await ingestFile(bytes, { name: url.searchParams.get("name") ?? undefined, projectId: project ? Number(project) : undefined, via: "upload" });
           return sendJson(res, r.duplicate ? 200 : 201, { duplicate: r.duplicate, item: withProject(r.item) });
         }
-        // POST /api/inbox/paste { text, name?, kind?: "note"|"paste", project?, thread? }
+        // POST /api/inbox/paste { text, name?, kind?: "note"|"paste", via?: "dictation", project?, thread? }
         if (m === "POST" && seg[2] === "paste" && seg.length === 3) {
           const b = await readBody(req);
           const r = await ingestPaste(String(b?.text ?? ""), {
@@ -1012,7 +1012,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             name: typeof b?.name === "string" ? b.name : undefined,
             projectId: b?.project != null ? Number(b.project) : undefined,
             thread: b?.thread === false ? false : undefined,
-            via: "paste",
+            via: pasteVia(b),
           });
           return sendJson(res, r.duplicate ? 200 : 201, { duplicate: r.duplicate, item: withProject(r.item) });
         }

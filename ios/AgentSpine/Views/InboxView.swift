@@ -7,6 +7,10 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AVFoundation
+import Observation
+#endif
 
 /// Add anything you want to remember: files, screenshots, scans, a pasted chat, a note. Each is read on this
 /// Mac, kept private and searchable at once; a suggested project is shown and never applied for you.
@@ -23,6 +27,7 @@ struct InboxView: View {
     @State private var pasteText = ""
     @State private var pasteTitle = ""
     @State private var pasteAsNote = false
+    @State private var dictatingNote = false
     @State private var deleting: InboxItem?
     @State private var searchText = ""
     @State private var searching = false
@@ -136,6 +141,7 @@ struct InboxView: View {
                 Menu {
                     Button("Add files…") { choosingFiles = true }
                     Button("Paste text…") { pasting = true }
+                    Button("Dictate a note…") { dictatingNote = true }
                 } label: { Image(systemName: "plus") }
                     .disabled(busy)
                     .accessibilityLabel("Add to inbox")
@@ -145,6 +151,7 @@ struct InboxView: View {
             if case .success(let urls) = result { Task { await add(urls) } }
         }
         .sheet(isPresented: $pasting) { pasteSheet }
+        .sheet(isPresented: $dictatingNote) { DictatedNoteSheet { await load() } }
         .confirmationDialog(
             "Delete \"\(deleting?.name ?? "")\"?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -284,3 +291,188 @@ struct InboxView: View {
         } catch { actionError = error.localizedDescription }
     }
 }
+
+/// Speak a note, read what was heard, then add it. Nothing is stored until Add: Whisper mishears names, and a saved
+/// note becomes a searchable source. The state lives here so closing the sheet drops a take that was still in flight.
+private struct DictatedNoteSheet: View {
+    let onAdded: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var dictation = Dictation()
+    @State private var title = ""
+    @State private var text = ""
+    @State private var problem: String?
+    @State private var saving = false
+
+    private var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Button { Task { await toggle() } } label: {
+                        switch dictation.phase {
+                        case .idle: Label(isEmpty ? "Start dictating" : "Dictate more", systemImage: "mic")
+                        case .recording: Label("Stop and transcribe", systemImage: "stop.circle")
+                        case .transcribing: Label("Transcribing…", systemImage: "waveform")
+                        }
+                    }
+                    .disabled(dictation.phase == .transcribing || saving)
+                    if dictation.phase == .recording {
+                        HStack {
+                            level
+                            Text(Duration.seconds(Int(dictation.elapsed)).formatted(.time(pattern: .minuteSecond)))
+                                .monospacedDigit()
+                        }
+                        Button("Discard this take", role: .destructive) { dictation.cancel() }
+                    }
+                    if let problem {
+                        Text(problem).foregroundStyle(.red)
+                    }
+                }
+                Section {
+                    TextField("Title (optional)", text: $title)
+                    TextEditor(text: $text)
+                        .frame(minHeight: 160)
+                        .accessibilityLabel("Dictated note")
+                } footer: {
+                    Text("Read it through before adding: names are the words speech recognition most often gets wrong.")
+                }
+            }
+            .navigationTitle("Dictate a note")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") { Task { await add() } }
+                        .disabled(isEmpty || saving || dictation.phase != .idle)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 460, minHeight: 460)
+        #endif
+        .onChange(of: dictation.atLimit) { _, hit in
+            if hit { Task { await toggle() } }
+        }
+        .onDisappear { dictation.cancel() }
+    }
+
+    @ViewBuilder private var level: some View {
+        #if os(iOS)
+        DictationWaveform(levels: dictation.levels).frame(height: 24)
+        #else
+        ProgressView(value: Double(dictation.levels.last ?? 0)).accessibilityHidden(true)
+        #endif
+    }
+
+    private func toggle() async {
+        problem = nil
+        switch dictation.phase {
+        case .idle:
+            problem = await dictation.start()
+        case .recording:
+            do {
+                let heard = try await dictation.finish().trimmingCharacters(in: .whitespacesAndNewlines)
+                if heard.isEmpty {
+                    problem = "Nothing was heard."
+                } else {
+                    text += text.isEmpty || text.last?.isWhitespace == true ? heard : " \(heard)"
+                }
+            } catch { problem = error.localizedDescription }
+        case .transcribing:
+            break
+        }
+    }
+
+    private func add() async {
+        saving = true
+        defer { saving = false }
+        do {
+            _ = try await APIClient.shared.inboxPaste(text: text, kind: "note", name: title, via: "dictation")
+            await onAdded()
+            dismiss()
+        } catch { problem = error.localizedDescription }
+    }
+}
+
+#if os(macOS)
+/// The Mac's take on the phone's `Dictation` (`Core/Dictation.swift`, which needs `AVAudioSession` and so is iPhone
+/// only). Same phases and same upload, so the sheet above is one view on both. It uses the microphone permission the
+/// meeting recorder already declares.
+@MainActor
+@Observable
+final class Dictation {
+    enum Phase: Equatable { case idle, recording, transcribing }
+
+    private(set) var phase: Phase = .idle
+    private(set) var elapsed: TimeInterval = 0
+    private(set) var levels: [Float] = []
+    private static let levelCount = 40
+    private var maxSeconds = 120
+    private var recorder: AVAudioRecorder?
+    private var timer: Timer?
+    private var fileURL: URL?
+
+    var atLimit: Bool { phase == .recording && Int(elapsed) >= maxSeconds - 1 }
+
+    func start() async -> String? {
+        do {
+            let status = try await APIClient.shared.dictationStatus()
+            guard status.modelReady else { return "The server's speech model is missing, so nothing can transcribe this." }
+            maxSeconds = status.maxSeconds
+        } catch { return error.localizedDescription }
+        guard await AVCaptureDevice.requestAccess(for: .audio) else {
+            return "Microphone access is off. Allow it in System Settings → Privacy & Security → Microphone."
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-\(UUID().uuidString).m4a")
+        do {
+            let recorder = try AVAudioRecorder(url: url, settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 16_000,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 32_000,
+            ])
+            recorder.isMeteringEnabled = true
+            guard recorder.record() else { return "The microphone could not start." }
+            self.recorder = recorder
+            fileURL = url
+        } catch { return error.localizedDescription }
+        elapsed = 0
+        levels = Array(repeating: 0, count: Self.levelCount)
+        phase = .recording
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let recorder = self.recorder else { return }
+                self.elapsed = recorder.currentTime
+                recorder.updateMeters()
+                let level = MicLevel.normalized(decibels: recorder.averagePower(forChannel: 0))
+                self.levels = MicLevel.push(level, onto: self.levels, count: Self.levelCount)
+            }
+        }
+        return nil
+    }
+
+    func finish() async throws -> String {
+        guard let url = stopRecording() else { return "" }
+        defer { try? FileManager.default.removeItem(at: url) }
+        phase = .transcribing
+        defer { phase = .idle }
+        return try await APIClient.shared.dictate(audio: Data(contentsOf: url), mime: "audio/mp4")
+    }
+
+    func cancel() {
+        if let url = stopRecording() { try? FileManager.default.removeItem(at: url) }
+        if phase == .recording { phase = .idle }
+    }
+
+    private func stopRecording() -> URL? {
+        timer?.invalidate()
+        timer = nil
+        recorder?.stop()
+        recorder = nil
+        levels = []
+        defer { fileURL = nil }
+        return fileURL
+    }
+}
+#endif

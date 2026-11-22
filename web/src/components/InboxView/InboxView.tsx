@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 
 import type { InboxItem, KnowledgeHit, Project } from "../../lib/types.ts";
 
+import { useDictation } from "../../hooks/useDictation.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import styles from "../ListPage/ListPage.module.css";
@@ -42,6 +43,15 @@ export const InboxView = ({ projects }: InboxViewProps) => {
   const [hits, setHits] = useState<KnowledgeHit[] | null>(null);
   const [extractNotes, setExtractNotes] = useState<Record<number, string>>({});
   const picker = useRef<HTMLInputElement>(null);
+  // The transcript lands in the box and waits for Add: Whisper mishears names, and this becomes a searchable source.
+  const [dictated, setDictated] = useState(false);
+  const appendDictation = useCallback((heard: string): void => {
+    setText((current) => (current && !/\s$/.test(current) ? `${current} ${heard}` : `${current}${heard}`));
+    setDictated(true);
+  }, []);
+  const voice = useDictation(appendDictation);
+  const micReason = voice.source === "browser" ? voice.browserReason : voice.status?.serverMicReason || null;
+  const micBlocked = voice.source === "browser" ? voice.browserReason !== null : voice.status?.serverMic === false;
 
   const guard = async (label: string, work: () => Promise<unknown>): Promise<void> => {
     setBusy(label);
@@ -126,22 +136,38 @@ export const InboxView = ({ projects }: InboxViewProps) => {
         <textarea
           aria-label="Text to add"
           className={`${styles.input} ${styles.fullWidth}`}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Paste a thread, or type a note…"
+          onChange={(e) => {
+            setText(e.target.value);
+            if (!e.target.value.trim()) setDictated(false);
+          }}
+          placeholder="Paste a thread, type a note, or dictate one…"
           rows={5}
           value={text}
         />
         <div className={styles.form}>
+          {voice.status && (
+            <button
+              aria-pressed={voice.listening}
+              className={styles.button}
+              disabled={busy !== "" || voice.busy || micBlocked}
+              onClick={() => (voice.listening ? voice.stop() : voice.start())}
+              title={micReason ?? undefined}
+              type="button"
+            >
+              {voice.busy ? "Transcribing…" : voice.listening ? "Stop and transcribe" : "Dictate"}
+            </button>
+          )}
           {(["paste", "note"] as const).map((kind) => (
             <button
               className={styles.primary}
-              disabled={busy !== "" || !text.trim()}
+              disabled={busy !== "" || !text.trim() || voice.listening || voice.busy}
               key={kind}
               onClick={() =>
                 void guard("Adding…", async () => {
-                  await api.inboxPaste(text, { kind, name: name.trim() || undefined });
+                  await api.inboxPaste(text, { kind, name: name.trim() || undefined, ...(kind === "note" && dictated ? { via: "dictation" as const } : {}) });
                   setText("");
                   setName("");
+                  setDictated(false);
                 })
               }
               type="button"
@@ -150,6 +176,8 @@ export const InboxView = ({ projects }: InboxViewProps) => {
             </button>
           ))}
         </div>
+        {dictated && <p className={styles.meta}>Read it through before adding: names are the words speech recognition most often gets wrong.</p>}
+        {voice.error && <p className={styles.error}>{voice.error}</p>}
       </div>
 
       {busy && <p className={styles.meta}>{busy}</p>}
