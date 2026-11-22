@@ -631,6 +631,9 @@ struct TurnView: View {
             }
 
             if let summary = turn.summary, !summary.isEmpty {
+                if let card = WeatherCard.of(calls: turn.actions.map { ($0.tool, $0.output, $0.status == .executed) }) {
+                    WeatherCardView(card: card)
+                }
                 MarkdownText(summary)
             } else if turn.status == "failed" {
                 Label("This turn failed.", systemImage: "exclamationmark.triangle")

@@ -1,0 +1,79 @@
+.compact,
+.strip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  margin: 10px 0 4px;
+}
+
+.compact {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.strip {
+  padding: var(--space-md);
+}
+
+.place {
+  color: var(--text-faint);
+  font-size: var(--font-size-caption);
+}
+
+.temp {
+  font-family: var(--font-display);
+  font-size: var(--font-size-title1);
+  line-height: 1.1;
+}
+
+.cond {
+  font-size: var(--font-size-body);
+  text-transform: capitalize;
+}
+
+.hl {
+  color: var(--text-dim);
+  font-size: var(--font-size-footnote);
+}
+
+.days {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  overflow-x: auto;
+}
+
+.day {
+  align-items: center;
+  background: var(--bg-inset);
+  border-radius: var(--radius);
+  display: flex;
+  flex: 1 0 64px;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-sm);
+}
+
+.dow {
+  color: var(--text-dim);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+}
+
+.dayHi {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+}
+
+.dayLo,
+.precip {
+  color: var(--text-faint);
+  font-size: var(--font-size-footnote);
+}
+
+.precip {
+  color: var(--accent);
+}

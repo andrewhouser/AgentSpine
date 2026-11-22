@@ -29,6 +29,9 @@ struct LiveTurnView: View {
 
 
             if case .finished(let summary) = stream.phase, let summary, !summary.isEmpty {
+                if let card = WeatherCard.of(calls: stream.calls.map { ($0.tool, $0.output, $0.status == .executed) }) {
+                    WeatherCardView(card: card)
+                }
                 MarkdownText(summary)
             }
             if case .failed(let message) = stream.phase {

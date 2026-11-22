@@ -54,6 +54,7 @@ struct MacTurnSpine: View {
         case call(Call)
         case progress(String)
         case text(String)
+        case weather(WeatherCard)
         case failure(String)
         case note(String)
         case waiting(Confirmation)
@@ -63,6 +64,7 @@ struct MacTurnSpine: View {
             case .call(let call): return call.id
             case .progress: return "progress"
             case .text: return "text"
+            case .weather: return "weather"
             case .failure: return "failure"
             case .note: return "note"
             case .waiting(let confirmation): return "waiting-\(confirmation.id)"
@@ -113,7 +115,12 @@ struct MacTurnSpine: View {
         case .finished, .failed, .idle:
             break
         }
-        if let summary, !summary.isEmpty { rows.append(.text(summary)) }
+        if let summary, !summary.isEmpty {
+            if let card = WeatherCard.of(calls: calls.map { ($0.tool, $0.output, $0.status == .executed) }) {
+                rows.append(.weather(card))
+            }
+            rows.append(.text(summary))
+        }
         if let failure, !failure.isEmpty { rows.append(.failure(failure)) }
         if let note, !note.isEmpty { rows.append(.note(note)) }
         rows += unmatched.map(Row.waiting)
@@ -139,7 +146,7 @@ struct MacTurnSpine: View {
             SpineRow(node: .verdict(.error), isFirst: isFirst, isLast: isLast) { content(for: row) }
         case .waiting:
             SpineRow(node: .waiting, isFirst: isFirst, isLast: isLast) { content(for: row) }
-        case .progress, .text, .note:
+        case .progress, .text, .note, .weather:
             SpineRow(node: .plain, isFirst: isFirst, isLast: isLast) { content(for: row) }
         }
     }
@@ -157,6 +164,8 @@ struct MacTurnSpine: View {
             .foregroundStyle(Spine.Palette.textDim)
         case .text(let text):
             MarkdownText(text)
+        case .weather(let card):
+            WeatherCardView(card: card)
         case .failure(let text):
             Label(text, systemImage: "exclamationmark.triangle")
                 .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))

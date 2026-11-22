@@ -2,6 +2,7 @@ import type { Attachment, LiveToolCall, VisionPass } from "../../lib/types.ts";
 
 import { describeActivity } from "../../lib/activity.ts";
 import { recoveredCalls } from "../../lib/recovery.ts";
+import { weatherCardOf } from "../../lib/weatherCard.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
 import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
@@ -13,6 +14,7 @@ import { TierBadge } from "../TierBadge/TierBadge.tsx";
 import { ToolTrace } from "../ToolTrace/ToolTrace.tsx";
 import { UserMessage } from "../UserMessage/UserMessage.tsx";
 import { VisionNote } from "../VisionNote/VisionNote.tsx";
+import { WeatherCard } from "../WeatherCard/WeatherCard.tsx";
 import styles from "./Turn.module.css";
 
 interface TurnProps {
@@ -84,6 +86,7 @@ export const Turn = ({
 }: TurnProps) => {
   // A failure the turn went on to get past reads as a quiet step, not an alarm (lib/recovery.ts).
   const recovered = recoveredCalls(toolCalls, !!error);
+  const weather = weatherCardOf(toolCalls);
   // Images bind to one run, once, so a message that carried any cannot be sent again: a retry
   // would quietly drop them and answer a different question. Copy and the time still show.
   const canResend = attachments.length === 0 && task.trim() !== "";
@@ -138,6 +141,7 @@ export const Turn = ({
 
     {summary && (
       <>
+        {weather && <WeatherCard card={weather} />}
         <AssistantMessage text={summary} />
         {runId !== undefined && !live && !error && (
           <ReplyActions contextUsed={contextUsed} projectId={projectId} runId={runId} starred={starred} />

@@ -68,12 +68,72 @@ const WMO: Record<number, string> = {
 
 export const describe = (code: unknown): string => WMO[Number(code)] ?? `code ${code}`;
 
+/** The glyph a client draws. Few on purpose: web, Mac and iPhone each map every one. */
+export type WeatherIcon = "clear" | "cloudy" | "drizzle" | "fog" | "partly" | "rain" | "sleet" | "snow" | "storm";
+
+/**
+ * WMO code → glyph. Code owns this mapping (not each client) so the three apps cannot
+ * disagree about what "code 61" looks like; clients only know how to draw the nine names.
+ */
+export const iconFor = (code: unknown): WeatherIcon => {
+  const c = Number(code);
+  if (c === 0 || c === 1) return "clear";
+  if (c === 2) return "partly";
+  if (c === 3) return "cloudy";
+  if (c === 45 || c === 48) return "fog";
+  if (c >= 51 && c <= 55) return "drizzle";
+  if (c === 56 || c === 57 || c === 66 || c === 67) return "sleet";
+  if ((c >= 61 && c <= 65) || (c >= 80 && c <= 82)) return "rain";
+  if ((c >= 71 && c <= 77) || c === 85 || c === 86) return "snow";
+  if (STORM_CODES.has(c)) return "storm";
+  return "cloudy";
+};
+
+/** What the chat draws above the reply: a compact card for one day, a landscape strip for several. */
+export interface WeatherCard {
+  place: string;
+  now: { condition: string; feelsLike: number; icon: WeatherIcon; night: boolean; temp: number; wind: number };
+  days: { condition: string; date: string; hi: number; icon: WeatherIcon; lo: number; precip: number }[];
+}
+
+/** Clients find the card in the tool's output between these markers (web/src/lib/weatherCard.ts, Swift WeatherCard). */
+export const CARD_OPEN = "<weather-card>";
+export const CARD_CLOSE = "</weather-card>";
+
+export const buildCard = (label: string, fc: any, days: number): WeatherCard => {
+  const c = fc?.current ?? {};
+  const d = fc?.daily ?? {};
+  const n = Math.min(days, d.time?.length ?? 0);
+  return {
+    place: label,
+    now: {
+      condition: describe(c.weather_code),
+      feelsLike: Math.round(c.apparent_temperature),
+      icon: iconFor(c.weather_code),
+      night: c.is_day === 0,
+      temp: Math.round(c.temperature_2m),
+      wind: Math.round(c.wind_speed_10m),
+    },
+    days: Array.from({ length: n }, (_, i) => ({
+      condition: describe(d.weather_code[i]),
+      date: d.time[i],
+      hi: Math.round(d.temperature_2m_max[i]),
+      icon: iconFor(d.weather_code[i]),
+      lo: Math.round(d.temperature_2m_min[i]),
+      precip: Number(d.precipitation_probability_max?.[i] ?? 0),
+    })),
+  };
+};
+
 /** WMO codes that mean thunderstorm. */
 export const STORM_CODES = new Set([95, 96, 99]);
 
 interface Args {
   location?: string;
-  /** How many days of forecast, 1–7. 1 = today only. */
+  /**
+   * How many days of forecast, 1–7. 1 = today only. Also decides the card: an explicit 2+
+   * draws the landscape strip, anything else the compact card for today.
+   */
   days?: number;
 }
 
@@ -108,7 +168,7 @@ export const geocode = async (name: string): Promise<Place | null> => {
 export const fetchForecast = async (p: Place, days: number): Promise<any> =>
   getJson(
     `${FORECAST}?latitude=${p.latitude}&longitude=${p.longitude}` +
-      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m` +
+      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day` +
       `&daily=${DAILY_FIELDS}` +
       `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch` +
       `&timezone=auto&forecast_days=${days}`,
@@ -136,7 +196,10 @@ export const weather: Tool = {
     `Omit the location to use the configured default${DEFAULT_LOCATION ? ` (${DEFAULT_LOCATION})` : ""}. ` +
     "One call, one place — the place the CURRENT request is about, not every place " +
     "mentioned earlier; check several only when asked for several. Useful in a morning " +
-    "brief, and worth checking before an outdoor or travel-involving calendar event.",
+    "brief, and worth checking before an outdoor or travel-involving calendar event. " +
+    "Pass days only when the user asked for a span (\"next 3 days\" → 3, \"5-day\" → 5); the " +
+    "chat then shows a forecast strip. For \"the weather\" or \"today\", omit days. The chat " +
+    "draws a weather card from the result by itself, so do not repeat the card data.",
   argsSchema: '{ "location"?: string, "days"?: 1-7 }',
   classify: (a: Args): ClassifiedAction => ({
     reversibility: "reversible",
@@ -188,6 +251,12 @@ export const weather: Tool = {
           );
         }
       }
+      // Explicit span → strip of that many days; otherwise one compact card for today.
+      const asked = Math.round(Number(a?.days ?? 0)) >= 2 ? days : 1;
+      lines.push(
+        `[A weather card for the user is drawn automatically above your reply; do not repeat its data or markers.]`,
+        `${CARD_OPEN}${JSON.stringify(buildCard(p.label, fc, asked))}${CARD_CLOSE}`,
+      );
       return lines.join("\n");
     } catch (err) {
       return `ERROR: weather lookup failed: ${err instanceof Error ? err.message : String(err)}`;
