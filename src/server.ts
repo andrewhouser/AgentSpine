@@ -85,6 +85,7 @@ import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
+import { tick as instagramTick } from "./instagram/index.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
@@ -2288,6 +2289,18 @@ setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
 // its window a watch makes no call at all, so a quiet day costs nothing.
 void sweepWatches();
 setInterval(() => void sweepWatches(), 5 * 60_000).unref();
+// The Instagram queue (docs/INSTAGRAM.md): code-only, and a no-op unless policy.json has an enabled
+// `instagram` section. Even then it is a dry run that posts nothing until `publish` is exactly true.
+// One minute, because a post's slot is a minute on a calendar and "one hour out" has a short window.
+const sweepInstagram = async (): Promise<void> => {
+  // loadPolicy is inside the try: a policy.json caught mid-edit must cost one tick, not the process.
+  try {
+    await instagramTick({ notify: (t, b, o) => notify(t, b, o), policy: loadPolicy() });
+  } catch (err) {
+    console.error("instagram sweep error:", err instanceof Error ? err.message : err);
+  }
+};
+setInterval(() => void sweepInstagram(), 60_000).unref();
 // Flash cards that have come due earn one nudge a day.
 void sweepDueCards();
 setInterval(() => void sweepDueCards(), 10 * 60_000).unref();

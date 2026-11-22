@@ -36,6 +36,7 @@ export type PolicyOverlay = {
   fs?: { readableDirs?: string[]; writableDirs?: string[] };
   git?: { repoDirs?: string[] };
   google?: { enabled?: boolean };
+  instagram?: { enabled?: boolean; publish?: boolean };
   schedules?: { enabled?: boolean };
   subagents?: { enabled?: boolean };
   weather?: { enabled?: boolean };
@@ -141,6 +142,18 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
     },
     git: { repoDirs: intersect(base.git?.repoDirs, overlay.git?.repoDirs) },
     google: { enabled: and(base.google?.enabled, overlay.google?.enabled) },
+    // A project run reaches Instagram only when the overlay says so in as many words. Every other
+    // section here treats an overlay's silence as "no change"; this one does not, because the
+    // surface writes to a public account and a project that never mentions it has no business there.
+    ...(base.instagram
+      ? {
+          instagram: {
+            ...base.instagram,
+            enabled: Boolean(base.instagram.enabled) && overlay.instagram?.enabled === true,
+            publish: base.instagram.publish === true && overlay.instagram?.publish === true,
+          },
+        }
+      : {}),
     schedules: { enabled: and(base.schedules?.enabled, overlay.schedules?.enabled) },
     subagents: { enabled: and(base.subagents?.enabled, overlay.subagents?.enabled) },
     weather: { enabled: and(base.weather?.enabled, overlay.weather?.enabled) },

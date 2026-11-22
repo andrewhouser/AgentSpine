@@ -472,6 +472,20 @@ is to keep it.
 > sent-mail-derived text through the chat model, possibly the cloud tier. Instead `style_learn` parks a proposal
 > and returns only that one is waiting; you read the note in full and press Accept, which no tool can reach.
 
+---
+
+> ### Amendment, 2026-11-22: publishing to one Instagram account
+>
+> The first write that reaches the public, so the first exception to draft-not-send. `docs/INSTAGRAM.md` is
+> the record. In short: a code-only runner publishes queue rows that a person approved, to the one account
+> `policy.json` names, and nothing else. It is off without an `instagram` section and a **dry run unless
+> `instagram.publish` is exactly `true`**. Approval is bound to a digest of the exact caption, image bytes,
+> URL and time. `instagram_approve` and `instagram_publish` are irreversible and queue even from a scheduled
+> run (`confirmWhenUnattended`); the model names a row id and supplies no content. The token is a separate
+> 0600 file held by `src/instagram/token.ts` alone, and the API client has two writes (create a container,
+> publish it) and no delete, comment or message call. A publish with an unknown outcome is reconciled before
+> anything is sent again. Built and tested against a mocked API; not yet run against Meta.
+
 ## 6. Cross-cutting — earn trust as it acts more  ✅ **BUILT**
 
 > **Status: done — all four bullets.**

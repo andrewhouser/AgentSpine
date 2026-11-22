@@ -178,6 +178,23 @@ export interface Policy {
    */
   images?: { enabled: boolean };
   /**
+   * Publishing to one Instagram professional account (docs/INSTAGRAM.md). Absent = denied, like
+   * every other optional surface.
+   *
+   * `enabled` switches on the read side: the queue, the dry run, account checks and insights.
+   * `publish` is the write switch and it must be exactly `true`: anything else, absent included,
+   * is a dry run that reports what would be posted and posts nothing. A public post cannot be
+   * taken back from the people who saw it, so the default is the one that does nothing.
+   *
+   * `account` is the one username this install may post to. A token that turns out to belong to
+   * any other account is refused before a container is created. `liveStatusUrl` is the page the
+   * runner asks whether the stream is live; without it a "live now" row is held, never guessed.
+   *
+   * The access token is not here and never will be: it lives 0600 outside the repo, held by
+   * src/instagram/token.ts alone.
+   */
+  instagram?: { account: string; enabled: boolean; liveStatusUrl?: string; publish?: boolean };
+  /**
    * MCP servers whose tools the agent may call (docs/MCP.md). Absent = denied, like every
    * other optional surface. The URL and the allowlist live here, written by a human; nothing
    * the model can call edits policy.json, so it cannot add a server.

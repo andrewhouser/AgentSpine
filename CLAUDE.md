@@ -13,6 +13,7 @@ records live in `docs/`; finished plans are in `docs/archive/` (history, not a t
 | Voice / TTS, image generation, watchers | `docs/VOICE.md`, `docs/IMAGE_GENERATION.md`, `docs/WATCHERS.md` |
 | Build loop (`run_command`, `git_write`, builder) | `docs/archive/PLAN-build-loop.md` (design record; all phases shipped) |
 | MCP client (remote MCP server tools) | `docs/MCP.md` |
+| Instagram publishing (queue, runner, insights, digest) | `docs/INSTAGRAM.md`: the design record and the setup steps. Dry run unless `policy.instagram.publish` is exactly `true` |
 | **What is left to do** (the only plan doc) | `docs/PLAN-open-work.md`. Update it in the same change as any work it lists. Do not start another PLAN doc |
 | Native Mac app, design system, the "spine" identity | `docs/archive/PLAN-native-apps-and-ui-refresh.md` (design record; built, leftovers are in `PLAN-open-work.md` section 5) |
 | Notifications: quiet hours, caps, weekly "what I sent you" review | `docs/archive/PLAN-outbox.md` (design record; phases 0-2 built, log-only until `OUTBOX_ENFORCE`; remaining phases in `PLAN-open-work.md` section 2. |
@@ -64,6 +65,11 @@ Server code changes need a dashboard restart (see README → "Updating & restart
   (SPEC §5, 2026-11-21). It has no send, no permanent delete and no calendar delete, and mail is still
   drafted, never sent. Don't add a send or delete function there, or use that token anywhere else,
   without a new recorded decision.
+- **Instagram is a public write.** A publish whose outcome is unknown is reconciled against the
+  container's status before anything is sent again, never retried blind. Approval is of the exact
+  content, the tools take a row id and no content, and the token is named only by
+  `src/instagram/token.ts`. Don't add a third write (delete, comment, message) to
+  `src/instagram/api.ts` without a new recorded decision.
 - **No tool may write** `policy.json`, `profile.md`, `goals.md` or `agents/*.md`. That's on
   purpose (LEARNING invariant 1).
 - **Scheduled runs are pre-approved, but they can't write standing work.** A tool that creates

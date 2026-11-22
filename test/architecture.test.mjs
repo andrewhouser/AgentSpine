@@ -153,5 +153,37 @@ const clientTs = sources["src/google/client.ts"];
 check("client.ts has no mail or calendar write endpoint", /\/modify\b|\/trash\b|\/untrash\b|\/batchModify|\/send\b|\/insert\b|["'`](PATCH|PUT|DELETE)["'`]/.test(clientTs), false);
 check("the Gmail and Calendar APIs are called only from src/google and config", filesMatching(/(gmail|www)\.googleapis\.com\/(gmail|calendar)/), ["src/google/client.ts", "src/google/write.ts"]);
 
+// ---- 3. Instagram: the token, and the two writes --------------------------------------------
+// docs/INSTAGRAM.md. Publishing is a write to a public account, so the same kind of tripwires as the
+// Google write token: who can name the token, who can reach the module that sends it, and what that
+// module is able to ask Meta for.
+
+console.log("\nTHE INSTAGRAM TOKEN: WHO CAN NAME IT");
+check("only config and token.ts name INSTAGRAM_TOKEN_PATH", filesMatching(/\bINSTAGRAM_TOKEN_PATH\b/), ["src/config.ts", "src/instagram/token.ts"]);
+check("the token's file name appears only where config sets it", filesMatching(/instagram-token/), ["src/config.ts"]);
+check("token.ts is imported only inside src/instagram", filesMatching(/from\s+"[^"]*\/token(\.ts)?"/).filter((f) => /instagram/.test(sources[f])), ["src/instagram/index.ts", "src/instagram/insights.ts", "src/instagram/runner.ts"]);
+check("no tool imports the token module or the API client", filesMatching(/from\s+"[^"]*instagram\/(token|api)(\.ts)?"/).filter((f) => f.startsWith("src/tools/")), []);
+check("no tool can store a token", filesMatching(/\b(storeToken|saveToken)\b/).filter((f) => f.startsWith("src/tools/")), []);
+check("the token is written in exactly one place", filesMatching(/\bsaveToken\s*\(/).filter((f) => f !== "src/instagram/token.ts"), ["src/instagram/index.ts"]);
+
+console.log("\nTHE INSTAGRAM API: WHAT THE CLIENT CAN ASK FOR");
+const igApi = sources["src/instagram/api.ts"];
+const igApiRaw = fs.readFileSync(path.join(ROOT, "src/instagram/api.ts"), "utf8");
+check("its request helper is typed to GET and POST only", /const call = async \(\s*method:\s*"GET"\s*\|\s*"POST"\s*,/.test(igApiRaw), true);
+check("every call it makes uses GET or POST", [...new Set([...igApi.matchAll(/\bcall\(\s*"([A-Z]+)"/g)].map((m) => m[1]))].sort(), ["GET", "POST"]);
+check("it has exactly two writes: create a container, and publish one", [...igApi.matchAll(/\bcall\(\s*"POST",\s*"([^"]+)"/g)].map((m) => m[1]), ["create container", "publish"]);
+check("it has no delete, comment, message or profile call", /["'`]DELETE["'`]|\/comments\b|\/messages\b|\/replies\b|comment_enabled/.test(igApi), false);
+check("the API host is named in one place", filesMatching(/graph\.instagram\.com/), ["src/instagram/rules.ts"]);
+check("the client is built only inside src/instagram", filesMatching(/\bcreateClient\s*\(/), ["src/instagram/index.ts", "src/instagram/insights.ts", "src/instagram/runner.ts"]);
+
+console.log("\nTHE INSTAGRAM RUNNER: ONE PLACE PUBLISHES, AND IT CLAIMS FIRST");
+const igRunner = sources["src/instagram/runner.ts"];
+check("publishContainer is called from the runner alone", filesMatching(/\.publishContainer\s*\(/), ["src/instagram/runner.ts"]);
+check("and from exactly one line of it", (igRunner.match(/\.publishContainer\s*\(/g) ?? []).length, 1);
+check("a container is created from exactly one line too", [filesMatching(/\.createImageContainer\s*\(/), (igRunner.match(/\.createImageContainer\s*\(/g) ?? []).length], [["src/instagram/runner.ts"], 1]);
+const claimAt = igRunner.search(/transition\(r\.id,\s*"container",\s*"publishing"/);
+check("the row is claimed as 'publishing' before the publish request is sent", claimAt > 0 && claimAt < igRunner.search(/\.publishContainer\s*\(/), true);
+check("the tools reach publishing only through the runner's publishNow", /\bpublishNow\b/.test(sources["src/tools/instagram.ts"]) && !/publishContainer|createImageContainer/.test(sources["src/tools/instagram.ts"]), true);
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

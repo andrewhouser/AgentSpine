@@ -69,8 +69,15 @@ Nothing below has run against real systems yet. F3 and F4 from section 0 are fix
 5. Work through `docs/ROLLOUT.md` (the learning-loop checklist). One box is ticked and 22 are not, and the repo
    cannot say how far you are: run `npm run digest 168` on the Mini and tick what is already on.
 
+6. Instagram publishing (built 2026-11-22, `docs/INSTAGRAM.md`). It is off and has never called Meta. The
+   nine setup steps in that doc are all yours: confirm the account type, create the Meta app, host the JPEGs
+   (the DJLive R2 bucket), add the `instagram` section to `policy.json` without `publish`, store the token
+   with `npm run instagram -- token`, seed the queue from the djlive kit, read `npm run instagram -- dry-run`,
+   publish one approved test post, then approve a week at a time. Still to build if wanted: a queue screen in
+   the dashboard and apps (approval is the CLI or the confirmation queue today).
+
 Never exercised against real services: Google Calendar reads, web search and retailer pages for Heads-up,
-AeroDataBox, TomTom, APNs delivery of the Heads-up categories, Gmail and Calendar writes.
+AeroDataBox, TomTom, APNs delivery of the Heads-up categories, Gmail and Calendar writes, the Instagram API.
 
 ---
 

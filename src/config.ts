@@ -1051,6 +1051,12 @@ export const GOOGLE_WRITE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
 ];
 
+// --- Instagram (docs/INSTAGRAM.md) ---
+// The long-lived access token for the one professional account this install may post to. Outside
+// the repo and 0600, like the Google tokens, and named by src/instagram/token.ts alone (pinned in
+// test/architecture.test.mjs). It never goes in policy.json, the database or a log line.
+export const INSTAGRAM_TOKEN_PATH = env.INSTAGRAM_TOKEN_PATH ?? path.join(CONFIG_DIR, "instagram-token.json");
+
 /** Load OAuth client id/secret from env, or from a client_secret_*.json in CONFIG_DIR. */
 export const loadGoogleCreds = (): { clientId: string; clientSecret: string } | null => {
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
