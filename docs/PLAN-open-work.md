@@ -10,10 +10,12 @@ management knowledge system, which is the main direction: the highest return is 
 remembering, connecting, citing and updating workplace knowledge. Live Activities, richer travel integrations,
 buying or booking actions and most new proactive behaviour are deprioritized until section 8 has a reliable
 foundation (they are marked in section 3). Section 9 (harness awareness, added 2026-11-21, its three open questions settled by the proposed defaults) is being built in order, S1 and S2 first (done).
-Sections 1 to 7 are the rest, mostly verification that needs you.
+Sections 1 to 7 are the rest, mostly verification that needs you. Section 10 (added 2026-11-22: Claude Desktop
+parity on local models, self-change and self-learning) is proposed and not yet placed in this order; that is
+its first open decision.
 
-Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8 and 9 are new,
-and 1 to 7 and 4a are as before.
+Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9 and 10 are
+new, and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -741,6 +743,141 @@ Open decisions for you:
 
 ---
 
+## 10. Claude Desktop parity on local models, self-change and self-learning (added 2026-11-22)
+
+**The goal, in your words:** a system that works like Claude Desktop, with more than it offers, served by local
+MLX models; that you can question about its own code and that proposes and makes changes to it; and that
+reflects on its work with you and proposes changes and routines you had not thought of.
+
+**What the survey of 2026-11-22 found.** The privacy rule is not what holds this back. With local models as
+the target, "private never reaches the cloud" costs almost nothing. What costs is the shape of the loop around
+a 28 tok/s model, the "Not doing" list, and learners that are built but have never been switched on. Nothing in
+this section loosens the broker, the confirmation queue, `tagUntrusted` or LEARNING invariants 1 to 5: those are
+security, not privacy, and every item below adds injection surface.
+
+Labels are local to this section: LP (loop), CP (capabilities), SC (self-change), SL (self-learning). Nothing
+here is built. Every measurement named below needs the model host, so every item is **Both** unless marked.
+
+### LP. The agent loop
+
+- **LP1 Stream the answer.** `src/llm.ts` and `src/router.ts` do not stream. At 28 tok/s a 500-token reply is
+  about 18 seconds of nothing on screen. The final answer is inside `{"action":"final","summary":...}`, so it
+  cannot stream as it stands. Proposed: a reply that does not open with `{` is the answer, in plain prose, and
+  is streamed; a tool call stays one JSON object. This also removes the cut-off-final failure (the answer that
+  loses its closing brace at the token cap, `AGENT_STEP_MAX_TOKENS` comment in `src/config.ts`). Web, Mac and
+  iPhone together. Measure the parse-failure rate before and after on the same prompts.
+- **LP2 "Local deep": thinking on for hard steps.** `NO_THINKING` is sent on every local call (`src/llm.ts`).
+  A run that has read mail, a calendar, a file or a project is pinned local, and `resolveTier` turns `deep`
+  into `standard` for it, so a task sized `deep` gets the same effort as an easy one. Proposed: on a pinned run
+  sized `deep`, the plan step and a re-ask after a failed step run on the same endpoint with thinking on and a
+  larger token cap. Code decides when; no model switch, so no reload cost. Measure the added seconds per step
+  and whether the builder and multi-part chat tasks finish more often.
+- **LP3 Budgets by tokens, with compaction at a threshold.** `MAX_STEPS` is 10, a subagent gets 6, and chat
+  history is 8 turns in 6,000 characters. Replace the step cap with a token and wall-clock budget, and when a
+  run's context passes a threshold, replace old tool results with short stubs (the full text stays reachable
+  through `read_more`). Compact rarely, since each compaction rewrites the prefix and pays prefill again.
+- **LP4 More than one tool call per step (measure first).** The protocol is one JSON action per turn and every
+  step pays prefill. Bench native tool calling on the standard model through `mlx_lm.server` against the current
+  protocol: parse failures, steps per task, seconds per task. Switch only if it wins. Not checked: how well
+  `mlx_lm.server` handles native tool calls.
+- **LP5 Chat goes ahead of scheduled work.** Runs are serialized (`queue_wait` in `src/runner.ts`), so a chat
+  turn waits behind a scheduled job. Let a chat turn take the model at the next step boundary of a background
+  run, the same boundary the stop button uses, and resume the job afterwards.
+- **LP6 Load tool descriptions on demand.** Every visible tool's description and schema is in the prompt
+  prefix (`toolDocs` in `src/agent.ts`). Keep a small core set there and let the model ask for the rest by
+  name. This is a precondition for CP1, which would otherwise grow the prefix with every server.
+
+### CP. Capabilities (each waits on a decision below)
+
+- **CP1 MCP over stdio, and a privacy flag per server.** The client is HTTP-only (`src/mcp/client.ts`), and
+  MCP tools do not declare `privateOutput`. Most MCP servers people run with Claude Desktop are local stdio
+  processes, which are more private than a remote one. Add stdio transport, a per-server `privateOutput` in
+  `policy.mcp.servers`, and keep the existing gating (deny by default, `readOnlyHint` or the queue).
+- **CP2 Google: real drafts, timed events, user-directed send.** `policy.userDirected` already sends mail
+  through Apple Mail when your own message names the recipient (`mac_control.send_mail`). Proposed: Gmail
+  drafts created in Gmail, timed events and RSVPs, and send under the same named-recipient rule. Unattended
+  auto-send stays in "Not doing". Run N2's live half first (section 4).
+- **CP3 A scratch interpreter.** `run_command` runs only declared commands, so there is nothing like Claude's
+  analysis tool for arithmetic over a file. A `sandbox-exec` scratch directory with no network and a time
+  limit. This is not the Docker workspace container that "Not doing" rules out, but it is close enough to need
+  your yes.
+
+### SC. Self-change: ask it about its own code, and have it propose and make changes
+
+**What exists.** `policy.build.repos` already declares this repo with `gitWrite` and four commands (`test`,
+`typecheck`, `lint`, `webbuild`). The `builder` unit (`agents/builder.md`) has 40 steps, branches before it
+edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md`, `goals.md` or `agents/*.md`.
+
+- **SC1 The builder runs on the local model with thinking off, whatever its file says.** `agents/builder.md`
+  asks for `tier: deep`, but `read_file` and `list_dir` declare `privateOutput` for every path, so the first
+  read pins the run local and `deep` becomes `standard`. LP2 and LP3 are therefore the first work for
+  self-change, not an extra. Then measure: give the builder three real changes from this file and record how
+  many end with a passing suite. Do not exempt source folders from the pin until that number is known.
+- **SC2 Code search (Code).** There is no search tool; the builder finds things with `list_dir` and
+  `read_file`. Add a read-only `search_files` (plain Node, no new dependency, same allowlist and
+  `privateOutput` as `read_file`). "How does the outbox decide quiet hours?" cannot be answered well without it.
+- **SC3 A map of its own code in trusted context.** Claude works in this repo from the area table in
+  `CLAUDE.md`. AgentSpine has no equivalent: S6's `AGENTSPINE.md` cannot be used here, because `policy.json`
+  makes `~/Developer` writable and the file must sit outside every writable folder. Either narrow
+  `fs.writableDirs` (You) or have the server supply a fixed, read-only area map for runs in this repo (Code).
+- **SC4 A real check command (You, then Code).** The declared commands do not include `npm run check`, and
+  nothing builds Swift. Add `check` to this repo's entry in `policy.json` (yours to edit). Until an
+  `xcodebuild` command is declared, a self-made UI change covers web only, which breaks the three-clients
+  rule, so UI changes stay out of scope for self-change.
+- **SC5 Propose, then patch.** A change starts as a proposal card in the confirmation queue: what, why, the
+  files, the test plan, and the runs that prompted it. Approving starts the builder on an `agentspine/` branch.
+  Merge, push, `update.sh` and the restart stay yours, so the service never restarts onto code you have not read.
+- **SC6 Guard the gates in code, not only in policy.** A builder that cannot write `policy.json` can still
+  edit `src/broker.ts`, `src/sensitivity.ts`, `src/confirmations.ts`, `src/learn/promote.ts` or
+  `test/architecture.test.mjs`. Add a protected-paths list in code: an edit to one queues with the diff shown,
+  as a build manifest does today, and the architecture test pins the list.
+- **SC7 Which checkout it works in (You).** Not checked: whether the builder on the Mini would branch inside
+  the checkout the LaunchAgent serves from. If so, give it a separate clone, so a half-made branch is never
+  what the next restart loads.
+
+### SL. Self-learning: reflect on the work and propose what you had not asked for
+
+**What exists.** LEARNING phases 0 to 5 are built: reflection facts, friction notes, the denial learner,
+recipes, sampled self-critique (`LESSON_SAMPLE_RATE` 0.1), schedule and auto-approval proposers, and the
+task-text rewriter. Most of "self-learning" is switching these on, which sections 1 and 4 already list.
+
+- **SL1 Switch on what is built (You).** In order: N2 live half, ROLLOUT step 3, then step 5. This settles the
+  open decision in 4a: yes to a weekly trigger for `runProposer`, and for `runRewriter` once step 5 is done.
+  Run consolidation 6.0 on the Mini as 4a says.
+- **SL2 A weekly retrospective (Code).** One local pass, pinned `private`, over the week's ledger. Code counts
+  the candidates: repeated requests, rejections with their reasons, corrections, stops, runs that hit a cap,
+  denied calls, and things you asked for that no tool could do. The model words at most a fixed number of
+  proposals, each of a closed kind: routine (a schedule, created disabled), recipe, auto-approval, memory
+  correction, missing capability, or code change (which becomes an SC5 card). Each lists the runs it rests on,
+  as Phase 2 proposals do. It arrives with the weekly review and counts against the daily cap.
+- **SL3 Signals of a bad answer (Code).** Reflection learns only from your own words, and that stays. Add the
+  signals you already give without typing: a stop, an immediate re-ask, an edited draft, a rejected proposal.
+  They are counted by code and feed SL2; none writes a memory by itself.
+- **SL4 Proposals that learn from their own outcomes (Code).** Record accept and reject per proposal kind. A
+  rejected proposal is not made again, and a kind you mostly reject is made less often, by a threshold in code.
+- **SL5 Know whether it is working (You).** Use the checks in LEARNING, "How to tell it is working, and what to
+  delete", after four weeks of SL1. Delete a learner whose output you never accept.
+
+### Sequence and decisions
+
+Order: SL1 (nearest to done, and N2 gates the rest); LP1, LP2 and LP5; SC2, SC4, SC5 and SC6, then SC1's
+three-change measurement; SL2 feeding SC5; LP3, LP4 and LP6; the CP items as each decision is made.
+
+Open decisions for you:
+
+- Where this section sits against section 8. Proposed: LP and SL1 alongside section 8, since both make
+  section 8 better; SC after LP2; CP last.
+- Reopen "MCP connectors beyond `docs/MCP.md`" for CP1. Proposed: yes, for local stdio servers only.
+- Amend the Google-writes ground rule for CP2. Proposed: yes to Gmail drafts and timed events now; send only
+  after N2's live half has a baseline.
+- CP3's scratch interpreter. Proposed: yes, no network, You-enabled per project.
+- SC6's protected-paths list. Proposed: the five files named there, plus `src/google/write.ts`,
+  `src/instagram/api.ts` and `src/instagram/token.ts`.
+- Whether source folders may be exempt from the local pin so the builder can use the cloud tier. Proposed: no,
+  until SC1's measurement shows the local builder is not good enough.
+
+---
+
 ---
 
 ## Ground rules (settled; not work)
@@ -760,7 +897,8 @@ Open decisions for you:
 - **UI changes are built for web, Mac and iPhone together.**
 
 **Not doing.** Model-judged safety checks (revisit only if N2 shows the code gates cost real approval fatigue);
-MCP connectors beyond `docs/MCP.md`; Docker workspace containers; Telegram or WhatsApp (a second place for
+MCP connectors beyond `docs/MCP.md` (section 10 CP1 proposes reopening this for local stdio servers; still
+not doing until you decide); Docker workspace containers; Telegram or WhatsApp (a second place for
 approvals to be dismissed unseen); usage telemetry (local-first); auto-sending email; a live "agent thinking"
 dashboard; unsubscribing through a browser in the inbox cleanup (one-click unsubscribe is built, SPEC section 5, 2026-11-21; senders
 whose link needs a page click are listed as "unsubscribe by hand").
