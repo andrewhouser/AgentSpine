@@ -188,10 +188,6 @@ Section 0 is the priority in this area. What is left of the Nod items:
   this work, since a hostile email is now worth more to an attacker.
 - **N1 memory provenance.** Built 2026-11-21: a friction note now records the run that first met the error
   (`recordFriction` takes the run id from the broker). Nothing uses `origin` to change recall or pruning, by design.
-- **N3 cloud token cap.** You: add `CLOUD_TOKENS_PER_DAY`, `CLOUD_TOKENS_PER_MONTH` and `CLOUD_TOKENS_PER_RUN` to
-  the example env file, and check that `CONSOLIDATE_SIMILARITY` and `CONSOLIDATE_GROUP_MAX` are there too. Also
-  delete the stale `JUDGE_INTERRUPTIONS_PROACTIVE` comment line from it. The sandbox blocks me from editing that
-  file, so this is yours. There is no form to raise a cap, on purpose.
 - **N4 writing styles (`src/styles/`, `src/tools/styles.ts`).** Built, never run on real mail.
   - You: the before and after of a few drafts per style, which needs the Mini and a real token.
   - You: look at the Styles screen on web (Settings, Memory tab), iPhone and Mac.
