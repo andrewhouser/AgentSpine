@@ -49,16 +49,32 @@ enum Keychain {
         SecItemAdd(query as CFDictionary, nil)
     }
 
-    static func get(_ account: String) -> String? {
+    /// What a read found. "Nothing saved" and "could not look" are different answers: the app treats
+    /// a missing token as a sign-out and erases the offline copy, so a read that merely failed (before
+    /// the first unlock after a reboot, say) must never be reported as missing.
+    enum ReadResult: Equatable {
+        case found(String)
+        case missing
+        case unreadable
+    }
+
+    static func read(_ account: String) -> ReadResult {
         var query = identity(account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let string = String(data: data, encoding: .utf8)
-        else { return nil }
-        return string
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        return classify(status: status, data: item as? Data)
+    }
+
+    /// Only `errSecItemNotFound` means nothing is saved. Separate from `read` so a test can feed it
+    /// the statuses a simulator will not produce on demand.
+    static func classify(status: OSStatus, data: Data?) -> ReadResult {
+        if status == errSecItemNotFound { return .missing }
+        guard status == errSecSuccess, let data, let string = String(data: data, encoding: .utf8) else {
+            return .unreadable
+        }
+        return .found(string)
     }
 
     static func remove(_ account: String) {

@@ -82,6 +82,8 @@ final class APIClient {
     // MARK: - Request plumbing
 
     private func request(_ path: String, query: [String: String] = [:]) throws -> URLRequest {
+        // A lock-screen approval can be the first thing to run after the phone is unlocked.
+        settings.retryTokenRead()
         guard settings.isConfigured else { throw APIError.notConfigured }
         guard let base = settings.baseURL,
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false)

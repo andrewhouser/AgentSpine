@@ -25,8 +25,19 @@ final class Settings {
     }
 
     var token: String {
-        didSet { Keychain.set(token, for: Key.token) }
+        didSet {
+            // An unchanged value must not write: while the saved token is unreadable this field is
+            // empty, and writing "" would delete the real token.
+            guard token != oldValue, !restoringToken else { return }
+            tokenUnreadable = false
+            Keychain.set(token, for: Key.token)
+        }
     }
+
+    /// The keychain could not be read, so whether a token exists is unknown. The token field is
+    /// empty, but this is not a sign-out and must not erase the offline copy.
+    private(set) var tokenUnreadable = false
+    private var restoringToken = false
 
     /// What this phone calls itself in `GET /api/devices`. Defaults to the device name, which
     /// is the only way to tell two registrations apart once you have reinstalled a few times.
@@ -46,7 +57,30 @@ final class Settings {
         tabOrder = UserDefaults.standard.stringArray(forKey: Key.tabOrder) ?? []
         rawBaseURL = UserDefaults.standard.string(forKey: Key.baseURL) ?? ""
         deviceName = UserDefaults.standard.string(forKey: Key.deviceName) ?? ""
-        token = Keychain.get(Key.token) ?? ""
+        let saved = Keychain.read(Key.token)
+        if case .found(let value) = saved { token = value } else { token = "" }
+        tokenUnreadable = saved == .unreadable
+    }
+
+    /// Try again after a failed read. Returns true when a saved token came back, so the caller can
+    /// do the loading that launch had to skip. Costs nothing once a read has answered.
+    @discardableResult
+    func retryTokenRead() -> Bool {
+        guard tokenUnreadable else { return false }
+        switch Keychain.read(Key.token) {
+        case .found(let value):
+            // Already in the keychain, so it is not written back.
+            restoringToken = true
+            token = value
+            restoringToken = false
+            tokenUnreadable = false
+            return true
+        case .missing:
+            tokenUnreadable = false
+            return false
+        case .unreadable:
+            return false
+        }
     }
 
     /// The base URL, repaired as far as it can be.
@@ -69,6 +103,9 @@ final class Settings {
     }
 
     var isConfigured: Bool { baseURL != nil && !token.isEmpty }
+
+    /// No server, or a token known to be absent. The only state that may erase the offline copy at launch.
+    var isSignedOut: Bool { baseURL == nil || (token.isEmpty && !tokenUnreadable) }
 
     /// The name to register this device under. Never empty — an unnamed row in the device
     /// list is worse than a generic one.

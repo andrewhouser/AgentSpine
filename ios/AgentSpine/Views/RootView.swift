@@ -31,22 +31,30 @@ struct RootView: View {
         .task {
             // A first launch with nothing configured should land on Settings rather than on an
             // empty thread list with an error under it.
-            if !settings.isConfigured {
+            settings.retryTokenRead()
+            if settings.isConfigured {
+                await state.refresh()
+                push.registerIfAuthorized()
+            } else if settings.isSignedOut {
                 // No server or token any more is this app's sign-out, so the private copy goes with it.
                 OfflineCache.shared.clear()
                 tab = .settings
             } else {
+                // The keychain would not answer. The token may be fine, so keep the copy, say why
+                // nothing loaded, and try again when the app next comes forward.
                 await state.refresh()
-                push.registerIfAuthorized()
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            let recovered = settings.retryTokenRead()
             // Coming back to the app is exactly when the lists are most likely to be stale —
             // you have probably just answered something from a notification.
-            guard phase == .active, settings.isConfigured else { return }
+            guard settings.isConfigured else { return }
             Task {
                 await state.refreshConversations()
                 push.refreshAuthorization()
+                if recovered { push.registerIfAuthorized() }
             }
         }
         .onChange(of: push.pendingDeepLink) { _, link in

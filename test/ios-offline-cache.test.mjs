@@ -42,6 +42,14 @@ console.log("\nAPPROVALS AND WRITES (source)");
   check("a passing connection test does the reload", /probe = "Connected[\s\S]{0,420}await state\.refresh\(\)/.test(settings), true);
   check("a poll clears a stale credentials error", /cachedAt != nil \|\| needsFullLoad[\s\S]{0,40}await refresh\(\)/.test(appState), true);
   check("the list loads fully when opened without a connection test", /\.task \{\s*if state\.needsFullLoad \{ await state\.refresh\(\) \}/.test(read("ios/AgentSpine/Views/ConversationsView.swift")), true);
+  const rootView = read("ios/AgentSpine/Views/RootView.swift");
+  const appSettings = read("ios/AgentSpine/Core/Settings.swift");
+  check("launch wipes the copy only when signed out", /else if settings\.isSignedOut \{[\s\S]{0,200}OfflineCache\.shared\.clear\(\)/.test(rootView), true);
+  check("launch has no other wipe", (rootView.match(/OfflineCache\.shared\.clear/g) ?? []).length, 1);
+  check("an unreadable token is not signed out", appSettings.includes("token.isEmpty && !tokenUnreadable"), true);
+  check("an unchanged token field never writes the keychain", /guard token != oldValue, !restoringToken else \{ return \}[\s\S]{0,80}Keychain\.set/.test(appSettings), true);
+  check("coming forward retries a failed read", /phase == \.active else \{ return \}\s*let recovered = settings\.retryTokenRead\(\)/.test(rootView), true);
+  check("a request retries a failed read", /settings\.retryTokenRead\(\)\s*guard settings\.isConfigured/.test(client), true);
   check("a run's copy leaves out its trace", /key: "run:\\\(id\)",\s*storing: OfflineStore\.withoutTrace/.test(client), true);
   const store = read("ios/AgentSpine/Core/OfflineCache.swift");
   check("files are encrypted and locked with the phone", store.includes(".completeFileProtection"), true);
@@ -63,6 +71,7 @@ if (!swiftc) {
 } else {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agentspine-offline-"));
   const main = `import Foundation
+import Security
 @MainActor func runAll() throws {
 var clock = Date(timeIntervalSince1970: 1_000_000)
 let folder = URL(fileURLWithPath: CommandLine.arguments[1]).appendingPathComponent("cache")
@@ -141,12 +150,19 @@ let damaged = OfflineStore(directory: folder, now: { clock })
 say("damagedIsEmpty", text(damaged.read("thread:1", owner: me)))
 damaged.write(Data("again".utf8), key: "thread:1", owner: me)
 say("damagedRecovers", text(damaged.read("thread:1", owner: me)))
+
+say("kcFound", Keychain.classify(status: errSecSuccess, data: Data("t".utf8)) == .found("t"))
+say("kcMissing", Keychain.classify(status: errSecItemNotFound, data: nil) == .missing)
+say("kcLocked", Keychain.classify(status: errSecInteractionNotAllowed, data: nil) == .unreadable)
+say("kcUnsigned", Keychain.classify(status: errSecMissingEntitlement, data: nil) == .unreadable)
+say("kcNoData", Keychain.classify(status: errSecSuccess, data: nil) == .unreadable)
+say("kcBadText", Keychain.classify(status: errSecSuccess, data: Data([0xFF])) == .unreadable)
 }
 MainActor.assumeIsolated { try! runAll() }
 `;
   fs.writeFileSync(path.join(dir, "main.swift"), main);
   const bin = path.join(dir, "offline");
-  execFileSync(swiftc.cmd, [...swiftc.args, "-o", bin, SOURCE, path.join(dir, "main.swift")], { stdio: ["ignore", "ignore", "inherit"] });
+  execFileSync(swiftc.cmd, [...swiftc.args, "-o", bin, SOURCE, path.join(root, "ios/AgentSpine/Core/Keychain.swift"), path.join(dir, "main.swift")], { stdio: ["ignore", "ignore", "inherit"] });
   const out = Object.fromEntries(
     execFileSync(bin, [dir], { encoding: "utf8" })
       .trim()
@@ -183,6 +199,14 @@ MainActor.assumeIsolated { try! runAll() }
   check("an unexpected reply is not stored", out.badShape, "true");
   check("a damaged index reads as empty", out.damagedIsEmpty, "nil");
   check("and recovers on the next save", out.damagedRecovers, "again");
+
+  console.log("\nTHE KEYCHAIN READ");
+  check("a saved token is found", out.kcFound, "true");
+  check("only item-not-found counts as missing", out.kcMissing, "true");
+  check("a locked phone is unreadable, not missing", out.kcLocked, "true");
+  check("an unsigned build is unreadable, not missing", out.kcUnsigned, "true");
+  check("success with no data is unreadable", out.kcNoData, "true");
+  check("a value that is not text is unreadable", out.kcBadText, "true");
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
