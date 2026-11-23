@@ -291,7 +291,9 @@ Left to do:
   **Gateway fallback checked in the simulator (2026-11-22, local proxy answering each status):** 502, 503 and 504 each
   showed the saved list under the offline notice (the saved thread was opened under 502 only). A 500 showed its error
   instead of the copy. No write was sent during the outages, Try again recovered without a relaunch, and removing the
-  token still erased the copy. Real `tailscale serve` with the dashboard stopped has not been run.
+  token still erased the copy.
+  **Checked on the real iPhone (2026-11-23, reported by Andrew):** the token survived a force quit on a signed build,
+  and the app passed the check with the dashboard stopped behind real `tailscale serve`.
   **File protection checked on a real iPhone 16 Pro Max (2026-11-23, Xcode debugger):** `manifest.json` reports
   `NSFileProtectionComplete`, and reading it from inside the app returned 601 bytes unlocked, 0 after 30 seconds
   locked, and 601 after unlocking. The saved replies use the same write options but were not read individually.
