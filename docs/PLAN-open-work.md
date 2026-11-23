@@ -281,6 +281,9 @@ Left to do:
   after 14 days, capped at 25 MB (2 MB per reply), and follows deletions on the next fresh list. A run's raw trace is
   not kept, because it carries the profile and recalled memories; attachments and meeting transcripts are not cached.
   Settings shows its size and can delete it. The Mac has a no-op stub. Suite: `test/ios-offline-cache.test.mjs`.
+  **Checked in the simulator (2026-11-22, throwaway server):** a saved thread showed its approval with no Approve or
+  Reject while the server was down and after it came back. A fresh reload restored the buttons, and an approval
+  rejected elsewhere in the meantime left the thread on reload.
   **Not proven:** file protection cannot be observed in the simulator, so it needs a look on a real, locked iPhone.
 - **Web, Mac and iPhone matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`,
   toggled from the chat tab bar, remembered in `localStorage`) with four cards plus a **Tokens** card (in, out, calls,
