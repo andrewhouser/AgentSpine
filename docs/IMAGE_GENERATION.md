@@ -234,6 +234,27 @@ against a down standard tier **fails outright** rather than degrading.
 Nothing about the image service depends on this. It matters because if you test by stopping
 :8080, the resulting behaviour is cloud spend or a hard failure — not a quiet downgrade.
 
+## ComfyUI backend (2026-11-23)
+
+Set `COMFY_URL` (e.g. `http://127.0.0.1:8188`) and `generate_image` stops calling MFLUX and uses
+ComfyUI instead (`src/comfy.ts`). The model still only writes a plain sentence plus an optional
+`style` (`photorealistic` default, `painting`, `illustration`) and `size`. Code owns the rest: the
+workflow graph, steps, cfg, sampler, a fresh random seed per render, and the style's prompt suffix
+and negative prompt. The tool submits `POST /prompt`, polls `GET /history/{id}` once a second
+(5 minute ceiling, then `/interrupt`), fetches `/view`, and writes the PNG to `IMAGES_DIR`, so
+the UI shows it through `/images/` exactly as before.
+
+- `COMFY_WORKFLOW=sdxl` (default): an SDXL file in `models/checkpoints` (28 steps, cfg 6).
+  Measured on the 16 GB Mini: CyberRealistic XL at 1024x1024 rendered the loon-and-fog prompt
+  in 218 s (cold load included) and the result was a good photoreal image.
+- `COMFY_WORKFLOW=zimage`: Z-Image Turbo from `models/diffusion_models`, with
+  `qwen_3_4b.safetensors` and `ae.safetensors`; 8 steps, cfg 1. **Do not use on 16 GB:** its
+  11.7 GB bf16 weights swapped the machine until ComfyUI stopped answering (0/8 steps after 5 min).
+- Sizes default to 1024x1024 and clamp to 1536 a side.
+- Polls tolerate slow replies (60 s each) and retry until the 5 minute ceiling.
+- Verified live against ComfyUI 0.45 via `src/comfy.ts`; the full tool path through the chat UI
+  was not exercised. Still open: live progress in the UI and an async "job" card.
+
 ## Related
 
 - [MODELS.md](MODELS.md) — the model host, the three pinned servers, and the 14B incident

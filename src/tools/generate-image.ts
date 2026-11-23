@@ -28,10 +28,13 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { clientFor } from "../llm.ts";
-import { IMAGE_BASE_URL, IMAGES_DIR } from "../config.ts";
+import { COMFY_MODEL, COMFY_URL, COMFY_WORKFLOW, IMAGE_BASE_URL, IMAGES_DIR } from "../config.ts";
+import { renderWithComfy, STYLES } from "../comfy.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
 interface Args {
+  /** ComfyUI only: "photorealistic" (default), "painting" or "illustration". */
+  style?: string;
   prompt?: string;
   /** "512x512" (default) or "768x768". Larger is clamped down — 768 is the host ceiling. */
   size?: string;
@@ -44,8 +47,10 @@ interface Args {
  * clamped down to the largest size that fits — the OpenAI images API has no notion of a
  * per-server ceiling for the model to have known about.
  */
-const DEFAULT_SIZE = "512x512";
-const MAX_SIDE = 768;
+// ComfyUI runs on a machine with room for a full-size render (Z-Image Turbo and SDXL are
+// both native at ~1024), so its default and ceiling are larger than MFLUX's.
+const DEFAULT_SIZE = COMFY_URL ? "1024x1024" : "512x512";
+const MAX_SIDE = COMFY_URL ? 1536 : 768;
 
 /** Parse "WxH", clamp each side into (0, MAX_SIDE], snap to /16 as MFLUX requires. */
 const clampSize = (raw?: string): string => {
@@ -83,7 +88,9 @@ export const generateImage: Tool = {
     "or '768x768' (more detail, slower). A render takes 15-30s, and the first one after a " +
     "quiet spell up to ~20s longer while the pipeline loads. The result is a URL, not the " +
     "image data; hand it back to the user as a Markdown image so it displays.",
-  argsSchema: '{ "prompt": string, "size"?: "512x512" | "768x768" }',
+  argsSchema: COMFY_URL
+    ? '{ "prompt": string, "style"?: "photorealistic" | "painting" | "illustration", "size"?: "WxH, e.g. 1024x1024 or 1344x768 (landscape)" }'
+    : '{ "prompt": string, "size"?: "512x512" | "768x768" }',
 
   classify: (a: Args): ClassifiedAction => ({
     // Writing a new PNG into a directory this tool owns is reversible — it deletes cleanly
@@ -107,7 +114,7 @@ export const generateImage: Tool = {
     }
     // A no-op endpoint is a misconfiguration, not a grant. Fail here rather than letting the
     // OpenAI client throw an obscure connection error deep in run().
-    if (!IMAGE_BASE_URL) {
+    if (!IMAGE_BASE_URL && !COMFY_URL) {
       return {
         allowed: false,
         reason:
@@ -121,9 +128,34 @@ export const generateImage: Tool = {
   run: async (a: Args): Promise<string> => {
     const prompt = String(a?.prompt ?? "").trim();
     if (!prompt) return "ERROR: generate_image needs a non-empty prompt.";
-    if (!IMAGE_BASE_URL) return "ERROR: IMAGE_URL is not configured; cannot reach the image service.";
+    if (!IMAGE_BASE_URL && !COMFY_URL) return "ERROR: IMAGE_URL is not configured; cannot reach the image service.";
 
     const size = clampSize(a?.size);
+
+    if (COMFY_URL) {
+      try {
+        const [width, height] = size.split("x").map(Number) as [number, number];
+        const style = STYLES[String(a?.style ?? "photorealistic").toLowerCase()] ?? STYLES.photorealistic!;
+        // Submit, poll until ComfyUI reports done (a cold model load can take a minute or two),
+        // then write the PNG ourselves so it is served from /images/ like every other result.
+        const png = await renderWithComfy({
+          baseUrl: COMFY_URL,
+          model: COMFY_MODEL,
+          kind: COMFY_WORKFLOW,
+          prompt: prompt + style.suffix,
+          negative: style.negative,
+          width,
+          height,
+          timeoutMs: 300_000,
+        });
+        const name = `${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}-${randomUUID().slice(0, 8)}.png`;
+        fs.mkdirSync(IMAGES_DIR, { recursive: true });
+        fs.writeFileSync(path.join(IMAGES_DIR, name), png);
+        return `Generated a ${size} image and saved it. Show it to the user with this Markdown: ![generated image](/images/${name})`;
+      } catch (err) {
+        return `ERROR: image generation failed: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
 
     // "not-needed": the local service has no auth. Same keyless posture as the local tiers.
     const client = clientFor(IMAGE_BASE_URL, "not-needed");

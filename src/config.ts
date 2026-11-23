@@ -82,6 +82,12 @@ export const VISION_MAX_EDGE = Number(env.VISION_MAX_EDGE ?? "1024");
 // the very mistake docs/MODELS.md documents (a stale hardcoded id served the wrong model for
 // 26 days). The tool reads the id from the endpoint rather than carrying one.
 export const IMAGE_BASE_URL = env.IMAGE_URL ?? "";
+// ComfyUI backend for generate_image (src/comfy.ts). When COMFY_URL is set it wins over
+// IMAGE_URL. COMFY_MODEL is a filename in ComfyUI's models/diffusion_models (Z-Image Turbo)
+// or models/checkpoints (SDXL, the default: Z-Image's 11.7 GB bf16 weights hung a 16 GB Mac).
+export const COMFY_URL = env.COMFY_URL ?? "";
+export const COMFY_MODEL = env.COMFY_MODEL ?? "cyberrealisticXL_v100_pruned_fp16.safetensors";
+export const COMFY_WORKFLOW = env.COMFY_WORKFLOW === "zimage" ? "zimage" : "sdxl";
 // Size each task and send it to the cheapest tier that can close it. The sizing is
 // regex-based and costs nothing; see src/dispatch.ts for why it is not a model call.
 export const AUTO_ROUTE = (env.AUTO_ROUTE ?? "true") !== "false";
