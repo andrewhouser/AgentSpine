@@ -207,13 +207,19 @@ export const generateImage: Tool = {
     if (!IMAGE_BASE_URL && !COMFY_URL) return "ERROR: IMAGE_URL is not configured; cannot reach the image service.";
 
     // Editing needs ComfyUI whatever quality was asked for: MFLUX here is text-to-image only.
-    const editing = hasSource(a);
+    // A picture attached to THIS message is the source, whatever the model named. Observed
+    // 2026-11-23: asked to edit an attachment, it passed the previous result's URL instead and
+    // the user's photo was never used. It may still choose between several attachments.
+    const attached = ctx?.runId == null ? [] : store.attachmentsForRun(ctx.runId);
+    const named = String(a?.source_image ?? "").replace(/^#/, "");
+    const sourceRef = attached.length ? (attached.find((r) => String(r.id) === named) ?? attached[0]!).id : a?.source_image;
+    const editing = sourceRef !== undefined && sourceRef !== null && sourceRef !== "";
     if (editing && !COMFY_URL) return "ERROR: editing an image needs ComfyUI, and COMFY_URL is not set.";
     // A user's photo stays on this machine, whatever COMFY_URL is later pointed at.
     if (editing && !isLoopback(COMFY_URL)) return "ERROR: refusing to send a source image to a ComfyUI that is not on this machine.";
     const backend = editing ? "comfy" : pickBackend(a?.quality, ctx?.run?.goal);
     const size = clampSize(a?.size, backend);
-    const source = editing ? resolveSource(a.source_image as number | string, ctx?.runId) : undefined;
+    const source = editing ? resolveSource(sourceRef as number | string, ctx?.runId) : undefined;
     if (typeof source === "string") return source;
 
     // The two pipelines do not fit in 16 GB together, so each asks the other to let go first.

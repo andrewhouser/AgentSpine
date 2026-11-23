@@ -257,7 +257,9 @@ the UI shows it through `/images/` exactly as before.
 - Sizes default to 1024x1024 and clamp to 1536 a side.
 - Polls tolerate slow replies (60 s each) and retry until the 5 minute ceiling.
 - **Editing a picture:** `source_image` takes an attachment id or an earlier `/images/` URL, and
-  must belong to the current conversation (same gate as `look_at_image`). `change` is `subtle`,
+  must belong to the current conversation (same gate as `look_at_image`). A picture attached to
+  the current message always wins over whatever the model names, because in the live test it
+  named the previous result instead. `change` is `subtle`,
   `moderate` or `strong` (denoise 0.35, 0.55, 0.75). Edits always use ComfyUI and refuse a
   non-loopback `COMFY_URL`, so a photo cannot leave the machine. ComfyUI has no delete for
   uploads, so every edit overwrites one file (`input/agentspine/source.png`), and renders run
