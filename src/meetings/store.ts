@@ -331,6 +331,153 @@ export const setProject = (id: number, projectId: null | number): void => {
   rawDb.prepare("UPDATE meetings SET project_id = ? WHERE id = ?").run(projectId, id);
 };
 
+/** A meeting's copies in any project's index. By kind as well as ref: a folder source can be named `meeting:12`. */
+export const meetingCopies = (id: number): MeetingCopy[] =>
+  rawDb
+    .prepare(
+      "SELECT s.id, s.project_id, s.ref, (SELECT COUNT(*) FROM chunks c WHERE c.source_id = s.id) AS chunks " +
+        "FROM project_sources s WHERE s.kind = 'meeting' AND s.ref IN (?, ?) ORDER BY s.id",
+    )
+    .all(`meeting:${id}`, `meeting-summary:${id}`) as unknown as MeetingCopy[];
+
+export interface MeetingCopy {
+  chunks: number;
+  id: number;
+  project_id: number;
+  ref: string;
+}
+
+/**
+ * Which copies stay, and where, once a meeting belongs to `projectId`. Pure, so the orphan report
+ * and the real move cannot disagree.
+ *
+ * A copy is moved rather than deleted and re-indexed because past the retention window the index
+ * holds the only words left of a kept transcript: re-indexing would find nothing to index.
+ */
+const planCopies = (copies: MeetingCopy[], projectId: null | number, keep: null | number, transcriptRef: string) => {
+  if (projectId == null) return { move: [] as number[], remove: copies.map((c) => c.id) };
+  const transcripts = copies.filter((c) => c.ref === transcriptRef);
+  const summaries = copies.filter((c) => c.ref !== transcriptRef);
+  // One copy of a form survives: the target's own if it has text, otherwise the fullest.
+  const best = (rows: MeetingCopy[]) =>
+    [...rows].sort((a, b) => Number(b.project_id === projectId && b.chunks > 0) - Number(a.project_id === projectId && a.chunks > 0) || b.chunks - a.chunks)[0];
+  const wanted =
+    keep === 0
+      ? [best(summaries)] // a summary-only meeting never carries its words into a project
+      : transcripts.some((c) => c.chunks > 0)
+        ? [best(transcripts)]
+        : [best(transcripts), best(summaries)];
+  const kept = wanted.filter((c): c is MeetingCopy => c !== undefined);
+  const keptIds = new Set(kept.map((c) => c.id));
+  return {
+    move: kept.filter((c) => c.project_id !== projectId).map((c) => c.id),
+    remove: copies.filter((c) => !keptIds.has(c.id)).map((c) => c.id),
+  };
+};
+
+const applyCopyPlan = (meetingId: number, projectId: null | number, plan: { move: number[]; remove: number[] }): void => {
+  for (const sourceId of plan.remove) {
+    rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(sourceId);
+    rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(sourceId);
+  }
+  for (const sourceId of plan.move) {
+    rawDb.prepare("UPDATE project_sources SET project_id = ? WHERE id = ?").run(projectId, sourceId);
+    rawDb.prepare("UPDATE chunks SET project_id = ? WHERE source_id = ?").run(projectId, sourceId);
+  }
+  if (plan.remove.length || plan.move.length)
+    logDataEvent("meeting_copies_refiled", `meeting #${meetingId}`, `${plan.move.length} index copy(ies) moved to ${projectId == null ? "no project" : `project #${projectId}`}, ${plan.remove.length} removed`);
+};
+
+/**
+ * File a meeting under a project (or none) and bring its index copies with it. Every route that
+ * changes `project_id` goes through here: a copy left in the old project stayed searchable there,
+ * outside the choice the person had just made. A savepoint because close-out calls this inside
+ * its own transaction and the PATCH route does not.
+ */
+export const fileMeeting = (id: number, projectId: null | number): void => {
+  rawDb.exec("SAVEPOINT file_meeting");
+  try {
+    setProject(id, projectId);
+    const keep = getMeeting(id)?.keep_transcript ?? null;
+    applyCopyPlan(id, projectId, planCopies(meetingCopies(id), projectId, keep, `meeting:${id}`));
+    rawDb.exec("RELEASE file_meeting");
+  } catch (err) {
+    rawDb.exec("ROLLBACK TO file_meeting");
+    rawDb.exec("RELEASE file_meeting");
+    throw err;
+  }
+};
+
+export interface OrphanReport {
+  /** Copies whose meeting no longer exists. */
+  meetingGone: number;
+  /** Copies that would move to the project the meeting is filed under now, which has none. */
+  moved: number;
+  /** Copies replaced by one the current project already holds, or of a form no longer wanted. */
+  superseded: number;
+  /** Meetings a person has to decide about: un-filed with the last copy of a pruned transcript, or filed under a deleted project. Never touched here. */
+  lastCopyHeld: number[];
+}
+
+/**
+ * Copies left behind by moves made before `fileMeeting` existed. Reports by default and changes
+ * nothing; only `apply` writes, and only a person runs that (`npm run meetings:orphans`). It is
+ * deliberately not on startup or the prune: these rows are private data and a wrong guess is
+ * unrecoverable. An un-filed meeting's last copy of a pruned transcript is listed and left alone,
+ * because removing it erases words the person once chose to keep.
+ */
+export const staleMeetingCopies = (apply = false): OrphanReport => {
+  const report: OrphanReport = { lastCopyHeld: [], meetingGone: 0, moved: 0, superseded: 0 };
+  const rows = rawDb.prepare("SELECT id, ref FROM project_sources WHERE kind = 'meeting'").all() as unknown as { id: number; ref: string }[];
+  const meetingIds = new Set<number>();
+  const goneIds: number[] = [];
+  for (const row of rows) {
+    const match = /^meeting(?:-summary)?:(\d+)$/.exec(row.ref);
+    if (!match) continue;
+    const meetingId = Number(match[1]);
+    if (getMeeting(meetingId)) meetingIds.add(meetingId);
+    else goneIds.push(row.id);
+  }
+  report.meetingGone = goneIds.length;
+
+  rawDb.exec("SAVEPOINT stale_copies");
+  try {
+    if (apply && goneIds.length) {
+      for (const sourceId of goneIds) {
+        rawDb.prepare("DELETE FROM chunks WHERE source_id = ?").run(sourceId);
+        rawDb.prepare("DELETE FROM project_sources WHERE id = ?").run(sourceId);
+      }
+      logDataEvent("meeting_copies_refiled", "deleted meetings", `${goneIds.length} index copy(ies) of meetings that no longer exist removed`);
+    }
+    for (const meetingId of meetingIds) {
+      const meeting = getMeeting(meetingId);
+      if (!meeting) continue;
+      const copies = meetingCopies(meetingId);
+      if (copies.every((c) => c.project_id === meeting.project_id)) continue;
+      const transcriptRef = `meeting:${meetingId}`;
+      // Filed under a project since deleted: moving the copy there would put it out of reach.
+      if (meeting.project_id != null && !rawDb.prepare("SELECT 1 FROM projects WHERE id = ?").get(meeting.project_id)) {
+        report.lastCopyHeld.push(meetingId);
+        continue;
+      }
+      if (meeting.project_id == null && meeting.keep_transcript !== 0 && !transcriptText(meetingId, "final") && copies.some((c) => c.ref === transcriptRef && c.chunks > 0)) {
+        report.lastCopyHeld.push(meetingId);
+        continue;
+      }
+      const plan = planCopies(copies, meeting.project_id, meeting.keep_transcript, transcriptRef);
+      report.moved += plan.move.length;
+      report.superseded += plan.remove.length;
+      if (apply) applyCopyPlan(meetingId, meeting.project_id, plan);
+    }
+    rawDb.exec("RELEASE stale_copies");
+  } catch (err) {
+    rawDb.exec("ROLLBACK TO stale_copies");
+    rawDb.exec("RELEASE stale_copies");
+    throw err;
+  }
+  return report;
+};
+
 export const setKeepTranscript = (id: number, keep: boolean): void => {
   rawDb.prepare("UPDATE meetings SET keep_transcript = ? WHERE id = ?").run(keep ? 1 : 0, id);
 };

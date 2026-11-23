@@ -1747,11 +1747,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const b = await readBody(req);
         const meeting = meetingStore.getMeeting(id);
         if (!meeting) return sendJson(res, 404, { error: "no such meeting" });
+        // Checked before anything changes: filing under a bad id would carry the index copies out of reach.
+        if (b && "projectId" in b && b.projectId != null && !projects.getProject(Number(b.projectId)))
+          return sendJson(res, 400, { error: "no such project" });
         if (typeof b?.title === "string") meetingStore.setTitle(id, b.title);
         if (Array.isArray(b?.tags)) meetingStore.setTags(id, b.tags.map(String));
         if (b && "projectId" in b) {
           const projectId = b.projectId == null ? null : Number(b.projectId);
-          meetingStore.setProject(id, projectId);
+          meetingStore.fileMeeting(id, projectId);
           knowledge.setSourceProject("meeting", `meeting:${id}`, projectId);
           // Assigning a project is what files the transcript into that project's index.
           // Doing it here rather than only at stop() is the whole point of assign-after —

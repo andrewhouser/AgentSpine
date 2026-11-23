@@ -980,6 +980,12 @@ npm run tick | loop    # legacy single-goal heartbeat
 >    chunk touches disk only as a temp WAV unlinked in a `finally`, because `whisper-cli` has
 >    no stdin mode. Point `TMPDIR` at a RAM disk if that distinction matters to you.
 > 8. **Transcripts prune on their own 30-day window** while meeting rows outlive them.
+> 9. **A meeting's index copy follows the meeting (2026-11-23).** Every change of project goes
+>    through `fileMeeting`, which moves the copy rather than deleting and re-indexing it: past the
+>    prune, the index holds the only words left of a kept transcript, and a re-index would find
+>    nothing. Un-filing removes the copy, including that last one. Deleting a meeting removes its
+>    copies from every project. Copies stranded by earlier moves are not swept automatically:
+>    `npm run meetings:orphans` reports them, and only `-- --apply` changes anything.
 >
 > Also fixed here: `indexSource` would have walked `meeting:12` as a relative path, failed the
 > allowlist, and overwritten a good status with a denial. It now skips non-`path` kinds.

@@ -126,7 +126,7 @@ const applyPlan = (meetingId: number, plan: CloseoutPlan): CloseoutCounts => {
 
   const projectId = plan.projectId === undefined ? meeting.project_id : plan.projectId;
   if (projectId !== meeting.project_id) {
-    meetings.setProject(meetingId, projectId);
+    meetings.fileMeeting(meetingId, projectId);
     k.setSourceProject("meeting", refOf(meetingId), projectId);
   }
 

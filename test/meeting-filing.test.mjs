@@ -19,6 +19,8 @@ const store = await import("../src/meetings/store.ts");
 const session = await import("../src/meetings/session.ts");
 const projects = await import("../src/projects/store.ts");
 const { rawDb } = await import("../src/memory/store.ts");
+const { closeMeeting, previewCloseout } = await import("../src/knowledge/closeout.ts");
+const { searchKnowledge } = await import("../src/projects/search.ts");
 
 let passed = 0;
 let failed = 0;
@@ -114,6 +116,125 @@ console.log("\nDELETING A MEETING REMOVES EITHER FORM");
   await session.indexIntoProject(b, pid, false);
   check("both delete cleanly", [session.deleteMeeting(a).ok, session.deleteMeeting(b).ok], [true, true]);
   check("nothing of either is left in the project", [sources(a), sources(b)], [[], []]);
+}
+
+console.log("\nMOVING OR UN-FILING LEAVES NO COPY BEHIND");
+{
+  const other = projects.createProject("Elsewhere");
+  const copies = (id) => rawDb.prepare("SELECT project_id AS p, ref FROM project_sources WHERE kind = 'meeting' AND ref IN (?, ?) ORDER BY id").all(`meeting:${id}`, `meeting-summary:${id}`).map((r) => [r.p, r.ref]);
+  const chunksIn = (project, id) => rawDb.prepare("SELECT COUNT(*) AS n FROM chunks WHERE project_id = ? AND path IN (?, ?)").get(project, `meeting:${id}`, `meeting-summary:${id}`).n;
+  const plan = (projectId) => ({ claims: [], projectId, speakers: [] });
+  const move = async (id, to) => {
+    const saved = closeMeeting(id, plan(to));
+    if (saved.projectChanged && saved.projectId) await session.indexIntoProject(id, saved.projectId);
+  };
+
+  const moved = make("move keep");
+  await session.indexIntoProject(moved, pid, true);
+  await move(moved, other);
+  check("a moved transcript is only in the new project", copies(moved), [[other, `meeting:${moved}`]]);
+  check("and no chunk stays in the old one", chunksIn(pid, moved), 0);
+
+  // The promise is about search, so ask search and not only the tables.
+  const found = async (project, id) => (await searchKnowledge(CANARY, { k: 50, perSource: 50, projectId: project })).some((h) => h.path === `meeting:${id}`);
+  check("search no longer finds it in the old project", await found(pid, moved), false);
+  check("search finds it in the new one", await found(other, moved), true);
+
+  const previewed = make("preview only");
+  await session.indexIntoProject(previewed, pid, true);
+  const events = () => rawDb.prepare("SELECT COUNT(*) AS n FROM data_events WHERE kind = 'meeting_copies_refiled'").get().n;
+  const eventsBefore = events();
+  previewCloseout(previewed, plan(other));
+  check("a close-out preview moves nothing", [copies(previewed), store.getMeeting(previewed).project_id, events()], [[[pid, `meeting:${previewed}`]], pid, eventsBefore]);
+
+  const summary = make("move summary");
+  await session.indexIntoProject(summary, pid, false);
+  await move(summary, other);
+  check("a moved summary is only in the new project", copies(summary), [[other, `meeting-summary:${summary}`]]);
+  check("and no summary chunk stays in the old one", chunksIn(pid, summary), 0);
+
+  const unfiled = make("unfile");
+  await session.indexIntoProject(unfiled, pid, true);
+  await move(unfiled, null);
+  check("un-filing removes the copy", copies(unfiled), []);
+  check("and its chunks", chunksIn(pid, unfiled), 0);
+
+  // After the prune the index holds the only words left of a kept transcript, so a move has to carry them.
+  const pruned = make("move after prune");
+  await session.indexIntoProject(pruned, pid, true);
+  rawDb.prepare("DELETE FROM meeting_segments WHERE meeting_id = ?").run(pruned);
+  await move(pruned, other);
+  check("a kept transcript past the prune moves with its words", [copies(pruned), chunksIn(other, pruned) > 0], [[[other, `meeting:${pruned}`]], true]);
+
+  const deleted = make("delete after a stale move");
+  await session.indexIntoProject(deleted, pid, true);
+  store.setProject(deleted, other); // the state an earlier move left behind
+  await session.indexIntoProject(deleted, other);
+  check("delete clears a copy in a project it no longer belongs to", [session.deleteMeeting(deleted).ok, copies(deleted), chunksIn(pid, deleted)], [true, [], 0]);
+
+  // A folder source whose path merely looks like a meeting ref is not a meeting copy.
+  const lookalike = make("lookalike");
+  const folder = projects.addSource(other, `meeting:${lookalike}`, "path");
+  const sameProject = projects.addSource(pid, `meeting:${lookalike}`, "path");
+  await move(lookalike, other);
+  check("a move leaves a look-alike path source alone", [projects.getSource(folder)?.project_id, projects.getSource(sameProject)?.project_id], [other, pid]);
+  session.deleteMeeting(lookalike);
+  check("a path source with a look-alike ref survives delete", [projects.getSource(folder)?.kind, projects.getSource(sameProject)?.kind], ["path", "path"]);
+
+  const same = make("same project");
+  await session.indexIntoProject(same, pid, true);
+  store.fileMeeting(same, pid);
+  check("re-filing under the same project keeps the copy", [copies(same), chunksIn(pid, same) > 0], [[[pid, `meeting:${same}`]], true]);
+
+  const toSummary = make("past prune, ask for transcript");
+  await session.indexIntoProject(toSummary, pid, false);
+  rawDb.prepare("DELETE FROM meeting_segments WHERE meeting_id = ?").run(toSummary);
+  store.fileMeeting(toSummary, other);
+  await session.indexIntoProject(toSummary, other, true);
+  check("asking for a pruned transcript does not lose the summary", copies(toSummary), [[other, `meeting-summary:${toSummary}`]]);
+
+  const racing = make("moved while embedding");
+  store.setProject(racing, other);
+  check("a late write to a project the meeting left is dropped", [await session.indexIntoProject(racing, pid, true), chunksIn(pid, racing)], [0, 0]);
+  store.setProject(racing, pid);
+
+  console.log("\nCOPIES ALREADY ORPHANED");
+  // Clear the board so the counts below are about these cases alone.
+  rawDb.prepare("DELETE FROM chunks WHERE source_id IN (SELECT id FROM project_sources WHERE kind = 'meeting')").run();
+  rawDb.prepare("DELETE FROM project_sources WHERE kind = 'meeting'").run();
+  const orphan = async (title, keep = true) => {
+    const id = make(title);
+    await session.indexIntoProject(id, pid, keep);
+    return id;
+  };
+  const superseded = await orphan("has a copy in B");
+  store.setProject(superseded, other);
+  await session.indexIntoProject(superseded, other);
+  const sole = await orphan("only copy, past prune");
+  rawDb.prepare("DELETE FROM meeting_segments WHERE meeting_id = ?").run(sole);
+  store.setProject(sole, other);
+  const held = await orphan("un-filed, past prune");
+  rawDb.prepare("DELETE FROM meeting_segments WHERE meeting_id = ?").run(held);
+  store.setProject(held, null);
+  const gone = await orphan("meeting gone");
+  rawDb.prepare("DELETE FROM meetings WHERE id = ?").run(gone);
+
+  const dangling = await orphan("filed under a deleted project");
+  const doomed = projects.createProject("Deleted later");
+  store.setProject(dangling, doomed);
+  projects.deleteProject(doomed);
+
+  const before = rawDb.prepare("SELECT COUNT(*) AS n FROM project_sources WHERE kind = 'meeting'").get().n;
+  const expected = { lastCopyHeld: [held, dangling], meetingGone: 1, moved: 1, superseded: 1 };
+  check("the report counts each kind", store.staleMeetingCopies(), expected);
+  check("and changes nothing", rawDb.prepare("SELECT COUNT(*) AS n FROM project_sources WHERE kind = 'meeting'").get().n, before);
+  check("applying does what the report said", store.staleMeetingCopies(true), expected);
+  check("the superseded copy is gone", copies(superseded), [[other, `meeting:${superseded}`]]);
+  check("the only copy moved with its words", [copies(sole), chunksIn(other, sole) > 0], [[[other, `meeting:${sole}`]], true]);
+  check("the un-filed last copy is left for a person", copies(held), [[pid, `meeting:${held}`]]);
+  check("the deleted meeting's copy is gone", copies(gone), []);
+  check("a second pass finds only the held one", store.staleMeetingCopies(), { lastCopyHeld: [held, dangling], meetingGone: 0, moved: 0, superseded: 0 });
+  check("a copy is not moved into a deleted project", copies(dangling), [[pid, `meeting:${dangling}`]]);
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

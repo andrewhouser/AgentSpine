@@ -14,6 +14,7 @@
     "confirm": "node src/confirm.ts",
     "auth": "node src/google/auth.ts",
     "do": "node src/do.ts",
+    "meetings:orphans": "node src/meetings/orphans.ts",
     "dashboard": "node src/server.ts",
     "watcher": "node src/watcher.ts",
     "propose": "node src/learn/propose.ts",

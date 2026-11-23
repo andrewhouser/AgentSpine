@@ -667,6 +667,9 @@ export const runExtraction = async (meetingId: number): Promise<void> => {
  * Omitted means "as already chosen", and for a meeting that was never asked, true: that is what
  * filing did before the choice existed, so nothing changes for existing meetings. Returns the
  * number of chunks indexed.
+ *
+ * This only refreshes the copy in `projectId`. Moving a meeting between projects is
+ * `store.fileMeeting`, which carries the copy across first.
  */
 export const indexIntoProject = async (
   meetingId: number,
@@ -679,27 +682,33 @@ export const indexIntoProject = async (
 
   const transcriptRef = `meeting:${meetingId}`;
   const summaryRef = `meeting-summary:${meetingId}`;
-  const sources = projects.listSources(projectId);
-  // Whichever form is not wanted goes, so switching the choice replaces the old copy.
-  const stale = sources.find((s) => s.ref === (keep ? summaryRef : transcriptRef));
-  if (stale) projects.removeSource(stale.id);
-
   const ref = keep ? transcriptRef : summaryRef;
   const text = keep ? store.transcriptText(meetingId, "final") : summaryText(meetingId);
+  // Whichever form is not wanted goes, so switching the choice replaces the old copy. Asking for
+  // the transcript after the prune has nothing to replace the summary with, so the summary stays.
+  if (!keep || text) {
+    const stale = projects.listSources(projectId).find((s) => s.kind === "meeting" && s.ref === (keep ? summaryRef : transcriptRef));
+    if (stale) projects.removeSource(stale.id);
+  }
   if (!text) return 0;
-
-  const existing = sources.find((s) => s.ref === ref);
-  const sourceId = existing?.id ?? projects.addSource(projectId, ref, "meeting");
 
   const pieces = chunkText(text);
   const embedder = await getEmbedder();
+  const vectors: (Float32Array | null)[] = [];
+  for (const piece of pieces) vectors.push(embedder ? await embedder(piece) : null);
+
+  // Embedding yields, and the meeting can be moved or deleted meanwhile. Writing now would put
+  // its words back in a project it just left, so the write happens only if it is still here.
+  if (store.getMeeting(meetingId)?.project_id !== projectId) return 0;
+  const existing = projects.listSources(projectId).find((s) => s.kind === "meeting" && s.ref === ref);
+  const sourceId = existing?.id ?? projects.addSource(projectId, ref, "meeting");
   projects.deleteChunksForPath(sourceId, ref);
+  // The fingerprint for a meeting is when it was transcribed. It never changes after that, so
+  // the incremental walk in ingest.ts would consider it unchanged forever, which is correct: a
+  // recording of a past meeting cannot be edited.
+  const stamp = meeting?.transcribed_at ?? meeting?.started ?? new Date().toISOString();
   for (let i = 0; i < pieces.length; i++) {
-    const vector = embedder ? await embedder(pieces[i]) : null;
-    // The fingerprint for a meeting is when it was transcribed. It never changes after
-    // that, so the incremental walk in ingest.ts would consider it unchanged forever,
-    // which is correct: a recording of a past meeting cannot be edited.
-    const stamp = meeting?.transcribed_at ?? meeting?.started ?? new Date().toISOString();
+    const vector = vectors[i];
     projects.insertChunk(projectId, sourceId, ref, i, stamp, pieces[i], vector ? toBlob(vector) : null);
   }
   projects.setSourceStatus(sourceId, `${keep ? "meeting transcript" : "meeting summary"}, ${pieces.length} chunks`, {
@@ -721,8 +730,8 @@ const summaryText = (meetingId: number): string => {
 export type DeleteResult = { ok: false; reason: string } | { ok: true; rejectedItems: number };
 
 /**
- * Delete a meeting for good: its transcript, extraction, chat, tags, kept audio, the copy filed
- * into a project's index, and any work item still waiting in Approvals. Tasks already filed
+ * Delete a meeting for good: its transcript, extraction, chat, tags, kept audio, every copy filed
+ * into any project's index, and any work item still waiting in Approvals. Tasks already filed
  * into a project stay (they are the user's by now).
  *
  * Refused while the meeting is being captured, transcribed or extracted: deleting under a
@@ -748,11 +757,8 @@ export const deleteMeeting = (meetingId: number): DeleteResult => {
   }
 
   // The project index: the transcript chunks are retrievable context, which is the point of this.
-  if (meeting.project_id != null) {
-    for (const source of projects.listSources(meeting.project_id)) {
-      if (source.ref === `meeting:${meetingId}` || source.ref === `meeting-summary:${meetingId}`) projects.removeSource(source.id);
-    }
-  }
+  // Every project, not just the current one: a move made before fileMeeting left copies behind.
+  for (const copy of store.meetingCopies(meetingId)) projects.removeSource(copy.id);
   deleteAudio(meetingId);
   // Claims cited to this meeting go with it: a citation to a deleted source would point at nothing.
   const claims = deleteClaimsFromSource("meeting", `meeting:${meetingId}`);
