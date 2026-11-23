@@ -45,6 +45,8 @@ final class RunStream {
         case idle
     }
 
+    /// The answer as it is being written. A preview: the `final` summary replaces it.
+    private(set) var answerText = ""
     private(set) var calls: [LiveCall] = []
     private(set) var phase: Phase = .idle
     private(set) var pendingConfirmationIDs: [Int] = []
@@ -72,6 +74,7 @@ final class RunStream {
         stop()
         self.runID = runID
         lastSeq = -1
+        answerText = ""
         calls = []
         plan = []
         pendingConfirmationIDs = []
@@ -198,7 +201,12 @@ final class RunStream {
                 pendingConfirmationIDs.append(id)
             }
 
+        case "answer":
+            // The whole reply so far, so a replayed event can never double it up.
+            answerText = event.text ?? ""
+
         case "final":
+            answerText = ""
             phase = .finished(summary: event.summary)
 
         case "run_end":

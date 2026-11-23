@@ -19,6 +19,7 @@ struct MacThreadDetail: View {
     @State private var thread: Thread?
     @State private var loadError: String?
     @State private var stream = RunStream()
+    @State private var nearBottom = true
     @State private var liveTask: String?
     /// When the live message was sent, for the time under it before the ledger row has loaded.
     @State private var liveSentAt: Date?
@@ -78,7 +79,7 @@ struct MacThreadDetail: View {
                         } else {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, Spine.Space.xxl)
                         }
-                        Color.clear.frame(height: 1).id("bottom")
+                        Color.clear.frame(height: 1).id("bottom").tracksNearScrollBottom($nearBottom)
                     }
                     .padding(Spine.Space.xl)
                     .frame(maxWidth: 760, alignment: .leading)
@@ -86,6 +87,9 @@ struct MacThreadDetail: View {
                 }
                 .onChange(of: stream.calls.count) { _, _ in
                     withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                .onChange(of: stream.answerText) { _, text in
+                    if nearBottom, !text.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
                 .onChange(of: thread?.turns.count) { _, _ in
                     proxy.scrollTo("bottom", anchor: .bottom)
@@ -292,7 +296,7 @@ struct MacThreadDetail: View {
 
     private var liveSummary: String? {
         if case .finished(let summary) = stream.phase { return summary }
-        return nil
+        return stream.isLive && !stream.answerText.isEmpty ? stream.answerText : nil
     }
 
     private var liveFailure: String? {

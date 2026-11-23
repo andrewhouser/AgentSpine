@@ -17,6 +17,7 @@ import type { Attachment, BrokerStatus, LiveTurn, RunEvent } from "../lib/types.
 import { api, runStreamUrl } from "../lib/api.ts";
 
 const blank = (runId: number, task: string, attachments: Attachment[]): LiveTurn => ({
+  answer: "",
   attachments,
   confirmations: [],
   delegations: [],
@@ -36,6 +37,10 @@ const blank = (runId: number, task: string, attachments: Attachment[]): LiveTurn
 
 const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
   switch (event.type) {
+    // The whole reply so far, or "" when it turned out not to be the answer.
+    case "answer":
+      return { ...turn, answer: event.text ?? "" };
+
     case "confirmation":
       return {
         ...turn,
@@ -79,7 +84,7 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
       return { ...turn, error: event.message ?? "run failed", status: "failed" };
 
     case "final":
-      return { ...turn, summary: event.summary ?? "" };
+      return { ...turn, answer: "", summary: event.summary ?? "" };
 
     case "queue_wait":
       return { ...turn, waitingBehind: event.depth ?? 0 };

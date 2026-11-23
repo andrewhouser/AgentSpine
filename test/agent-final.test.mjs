@@ -109,7 +109,7 @@ check("an ever-changing answer never trips the repeat limit", changing.repeats, 
 check("but the call ceiling still stops a loop", changing.calls >= CALL_CEILING, true);
 
 console.log("\nTHE CHAT PROMPT — a reply, not a report");
-check("asks for a reply, not a summary", /"reply":"<your answer to the user/.test(chat), true);
+check("asks for a reply, not a summary", /Write your answer to the user directly, in plain prose/.test(chat), true);
 check("says the person is reading now", /You are in a live conversation/.test(chat), true);
 check("says tool cards are already visible", /collapsed card/.test(chat), true);
 check("names the exact failure that was seen", /I sent you a notification/.test(chat), true);
@@ -158,6 +158,26 @@ check("asks for a shorter reply", /keep it shorter/.test(parseFailureNudge(true,
 check("chat: points at the reply key", /"reply"/.test(parseFailureNudge(true, true)), true);
 check("unattended: points at the summary key", /"summary"/.test(parseFailureNudge(true, false)), true);
 check("malformed (not truncated) keeps the plain re-ask", parseFailureNudge(false, true), "That was not one valid JSON object. Reply with exactly one.");
+
+/**
+ * LP1: in a chat turn, prose is the answer. Measured 2026-11-23, 21 of 33 finishing replies
+ * failed the JSON parse, and the two inspected were correct answers with no wrapper.
+ */
+console.log("\nA CHAT ANSWER IS PROSE, AND A TOOL CALL IS STILL A TOOL CALL");
+const { readReply } = __test;
+check("prose is the answer", readReply("The capital is Lisbon.", false, true), { action: "final", reply: "The capital is Lisbon." });
+check("JSON final still works", readReply('{"action":"final","reply":"Lisbon"}', false, true)?.reply, "Lisbon");
+check("a tool call stays a tool call", readReply('{"action":"tool","tool":"weather","args":{}}', false, true)?.action, "tool");
+check("a tool call after a preamble still runs", readReply('Checking.\n{"action":"tool","tool":"weather","args":{}}', false, true)?.action, "tool");
+check("prose quoting ordinary JSON is prose", readReply('A book looks like {"title":"Emma"}.', false, true)?.action, "final");
+check("a requested JSON example can open the answer", readReply('{"title":"Emma"}\n\nThe title key names the book.', false, true)?.action, "final");
+check("a wrapper missing its action is not shown raw", readReply('{"reply":"Lisbon"}', false, true)?.action, undefined);
+check("a broken JSON attempt is not an answer", readReply('{"action":"final","reply":"cut', true, true), null);
+check("a promise of work is not an answer", readReply("I'll look that up for you.", false, true), null);
+check("a long answer may start with 'Let me'", readReply(`Let me explain. ${"Detail. ".repeat(40)}`, false, true)?.action, "final");
+check("cut-off prose says so", /cut off/.test(readReply("Part of an answer", true, true)?.reply ?? ""), true);
+check("empty is not an answer", readReply("  ", false, true), null);
+check("unattended runs stay strict", readReply("All done.", false, false), null);
 
 console.log("\nSHARED — neither mode loses what both need");
 for (const [name, p] of [["chat", chat], ["job", job]]) {

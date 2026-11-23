@@ -6,6 +6,7 @@
  * malformed tool call on the local model triggers a one-shot cloud retry for that
  * step, which is where small-model tool-calling unreliability gets absorbed.
  */
+import { answerPublisher, PROMISE_MAX_CHARS, PROMISE_ONLY } from "./answer-stream.ts";
 import { AGENT_STEP_MAX_TOKENS, MAX_PARSE_FAILURES, MAX_STEPS } from "./config.ts";
 import { route } from "./router.ts";
 import type { RouteOpts } from "./router.ts";
@@ -135,7 +136,7 @@ const clock = (): string =>
  */
 const finalDocs = (conversational: boolean): string =>
   conversational
-    ? `{"action":"final","reply":"<your answer to the user, in prose>"}`
+    ? `Write your answer to the user directly, in plain prose or Markdown. No JSON around it, and do not start it with {.`
     : `{"action":"final","summary":"<what you did and what you left for the user to confirm>"}`;
 
 /** Rules that only apply when a person is on the other end, reading this as it happens. */
@@ -225,7 +226,7 @@ const system = (tools: Record<string, Tool>, conversational: boolean): string =>
 
 ${clock()}
 
-You work in a loop. Each turn, reply with EXACTLY ONE JSON object and nothing else.
+${conversational ? "You work in a loop. Each turn, EITHER call one tool with EXACTLY ONE JSON object and nothing else, OR finish by answering in plain prose." : "You work in a loop. Each turn, reply with EXACTLY ONE JSON object and nothing else."}
 
 To use a tool:
 {"action":"tool","tool":"<name>","args":{...}}
@@ -341,12 +342,12 @@ export interface AgentOpts {
 /** One tier up, for the retry after a malformed reply. `deep` has nowhere further to go. */
 const escalate = (tier: Tier): Tier => (tier === "fast" ? "standard" : "deep");
 
-const parseOr = async (messages: Msg[], opts: RouteOpts) => {
+const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, truncated: boolean) => any) => {
   // The cap is explicit because the server's default is not "none" — see AGENT_STEP_MAX_TOKENS.
   const result = await route(messages, { maxTokens: AGENT_STEP_MAX_TOKENS, ...opts });
   return {
     actualTier: result.tier,
-    parsed: safeJson(result.text),
+    parsed: read(result.text, result.truncated),
     text: result.text,
     truncated: result.truncated,
     via: result.via,
@@ -492,6 +493,33 @@ const safeJson = (text: string): any | null => {
   }
 };
 
+const CUT_OFF_NOTE = "\n\n_This reply reached the length limit and was cut off._";
+
+/**
+ * Read one step's reply. In a chat turn, plain prose is the answer (LP1).
+ *
+ * Measured 2026-11-23: of 33 samples that should have finished, 21 failed to parse, and the
+ * two inspected were correct answers without the JSON wrapper. A real tool call still wins,
+ * even after a sentence of preamble, and a reply opening with `{` is a broken protocol
+ * attempt rather than an answer. Unattended runs keep the strict format: nobody is there to
+ * notice a run that stopped early because it wrote a sentence.
+ */
+const readReply = (text: string, truncated: boolean, conversational: boolean, tools: Record<string, Tool>): any => {
+  const parsed = safeJson(text);
+  if (!conversational) return parsed;
+  const action = parsed?.action;
+  if (action === "final" || action === "tool" || (typeof action === "string" && tools[action])) return parsed;
+  const body = text.trim();
+  if (!body || /^```(?:json)?\s*\{\s*"action"/.test(body)) return parsed;
+  // Asked to "show a JSON object", the model opens with one and explains it, which is an answer.
+  // Anything shaped like the protocol, or that does not parse, is still a failed attempt.
+  if (body.startsWith("{") && (!parsed || "action" in parsed || "tool" in parsed || FINAL_KEYS.some((key) => key in parsed))) {
+    return parsed;
+  }
+  if (body.length <= PROMISE_MAX_CHARS && PROMISE_ONLY.test(body)) return null;
+  return { action: "final", reply: truncated ? `${body}${CUT_OFF_NOTE}` : body };
+};
+
 /**
  * Run the loop, then drop this run's private pin if it is the root of its tree. A subagent
  * shares its parent's `budgetRunId`, so it neither owns the pin nor releases it.
@@ -588,6 +616,10 @@ const runAgentLoop = async (
 
   /** Steps in a row whose reply could not be parsed, even after the tier-up re-ask. */
   let parseFailures = 0;
+  const read = (text: string, truncated: boolean): any => readReply(text, truncated, conversational, tools);
+  // Only a chat turn has someone reading it as it is written (see AgentOpts.conversational).
+  const answer = conversational ? answerPublisher((text) => publish(runId, { text, type: "answer" })) : null;
+  const streaming = answer ? { onDelta: answer.update } : {};
 
   for (let step = 0; step < maxSteps; step++) {
     // The user pressed stop. Checked here, between steps, so a tool that was already running
@@ -600,8 +632,9 @@ const runAgentLoop = async (
       runId,
       step: step + 1,
       tier,
+      ...streaming,
       ...sens(),
-    });
+    }, read);
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
     // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
@@ -619,9 +652,13 @@ const runAgentLoop = async (
         runId,
         step: step + 1,
         ...(tier === "deep" ? { prefer: "cloud" as const } : { tier: escalate(tier) }),
+        ...streaming,
         ...sens(),
-      }));
+      }, read));
     }
+
+    // Whatever this step showed was not the answer after all, so it comes back off the screen.
+    if (!(parsed?.action === "final" && finalText(parsed))) answer?.retract();
 
     // If the router fell back to a different tier than what dispatch sized, correct the
     // badge so the UI never shows "local" when the answer actually came from the cloud.
@@ -663,7 +700,7 @@ const runAgentLoop = async (
         messages.push({
           role: "user",
           content: conversational
-            ? 'Your reply was empty. Answer the user now, in prose, using what the tools returned: {"action":"final","reply":"<the answer itself>"}'
+            ? "Your reply was empty. Answer the user now, in plain prose, using what the tools returned."
             : 'Your summary was empty. Finish with {"action":"final","summary":"<what you did>"}.',
         });
         continue;
@@ -773,7 +810,7 @@ const runAgentLoop = async (
           content:
             `tool result [${result.status}]:\n${result.output}\n\n` +
             `You have already written the answer. Do NOT call another tool — no searches, no ` +
-            `lookups, nothing. Reply now with {"action":"final","reply":"<that same text>"}.`,
+            `lookups, nothing. Reply now with that same text, in plain prose.`,
         });
         continue;
       }
@@ -801,8 +838,8 @@ const runAgentLoop = async (
           // hint gets to finish properly rather than being cut off.
           (repeats > 1
             ? `\n\nYou have now made this exact call ${repeats} times and received the same answer. ` +
-              `Do NOT call it again. You have what you need — answer now with ` +
-              `{"action":"final","${conversational ? "reply" : "summary"}":"..."}.`
+              `Do NOT call it again. You have what you need — answer now ` +
+              (conversational ? "in plain prose." : `with {"action":"final","summary":"..."}.`)
             : ""),
       });
       continue;
@@ -810,7 +847,9 @@ const runAgentLoop = async (
 
     messages.push({
       role: "user",
-      content: 'Reply with {"action":"tool","tool":"<name>","args":{...}} or {"action":"final","summary":"..."}.',
+      content: conversational
+        ? 'Call a tool with {"action":"tool","tool":"<name>","args":{...}}, or answer the user in plain prose.'
+        : 'Reply with {"action":"tool","tool":"<name>","args":{...}} or {"action":"final","summary":"..."}.',
     });
   }
 
@@ -831,6 +870,7 @@ export const __test = {
   finalText,
   nextRepeat,
   parseFailureNudge,
+  readReply: (text: string, truncated: boolean, conversational: boolean) => readReply(text, truncated, conversational, registry),
   refusedNotifyText,
   REPEAT_LIMIT,
   settingTools,

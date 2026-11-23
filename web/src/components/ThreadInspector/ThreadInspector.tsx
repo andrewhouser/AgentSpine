@@ -105,6 +105,7 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
   let tokensOut = 0;
   let calls = 0;
   let unreported = 0;
+  let modelMs = 0;
   const byModel = new Map<string, { calls: number; completion: number; model: string; prompt: number; tier: null | string }>();
   for (const t of turns) {
     const u = t.usage;
@@ -114,6 +115,7 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
     calls += u.calls;
     unreported += u.unreported;
     for (const m of u.byModel) {
+      modelMs += m.ms;
       const key = `${m.tier ?? ""}|${m.model}`;
       const row = byModel.get(key) ?? { calls: 0, completion: 0, model: m.model, prompt: 0, tier: m.tier };
       row.calls += m.calls;
@@ -123,6 +125,16 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
     }
   }
   const lastUsage = [...turns].reverse().find((t) => (t.usage?.calls ?? 0) > 0)?.usage;
+  // "Effective" because no first-token time is recorded: `ms` is the whole request, prefill included,
+  // so on a 22k-token prompt this reads far below the model's 28 tok/s decode speed.
+  const modelSeconds = Math.round(modelMs / 1000);
+  const modelTime =
+    modelSeconds < 60
+      ? `${modelSeconds}s`
+      : modelSeconds < 3600
+        ? `${Math.floor(modelSeconds / 60)}m ${modelSeconds % 60}s`
+        : `${Math.floor(modelSeconds / 3600)}h ${Math.floor((modelSeconds % 3600) / 60)}m`;
+  const effectiveSpeed = modelMs > 0 ? (tokensOut / (modelMs / 1000)).toFixed(1) : null;
 
   const byTool = new Map<string, BrokerStatus[]>();
   for (const a of actions) byTool.set(a.tool, [...(byTool.get(a.tool) ?? []), a.decision]);
@@ -188,6 +200,11 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
             {lastUsage && (
               <p className={styles.faint}>
                 Latest turn: {num(lastUsage.promptTokens)} in, {num(lastUsage.completionTokens)} out
+              </p>
+            )}
+            {effectiveSpeed && (
+              <p className={styles.faint} title="Output tokens divided by total model time, including prompt processing">
+                Effective: {effectiveSpeed} tok/s · {modelTime} model time
               </p>
             )}
             {[...byModel.values()].map((m) => (

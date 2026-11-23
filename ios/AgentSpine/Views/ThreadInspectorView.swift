@@ -194,6 +194,21 @@ struct ThreadInspectorView: View {
         n.formatted(.number.grouping(.automatic))
     }
 
+    private var totalModelMs: Int { usages.reduce(0) { $0 + $1.byModel.reduce(0) { $0 + $1.ms } } }
+
+    /// "Effective" because no first-token time is recorded: `ms` is the whole request, prefill included,
+    /// so on a 22k-token prompt this reads far below the model's 28 tok/s decode speed.
+    private var effectiveSpeedLine: String? {
+        guard totalModelMs > 0 else { return nil }
+        let exactSeconds = Double(totalModelMs) / 1000
+        let seconds = Int(exactSeconds.rounded())
+        let time = seconds < 60 ? "\(seconds)s"
+            : seconds < 3600 ? "\(seconds / 60)m \(seconds % 60)s"
+            : "\(seconds / 3600)h \((seconds % 3600) / 60)m"
+        let speed = (Double(totalOut) / exactSeconds).formatted(.number.precision(.fractionLength(1)))
+        return "Effective: \(speed) tok/s · \(time) model time"
+    }
+
     private var tokensCard: some View {
         card("Tokens", symbol: "number", trailing: totalCalls > 0 ? "\(count(totalCalls)) call\(totalCalls == 1 ? "" : "s")" : nil) {
             if totalCalls == 0 {
@@ -221,6 +236,12 @@ struct ThreadInspectorView: View {
                     Text("Latest turn: \(count(latest.promptTokens)) in, \(count(latest.completionTokens)) out")
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textFaint)
+                }
+                if let line = effectiveSpeedLine {
+                    Text(line)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                        .accessibilityHint("Output tokens divided by total model time, including prompt processing")
                 }
                 ForEach(Array(modelTokens.enumerated()), id: \.element.id) { index, row in
                     if index > 0 { Divider().overlay(Spine.Palette.border) }

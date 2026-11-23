@@ -168,6 +168,11 @@ export interface ChatOpts {
   purpose?: null | string;
   /** The tier being asked. Injected by the router, which knows it after fallback. */
   tier?: null | string;
+  /**
+   * Stream this call and report the raw reply so far. Called with "" as each attempt starts,
+   * so a retry or a tier fallback clears what the failed attempt had written.
+   */
+  onDelta?: (textSoFar: string) => void;
 }
 
 /**
@@ -251,6 +256,120 @@ export interface ChatReply {
   truncated: boolean;
 }
 
+/** The parts of a completion `chatReply` reads, whichever way it arrived. */
+interface Completion {
+  choices?: { finish_reason?: null | string; message?: { content?: null | string; reasoning?: unknown } }[];
+  usage?: { completion_tokens?: number; prompt_tokens?: number } | null;
+}
+
+/** Read an OpenAI-style event stream into one completion, reporting the text as it grows. */
+const readEventStream = async (res: Response, report: (text: string) => void): Promise<Completion> => {
+  if (!res.body) throw new Error("connection error: the stream had no body");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let text = "";
+  let reasoning = "";
+  let finishReason: null | string = null;
+  let usage: Completion["usage"] = null;
+
+  const line = (raw: string): boolean => {
+    if (!raw.startsWith("data:")) return false;
+    const data = raw.slice(5).trim();
+    if (data === "[DONE]") return true;
+    const chunk = JSON.parse(data);
+    if (chunk.error) throw new LLMError(`the model server reported: ${chunk.error.message ?? JSON.stringify(chunk.error)}`);
+    if (chunk.usage) usage = chunk.usage;
+    const choice = chunk.choices?.[0];
+    if (choice?.finish_reason) finishReason = choice.finish_reason;
+    if (typeof choice?.delta?.reasoning === "string") reasoning += choice.delta.reasoning;
+    if (typeof choice?.delta?.content === "string" && choice.delta.content) {
+      text += choice.delta.content;
+      report(text);
+    }
+    return false;
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    pending += done ? decoder.decode() : decoder.decode(value, { stream: true });
+    const lines = pending.split(/\r?\n/);
+    pending = done ? "" : (lines.pop() ?? "");
+    let finished = false;
+    for (const raw of lines) finished = line(raw) || finished;
+    if (finished) break;
+    // A stream that closes before saying it finished is a partial reply, never a whole one.
+    if (done) {
+      if (finishReason) break;
+      throw new Error("the stream closed before the reply finished");
+    }
+  }
+  await reader.cancel().catch(() => undefined);
+  return {
+    choices: [
+      {
+        finish_reason: finishReason,
+        // Absent rather than "" for a reasoning-only reply, so the check below can name it.
+        message: { content: text || (reasoning ? null : ""), reasoning: reasoning || undefined },
+      },
+    ],
+    usage,
+  };
+};
+
+/**
+ * One streamed request. The deadline is ours because the SDK's timeout stops at the response
+ * headers, and a streamed reply spends nearly all of its time after them.
+ */
+const streamedCompletion = async (
+  client: OpenAI,
+  params: Record<string, unknown>,
+  budgetMs: number,
+  runId: null | number | undefined,
+  onDelta: (text: string) => void,
+): Promise<Completion> => {
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () => deadline.abort(Object.assign(new Error("Request timed out."), { name: "TimeoutError" })),
+    budgetMs,
+  );
+  const stop = stopSignal(runId);
+  const signal = stop ? AbortSignal.any([stop, deadline.signal]) : deadline.signal;
+  try {
+    // Plain fetch rather than the SDK's stream: all this needs is one POST and an event parser,
+    // and it keeps the path independent of which major version of the SDK a machine installed.
+    const res = await fetch(`${String(client.baseURL).replace(/\/+$/, "")}/chat/completions`, {
+      body: JSON.stringify({ ...params, stream: true, stream_options: { include_usage: true } }),
+      headers: { accept: "text/event-stream", authorization: `Bearer ${client.apiKey}`, "content-type": "application/json" },
+      method: "POST",
+      signal,
+    }).catch((err: unknown) => {
+      if (deadline.signal.aborted || stop?.aborted) throw err;
+      // Bare fetch says only "fetch failed", which would read as a real error and skip the retry.
+      throw new Error(`connection error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+    });
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      // `status` is what isTransient reads to tell a 503 worth retrying from a 400 that is not.
+      throw Object.assign(new Error(`${res.status} ${detail}`.trim()), { status: res.status });
+    }
+    // A server that ignores `stream` still answered, so that reply is used as it is.
+    if (!(res.headers.get("content-type") ?? "").includes("text/event-stream")) return (await res.json()) as Completion;
+    try {
+      return await readEventStream(res, onDelta);
+    } catch (err) {
+      if (err instanceof LLMError || deadline.signal.aborted || stop?.aborted) throw err;
+      // A socket dropped mid-reply is the same transient failure as one dropped before it.
+      throw new Error(`connection error while streaming: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+    }
+  } catch (err) {
+    if (deadline.signal.aborted) throw deadline.signal.reason;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 /** One completion against a specific client + model. Throws LLMError on failure. */
 export const chat = async (client: OpenAI, model: string, messages: Msg[], opts: ChatOpts = {}): Promise<string> =>
   (await chatReply(client, model, messages, opts)).text;
@@ -260,7 +379,7 @@ export const chatReply = async (
   client: OpenAI,
   model: string,
   messages: Msg[],
-  { maxTokens, purpose, runId, step, temperature = 0.2, tier, timeoutMs }: ChatOpts = {},
+  { maxTokens, onDelta, purpose, runId, step, temperature = 0.2, tier, timeoutMs }: ChatOpts = {},
 ): Promise<ChatReply> => {
   const budgetMs = timeoutMs ?? timeoutForTokens(maxTokens);
   const isCloud = sameEndpoint(String(client.baseURL ?? ""), CLOUD_BASE_URL);
@@ -282,23 +401,34 @@ export const chatReply = async (
     });
 
   try {
-    const res = await client.chat.completions.create(
-      {
-        model,
-        messages: foldSystemMessages(messages),
-        temperature,
-        ...(maxTokens ? { max_tokens: maxTokens } : {}),
-        ...(isCloud ? {} : NO_THINKING),
-      } as ChatCompletionCreateParamsNonStreaming,
-      { signal: stopSignal(runId), timeout: budgetMs },
-    );
+    const params = {
+      model,
+      messages: foldSystemMessages(messages),
+      temperature,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
+      ...(isCloud ? {} : NO_THINKING),
+    };
+    // A display callback must never be able to fail the model call it is watching.
+    const report = (partial: string): void => {
+      try {
+        onDelta?.(partial);
+      } catch (err) {
+        console.warn(`[llm] stream listener failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+    report("");
+    const res: Completion = onDelta
+      ? await streamedCompletion(client, params, budgetMs, runId, report)
+      : await client.chat.completions.create(params as ChatCompletionCreateParamsNonStreaming, {
+          signal: stopSignal(runId),
+          timeout: budgetMs,
+        });
     // Timed before the shape checks below: the server did the work and we waited for it,
     // whether or not what came back is usable. A reply that burned 40 seconds and then
     // turned out to be reasoning-with-no-content is exactly the cost worth seeing.
     timed(true, res.usage);
 
-    const message = res.choices?.[0]?.message as
-      | (typeof res.choices)[number]["message"] & { reasoning?: unknown };
+    const message = res.choices?.[0]?.message;
     const text = message?.content;
     if (typeof text !== "string") {
       // Belt and braces for the case NO_THINKING is meant to prevent: if a reasoning model

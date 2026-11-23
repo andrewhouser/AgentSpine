@@ -1,5 +1,16 @@
 import SwiftUI
 
+extension View {
+    /// For the thread's bottom marker: whether the reader is at the end. A streaming answer
+    /// updates several times a second, and following it unconditionally would make it
+    /// impossible to scroll up and read. 80pt is about two lines of slack.
+    func tracksNearScrollBottom(_ isNear: Binding<Bool>) -> some View {
+        onGeometryChange(for: Bool.self) { proxy in
+            (proxy.bounds(of: .scrollView)?.maxY ?? 0) >= -80
+        } action: { isNear.wrappedValue = $0 }
+    }
+}
+
 struct LiveTurnView: View {
     let task: String
     var isDecision = false
@@ -28,6 +39,7 @@ struct LiveTurnView: View {
             }
 
             if stream.isLive { PlanCardView(steps: stream.plan) }
+            if stream.isLive, !stream.answerText.isEmpty { MarkdownText(stream.answerText) }
 
             if case .finished(let summary) = stream.phase, let summary, !summary.isEmpty {
                 if let card = WeatherCard.of(calls: stream.calls.map { ($0.tool, $0.output, $0.status == .executed) }) {

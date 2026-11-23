@@ -877,10 +877,13 @@ export interface RunEvent {
   steps?: number;
   summary?: null | string;
   target?: null | string;
+  /** `answer`: the whole reply so far, or "" when it was taken back. */
+  text?: string;
   tier?: string;
   tool?: string;
   ts: string;
   type:
+    | "answer"
     | "confirmation"
     | "error"
     | "final"
@@ -933,6 +936,8 @@ export interface PlanStep {
 
 /** What a turn looks like while it is still running. */
 export interface LiveTurn {
+  /** The answer as it is being written. A preview: `summary` replaces it when the run finishes. */
+  answer: string;
   /** Images the user attached, echoed locally so the turn renders them before it finishes. */
   attachments: Attachment[];
   confirmations: { id: number; summary: string; tool: string }[];
