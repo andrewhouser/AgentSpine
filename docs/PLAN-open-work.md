@@ -272,7 +272,7 @@ Left to do:
 - Spacing and type sizes still use the old literal values in most modules (only colours and fonts moved to
   tokens); meeting speaker colours stay hard-coded hues.
 - Distribution is development-signed only, with no notarised route, by decision.
-- **iPhone offline cache (built 2026-11-22; see "Not proven" below).** `Core/OfflineCache.swift` keeps the raw replies
+- **iPhone offline cache (built 2026-11-22; checks recorded below).** `Core/OfflineCache.swift` keeps the raw replies
   for the thread list, threads, tasks, files, projects and runs you opened, shown under an "Offline: saved copy" notice
   with their age when the server is unreachable (or answers 502 to 504). Nothing is fetched ahead, and writes are not
   queued. A question from a saved copy has no Approve or Reject, even if the network returns, until the thread reloads
@@ -292,7 +292,9 @@ Left to do:
   showed the saved list under the offline notice (the saved thread was opened under 502 only). A 500 showed its error
   instead of the copy. No write was sent during the outages, Try again recovered without a relaunch, and removing the
   token still erased the copy. Real `tailscale serve` with the dashboard stopped has not been run.
-  **Not proven:** file protection cannot be observed in the simulator, so it needs a look on a real, locked iPhone.
+  **File protection checked on a real iPhone 16 Pro Max (2026-11-23, Xcode debugger):** `manifest.json` reports
+  `NSFileProtectionComplete`, and reading it from inside the app returned 601 bytes unlocked, 0 after 30 seconds
+  locked, and 601 after unlocking. The saved replies use the same write options but were not read individually.
 - **Web, Mac and iPhone matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`,
   toggled from the chat tab bar, remembered in `localStorage`) with four cards plus a **Tokens** card (in, out, calls,
   by model; from `usage` on each turn, which `usageForRuns` sums from `llm_calls` for the turn and its child runs).
