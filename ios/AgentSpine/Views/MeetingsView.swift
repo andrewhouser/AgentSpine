@@ -344,11 +344,15 @@ struct MeetingDetailView: View {
                 ErrorNotice(message: error) { Task { await load() } }
             }
             if let detail {
+                #if os(macOS)
+                macHeader(detail.meeting)
+                #else
                 header(detail.meeting)
                 tagsSection(detail.meeting)
                 if detail.meeting.status == "done" {
                     Section { Button("Close out this meeting") { closingOut = true } }
                 }
+                #endif
                 if recording { coachSection }
                 if recording, let cards { contextSection(cards) }
                 if let extraction = detail.extraction { summarySection(extraction) }
@@ -477,6 +481,121 @@ struct MeetingDetailView: View {
             }
         }
     }
+
+    #if os(macOS)
+    /// The Mac's whole header in about three lines. As stacked rows it took most of a window
+    /// before the summary, and rename and filing sat out of sight in the toolbar's overflow menu.
+    private func macHeader(_ meeting: Meeting) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: Spine.Space.sm) {
+                HStack(spacing: Spine.Space.sm) {
+                    Text(meeting.displayTitle)
+                        .font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .title3).weight(.semibold))
+                        .lineLimit(2)
+                    Button {
+                        newTitle = meeting.title ?? ""
+                        renaming = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Rename meeting")
+                    .accessibilityLabel("Rename meeting")
+                    Spacer(minLength: Spine.Space.sm)
+                    macProjectMenu(meeting)
+                    if meeting.status == "done" {
+                        Button("Close out this meeting") { closingOut = true }
+                            .help("Review speakers, project and extracted items")
+                    }
+                }
+                Text(macMetadata(meeting))
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+                    .textSelection(.enabled)
+                if !meeting.isRecording { macTagChips }
+            }
+            .padding(.vertical, Spine.Space.xs)
+        }
+    }
+
+    /// Everything the stacked rows said, in one line that wraps. The note is where "8 speakers
+    /// detected" comes from.
+    private func macMetadata(_ meeting: Meeting) -> String {
+        var parts = [meeting.status, SpineDate.relative(meeting.started), meeting.device]
+        if meeting.hasKeptAudio, let until = SpineDate.parse(meeting.audioExpires) {
+            parts.append("audio kept until \(until.formatted(date: .omitted, time: .shortened))")
+        }
+        parts.append("\(meeting.wordCount) words")
+        if let note = meeting.note, !note.isEmpty { parts.append(note) }
+        if let keeps = meeting.projectKeeps { parts.append("project keeps: \(keeps)") }
+        return parts.joined(separator: " · ")
+    }
+
+    private func macProjectMenu(_ meeting: Meeting) -> some View {
+        let current = state.projects.first { $0.id == meeting.projectID }
+        return Menu {
+            Button("No project") { Task { await file(nil) } }
+                .disabled(meeting.projectID == nil)
+            Divider()
+            ForEach(state.projects) { project in
+                // Filing indexes the meeting, so it asks what the project should keep.
+                Button(project.name) { filingUnder = project }
+                    .disabled(project.id == meeting.projectID)
+            }
+            if meeting.projectID != nil {
+                Divider()
+                Button(meeting.keepTranscript == 0 ? "Keep the full transcript in the project" : "Keep only the summary in the project") {
+                    Task { await setKeep(meeting.keepTranscript == 0) }
+                }
+            }
+        } label: {
+            Label(current?.name ?? (meeting.projectID == nil ? "No project" : "Project #\(meeting.projectID ?? 0)"), systemImage: "folder")
+        }
+        .fixedSize()
+        .help("File this meeting under a project")
+        .accessibilityLabel("Project")
+    }
+
+    private var macTagChips: some View {
+        FlowLayout(spacing: Spine.Space.xs) {
+            ForEach(tags, id: \.self) { tag in
+                HStack(spacing: 3) {
+                    Text(tag)
+                    Button {
+                        Task { await setTags(tags.filter { $0 != tag }) }
+                    } label: {
+                        Image(systemName: "xmark").imageScale(.small)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(savingTags)
+                    .help("Remove tag \(tag)")
+                    .accessibilityLabel("Remove tag \(tag)")
+                }
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.medium))
+                .foregroundStyle(Spine.Palette.textDim)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .overlay(Capsule().strokeBorder(Spine.Palette.border, lineWidth: 0.5))
+            }
+            Menu {
+                // In-use tags first, for the same reason as the iPhone's list: a small vocabulary.
+                ForEach(offerableTags) { entry in
+                    Button("\(entry.tag) (\(entry.count))") {
+                        Task { await setTags(tags + [entry.tag]) }
+                    }
+                }
+                Button("New tag…") { newTag = ""; addingTag = true }
+            } label: {
+                Label("Add tag", systemImage: "plus")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(savingTags)
+            .help("Tags are lower-cased, de-duplicated and sorted by the server, up to 20 per meeting. They filter the meetings list and narrow what the assistant searches.")
+        }
+    }
+    #endif
 
     /// A finished meeting's tags, with one add and one remove.
     ///

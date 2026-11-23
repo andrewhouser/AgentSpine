@@ -76,7 +76,7 @@ struct ComponentGallery: View {
 }
 
 /// Wraps its children onto new lines, so badges do not clip at large type sizes.
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var spacing: CGFloat = Spine.Space.sm
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

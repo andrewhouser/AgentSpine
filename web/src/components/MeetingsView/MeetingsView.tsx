@@ -10,9 +10,11 @@
  *
  * ## Assign after, not before
  *
- * The project selector is available while recording and stays available afterwards, because
+ * The dropdown on each meeting's row stays available afterwards, because
  * you often do not know which project a meeting was about until it is over. Choosing one on
- * a finished meeting is what indexes its transcript into that project.
+ * a finished meeting is what indexes its transcript into that project. The selector beside the
+ * Record button only presets the next recording, and says so: it used to read just "Project",
+ * and changing it with a finished meeting open looked like a filing that silently did nothing.
  *
  * ## Why the rejected work items are on screen
  *
@@ -559,23 +561,51 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
   // Filing indexes the meeting into a project, so it asks what the project should keep. Taking a
   // meeting out of a project needs no question.
   const [filing, setFiling] = useState<{ id: number; projectId: number } | null>(null);
+  // The PATCH waits for the transcript to be embedded, so it can take a while. Until the list
+  // comes back the dropdown holds the choice: snapping to the old project read as "nothing happened".
+  const [savingProject, setSavingProject] = useState<{ done: boolean; id: number; projectId: null | number } | null>(null);
+  const [filingProblem, setFilingProblem] = useState<{ id: number; message: string } | null>(null);
 
-  const assign = async (id: number, value: string): Promise<void> => {
-    if (value === "") {
+  // Only a new list settles it; `done` flipping must not clear the choice before that list lands.
+  const [seenMeetings, setSeenMeetings] = useState(meetings);
+  if (meetings !== seenMeetings) {
+    setSeenMeetings(meetings);
+    if (savingProject?.done) setSavingProject(null);
+  }
+
+  const saveProject = async (id: number, target: null | number, keepTranscript?: boolean): Promise<void> => {
+    setFiling(null);
+    setFilingProblem(null);
+    setSavingProject({ done: false, id, projectId: target });
+    try {
+      await api.setMeetingProject(id, target, keepTranscript);
+      setSavingProject({ done: true, id, projectId: target });
+    } catch (err) {
+      // The server stores the project before it indexes, so a failure can still have moved it.
+      // Reloading below shows whichever is true.
+      setSavingProject(null);
+      setFilingProblem({ id, message: err instanceof Error ? err.message : String(err) });
+    }
+    reloadMeetings();
+    if (open === id) await load(id);
+  };
+
+  const assign = async (m: Meeting, value: string): Promise<void> => {
+    const target = value === "" ? null : Number(value);
+    if (target === m.project_id) {
       setFiling(null);
-      await api.setMeetingProject(id, null);
-      reloadMeetings();
       return;
     }
-    setFiling({ id, projectId: Number(value) });
+    if (target === null) {
+      await saveProject(m.id, null);
+      return;
+    }
+    setFiling({ id: m.id, projectId: target });
   };
 
   const file = async (keepTranscript: boolean): Promise<void> => {
     if (!filing) return;
-    const target = filing;
-    setFiling(null);
-    await api.setMeetingProject(target.id, target.projectId, keepTranscript);
-    reloadMeetings();
+    await saveProject(filing.id, filing.projectId, keepTranscript);
   };
 
   const changeKeep = async (id: number, keepTranscript: boolean): Promise<void> => {
@@ -707,15 +737,16 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
           </select>
 
           <select
-            aria-label="Project"
+            aria-label="Project for the next recording"
             className={styles.select}
             onChange={(e) => setProjectId(e.target.value === "" ? null : Number(e.target.value))}
+            title="Applies to the next recording. To file a finished meeting, use the dropdown on its row."
             value={projectId ?? ""}
           >
-            <option value="">No project</option>
+            <option value="">Next recording: no project</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                Next recording: {p.name}
               </option>
             ))}
           </select>
@@ -812,8 +843,11 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
             <select
               aria-label="File under project"
               className={styles.assign}
-              onChange={(e) => void assign(m.id, e.target.value)}
-              value={m.project_id ?? ""}
+              disabled={savingProject?.id === m.id}
+              onChange={(e) => void assign(m, e.target.value)}
+              value={
+                (filing?.id === m.id ? filing.projectId : savingProject?.id === m.id ? savingProject.projectId : m.project_id) ?? ""
+              }
             >
               <option value="">No project</option>
               {projects.map((p) => (
@@ -824,6 +858,16 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
             </select>
           </div>
 
+          {savingProject?.id === m.id && !savingProject.done && (
+            <p className={styles.hint} role="status">
+              Saving the project…
+            </p>
+          )}
+          {filingProblem?.id === m.id && (
+            <p className={styles.problem} role="alert">
+              Filing did not finish: {filingProblem.message}
+            </p>
+          )}
           {filing?.id === m.id && (
             <div aria-label="What the project keeps" className={styles.filing} role="group">
               <p>
