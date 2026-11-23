@@ -288,6 +288,10 @@ Left to do:
   connection test reloads, only the owning token's rejection wipes, and removing the server or token wipes at once.
   A failed keychain read no longer counts as a sign-out: only "item not found" does, so a launch before the first
   unlock keeps the copy and retries the read when the app comes forward or makes a request.
+  **Gateway fallback checked in the simulator (2026-11-22, local proxy answering each status):** 502, 503 and 504 each
+  showed the saved list under the offline notice (the saved thread was opened under 502 only). A 500 showed its error
+  instead of the copy. No write was sent during the outages, Try again recovered without a relaunch, and removing the
+  token still erased the copy. Real `tailscale serve` with the dashboard stopped has not been run.
   **Not proven:** file protection cannot be observed in the simulator, so it needs a look on a real, locked iPhone.
 - **Web, Mac and iPhone matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`,
   toggled from the chat tab bar, remembered in `localStorage`) with four cards plus a **Tokens** card (in, out, calls,
