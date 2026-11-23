@@ -216,7 +216,9 @@ fs.writeFileSync(path.join(root, "headsup-dates.json"), JSON.stringify(hDates.da
 // Preferences: one changed from the default, so the app has to decode a real mixture.
 const { updatePrefs: hUpdatePrefs } = await import("../src/headsup/prefs.ts");
 const { prefsForClient: hPrefsForClient } = await import("../src/headsup/prefs-view.ts");
-hUpdatePrefs({ dailyCap: 2, kinds: { bill: false }, quietStartHour: 22 });
+// Both quiet hours are set here: this checks the wire shape, and leaning on the default end hour
+// broke this suite when that default moved from 7 to 6 (3b6be95).
+hUpdatePrefs({ dailyCap: 2, kinds: { bill: false }, quietEndHour: 7, quietStartHour: 22 });
 fs.writeFileSync(path.join(root, "headsup-prefs.json"), JSON.stringify(hPrefsForClient()));
 
 // What "Check now" reports: a quiet day, and a calendar that could not be read.
