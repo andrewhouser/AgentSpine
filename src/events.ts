@@ -38,6 +38,7 @@ export type RunEventType =
   | "subagent_start"
   | "tier"
   | "tool_call"
+  | "tool_progress"
   | "tool_result"
   | "vision";
 

@@ -865,6 +865,8 @@ export interface RunEvent {
   error?: string;
   /** `plan`: the whole plan card, newest state (src/plan.ts). */
   items?: PlanStep[];
+  /** tool_progress: what the tool is doing now, e.g. "rendering 42%". */
+  label?: string;
   message?: string;
   /** `vision`: which model did the looking. */
   model?: string;
@@ -893,6 +895,7 @@ export interface RunEvent {
     | "subagent_start"
     | "tier"
     | "tool_call"
+    | "tool_progress"
     | "tool_result"
     | "vision";
 }
@@ -905,6 +908,8 @@ export interface LiveToolCall {
   args: unknown;
   callId: number;
   output: null | string;
+  /** What a long-running tool says it is doing right now, e.g. "rendering 42%". */
+  progress?: string;
   status: BrokerStatus | null;
   summary: null | string;
   target: null | string;

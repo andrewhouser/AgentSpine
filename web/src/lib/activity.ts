@@ -28,6 +28,8 @@ export const describeActivity = (calls: LiveToolCall[]): null | string => {
       return inFlight ? "reading a page" : "reviewing the page";
     case "read_more":
       return inFlight ? "reading more of the page" : "reviewing the page";
+    case "generate_image":
+      return inFlight ? `making your image${call.progress ? `: ${call.progress}` : ""}` : "reviewing the image";
     default:
       return inFlight ? `using ${call.tool}${what ? `: ${what}` : ""}` : `reviewing ${call.tool} result`;
   }

@@ -256,8 +256,22 @@ the UI shows it through `/images/` exactly as before.
   in 16 GB at once, so expect one to be evicted when you switch.
 - Sizes default to 1024x1024 and clamp to 1536 a side.
 - Polls tolerate slow replies (60 s each) and retry until the 5 minute ceiling.
-- Verified live against ComfyUI 0.45 via `src/comfy.ts`; the full tool path through the chat UI
-  was not exercised. Still open: live progress in the UI and an async "job" card.
+- **Editing a picture:** `source_image` takes an attachment id or an earlier `/images/` URL, and
+  must belong to the current conversation (same gate as `look_at_image`). `change` is `subtle`,
+  `moderate` or `strong` (denoise 0.35, 0.55, 0.75). Edits always use ComfyUI and refuse a
+  non-loopback `COMFY_URL`, so a photo cannot leave the machine. ComfyUI has no delete for
+  uploads, so every edit overwrites one file (`input/agentspine/source.png`), and renders run
+  one at a time. Results use `PreviewImage`, so no second copy piles up in ComfyUI's output.
+- **Draft detection:** a request worded as a quick draft goes to MFLUX even if the model omits
+  `quality`, because it did omit it in the live test.
+- **Memory:** before a best render the tool calls MFLUX `POST /unload`; before a draft it calls
+  ComfyUI `POST /free`. ComfyUI also frees itself after 5 idle minutes.
+- **Progress:** the tool publishes `tool_progress` events and the web status line shows
+  "rendering 42%". The iOS and Mac apps ignore the event for now.
+- **Services:** `services/comfyui/install-agents.sh` installs `com.local.comfyui` and
+  `com.local.mflux` as LaunchAgents, with paths from this machine's `$HOME`.
+- **Measured through real chat, 2026-11-23, with about 13 GB already in swap:** 1024px text-to-image
+  470 s and an edit 474 s. On a quiet machine the same render took 218 s. The limit is 15 minutes.
 
 ## Related
 

@@ -124,6 +124,16 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
         ],
       };
 
+    // Lands on the newest unfinished call to that tool; the server does not know call ids here.
+    case "tool_progress": {
+      const target = [...turn.toolCalls].reverse().find((c) => c.tool === event.tool && c.status === null);
+      if (!target) return turn;
+      return {
+        ...turn,
+        toolCalls: turn.toolCalls.map((c) => (c === target ? { ...c, progress: String(event.label ?? "") } : c)),
+      };
+    }
+
     // The server sends the whole plan each time; the newest one wins.
     case "plan":
       return { ...turn, plan: event.items ?? [] };

@@ -369,6 +369,20 @@ async def generate(req: ImageRequest):
     return {"created": int(time.time()), "data": data}
 
 
+@app.post("/unload")
+async def unload():
+    # ComfyUI and this pipeline do not fit in 16 GB together, so AgentSpine asks for the memory
+    # back before a "best" render instead of waiting out the idle timer. Non-blocking for the
+    # same reason as the reaper: a render in progress keeps its model.
+    if not _lock.acquire(blocking=False):
+        return {"unloaded": False, "reason": "busy"}
+    try:
+        _unload()
+    finally:
+        _lock.release()
+    return {"unloaded": True}
+
+
 @app.get("/health")
 async def health():
     return {

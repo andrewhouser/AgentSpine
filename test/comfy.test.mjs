@@ -6,9 +6,19 @@ import { buildGraph, renderWithComfy } from "../src/comfy.ts";
 const base = { model: "m.safetensors", prompt: "a loon", width: 1024, height: 768 };
 for (const kind of ["zimage", "sdxl"]) {
   const g = buildGraph({ ...base, kind, negative: "blur" });
-  assert.ok(Object.values(g).some((n) => n.class_type === "SaveImage"), kind);
+  assert.ok(Object.values(g).some((n) => n.class_type === "PreviewImage"), kind);
   const texts = Object.values(g).filter((n) => n.class_type === "CLIPTextEncode").map((n) => n.inputs.text);
   assert.deepEqual(texts.sort(), ["a loon", "blur"].sort());
+}
+
+// Image-to-image encodes the source instead of a blank latent, and keeps part of it.
+for (const kind of ["zimage", "sdxl"]) {
+  const g = buildGraph({ ...base, kind, sourceName: "agentspine/source.png", denoise: 0.35 });
+  const nodes = Object.values(g);
+  assert.ok(nodes.some((n) => n.class_type === "LoadImage" && n.inputs.image === "agentspine/source.png"), kind);
+  assert.ok(nodes.some((n) => n.class_type === "VAEEncode"), kind);
+  assert.ok(!nodes.some((n) => n.class_type.startsWith("Empty")), kind);
+  assert.equal(nodes.find((n) => n.class_type === "KSampler").inputs.denoise, 0.35);
 }
 
 let polls = 0;

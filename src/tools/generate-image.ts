@@ -29,14 +29,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { clientFor } from "../llm.ts";
 import { COMFY_MODEL, COMFY_URL, COMFY_WORKFLOW, IMAGE_BASE_URL, IMAGES_DIR } from "../config.ts";
-import { renderWithComfy, STYLES } from "../comfy.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import { readAttachment } from "../attachments.ts";
+import { freeComfy, renderWithComfy, STYLES } from "../comfy.ts";
+import { publish } from "../events.ts";
+import * as store from "../memory/store.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
 
 interface Args {
   /** ComfyUI only: "photorealistic" (default), "painting" or "illustration". */
   style?: string;
   /** "draft" = MFLUX (fast), "best" = ComfyUI. Only meaningful when both are configured. */
   quality?: string;
+  /** Start from this picture: an attachment id, or a /images/ URL from this conversation. */
+  source_image?: number | string;
+  /** How far an edit may move from the source: "subtle", "moderate" (default) or "strong". */
+  change?: string;
   prompt?: string;
   /** "512x512" (default) or "768x768". Larger is clamped down — 768 is the host ceiling. */
   size?: string;
@@ -54,18 +61,62 @@ interface Args {
 const DEFAULT_SIZE = "512x512";
 const MAX_SIDE = 768;
 
+const ASKED_FOR_DRAFT = /\bdraft\b|\bquickly\b|\b(quick|rough|fast)\s+(version|image|picture|sketch|render|mock-?up|one)\b/i;
+
 /**
  * Which backend serves a request. quality "draft" is MFLUX (about 35 s, 768px max, weaker at
  * exact subjects); "best" is ComfyUI (minutes, 1024px, a tuned photoreal checkpoint). Measured
  * 2026-11-23 on the 16 GB Mini. When only one is configured it serves everything; when both
  * are, an unspecified quality means best. Code picks, so the model never sees a URL.
  */
-export const pickBackend = (quality?: string): "comfy" | "mflux" => {
+export const pickBackend = (quality?: string, goal?: string): "comfy" | "mflux" => {
   if (!COMFY_URL) return "mflux";
   if (!IMAGE_BASE_URL) return "comfy";
-  return String(quality ?? "best").toLowerCase() === "draft" ? "mflux" : "comfy";
+  // Read off the user's own words too. Observed 2026-11-23: asked for "a quick rough draft", the
+  // model left quality out and the user would have waited seven minutes for a sketch. Narrow on
+  // purpose, so "a fast car" or "rough seas" are still subjects and not a speed request.
+  const asked = quality ?? (ASKED_FOR_DRAFT.test(goal ?? "") ? "draft" : "best");
+  return String(asked).toLowerCase() === "draft" ? "mflux" : "comfy";
 };
 const BOTH = Boolean(COMFY_URL && IMAGE_BASE_URL);
+
+// Code owns the numbers. ComfyUI denoise: how much of the source is redrawn. Below ~0.3 an edit
+// barely shows; above ~0.8 the composition is gone and it is a new picture.
+const CHANGE: Record<string, number> = { subtle: 0.35, moderate: 0.55, strong: 0.75 };
+
+const hasSource = (a?: Args): boolean => a?.source_image !== undefined && a?.source_image !== null && a?.source_image !== "";
+
+const isLoopback = (url: string): boolean => {
+  try {
+    return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The bytes of a source picture, or the reason there are none. Same structural gate as
+ * look_at_image: the source must belong to the CURRENT run's conversation, read from the ledger,
+ * so an id or URL invented by the model or lifted from a page reaches nothing. One message for
+ * "no such image" and "not yours" so a model cannot enumerate other threads.
+ */
+export const resolveSource = (raw: number | string, runId: null | number | undefined): Buffer | string => {
+  const conversationId = runId == null ? null : (store.getRun(runId)?.conversation_id ?? null);
+  if (conversationId == null) return "ERROR: this run has no conversation, so it has no source image to edit.";
+  const missing = `ERROR: there is no image ${raw} in this conversation.`;
+  const text = String(raw).trim();
+  const named = text.match(/\/images\/([A-Za-z0-9._-]+\.png)/)?.[1];
+  if (named) {
+    if (named.includes("..") || !store.conversationMentions(conversationId, `/images/${named}`)) return missing;
+    const file = path.join(IMAGES_DIR, named);
+    return fs.existsSync(file) ? fs.readFileSync(file) : missing;
+  }
+  const id = Number(text.replace(/^#/, ""));
+  if (!Number.isInteger(id) || id <= 0) return missing;
+  const row = store.getAttachment(id);
+  if (!row || row.conversation_id !== conversationId) return missing;
+  return readAttachment(row) ?? missing;
+};
 
 /** Parse "WxH", clamp each side into (0, MAX_SIDE], snap to /16 as MFLUX requires. */
 const clampSize = (raw?: string, backend: "comfy" | "mflux" = "mflux"): string => {
@@ -101,14 +152,20 @@ export const generateImage: Tool = {
     "Generate an image from a text prompt and save it, returning a URL to the saved PNG. " +
     "Use when the user asks you to draw, create, or generate a picture/image/illustration. " +
     "Describe the subject, style, and composition in the prompt as fully as you can — this " +
-    "is a small fast model, so a concrete prompt matters. Sizes: '512x512' (default, faster) " +
-    "or '768x768' (more detail, slower). A render takes 15-30s, and the first one after a " +
-    "quiet spell up to ~20s longer while the pipeline loads. The result is a URL, not the " +
-    "image data; hand it back to the user as a Markdown image so it displays.",
+    "is a local model, so a concrete prompt matters. " +
+    (BOTH
+      ? "Use quality 'draft' only when the user asks for something quick or rough; otherwise leave it out. "
+      : "") +
+    (COMFY_URL
+      ? "To change an existing picture, pass source_image (an image id from this conversation, or " +
+        "the /images/ URL of an earlier result), describe the whole desired picture in prompt, and " +
+        "set change to 'subtle', 'moderate' or 'strong'. A best-quality render can take several minutes. "
+      : "Sizes: '512x512' (default, faster) or '768x768' (more detail, slower). A render takes 15-30s. ") +
+    "The result is a URL, not the image data; hand it back to the user as a Markdown image so it displays.",
   argsSchema: COMFY_URL
     ? '{ "prompt": string, ' +
       (BOTH ? '"quality"?: "draft" (fast, ~35s, may get details wrong) | "best" (default, slower, more accurate), ' : "") +
-      '"style"?: "photorealistic" | "painting" | "illustration", "size"?: "WxH, e.g. 1024x1024 or 1344x768 (landscape)" }'
+      '"style"?: "photorealistic" | "painting" | "illustration", "size"?: "WxH, e.g. 1024x1024 or 1344x768 (landscape)", "source_image"?: number | "/images/name.png", "change"?: "subtle" | "moderate" | "strong" }'
     : '{ "prompt": string, "size"?: "512x512" | "768x768" }',
 
   classify: (a: Args): ClassifiedAction => ({
@@ -117,7 +174,7 @@ export const generateImage: Tool = {
     reversibility: "reversible",
     // Keyed like weather's endpoint target: one surface the allowlist and audit log key on.
     target: "generate_image",
-    summary: `Generate a ${clampSize(a?.size, pickBackend(a?.quality))} image: ${String(a?.prompt ?? "").slice(0, 80) || "(no prompt)"}`,
+    summary: `${hasSource(a) ? `Edit image ${a?.source_image} as a` : "Generate a"} ${clampSize(a?.size, hasSource(a) ? "comfy" : pickBackend(a?.quality))} image: ${String(a?.prompt ?? "").slice(0, 80) || "(no prompt)"}`,
   }),
 
   checkPolicy: (policy: Policy): PolicyDecision => {
@@ -144,18 +201,36 @@ export const generateImage: Tool = {
     return { allowed: true, reason: "policy.images.enabled is true and IMAGE_URL is set" };
   },
 
-  run: async (a: Args): Promise<string> => {
+  run: async (a: Args, ctx: ToolContext): Promise<string> => {
     const prompt = String(a?.prompt ?? "").trim();
     if (!prompt) return "ERROR: generate_image needs a non-empty prompt.";
     if (!IMAGE_BASE_URL && !COMFY_URL) return "ERROR: IMAGE_URL is not configured; cannot reach the image service.";
 
-    const backend = pickBackend(a?.quality);
+    // Editing needs ComfyUI whatever quality was asked for: MFLUX here is text-to-image only.
+    const editing = hasSource(a);
+    if (editing && !COMFY_URL) return "ERROR: editing an image needs ComfyUI, and COMFY_URL is not set.";
+    // A user's photo stays on this machine, whatever COMFY_URL is later pointed at.
+    if (editing && !isLoopback(COMFY_URL)) return "ERROR: refusing to send a source image to a ComfyUI that is not on this machine.";
+    const backend = editing ? "comfy" : pickBackend(a?.quality, ctx?.run?.goal);
     const size = clampSize(a?.size, backend);
+    const source = editing ? resolveSource(a.source_image as number | string, ctx?.runId) : undefined;
+    if (typeof source === "string") return source;
+
+    // The two pipelines do not fit in 16 GB together, so each asks the other to let go first.
+    if (backend === "comfy" && IMAGE_BASE_URL) {
+      await fetch(`${IMAGE_BASE_URL.replace(/\/v1\/?$/, "")}/unload`, { method: "POST", signal: AbortSignal.timeout(5_000) }).catch(() => {});
+    }
+    if (backend === "mflux" && COMFY_URL) await freeComfy(COMFY_URL);
 
     if (backend === "comfy") {
       try {
         const [width, height] = size.split("x").map(Number) as [number, number];
-        const style = STYLES[String(a?.style ?? "photorealistic").toLowerCase()] ?? STYLES.photorealistic!;
+        // An edit keeps the source's look unless a style was asked for; forcing "photorealistic"
+        // onto someone's painting would fight the picture they asked to keep.
+        const style =
+          editing && !a?.style
+            ? { suffix: "", negative: "watermark, text, lowres" }
+            : (STYLES[String(a?.style ?? "photorealistic").toLowerCase()] ?? STYLES.photorealistic!);
         // Submit, poll until ComfyUI reports done (a cold model load can take a minute or two),
         // then write the PNG ourselves so it is served from /images/ like every other result.
         const png = await renderWithComfy({
@@ -166,7 +241,12 @@ export const generateImage: Tool = {
           negative: style.negative,
           width,
           height,
-          timeoutMs: 300_000,
+          // A cold 1024px SDXL render measured 218 s on a quiet 16 GB Mini and about 450 s with
+          // 13 GB already in swap, which is too close to any shorter limit.
+          timeoutMs: 900_000,
+          source,
+          denoise: CHANGE[String(a?.change ?? "moderate").toLowerCase()] ?? CHANGE.moderate,
+          onProgress: (label) => publish(ctx?.runId ?? null, { label, tool: "generate_image", type: "tool_progress" }),
         });
         const name = `${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}-${randomUUID().slice(0, 8)}.png`;
         fs.mkdirSync(IMAGES_DIR, { recursive: true });
