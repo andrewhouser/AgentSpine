@@ -234,6 +234,50 @@ against a down standard tier **fails outright** rather than degrading.
 Nothing about the image service depends on this. It matters because if you test by stopping
 :8080, the resulting behaviour is cloud spend or a hard failure — not a quiet downgrade.
 
+## ComfyUI backend (2026-11-23)
+
+Set `COMFY_URL` (e.g. `http://127.0.0.1:8188`) and `generate_image` stops calling MFLUX and uses
+ComfyUI instead (`src/comfy.ts`). The model still only writes a plain sentence plus an optional
+`style` (`photorealistic` default, `painting`, `illustration`) and `size`. Code owns the rest: the
+workflow graph, steps, cfg, sampler, a fresh random seed per render, and the style's prompt suffix
+and negative prompt. The tool submits `POST /prompt`, polls `GET /history/{id}` once a second
+(5 minute ceiling, then `/interrupt`), fetches `/view`, and writes the PNG to `IMAGES_DIR`, so
+the UI shows it through `/images/` exactly as before.
+
+- `COMFY_WORKFLOW=sdxl` (default): an SDXL file in `models/checkpoints` (28 steps, cfg 6).
+  Measured on the 16 GB Mini: CyberRealistic XL at 1024x1024 rendered the loon-and-fog prompt
+  in 218 s (cold load included) and the result was a good photoreal image.
+- `COMFY_WORKFLOW=zimage`: Z-Image Turbo from `models/diffusion_models`, with
+  `qwen_3_4b.safetensors` and `ae.safetensors`; 8 steps, cfg 1. **Do not use on 16 GB:** its
+  11.7 GB bf16 weights swapped the machine until ComfyUI stopped answering (0/8 steps after 5 min).
+- **Both configured** (`COMFY_URL` and `IMAGE_URL`): the tool gains `quality`. `draft` = MFLUX
+  (about 35 s at 768px, but drew a duck for a loon), `best` = ComfyUI (default). With only one
+  configured it serves everything. Run both services; ComfyUI and MFLUX together will not fit
+  in 16 GB at once, so expect one to be evicted when you switch.
+- Sizes default to 1024x1024 and clamp to 1536 a side.
+- Polls tolerate slow replies (60 s each) and retry until the 5 minute ceiling.
+- **Editing a picture:** `source_image` takes an attachment id or an earlier `/images/` URL, and
+  must belong to the current conversation (same gate as `look_at_image`). A picture attached to
+  the current message always wins over whatever the model names, because in the live test it
+  named the previous result instead. `change` is `subtle`,
+  `moderate` or `strong` (denoise 0.35, 0.55, 0.75). Edits always use ComfyUI and refuse a
+  non-loopback `COMFY_URL`, so a photo cannot leave the machine. ComfyUI has no delete for
+  uploads, so every edit overwrites one file (`input/agentspine/source.png`), and renders run
+  one at a time. Results use `PreviewImage`, so no second copy piles up in ComfyUI's output.
+- **Draft detection:** a request worded as a quick draft goes to MFLUX even if the model omits
+  `quality`, because it did omit it in the live test.
+- **Memory:** before a best render the tool calls MFLUX `POST /unload`; before a draft it calls
+  ComfyUI `POST /free`. ComfyUI also frees itself after 5 idle minutes.
+- **Progress:** the tool publishes `tool_progress` events and the web status line shows
+  "rendering 42%". The iOS and Mac apps ignore the event for now.
+- **iPhone and Mac:** `MarkdownText` renders `![alt](/images/name)` as a picture, tap to zoom on
+  iPhone. Only the server's own `/images/` paths load, the same narrow rule as the web client,
+  so a reply quoting a page cannot make the phone fetch a remote image.
+- **Services:** `services/comfyui/install-agents.sh` installs `com.local.comfyui` and
+  `com.local.mflux` as LaunchAgents, with paths from this machine's `$HOME`.
+- **Measured through real chat, 2026-11-23, with about 13 GB already in swap:** 1024px text-to-image
+  470 s and an edit 474 s. On a quiet machine the same render took 218 s. The limit is 15 minutes.
+
 ## Related
 
 - [MODELS.md](MODELS.md) — the model host, the three pinned servers, and the 14B incident

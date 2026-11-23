@@ -1,4 +1,11 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+private typealias ReplyPlatformImage = UIImage
+#elseif canImport(AppKit)
+import AppKit
+private typealias ReplyPlatformImage = NSImage
+#endif
 
 /// An assistant reply, rendered as the markdown it is.
 ///
@@ -78,6 +85,9 @@ struct MarkdownText: View {
                 // block below, which is the one it belongs to.
                 .padding(.top, compact ? 2 : 5)
 
+        case .image(let alt, let path):
+            GeneratedImage(alt: alt, path: path, maxSide: compact ? 160 : 420)
+
         case .list(let items):
             VStack(alignment: .leading, spacing: compact ? 3 : Spine.Space.xs + 1) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -152,6 +162,89 @@ struct MarkdownText: View {
     }
 }
 
+// MARK: - Generated images
+
+/// A picture from `generate_image`, at its real shape. Decoded images are held in memory only.
+private struct GeneratedImage: View {
+    let alt: String
+    let path: String
+    let maxSide: CGFloat
+
+    @State private var image: ReplyPlatformImage?
+    @State private var failed = false
+    @State private var viewing = false
+
+    var body: some View {
+        Group {
+            if let image {
+                picture(image).resizable().scaledToFit()
+            } else if failed {
+                // Said in words: an empty box after a render reads as the render having failed.
+                Label("Image not available", systemImage: "photo.badge.exclamationmark")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textFaint)
+                    .frame(maxWidth: .infinity, minHeight: 72)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, minHeight: 220)
+            }
+        }
+        .frame(maxWidth: maxSide)
+        .background(Spine.Palette.bgInset)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(failed ? "\(alt), could not be loaded" : alt)
+        #if os(iOS)
+        .contentShape(Rectangle())
+        .onTapGesture { if image != nil { viewing = true } }
+        .accessibilityAddTraits(image != nil ? .isButton : [])
+        .fullScreenCover(isPresented: $viewing) {
+            if let image { AttachmentViewer(image: image, title: alt) }
+        }
+        #endif
+        .task(id: path) { await load() }
+    }
+
+    private func picture(_ image: ReplyPlatformImage) -> Image {
+        #if canImport(UIKit)
+        Image(uiImage: image)
+        #else
+        Image(nsImage: image)
+        #endif
+    }
+
+    private func load() async {
+        failed = false
+        if let cached = GeneratedImageCache.shared.object(forKey: path as NSString) {
+            image = cached
+            return
+        }
+        do {
+            let data = try await APIClient.shared.generatedImageData(path: path)
+            guard let decoded = ReplyPlatformImage(data: data) else {
+                failed = true
+                return
+            }
+            GeneratedImageCache.shared.setObject(decoded, forKey: path as NSString)
+            image = decoded
+        } catch is CancellationError {
+            // Scrolled away mid-load. The task runs again when the row comes back.
+        } catch {
+            failed = true
+        }
+    }
+}
+
+@MainActor
+private enum GeneratedImageCache {
+    static let shared: NSCache<NSString, ReplyPlatformImage> = {
+        let cache = NSCache<NSString, ReplyPlatformImage>()
+        cache.countLimit = 30
+        return cache
+    }()
+}
+
 // MARK: - Parsing
 
 extension MarkdownText {
@@ -164,10 +257,36 @@ extension MarkdownText {
     enum Block: Equatable {
         case code(String)
         case heading(level: Int, text: String)
+        case image(alt: String, path: String)
         case list(items: [ListItem])
         case paragraph(String)
         case quote(String)
         case rule
+
+        private static let imagePattern = try? NSRegularExpression(
+            pattern: #"!\[([^\]\n]*)\]\((/images/[A-Za-z0-9._-]+)\)"#
+        )
+
+        /// One line as alternating prose and image blocks. No image means one paragraph.
+        static func imagePieces(_ line: String) -> [Block] {
+            guard let pattern = imagePattern else { return [.paragraph(line)] }
+            let text = line as NSString
+            var pieces: [Block] = []
+            var cursor = 0
+            func addProse(upTo end: Int) {
+                let prose = text.substring(with: NSRange(location: cursor, length: end - cursor))
+                    .trimmingCharacters(in: .whitespaces)
+                if !prose.isEmpty { pieces.append(.paragraph(prose)) }
+            }
+            for match in pattern.matches(in: line, range: NSRange(location: 0, length: text.length)) {
+                addProse(upTo: match.range.location)
+                let alt = text.substring(with: match.range(at: 1))
+                pieces.append(.image(alt: alt.isEmpty ? "Generated image" : alt, path: text.substring(with: match.range(at: 2))))
+                cursor = match.range.location + match.range.length
+            }
+            addProse(upTo: text.length)
+            return pieces
+        }
 
         /// Line-at-a-time, because that is how markdown's block syntax is actually defined
         /// and because a reply is never long enough for anything cleverer to pay for itself.
@@ -175,6 +294,10 @@ extension MarkdownText {
         /// Consecutive lines of the same kind join into one block: three `- ` lines are one
         /// list, not three, and two prose lines are one paragraph with a soft break between
         /// them. A blank line ends whatever is open.
+        ///
+        /// Only the server's own `/images/<name>` paths count, the same narrow grant as
+        /// `web/src/lib/markdown.ts`: a reply can quote untrusted pages, and an image from any
+        /// other address would make the phone fetch it the moment the reply is on screen.
         static func parse(_ raw: String) -> [Block] {
             var blocks: [Block] = []
             var paragraph: [String] = []
@@ -231,6 +354,15 @@ extension MarkdownText {
 
                 if trimmed.isEmpty {
                     flushAll()
+                    continue
+                }
+
+                // Its own block even mid-sentence, because a model writes "Here it is:
+                // ![image](/images/x.png)" as often as it puts the image on its own line.
+                let pieces = imagePieces(trimmed)
+                if pieces.contains(where: { if case .image = $0 { true } else { false } }) {
+                    flushAll()
+                    blocks.append(contentsOf: pieces)
                     continue
                 }
 

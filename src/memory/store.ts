@@ -402,6 +402,16 @@ export const deleteConversation = (id: number): void => {
   db.prepare("DELETE FROM conversations WHERE id = ?").run(id);
 };
 
+/** Whether any message in this thread contains `text`. Literal match, so no LIKE escaping. */
+export const conversationMentions = (conversationId: number, text: string): boolean =>
+  Boolean(
+    db
+      .prepare(
+        "SELECT 1 FROM messages m JOIN runs r ON r.id = m.run_id WHERE r.conversation_id = ? AND instr(m.content, ?) > 0 LIMIT 1",
+      )
+      .get(conversationId, text),
+  );
+
 export const runsForConversation = (conversationId: number): any[] =>
   db.prepare("SELECT * FROM runs WHERE conversation_id = ? ORDER BY id").all(conversationId);
 

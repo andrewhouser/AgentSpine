@@ -383,6 +383,17 @@ final class APIClient {
         return try await sendRaw(req)
     }
 
+    /// A picture from `generate_image`. Only the server's own `/images/<name>` paths, because the
+    /// path comes out of a model's reply and must not be able to name any other route.
+    func generatedImageData(path: String) async throws -> Data {
+        guard path.range(of: #"^/images/[A-Za-z0-9._-]+$"#, options: .regularExpression) != nil,
+              !path.contains("..")
+        else { throw APIError.badURL }
+        var req = try request(path)
+        req.setValue("image/*", forHTTPHeaderField: "Accept")
+        return try await sendRaw(req)
+    }
+
     // MARK: - Approvals
 
     func confirmations(state: String? = nil) async throws -> [Confirmation] {
