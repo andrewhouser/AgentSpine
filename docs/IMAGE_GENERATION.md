@@ -250,6 +250,10 @@ the UI shows it through `/images/` exactly as before.
 - `COMFY_WORKFLOW=zimage`: Z-Image Turbo from `models/diffusion_models`, with
   `qwen_3_4b.safetensors` and `ae.safetensors`; 8 steps, cfg 1. **Do not use on 16 GB:** its
   11.7 GB bf16 weights swapped the machine until ComfyUI stopped answering (0/8 steps after 5 min).
+- **Both configured** (`COMFY_URL` and `IMAGE_URL`): the tool gains `quality`. `draft` = MFLUX
+  (about 35 s at 768px, but drew a duck for a loon), `best` = ComfyUI (default). With only one
+  configured it serves everything. Run both services; ComfyUI and MFLUX together will not fit
+  in 16 GB at once, so expect one to be evicted when you switch.
 - Sizes default to 1024x1024 and clamp to 1536 a side.
 - Polls tolerate slow replies (60 s each) and retry until the 5 minute ceiling.
 - Verified live against ComfyUI 0.45 via `src/comfy.ts`; the full tool path through the chat UI

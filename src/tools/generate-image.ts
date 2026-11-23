@@ -35,6 +35,8 @@ import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts
 interface Args {
   /** ComfyUI only: "photorealistic" (default), "painting" or "illustration". */
   style?: string;
+  /** "draft" = MFLUX (fast), "best" = ComfyUI. Only meaningful when both are configured. */
+  quality?: string;
   prompt?: string;
   /** "512x512" (default) or "768x768". Larger is clamped down — 768 is the host ceiling. */
   size?: string;
@@ -49,20 +51,35 @@ interface Args {
  */
 // ComfyUI runs on a machine with room for a full-size render (Z-Image Turbo and SDXL are
 // both native at ~1024), so its default and ceiling are larger than MFLUX's.
-const DEFAULT_SIZE = COMFY_URL ? "1024x1024" : "512x512";
-const MAX_SIDE = COMFY_URL ? 1536 : 768;
+const DEFAULT_SIZE = "512x512";
+const MAX_SIDE = 768;
+
+/**
+ * Which backend serves a request. quality "draft" is MFLUX (about 35 s, 768px max, weaker at
+ * exact subjects); "best" is ComfyUI (minutes, 1024px, a tuned photoreal checkpoint). Measured
+ * 2026-11-23 on the 16 GB Mini. When only one is configured it serves everything; when both
+ * are, an unspecified quality means best. Code picks, so the model never sees a URL.
+ */
+export const pickBackend = (quality?: string): "comfy" | "mflux" => {
+  if (!COMFY_URL) return "mflux";
+  if (!IMAGE_BASE_URL) return "comfy";
+  return String(quality ?? "best").toLowerCase() === "draft" ? "mflux" : "comfy";
+};
+const BOTH = Boolean(COMFY_URL && IMAGE_BASE_URL);
 
 /** Parse "WxH", clamp each side into (0, MAX_SIDE], snap to /16 as MFLUX requires. */
-const clampSize = (raw?: string): string => {
+const clampSize = (raw?: string, backend: "comfy" | "mflux" = "mflux"): string => {
+  const maxSide = backend === "comfy" ? 1536 : MAX_SIDE;
+  const dflt = backend === "comfy" ? "1024x1024" : DEFAULT_SIZE;
   const m = String(raw ?? "").trim().toLowerCase().match(/^(\d+)\s*x\s*(\d+)$/);
-  if (!m) return DEFAULT_SIZE;
+  if (!m) return dflt;
   const snap = (n: number): number => {
-    const clamped = Math.min(MAX_SIDE, Math.max(16, n));
+    const clamped = Math.min(maxSide, Math.max(16, n));
     return Math.floor(clamped / 16) * 16;
   };
   const w = snap(Number(m[1]));
   const h = snap(Number(m[2]));
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return DEFAULT_SIZE;
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return dflt;
   return `${w}x${h}`;
 };
 
@@ -89,7 +106,9 @@ export const generateImage: Tool = {
     "quiet spell up to ~20s longer while the pipeline loads. The result is a URL, not the " +
     "image data; hand it back to the user as a Markdown image so it displays.",
   argsSchema: COMFY_URL
-    ? '{ "prompt": string, "style"?: "photorealistic" | "painting" | "illustration", "size"?: "WxH, e.g. 1024x1024 or 1344x768 (landscape)" }'
+    ? '{ "prompt": string, ' +
+      (BOTH ? '"quality"?: "draft" (fast, ~35s, may get details wrong) | "best" (default, slower, more accurate), ' : "") +
+      '"style"?: "photorealistic" | "painting" | "illustration", "size"?: "WxH, e.g. 1024x1024 or 1344x768 (landscape)" }'
     : '{ "prompt": string, "size"?: "512x512" | "768x768" }',
 
   classify: (a: Args): ClassifiedAction => ({
@@ -98,7 +117,7 @@ export const generateImage: Tool = {
     reversibility: "reversible",
     // Keyed like weather's endpoint target: one surface the allowlist and audit log key on.
     target: "generate_image",
-    summary: `Generate a ${clampSize(a?.size)} image: ${String(a?.prompt ?? "").slice(0, 80) || "(no prompt)"}`,
+    summary: `Generate a ${clampSize(a?.size, pickBackend(a?.quality))} image: ${String(a?.prompt ?? "").slice(0, 80) || "(no prompt)"}`,
   }),
 
   checkPolicy: (policy: Policy): PolicyDecision => {
@@ -130,9 +149,10 @@ export const generateImage: Tool = {
     if (!prompt) return "ERROR: generate_image needs a non-empty prompt.";
     if (!IMAGE_BASE_URL && !COMFY_URL) return "ERROR: IMAGE_URL is not configured; cannot reach the image service.";
 
-    const size = clampSize(a?.size);
+    const backend = pickBackend(a?.quality);
+    const size = clampSize(a?.size, backend);
 
-    if (COMFY_URL) {
+    if (backend === "comfy") {
       try {
         const [width, height] = size.split("x").map(Number) as [number, number];
         const style = STYLES[String(a?.style ?? "photorealistic").toLowerCase()] ?? STYLES.photorealistic!;
