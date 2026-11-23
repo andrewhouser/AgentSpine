@@ -98,7 +98,9 @@ check("it is a schedule_update with enabled false for that job", [rows[0].tool, 
 check("it is waiting, not applied", rows[0].state, "pending");
 check("the schedule is still on", !!store.getSchedule(watch).enabled, true);
 check("asking again while it is pending queues nothing", learn.proposeSchedulesOff(SUNDAY_EVENING).length, 0);
-rawDb.prepare("UPDATE confirmations SET state = 'rejected' WHERE id = ?").run(rows[0].id);
+// On the test's clock. Left at the real time, the 90-day check below began failing for good at
+// 18:00 on 2026-11-23, one day after SUNDAY_EVENING, with nothing in the code having changed.
+rawDb.prepare("UPDATE confirmations SET state = 'rejected', ts = ? WHERE id = ?").run(SUNDAY_EVENING.toISOString(), rows[0].id);
 check("a rejected one is not asked again", learn.proposeSchedulesOff(SUNDAY_EVENING).length, 0);
 check("still exactly one row", pending().length, 1);
 const later = new Date(SUNDAY_EVENING.getTime() + 91 * 86_400_000);

@@ -415,6 +415,8 @@ struct RunEvent: Codable {
     let step: Int?
     let summary: String?
     let target: String?
+    /// `answer`: the whole reply so far, or "" when it was taken back.
+    let text: String?
     let tier: String?
     let tool: String?
     let ts: String?
@@ -422,7 +424,7 @@ struct RunEvent: Codable {
 
     enum CodingKeys: String, CodingKey {
         case agent, count, depth, elapsedMs, error, items, message, output, reason, seq
-        case status, step, summary, target, tier, tool, ts, type
+        case status, step, summary, target, text, tier, tool, ts, type
         case callID = "callId"
         case childRunID = "childRunId"
         case confirmationID = "confirmationId"

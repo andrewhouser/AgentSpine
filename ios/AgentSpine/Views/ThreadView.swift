@@ -16,6 +16,7 @@ struct ThreadView: View {
     @State private var cachedAt: Date?
     @State private var showInspector = false
     @State private var stream = RunStream()
+    @State private var nearBottom = true
     @State private var draft = ""
     /// The thread failing to arrive, shown at the top of an empty scroll.
     @State private var loadError: String?
@@ -87,13 +88,16 @@ struct ThreadView: View {
                     }
 
                     // Anchors the scroll so a new event keeps the newest content in view.
-                    Color.clear.frame(height: 1).id("bottom")
+                    Color.clear.frame(height: 1).id("bottom").tracksNearScrollBottom($nearBottom)
                 }
                 .padding(.horizontal)
                 .padding(.top, 12)
             }
             .onChange(of: stream.calls.count) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: stream.answerText) { _, text in
+                if nearBottom, !text.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: thread?.turns.count) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)

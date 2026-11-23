@@ -209,6 +209,15 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread, live?.step, live?.toolCalls.length, live?.summary]);
 
+  // Follow a streaming answer only while the reader is at the bottom. It updates several times
+  // a second, so following unconditionally would make it impossible to scroll up and read.
+  useEffect(() => {
+    const end = bottom.current;
+    if (live?.answer && end && end.getBoundingClientRect().top <= window.innerHeight + 60) {
+      end.scrollIntoView({ behavior: "auto" });
+    }
+  }, [live?.answer]);
+
   const turns = thread?.turns ?? [];
   // While a run streams, its own row already exists server-side (created before the queue).
   // Hide it from the persisted list so the turn isn't drawn twice.
@@ -341,7 +350,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               plan={live.plan}
               startedAt={turns.find((t) => t.id === live.runId)?.started ?? sentAt[live.runId]}
               step={live.step}
-              summary={live.summary}
+              summary={live.summary ?? (live.status === "queued" || live.status === "running" ? live.answer || null : null)}
               task={live.task}
               tier={live.tier}
               tierReason={live.tierReason}

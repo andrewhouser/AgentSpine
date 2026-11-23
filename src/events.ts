@@ -26,6 +26,7 @@ import { EventEmitter } from "node:events";
 import { emptyPlan, foldPlan, type PlanState, planSnapshot } from "./plan.ts";
 
 export type RunEventType =
+  | "answer"
   | "confirmation"
   | "error"
   | "final"
@@ -99,6 +100,12 @@ setInterval(sweep, 60_000).unref();
 
 const emit = (runId: number, b: RunBuffer, event: RunEventInput): void => {
   const full: RunEvent = { ...event, seq: b.seq++, ts: new Date().toISOString() };
+  // An `answer` holds the whole text so far, so only the newest is worth replaying. Kept, a
+  // single long reply would push the run's tool calls out of the 500-event buffer.
+  if (event.type === "answer") {
+    const earlier = b.events.findIndex((e) => e.type === "answer");
+    if (earlier !== -1) b.events.splice(earlier, 1);
+  }
   b.events.push(full);
   if (b.events.length > MAX_BUFFERED) b.events.shift();
   if (event.type === "run_end") b.endedAt = Date.now();

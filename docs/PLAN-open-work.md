@@ -299,7 +299,8 @@ Left to do:
   locked, and 601 after unlocking. The saved replies use the same write options but were not read individually.
 - **Web, Mac and iPhone matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`,
   toggled from the chat tab bar, remembered in `localStorage`) with four cards plus a **Tokens** card (in, out, calls,
-  by model; from `usage` on each turn, which `usageForRuns` sums from `llm_calls` for the turn and its child runs).
+  by model, and effective tok/s with model time; from `usage` on each turn, which `usageForRuns` sums from
+  `llm_calls` for the turn and its child runs. Effective speed includes prefill until LP1 can time decode alone).
   Mac and iPhone share one `ThreadInspectorView.swift` (the inspector column on Mac, a sheet from the thread's
   toolbar on iPhone; it is listed in the Mac target's membership exceptions in the project file). The project
   screen is split into Conversations, Documents, Tasks and Settings on web and, by a segmented picker in the shared
@@ -796,8 +797,8 @@ a 28 tok/s model, the "Not doing" list, and learners that are built but have nev
 this section loosens the broker, the confirmation queue, `tagUntrusted` or LEARNING invariants 1 to 5: those are
 security, not privacy, and every item below adds injection surface.
 
-Labels are local to this section: LP (loop), CP (capabilities), SC (self-change), SL (self-learning). Nothing
-here is built. Every measurement named below needs the model host, so every item is **Both** unless marked.
+Labels are local to this section: LP (loop), CP (capabilities), SC (self-change), SL (self-learning). Only LP1
+is built. Every measurement named below needs the model host, so every item is **Both** unless marked.
 
 ### LP. The agent loop
 
@@ -807,6 +808,24 @@ here is built. Every measurement named below needs the model host, so every item
   is streamed; a tool call stays one JSON object. This also removes the cut-off-final failure (the answer that
   loses its closing brace at the token cap, `AGENT_STEP_MAX_TOKENS` comment in `src/config.ts`). Web, Mac and
   iPhone together. Measure the parse-failure rate before and after on the same prompts.
+  **Baseline (2026-11-23, `bench/lp1-baseline.mjs`, Qwen3.6-35B, 14 synthetic requests x 3, one step each, no
+  re-ask):** all 9 tool requests returned a tool call. Of the 33 samples meant to finish, 6 returned valid final
+  JSON, 21 did not parse and 6 called a tool instead. No reply was truncated or empty, and none errored. The two
+  failing replies inspected were correct plain prose with no JSON wrapper, which is the shape LP1 proposes. The
+  bench uses the real system prompt (median 11,305 prompt tokens) but not the live envelope, context or history,
+  so this is a before-and-after reference and not the production failure rate. Streamed replies from
+  `mlx_lm.server` do report usage with `stream_options.include_usage`.
+  **Prose format and streaming built for chat turns (2026-11-23).** `readReply` in `src/agent.ts` takes plain
+  prose as the answer, keeps real tool calls, and re-asks on a broken JSON attempt or a short promise of work.
+  Unattended runs and subagents keep strict JSON. Same bench after: tool requests 9 of 9, finishing samples 27 of
+  33 (was 6), unparsed 0 (was 21). The other 6 are both 500-word writing requests choosing a tool, including an
+  unrequested `write_file`; the format does not fix that. A chat step streams through `onDelta` in `src/llm.ts`;
+  `src/answer-stream.ts` holds back anything that could still be a tool call and sends whole-text `answer`
+  snapshots, so a reconnect cannot duplicate text and a retry or tool call can clear it. Checked: the real loop on
+  the model host with no tools (a 9.2s answer showed text at 3.3s, no tool JSON shown), and a scripted stream on web
+  and the iPhone simulator (preview, retraction, growing answer). Not checked: a live chat on the deployed
+  dashboard, the Mac app at runtime (it builds), or following the scroll position on a long reply on Mac or iPhone.
+  First-token time is not stored, so the Tokens card still shows effective speed.
 - **LP2 "Local deep": thinking on for hard steps.** `NO_THINKING` is sent on every local call (`src/llm.ts`).
   A run that has read mail, a calendar, a file or a project is pinned local, and `resolveTier` turns `deep`
   into `standard` for it, so a task sized `deep` gets the same effort as an easy one. Proposed: on a pinned run

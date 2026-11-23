@@ -27,11 +27,10 @@
  *
  * ## The one thing this cannot see
  *
- * Time to first token. Every completion is non-streaming (`llm.ts` constructs them as
- * `ChatCompletionCreateParamsNonStreaming`), so there is no first token to time — the
- * `ms` here is the whole request, which is also exactly how long the user stares at
- * nothing. Splitting prefill from decode needs a streamed request; `bench/ttft.mjs` does
- * that against a live endpoint. What this gives you instead, and the benchmark cannot, is
+ * Time to first token. Chat steps now stream (LP1) but most other completions do not, so
+ * only some calls have a first token to time and none is recorded yet — the `ms` here is
+ * the whole request. Splitting prefill from decode across every call needs more than this
+ * table holds; `bench/ttft.mjs` does it against a live endpoint. What this gives you instead, and the benchmark cannot, is
  * the real distribution over real turns: how many calls a turn actually makes, which call
  * sites they come from, and how much of the total is spent somewhere other than composing
  * the answer the user is waiting for.
