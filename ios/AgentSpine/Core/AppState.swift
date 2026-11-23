@@ -107,13 +107,22 @@ final class AppState {
         cachedAt = nil
     }
 
+    /// True until one full load has worked, or while a credentials error is up. Settings no longer loads on each edit,
+    /// so someone who enters a token and goes straight to Threads relies on this to get everything, not just the list.
+    var needsFullLoad: Bool {
+        Settings.shared.isConfigured && (lastLoaded == nil
+            || loadError == APIError.unauthorized.localizedDescription
+            || loadError == APIError.notConfigured.localizedDescription)
+    }
+
     /// Just the thread list — which is where the blue dots come from. Cheap enough to call
     /// whenever the app comes forward, which is how a question answered from a notification
     /// stops showing as waiting.
     func refreshConversations() async {
         guard Settings.shared.isConfigured else { return }
-        // Showing a saved copy: only a full refresh can replace all of it and clear the offline notice.
-        if cachedAt != nil {
+        // Showing a saved copy: only a full refresh can replace all of it and clear the offline notice. The same goes
+        // for a credentials error, which otherwise stayed on screen above a list that was loading fine.
+        if cachedAt != nil || needsFullLoad {
             await refresh()
             return
         }

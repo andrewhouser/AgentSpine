@@ -148,8 +148,8 @@ final class APIClient {
     }
 
     /// A read that keeps a copy, and falls back to it only when the server is unreachable. 502 to 504 count, because
-    /// that is what `tailscale serve` answers while the dashboard is down. A rejected token never falls back: it wipes
-    /// the copy, since it may mean this phone's access was withdrawn.
+    /// that is what `tailscale serve` answers while the dashboard is down. A rejected token never falls back. If it is
+    /// the token that owns the copy, the copy is wiped, since this phone's access may have been withdrawn.
     private func sendKeepingCopy<T: Decodable>(
         _ req: URLRequest,
         as type: T.Type,
@@ -163,7 +163,7 @@ final class APIClient {
         } catch let error as APIError {
             switch error {
             case .unauthorized:
-                if owner == cacheOwner { OfflineCache.shared.clear() }
+                if let owner { OfflineCache.shared.clear(ifOwnedBy: owner) }
                 throw error
             case .server(404, _):
                 OfflineCache.shared.forget(key)

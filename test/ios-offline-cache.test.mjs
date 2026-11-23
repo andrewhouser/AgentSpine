@@ -32,7 +32,16 @@ console.log("\nAPPROVALS AND WRITES (source)");
   check("every card in a thread is told where it came from", thread.match(/ApprovalCard\(confirmation: confirmation\b[^)]*\)/g), Array(3).fill("ApprovalCard(confirmation: confirmation, answerable: cachedAt == nil)"));
   check("a saved thread never marks read or resumes a stream", /guard loaded\.cachedAt == nil else \{ return \}[\s\S]{0,300}markRead/.test(thread), true);
   check("the client never caches a write", (client.match(/sendKeepingCopy\(\s*(?:jsonRequest)/g) ?? []).length, 0);
-  check("a rejected token wipes the copy", /case \.unauthorized:[\s\S]{0,90}OfflineCache\.shared\.clear\(\)/.test(client), true);
+  check("a rejected token wipes the copy it owns", /case \.unauthorized:[\s\S]{0,90}OfflineCache\.shared\.clear\(ifOwnedBy: owner\)/.test(client), true);
+  const settings = read("ios/AgentSpine/Views/SettingsView.swift");
+  const appState = read("ios/AgentSpine/Core/AppState.swift");
+  const onEdit = settings.slice(settings.indexOf(".onChange(of: settings.isConfigured)"), settings.indexOf("private var authorizationLabel"));
+  check("typing a token starts no reload", onEdit.includes("refresh()"), false);
+  check("devices do not reload on a half-typed token", settings.includes(".task(id: settings.isConfigured)"), false);
+  check("removing the server or token wipes the copy at once", /guard !configured else \{ return \}[\s\S]{0,220}deleteOfflineCopy\(\)/.test(onEdit), true);
+  check("a passing connection test does the reload", /probe = "Connected[\s\S]{0,420}await state\.refresh\(\)/.test(settings), true);
+  check("a poll clears a stale credentials error", /cachedAt != nil \|\| needsFullLoad[\s\S]{0,40}await refresh\(\)/.test(appState), true);
+  check("the list loads fully when opened without a connection test", /\.task \{\s*if state\.needsFullLoad \{ await state\.refresh\(\) \}/.test(read("ios/AgentSpine/Views/ConversationsView.swift")), true);
   check("a run's copy leaves out its trace", /key: "run:\\\(id\)",\s*storing: OfflineStore\.withoutTrace/.test(client), true);
   const store = read("ios/AgentSpine/Core/OfflineCache.swift");
   check("files are encrypted and locked with the phone", store.includes(".completeFileProtection"), true);
@@ -114,6 +123,12 @@ store.clear()
 say("clearEmpties", store.totalBytes)
 say("clearRemovesFolder", !FileManager.default.fileExists(atPath: folder.path))
 
+store.write(Data("mine".utf8), key: "thread:1", owner: me)
+store.clear(ifOwnedBy: other)
+say("otherRejectedKeeps", text(store.read("thread:1", owner: me)))
+store.clear(ifOwnedBy: me)
+say("ownerRejectedWipes", text(store.read("thread:1", owner: me)))
+
 let run = Data(#"{"actions":[{"tool":"x"}],"run":{"id":1},"trace":[{"role":"system","content":"PRIVATE-PROFILE"}]}"#.utf8)
 let stripped = OfflineStore.withoutTrace(run).map { String(decoding: $0, as: UTF8.self) } ?? "nil"
 say("traceGone", !stripped.contains("PRIVATE-PROFILE"))
@@ -161,6 +176,8 @@ MainActor.assumeIsolated { try! runAll() }
   check("the newest stays", out.newestKept, "true");
   check("clear empties it", out.clearEmpties, "0");
   check("and removes the folder", out.clearRemovesFolder, "true");
+  check("a half-typed token being refused keeps the copy", out.otherRejectedKeeps, "mine");
+  check("the owning token being refused wipes it", out.ownerRejectedWipes, "nil");
   check("a run's raw trace is not kept", out.traceGone, "true");
   check("its tool calls are", out.actionsKept, "true");
   check("an unexpected reply is not stored", out.badShape, "true");

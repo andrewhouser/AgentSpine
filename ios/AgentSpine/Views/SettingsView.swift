@@ -224,14 +224,14 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .task(id: settings.isConfigured) { await loadDevices() }
+        .task { await loadDevices() }
         .onChange(of: settings.isConfigured) { _, configured in
-            // Entering a working server for the first time is the moment to register for push
-            // — the token may already have been issued and discarded for want of somewhere to
-            // send it.
-            guard configured else { return }
-            push.registerIfAuthorized()
-            Task { await state.refresh() }
+            // Nothing loads here when this turns true: that happens on the first typed character, so it sent a
+            // one-character token to the server. A passing connection test does the loading instead.
+            guard !configured else { return }
+            // No server or token any more is this app's sign-out, so the private copy goes now, not at next launch.
+            state.deleteOfflineCopy()
+            offlineBytes = OfflineCache.shared.totalBytes
         }
     }
 
@@ -262,8 +262,12 @@ struct SettingsView: View {
             let depth = status.queue?.depth ?? 0
             probe = "Connected. \(status.schedules ?? 0) schedule(s), "
                 + "\(depth) run(s) queued."
-            // A working connection is also the first chance to hand over a push token.
+            // A working connection is also the first chance to hand over a push token, which may already have been
+            // issued and discarded for want of somewhere to send it.
             push.registerIfAuthorized()
+            await state.refresh()
+            await loadDevices()
+            offlineBytes = OfflineCache.shared.totalBytes
         } catch {
             probe = error.localizedDescription
         }

@@ -17,6 +17,7 @@ final class OfflineStore {
     func forget(_ key: String) {}
     func forget(prefix: String, keeping: Set<String>) {}
     func clear() {}
+    func clear(ifOwnedBy owner: String) {}
 }
 
 @MainActor

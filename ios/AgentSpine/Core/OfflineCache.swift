@@ -7,7 +7,7 @@ import Foundation
 ///
 /// - Encrypted by iOS and unreadable while the phone is locked (`completeFileProtection`), and left out of backups,
 ///   so a copy of private work does not travel to iCloud or a Mac backup.
-/// - Tied to one server and token. A different pair sees nothing, and a rejected token wipes it.
+/// - Tied to one server and token. A different pair sees nothing, and rejecting the pair that owns it wipes it.
 /// - Holds only what was already opened here. Nothing is fetched ahead just to fill it.
 /// - The raw server reply is stored rather than a re-encoded model, so a saved copy cannot drift from what the
 ///   decoder expects. A reply that no longer decodes after an app update is simply treated as not saved.
@@ -111,6 +111,14 @@ final class OfflineStore {
     func clear() {
         manifest = nil
         try? FileManager.default.removeItem(at: directory)
+    }
+
+    /// The wipe for a rejected token. Only the pair that owns the copy counts: a poll that went out mid-edit with one
+    /// typed character was refused and erased a good copy (5 files to 0 in the simulator, 2026-11-22). Another pair
+    /// cannot read this copy anyway. An unreadable index cannot prove who owns it, so that case still wipes.
+    func clear(ifOwnedBy owner: String) {
+        if let current = loadManifest(), current.owner != owner { return }
+        clear()
     }
 
     // MARK: - Private
