@@ -41,6 +41,13 @@ enum APIError: LocalizedError {
     }
 }
 
+/// A reply and where it came from. `cachedAt` is set when the server could not be reached and this is the copy saved
+/// on that date, so a screen can say so and refuse to act on it.
+struct Loaded<Value> {
+    let value: Value
+    let cachedAt: Date?
+}
+
 @MainActor
 final class APIClient {
     static let shared = APIClient()
@@ -136,6 +143,59 @@ final class APIClient {
         return data
     }
 
+    private var cacheOwner: String? {
+        settings.baseURL.map { OfflineStore.owner(baseURL: $0, token: settings.token) }
+    }
+
+    /// A read that keeps a copy, and falls back to it only when the server is unreachable. 502 to 504 count, because
+    /// that is what `tailscale serve` answers while the dashboard is down. A rejected token never falls back: it wipes
+    /// the copy, since it may mean this phone's access was withdrawn.
+    private func sendKeepingCopy<T: Decodable>(
+        _ req: URLRequest,
+        as type: T.Type,
+        key: String,
+        storing: (Data) -> Data? = { $0 }
+    ) async throws -> Loaded<T> {
+        let owner = cacheOwner
+        let data: Data
+        do {
+            data = try await sendRaw(req)
+        } catch let error as APIError {
+            switch error {
+            case .unauthorized:
+                if owner == cacheOwner { OfflineCache.shared.clear() }
+                throw error
+            case .server(404, _):
+                OfflineCache.shared.forget(key)
+                throw error
+            case .offline, .server(502, _), .server(503, _), .server(504, _):
+                if let owner, owner == cacheOwner, let hit = OfflineCache.shared.read(key, owner: owner),
+                   let value = try? decoder.decode(T.self, from: hit.data) {
+                    return Loaded(value: value, cachedAt: hit.savedAt)
+                }
+                throw error
+            default:
+                throw error
+            }
+        }
+        let value: T
+        do {
+            value = try decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+        // The settings may have changed while this was in flight. A reply for the old server must not land in the new
+        // server's copy.
+        if let owner, owner == cacheOwner {
+            if let kept = storing(data) {
+                OfflineCache.shared.write(kept, key: key, owner: owner)
+            } else {
+                OfflineCache.shared.forget(key)
+            }
+        }
+        return Loaded(value: value, cachedAt: nil)
+    }
+
     private func jsonRequest(
         _ path: String,
         method: String,
@@ -184,6 +244,23 @@ final class APIClient {
 
     func thread(_ id: Int) async throws -> Thread {
         try await send(request("/api/conversations/\(id)"), as: Thread.self)
+    }
+
+    /// The list, keeping a copy. A fresh list also drops saved threads it no longer has, so a deleted one leaves here.
+    func conversationsKeepingCopy(limit: Int = 60) async throws -> Loaded<[Conversation]> {
+        let loaded = try await sendKeepingCopy(
+            request("/api/conversations", query: ["limit": String(limit)]),
+            as: [Conversation].self,
+            key: "conversations"
+        )
+        if loaded.cachedAt == nil {
+            OfflineCache.shared.forget(prefix: "thread:", keeping: Set(loaded.value.map { "thread:\($0.id)" }))
+        }
+        return loaded
+    }
+
+    func threadKeepingCopy(_ id: Int) async throws -> Loaded<Thread> {
+        try await sendKeepingCopy(request("/api/conversations/\(id)"), as: Thread.self, key: "thread:\(id)")
     }
 
     func createConversation(title: String? = nil, projectID: Int? = nil) async throws -> Conversation {
@@ -450,6 +527,18 @@ final class APIClient {
         try await send(request("/api/runs", query: ["limit": String(limit)]), as: [Run].self)
     }
 
+    func runsKeepingCopy(limit: Int = 100) async throws -> Loaded<[Run]> {
+        let loaded = try await sendKeepingCopy(
+            request("/api/runs", query: ["limit": String(limit)]),
+            as: [Run].self,
+            key: "runs"
+        )
+        if loaded.cachedAt == nil {
+            OfflineCache.shared.forget(prefix: "run:", keeping: Set(loaded.value.map { "run:\($0.id)" }))
+        }
+        return loaded
+    }
+
     // MARK: - Builds
 
     func builds(limit: Int = 40) async throws -> [Build] {
@@ -471,6 +560,16 @@ final class APIClient {
     /// conversation the model saw — so it is fetched only when a row is actually opened.
     func run(_ id: Int) async throws -> RunDetail {
         try await send(request("/api/runs/\(id)"), as: RunDetail.self)
+    }
+
+    /// The saved copy leaves out the raw trace (`OfflineStore.withoutTrace`), so offline it shows what the run did.
+    func runKeepingCopy(_ id: Int) async throws -> Loaded<RunDetail> {
+        try await sendKeepingCopy(
+            request("/api/runs/\(id)"),
+            as: RunDetail.self,
+            key: "run:\(id)",
+            storing: OfflineStore.withoutTrace
+        )
     }
 
     // MARK: - Schedules
@@ -556,6 +655,16 @@ final class APIClient {
         var query = ["status": status]
         if let projectID { query["projectId"] = String(projectID) }
         return try await send(request("/api/tasks", query: query), as: [TodoItem].self)
+    }
+
+    func todosKeepingCopy(status: String = "open", projectID: Int? = nil) async throws -> Loaded<[TodoItem]> {
+        var query = ["status": status]
+        if let projectID { query["projectId"] = String(projectID) }
+        return try await sendKeepingCopy(
+            request("/api/tasks", query: query),
+            as: [TodoItem].self,
+            key: "tasks:\(status):\(projectID.map(String.init) ?? "all")"
+        )
     }
 
     /// `due` is plain words ("friday 3pm") or ISO; the server parses it and says so in a 400
@@ -748,6 +857,23 @@ final class APIClient {
         try await send(request("/api/files/content", query: ["path": path]), as: FileContent.self)
     }
 
+    func savedFilesKeepingCopy() async throws -> Loaded<[SavedFile]> {
+        let loaded = try await sendKeepingCopy(request("/api/files"), as: [SavedFile].self, key: "files")
+        if loaded.cachedAt == nil {
+            let present = loaded.value.filter(\.exists).map { "file:\($0.path)" }
+            OfflineCache.shared.forget(prefix: "file:", keeping: Set(present))
+        }
+        return loaded
+    }
+
+    func fileContentKeepingCopy(_ path: String) async throws -> Loaded<FileContent> {
+        try await sendKeepingCopy(
+            request("/api/files/content", query: ["path": path]),
+            as: FileContent.self,
+            key: "file:\(path)"
+        )
+    }
+
     /// Save one reply as a file in the project's folder, or `docs/` on the Mac.
     func saveReply(runID: Int, name: String, projectID: Int?) async throws -> SavedPath {
         var body: [String: Any] = ["runId": runID, "name": name]
@@ -936,6 +1062,10 @@ final class APIClient {
 
     func projects() async throws -> [Project] {
         try await send(request("/api/projects"), as: [Project].self)
+    }
+
+    func projectsKeepingCopy() async throws -> Loaded<[Project]> {
+        try await sendKeepingCopy(request("/api/projects"), as: [Project].self, key: "projects")
     }
 
     func projectDetail(_ id: Int) async throws -> ProjectDetail {

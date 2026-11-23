@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var pushing = false
     @State private var devices: [RegisteredDevice] = []
     @State private var devicesError: String?
+    @State private var offlineBytes = 0
 
     var body: some View {
         Form {
@@ -187,6 +188,26 @@ struct SettingsView: View {
                 Text("How this phone appears in the server's device list. Re-register with "
                      + "the test button above after changing it.")
             }
+
+            Section {
+                HStack {
+                    Text("Saved on this phone")
+                    Spacer()
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(offlineBytes), countStyle: .file))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+                Button("Delete offline copy", role: .destructive) {
+                    state.deleteOfflineCopy()
+                    offlineBytes = OfflineCache.shared.totalBytes
+                }
+                .disabled(offlineBytes == 0)
+            } header: {
+                Text("Offline copy")
+            } footer: {
+                Text("Threads, tasks, files and runs you opened, for reading when the server can't be reached. "
+                     + "Encrypted, locked with the phone, left out of backups, and removed after 14 days.")
+            }
+            .task { offlineBytes = OfflineCache.shared.totalBytes }
 
             Section {
                 if let loaded = state.lastLoaded {

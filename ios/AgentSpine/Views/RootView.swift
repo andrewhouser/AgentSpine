@@ -32,6 +32,8 @@ struct RootView: View {
             // A first launch with nothing configured should land on Settings rather than on an
             // empty thread list with an error under it.
             if !settings.isConfigured {
+                // No server or token any more is this app's sign-out, so the private copy goes with it.
+                OfflineCache.shared.clear()
                 tab = .settings
             } else {
                 await state.refresh()

@@ -11,6 +11,9 @@ import SwiftUI
 /// away for anything else. A one-line preview makes approving a rubber stamp.
 struct ApprovalCard: View {
     let confirmation: Confirmation
+    /// False when this question came from the phone's saved copy. It may already have been answered or changed, so it
+    /// cannot be answered from here even if the network has come back: only a fresh load of the thread makes it live.
+    var answerable = true
     /// Called after the server accepted the answer, so the thread can reload.
     let onDecided: () async -> Void
 
@@ -25,7 +28,7 @@ struct ApprovalCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 AttentionDot()
-                Text("Waiting on you")
+                Text(answerable ? "Waiting on you" : "Was waiting when saved")
                     .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
                     .foregroundStyle(Color.attention)
                 Text(confirmation.tool)
@@ -58,28 +61,35 @@ struct ApprovalCard: View {
                 Text(error).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.danger)
             }
 
-            HStack(spacing: 10) {
-                Button(role: .destructive) {
-                    reason = ""
-                    rejecting = true
-                } label: {
-                    Text("Reject").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .tint(Spine.Palette.danger)
-
-                Button {
-                    Task { await decide(approve: true) }
-                } label: {
-                    Group {
-                        if busy { ProgressView() } else { Text("Approve") }
+            if answerable {
+                HStack(spacing: 10) {
+                    Button(role: .destructive) {
+                        reason = ""
+                        rejecting = true
+                    } label: {
+                        Text("Reject").frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
+                    .tint(Spine.Palette.danger)
+
+                    Button {
+                        Task { await decide(approve: true) }
+                    } label: {
+                        Group {
+                            if busy { ProgressView() } else { Text("Approve") }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.attention)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.attention)
+                .disabled(busy)
+            } else {
+                Text("This can only be answered once you reconnect and the thread reloads. It may already have been answered.")
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.textDim)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .disabled(busy)
         }
         .padding(Spine.Space.lg)
         .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))
@@ -93,6 +103,8 @@ struct ApprovalCard: View {
     }
 
     private func decide(approve: Bool, reason: String = "") async {
+        // The reject sheet can still be open when a reload swaps this card to a saved copy.
+        guard answerable else { return }
         busy = true
         defer { busy = false }
         do {

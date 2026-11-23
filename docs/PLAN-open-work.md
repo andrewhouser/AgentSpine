@@ -272,10 +272,16 @@ Left to do:
 - Spacing and type sizes still use the old literal values in most modules (only colours and fonts moved to
   tokens); meeting speaker colours stay hard-coded hues.
 - Distribution is development-signed only, with no notarised route, by decision.
-- **iPhone offline cache (Code, not started).** A read-only mirror of threads, tasks, files and recent run
-  results (SwiftData or SQLite), shown marked as cached when the server is unreachable. Writes are not queued.
-  Approvals are never replayed: an offline phone shows the question and says it can only be answered once
-  reconnected, because a stale approval is a security problem.
+- **iPhone offline cache (built 2026-11-22; see "Not proven" below).** `Core/OfflineCache.swift` keeps the raw replies
+  for the thread list, threads, tasks, files, projects and runs you opened, shown under an "Offline: saved copy" notice
+  with their age when the server is unreachable (or answers 502 to 504). Nothing is fetched ahead, and writes are not
+  queued. A question from a saved copy has no Approve or Reject, even if the network returns, until the thread reloads
+  fresh, because a stale approval is a security problem. The files use iOS complete file protection and are left out of
+  backups. The copy is tied to one server and token, wiped on a rejected token or when the app is unconfigured, removed
+  after 14 days, capped at 25 MB (2 MB per reply), and follows deletions on the next fresh list. A run's raw trace is
+  not kept, because it carries the profile and recalled memories; attachments and meeting transcripts are not cached.
+  Settings shows its size and can delete it. The Mac has a no-op stub. Suite: `test/ios-offline-cache.test.mjs`.
+  **Not proven:** file protection cannot be observed in the simulator, so it needs a look on a real, locked iPhone.
 - **Web, Mac and iPhone matched (2026-11-21).** Web has a thread inspector beside the chat (`ThreadInspector`,
   toggled from the chat tab bar, remembered in `localStorage`) with four cards plus a **Tokens** card (in, out, calls,
   by model; from `usage` on each turn, which `usageForRuns` sums from `llm_calls` for the turn and its child runs).

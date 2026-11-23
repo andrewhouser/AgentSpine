@@ -12,6 +12,8 @@ struct ThreadView: View {
 
     @Environment(AppState.self) private var state
     @State private var thread: Thread?
+    /// Set while `thread` is the phone's saved copy. Nothing on it can be sent or answered.
+    @State private var cachedAt: Date?
     @State private var showInspector = false
     @State private var stream = RunStream()
     @State private var draft = ""
@@ -48,6 +50,9 @@ struct ThreadView: View {
                     if let error = loadError {
                         ErrorNotice(message: error) { Task { await load() } }
                     }
+                    if let cachedAt {
+                        CachedNotice(savedAt: cachedAt) { Task { await load() } }
+                    }
                     if thread?.conversation.isLocalOnly == true { LocalOnlyNotice() }
 
                     ForEach(ledgerTurns) { turn in
@@ -60,7 +65,7 @@ struct ThreadView: View {
                         .id("turn-\(turn.id)")
                         // The buttons go under the turn that asked, where you are reading.
                         ForEach(turn.confirmations) { confirmation in
-                            ApprovalCard(confirmation: confirmation) { await afterDecision() }
+                            ApprovalCard(confirmation: confirmation, answerable: cachedAt == nil) { await afterDecision() }
                                 .id("confirmation-\(confirmation.id)")
                         }
                     }
@@ -69,7 +74,7 @@ struct ThreadView: View {
                         LiveTurnView(task: liveTask ?? "", isDecision: liveIsDecision, stream: stream)
                             .id("live")
                         ForEach(liveConfirmations) { confirmation in
-                            ApprovalCard(confirmation: confirmation) { await afterDecision() }
+                            ApprovalCard(confirmation: confirmation, answerable: cachedAt == nil) { await afterDecision() }
                                 .id("confirmation-\(confirmation.id)")
                         }
                     }
@@ -77,7 +82,7 @@ struct ThreadView: View {
                     // Questions no turn here raised — the inbox's: a meeting's work items, a
                     // learner's proposal. At the end, where the newest thing in a thread goes.
                     ForEach(thread?.confirmations ?? []) { confirmation in
-                        ApprovalCard(confirmation: confirmation) { await afterDecision() }
+                        ApprovalCard(confirmation: confirmation, answerable: cachedAt == nil) { await afterDecision() }
                             .id("confirmation-\(confirmation.id)")
                     }
 
@@ -245,7 +250,8 @@ struct ThreadView: View {
     /// silently dropped by a turn that then answered as though nothing had been attached.
     private var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return (hasText || !staged.isEmpty) && !isSending && uploading == 0
+        // Not from a saved copy: nothing is queued, and a reply to an old view of the thread could answer the wrong thing.
+        return cachedAt == nil && (hasText || !staged.isEmpty) && !isSending && uploading == 0
     }
 
     /// Pin the thread to one model. Sizing is a regex and cannot tell that *this* question
@@ -562,9 +568,13 @@ struct ThreadView: View {
 
     private func load() async {
         do {
-            let fresh = try await APIClient.shared.thread(conversationID)
+            let loaded = try await APIClient.shared.threadKeepingCopy(conversationID)
+            let fresh = loaded.value
             thread = fresh
+            cachedAt = loaded.cachedAt
             loadError = nil
+            // A saved copy was not read just now, and a turn it shows as running is not known to be running.
+            guard loaded.cachedAt == nil else { return }
             // On screen, so read — this is what clears the thread's unread dot everywhere.
             if scenePhase == .active {
                 try? await APIClient.shared.markRead(conversationID)
@@ -590,7 +600,7 @@ struct ThreadView: View {
     /// an image binds to one run only once, so a retry would drop it and answer a different
     /// question.
     private func resendable(_ turn: Turn) -> Bool {
-        !stream.isLive && !isSending && !turn.isDecision && turn.attachments.isEmpty
+        cachedAt == nil && !stream.isLive && !isSending && !turn.isDecision && turn.attachments.isEmpty
             && !(turn.task ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 

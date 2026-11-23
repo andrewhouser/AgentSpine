@@ -14,6 +14,9 @@ struct TasksView: View {
     @State private var adding = false
     @State private var projects: [Project] = []
     @State private var filterProject: Int?
+    /// Set while the list is the phone's saved copy. Changes are refused rather than queued.
+    @State private var cachedAt: Date?
+    private static let offlineRefusal = "You're offline, so this wasn't changed. Reconnect and try again."
 
     private func projectName(_ id: Int?) -> String? {
         guard let id else { return nil }
@@ -24,6 +27,11 @@ struct TasksView: View {
         List {
             if let loadError {
                 ErrorNotice(message: loadError) { Task { await load() } }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+            if let cachedAt {
+                CachedNotice(savedAt: cachedAt) { Task { await load() } }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
@@ -118,6 +126,7 @@ struct TasksView: View {
             ToolbarItem(placement: .spineTrailing) {
                 Button { adding = true } label: { Image(systemName: "plus") }
                     .accessibilityLabel("New task")
+                    .disabled(cachedAt != nil)
             }
         }
         .sheet(isPresented: $adding) {
@@ -140,10 +149,12 @@ struct TasksView: View {
 
     private func load() async {
         do {
-            if projects.isEmpty { projects = (try? await APIClient.shared.projects()) ?? [] }
-            items = try await APIClient.shared.todos(
+            if projects.isEmpty { projects = (try? await APIClient.shared.projectsKeepingCopy())?.value ?? [] }
+            let loaded = try await APIClient.shared.todosKeepingCopy(
                 status: showDone ? "all" : "open", projectID: filterProject
             )
+            items = loaded.value
+            cachedAt = loaded.cachedAt
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -152,6 +163,7 @@ struct TasksView: View {
     }
 
     private func toggle(_ item: TodoItem) async {
+        guard cachedAt == nil else { actionError = Self.offlineRefusal; return }
         do {
             try await APIClient.shared.setTodoDone(item.id, done: !item.isDone)
             await load()
@@ -161,6 +173,7 @@ struct TasksView: View {
     }
 
     private func move(_ item: TodoItem, to projectID: Int?) async {
+        guard cachedAt == nil else { actionError = Self.offlineRefusal; return }
         do {
             try await APIClient.shared.setTodoProject(item.id, projectID: projectID)
             await load()
@@ -170,6 +183,7 @@ struct TasksView: View {
     }
 
     private func remove(_ item: TodoItem) async {
+        guard cachedAt == nil else { actionError = Self.offlineRefusal; return }
         do {
             try await APIClient.shared.deleteTodo(item.id)
             await load()

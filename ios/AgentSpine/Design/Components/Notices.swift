@@ -53,6 +53,37 @@ struct LocalOnlyNotice: View {
     }
 }
 
+/// This screen is the phone's saved copy, because the server cannot be reached. Always stated, with its age, so an old
+/// answer is never read as the current one.
+struct CachedNotice: View {
+    let savedAt: Date
+    var retry: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.sm) {
+            Label("Offline: saved copy", systemImage: "icloud.slash")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                .foregroundStyle(Spine.Palette.warn)
+            Text("From \(SpineDate.relative(ISO8601DateFormatter().string(from: savedAt))). Nothing here can be changed or answered until you reconnect.")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(Spine.Palette.textDim)
+                .fixedSize(horizontal: false, vertical: true)
+            if let retry {
+                Button("Try again", action: retry)
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                    .buttonStyle(.bordered)
+                    .tint(Spine.Palette.accent)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spine.Space.md)
+        .background(Spine.Palette.warnSoft, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+        .overlay(RoundedRectangle(cornerRadius: Spine.Radius.md).strokeBorder(Spine.Palette.warnLine, lineWidth: 0.5))
+        .padding(.horizontal)
+        .accessibilityElement(children: .contain)
+    }
+}
+
 struct EmptyNotice: View {
     let symbol: String
     let title: String

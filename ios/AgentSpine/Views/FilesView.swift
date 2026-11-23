@@ -6,11 +6,17 @@ struct FilesView: View {
     @State private var loaded = false
     @State private var loadError: String?
     @State private var opened: SavedFile?
+    @State private var cachedAt: Date?
 
     var body: some View {
         List {
             if let loadError {
                 ErrorNotice(message: loadError) { Task { await load() } }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+            if let cachedAt {
+                CachedNotice(savedAt: cachedAt) { Task { await load() } }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
@@ -57,7 +63,9 @@ struct FilesView: View {
 
     private func load() async {
         do {
-            files = try await APIClient.shared.savedFiles()
+            let loaded = try await APIClient.shared.savedFilesKeepingCopy()
+            files = loaded.value
+            cachedAt = loaded.cachedAt
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -70,6 +78,7 @@ private struct FilePreview: View {
     @Environment(\.dismiss) private var dismiss
     let file: SavedFile
     @State private var content: FileContent?
+    @State private var cachedAt: Date?
     @State private var error: String?
 
     var body: some View {
@@ -77,6 +86,7 @@ private struct FilePreview: View {
             ScrollView {
                 if let content {
                     VStack(alignment: .leading, spacing: 8) {
+                        if let cachedAt { CachedNotice(savedAt: cachedAt).padding(.horizontal, -16) }
                         if file.name.lowercased().hasSuffix(".md") {
                             MarkdownText(content.text)
                         } else {
@@ -104,7 +114,11 @@ private struct FilePreview: View {
             }
         }
         .task {
-            do { content = try await APIClient.shared.fileContent(file.path) } catch { self.error = error.localizedDescription }
+            do {
+                let loaded = try await APIClient.shared.fileContentKeepingCopy(file.path)
+                content = loaded.value
+                cachedAt = loaded.cachedAt
+            } catch { self.error = error.localizedDescription }
         }
     }
 }

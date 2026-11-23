@@ -15,6 +15,7 @@ struct RunDetailView: View {
     let runID: Int
 
     @State private var detail: RunDetail?
+    @State private var cachedAt: Date?
     @State private var error: String?
     @State private var showTrace = false
 
@@ -23,6 +24,12 @@ struct RunDetailView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 if let error {
                     ErrorNotice(message: error) { Task { await load() } }
+                }
+                if let cachedAt {
+                    CachedNotice(savedAt: cachedAt) { Task { await load() } }
+                    Text("The raw trace is not kept on this phone.")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
                 }
 
                 if let detail {
@@ -154,7 +161,9 @@ struct RunDetailView: View {
 
     private func load() async {
         do {
-            detail = try await APIClient.shared.run(runID)
+            let loaded = try await APIClient.shared.runKeepingCopy(runID)
+            detail = loaded.value
+            cachedAt = loaded.cachedAt
             error = nil
         } catch {
             self.error = error.localizedDescription

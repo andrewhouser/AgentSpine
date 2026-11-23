@@ -218,6 +218,13 @@ struct ConversationsView: View {
                 }
             }
 
+            if let cachedAt = state.cachedAt {
+                Section {
+                    CachedNotice(savedAt: cachedAt) { Task { await state.refresh() } }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
             if state.conversations.isEmpty && state.loadError == nil {
                 Section {
                     EmptyNotice(

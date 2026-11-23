@@ -23,6 +23,8 @@ final class AppState {
     /// Non-nil once a load has succeeded, so an empty list can say "nothing yet" instead of
     /// showing an empty screen that looks identical to a failed load.
     var lastLoaded: Date?
+    /// Set while the lists are the phone's saved copy because the server is unreachable: the oldest date among them.
+    var cachedAt: Date?
 
     private let api = APIClient.shared
 
@@ -66,25 +68,43 @@ final class AppState {
         isLoading = true
         defer { isLoading = false }
 
-        async let threads = api.conversations()
-        async let runs = api.runs()
+        async let threads = api.conversationsKeepingCopy()
+        async let runs = api.runsKeepingCopy()
         // Projects are only labels here, and a server with none is normal, so a failure to
         // fetch them must not fail the refresh that the other three succeeded at.
-        async let projectList = try? api.projects()
+        async let projectList = try? api.projectsKeepingCopy()
 
         do {
             let (t, r) = try await (threads, runs)
-            projects = await projectList ?? []
+            projects = await projectList?.value ?? []
             // Archived threads stay on the server and out of the way here: a phone is for the
             // thread you are in the middle of.
-            conversations = t.filter { $0.archived == 0 }
-            recentRuns = r
+            conversations = t.value.filter { $0.archived == 0 }
+            recentRuns = r.value
             loadError = nil
-            lastLoaded = Date()
-            await refreshHeadsups()
+            cachedAt = [t.cachedAt, r.cachedAt].compactMap { $0 }.min()
+            if cachedAt == nil {
+                lastLoaded = Date()
+                await refreshHeadsups()
+            }
         } catch {
             loadError = error.localizedDescription
+            // The token was refused and the copy wiped, so what came from it leaves the screen too.
+            if case APIError.unauthorized = error, cachedAt != nil { dropCachedLists() }
         }
+    }
+
+    /// Delete the phone's saved copy, from Settings.
+    func deleteOfflineCopy() {
+        OfflineCache.shared.clear()
+        if cachedAt != nil { dropCachedLists() }
+    }
+
+    private func dropCachedLists() {
+        conversations = []
+        projects = []
+        recentRuns = []
+        cachedAt = nil
     }
 
     /// Just the thread list — which is where the blue dots come from. Cheap enough to call
@@ -92,8 +112,13 @@ final class AppState {
     /// stops showing as waiting.
     func refreshConversations() async {
         guard Settings.shared.isConfigured else { return }
-        if let fresh = try? await api.conversations() {
-            conversations = fresh.filter { $0.archived == 0 }
+        // Showing a saved copy: only a full refresh can replace all of it and clear the offline notice.
+        if cachedAt != nil {
+            await refresh()
+            return
+        }
+        if let fresh = try? await api.conversationsKeepingCopy(), fresh.cachedAt == nil {
+            conversations = fresh.value.filter { $0.archived == 0 }
         }
         // Coming back to the app is exactly when you have probably answered something from a
         // notification, so the Heads-up badge is refreshed alongside the thread dots.
