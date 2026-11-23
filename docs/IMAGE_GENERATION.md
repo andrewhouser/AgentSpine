@@ -270,6 +270,9 @@ the UI shows it through `/images/` exactly as before.
   ComfyUI `POST /free`. ComfyUI also frees itself after 5 idle minutes.
 - **Progress:** the tool publishes `tool_progress` events and the web status line shows
   "rendering 42%". The iOS and Mac apps ignore the event for now.
+- **iPhone and Mac:** `MarkdownText` renders `![alt](/images/name)` as a picture, tap to zoom on
+  iPhone. Only the server's own `/images/` paths load, the same narrow rule as the web client,
+  so a reply quoting a page cannot make the phone fetch a remote image.
 - **Services:** `services/comfyui/install-agents.sh` installs `com.local.comfyui` and
   `com.local.mflux` as LaunchAgents, with paths from this machine's `$HOME`.
 - **Measured through real chat, 2026-11-23, with about 13 GB already in swap:** 1024px text-to-image
