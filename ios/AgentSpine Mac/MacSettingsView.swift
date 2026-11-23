@@ -1,38 +1,106 @@
 import SwiftUI
 
-/// ⌘, : two tabs. Server is the address and the token; Assistant is the same list of screens the
+/// ⌘, : two panes. Server is the address and the token; Assistant is the same list of screens the
 /// phone's Settings has (recipes, auto-approval proposals, agents, Heads-up, memory, policy), so
 /// nothing about the assistant can only be changed from a browser or a phone.
+///
+/// A segmented control rather than a `TabView`: the settings window puts tabs in its toolbar, and a
+/// navigation push inside one fought them for it. Opening Recipes highlighted Server, and Back landed
+/// on Server with no way to the Assistant list.
 struct MacSettingsRoot: View {
+    private enum Pane: String, CaseIterable {
+        case server = "Server"
+        case assistant = "Assistant"
+
+        var symbol: String { self == .server ? "network" : "sparkles" }
+    }
+
+    @State private var pane: Pane = .server
+
     var body: some View {
-        TabView {
-            MacSettingsView()
-                .tabItem { Label("Server", systemImage: "network") }
-            MacAssistantSettings()
-                .tabItem { Label("Assistant", systemImage: "sparkles") }
+        VStack(spacing: 0) {
+            Picker("Settings", selection: $pane) {
+                ForEach(Pane.allCases, id: \.self) { item in
+                    Label(item.rawValue, systemImage: item.symbol).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.vertical, Spine.Space.md)
+            Divider()
+            switch pane {
+            case .server: MacSettingsView()
+            case .assistant: MacAssistantSettings()
+            }
         }
     }
 }
 
-/// The shared phone screens, pushed inside the settings window. They are the same views the
-/// iPhone uses, so a change to one lands on both.
+/// The shared phone screens, beside a sidebar that stays visible, so the way to another screen is
+/// always on show. They are the same views the iPhone uses, so a change to one lands on both.
 struct MacAssistantSettings: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                NavigationLink("Recipes") { RecipesView() }
-                NavigationLink("Styles") { StylesView() }
-                NavigationLink("Auto-approval proposals") { ProposalsView() }
-                NavigationLink("Agents") { AgentsView() }
-                NavigationLink("Heads-up") { HeadsupPrefsView() }
-                NavigationLink("Memory") { MemoryView() }
-                NavigationLink("Weekly review") { WeeklyReviewView() }
-                NavigationLink("Cloud usage") { CloudUsageView() }
-                NavigationLink("Policy") { PolicyView() }
+    private enum Screen: String, CaseIterable, Identifiable {
+        case recipes = "Recipes"
+        case styles = "Styles"
+        case proposals = "Auto-approval proposals"
+        case agents = "Agents"
+        case headsup = "Heads-up"
+        case memory = "Memory"
+        case weeklyReview = "Weekly review"
+        case cloudUsage = "Cloud usage"
+        case policy = "Policy"
+        case sidebarMenu = "Sidebar menu"
+
+        var id: Self { self }
+
+        var symbol: String {
+            switch self {
+            case .recipes: "list.bullet.rectangle"
+            case .styles: "textformat"
+            case .proposals: "checkmark.shield"
+            case .agents: "person.2"
+            case .headsup: "sparkles"
+            case .memory: "brain"
+            case .weeklyReview: "calendar"
+            case .cloudUsage: "cloud"
+            case .policy: "lock.shield"
+            case .sidebarMenu: "sidebar.left"
             }
-            .navigationTitle("Assistant")
         }
-        .frame(width: 560, height: 520)
+    }
+
+    @State private var selection: Screen? = .recipes
+
+    var body: some View {
+        HStack(spacing: 0) {
+            List(Screen.allCases, selection: $selection) { screen in
+                Label(screen.rawValue, systemImage: screen.symbol).tag(screen)
+            }
+            .listStyle(.sidebar)
+            .frame(width: 230)
+            Divider()
+            // A new identity per screen, so a page opened inside one doesn't stay open under the next.
+            NavigationStack { detail(selection ?? .recipes) }
+                .id(selection)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 800, height: 560)
+    }
+
+    @ViewBuilder private func detail(_ screen: Screen) -> some View {
+        switch screen {
+        case .recipes: RecipesView()
+        case .styles: StylesView()
+        case .proposals: ProposalsView()
+        case .agents: AgentsView()
+        case .headsup: HeadsupPrefsView()
+        case .memory: MemoryView()
+        case .weeklyReview: WeeklyReviewView()
+        case .cloudUsage: CloudUsageView()
+        case .policy: PolicyView()
+        case .sidebarMenu: MacMenuSettingsView()
+        }
     }
 }
 
@@ -112,6 +180,12 @@ struct MacSettingsView: View {
                 settings.rawBaseURL = address
                 settings.token = token
                 await state.refresh()
+                // Stay open: closing here would report success for a token that dies at next launch.
+                if let status = settings.tokenSaveError {
+                    probeFailed = true
+                    probe = "Connected, but the Keychain would not save the token (error \(status)). You'll need to enter it again next launch."
+                    return
+                }
                 dismiss()
             }
         } catch {

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		The Mac app keeps the dashboard token in the data protection keychain (see Keychain.swift),
+		which refuses a write from an app with no access group: SecItemAdd returned -34018, so the
+		token lasted only until the app quit. The sandbox, network and microphone entitlements still
+		come from the target's ENABLE_* build settings.
+	-->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.houserphotography.AgentSpine.mac</string>
+	</array>
+</dict>
+</plist>

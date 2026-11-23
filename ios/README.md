@@ -146,7 +146,7 @@ is only removed after the new build succeeds. `--no-open` leaves it closed, and
 
 It is for the Mac you work at: a sidebar of sections and threads with an inspector, Heads-up,
 meetings, approvals from the menu bar (with a notification when one arrives), and read-aloud. Like
-the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). The window has two tabs. **Server**: **Test connection** only checks what you typed; **Connect** saves it and closes the window. **Assistant**: recipes, auto-approval proposals, agents, Heads-up, memory and policy, the same screens as the phone's Settings. There is no
+the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). The window has two panes. **Server**: **Test connection** only checks what you typed; **Connect** saves it and closes the window. **Assistant**: recipes, auto-approval proposals, agents, Heads-up, memory and policy, the same screens as the phone's Settings, plus **Sidebar menu**, which sets the order of the menu at the foot of the sidebar: the first six are pinned and the rest fold under More. The web client has the same control in Settings → Menu. There is no
 App Store step: a development-signed build on each Mac, as with the iPhone.
 
 **Recording a meeting from the iPhone** (Meetings, the microphone button, "This iPhone", which is the
@@ -172,7 +172,7 @@ afterwards. The audio spooler is shared with the Mac (`Core/PCMSpooler.swift`).
 - While recording, the menu bar icon becomes a record circle and its menu starts with a clock, level
   meters and a Stop button.
 
-**Keyboard:** ⌘N new thread, ⌘K search, ⌘1 to ⌘7 the sections in the sidebar's order (Go menu), ⌘R
+**Keyboard:** ⌘N new thread, ⌘K search, ⌘1 to ⌘9 the first nine sections in your menu order (Go menu), ⌘R
 refresh. Windows reopen where you left them, on the section and thread you had.
 
 ### 6. Point it at the Mini

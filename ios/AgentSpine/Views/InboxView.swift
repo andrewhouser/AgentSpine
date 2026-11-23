@@ -203,6 +203,7 @@ struct InboxView: View {
                     Toggle("Store as a plain note", isOn: $pasteAsNote)
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("Paste text")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { pasting = false } }
@@ -212,6 +213,9 @@ struct InboxView: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 460, minHeight: 460)
+        #endif
     }
 
     private func meta(_ item: InboxItem) -> String {
@@ -365,6 +369,8 @@ private struct DictatedNoteSheet: View {
                     Text("Read it through before adding: names are the words speech recognition most often gets wrong.")
                 }
             }
+            // The Mac's default form style has no outer margin, so labels sat against the sheet's edge.
+            .formStyle(.grouped)
             .navigationTitle("Dictate a note")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -467,7 +473,7 @@ final class Dictation {
         levels = Array(repeating: 0, count: Self.levelCount)
         phase = .recording
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, let recorder = self.recorder else { return }
                 self.elapsed = recorder.currentTime
                 recorder.updateMeters()

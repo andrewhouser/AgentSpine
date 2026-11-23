@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { Status } from "../../hooks/useStatus.ts";
 import type { Conversation, Project } from "../../lib/types.ts";
 
+import { useNavOrder } from "../../hooks/useNavOrder.ts";
+import { foldedItems, NAV_ITEMS, pinnedItems } from "../../lib/navLayout.ts";
 import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
 import { ProjectGroup } from "../ProjectGroup/ProjectGroup.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
@@ -45,24 +47,9 @@ interface SidebarProps {
   view: View;
 }
 
-const NAV: { key: View; label: string }[] = [
-  { key: "search", label: "Search" },
-  { key: "headsup", label: "Heads-up" },
-  { key: "inbox", label: "Inbox" },
-  { key: "knowledge", label: "Knowledge" },
-  { key: "tasks", label: "Tasks" },
-  { key: "study", label: "Study" },
-  { key: "files", label: "Files" },
-  { key: "clients", label: "Clients" },
-  { key: "meetings", label: "Meetings" },
-  { key: "schedules", label: "Schedules" },
-  { key: "builds", label: "Builds" },
-  { key: "activity", label: "Activity" },
-  { key: "overview", label: "Overview" },
-  { key: "settings", label: "Settings" },
-];
-
 const COLLAPSE_KEY = "sidebar-nav-collapsed";
+
+const MORE_KEY = "sidebar-nav-more-open";
 
 const PROJECTS_COLLAPSED_KEY = "sidebar-projects-collapsed";
 
@@ -79,6 +66,14 @@ const readCollapsedProjects = (): Set<number> => {
 const readCollapsed = (): boolean => {
   try {
     return localStorage.getItem(COLLAPSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const readMoreOpen = (): boolean => {
+  try {
+    return localStorage.getItem(MORE_KEY) === "1";
   } catch {
     return false;
   }
@@ -103,7 +98,11 @@ export const Sidebar = ({
   view,
 }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [moreOpen, setMoreOpen] = useState(readMoreOpen);
   const [foldedProjects, setFoldedProjects] = useState(readCollapsedProjects);
+  const { order } = useNavOrder();
+  const pinned = pinnedItems(order);
+  const folded = foldedItems(order);
   // Conversations inside a project live under it, not in the general list.
   const loose = conversations.filter((c) => c.project_id === null || !projects.some((p) => p.id === c.project_id));
   const toggle = (): void => {
@@ -115,6 +114,33 @@ export const Sidebar = ({
       // storage blocked: the toggle still works for this session
     }
   };
+
+  const toggleMore = (): void => {
+    const next = !moreOpen;
+    setMoreOpen(next);
+    try {
+      localStorage.setItem(MORE_KEY, next ? "1" : "0");
+    } catch {
+      // storage blocked: More still opens for this session
+    }
+  };
+
+  const navButton = (key: View) => (
+    <button
+      className={`${styles.navItem} ${view === key ? styles.navActive : ""}`}
+      key={key}
+      onClick={() => onSelectView(key)}
+      type="button"
+    >
+      {NAV_ITEMS.find((item) => item.key === key)?.label ?? key}
+      {key === "schedules" && ` (${status.schedules})`}
+      {key === "headsup" && status.headsupsWaiting > 0 && (
+        <span aria-label={`${status.headsupsWaiting} waiting for you`} className={styles.badge}>
+          {status.headsupsWaiting}
+        </span>
+      )}
+    </button>
+  );
 
   const setProjectFolded = (id: number, folded: boolean): void => {
     const next = new Set(foldedProjects);
@@ -204,24 +230,20 @@ export const Sidebar = ({
         <span className={styles.chevron}>{collapsed ? "▴" : "▾"}</span>
       </button>
       {!collapsed && (
-        <div className={styles.navGrid}>
-      {NAV.map((item) => (
-        <button
-          className={`${styles.navItem} ${view === item.key ? styles.navActive : ""}`}
-          key={item.key}
-          onClick={() => onSelectView(item.key)}
-          type="button"
-        >
-          {item.label}
-          {item.key === "schedules" && ` (${status.schedules})`}
-          {item.key === "headsup" && status.headsupsWaiting > 0 && (
-            <span aria-label={`${status.headsupsWaiting} waiting for you`} className={styles.badge}>
-              {status.headsupsWaiting}
-            </span>
-          )}
-        </button>
-      ))}
-        </div>
+        <>
+          <div className={styles.navGrid}>{pinned.map(navButton)}</div>
+          {/* With More shut, the open view has no row of its own, so More carries the highlight. */}
+          <button
+            aria-expanded={moreOpen}
+            className={`${styles.moreToggle} ${!moreOpen && folded.includes(view) ? styles.navActive : ""}`}
+            onClick={toggleMore}
+            type="button"
+          >
+            More
+            <span className={styles.chevron}>{moreOpen ? "▴" : "▾"}</span>
+          </button>
+          {moreOpen && <div className={`${styles.navGrid} ${styles.overflow}`}>{folded.map(navButton)}</div>}
+        </>
       )}
     </div>
 

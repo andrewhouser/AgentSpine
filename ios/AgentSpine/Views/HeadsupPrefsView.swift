@@ -152,6 +152,9 @@ struct HeadsupPrefsView: View {
                 }
             }
         }
+        // The Mac's default form is two columns: section text took the wide column and ran past the
+        // pane's edge, and footers cut off. Grouped matches the phone and wraps inside the pane.
+        .formStyle(.grouped)
         .navigationTitle("Heads-up")
         .spineInlineTitle()
         .task { await load() }
@@ -207,7 +210,11 @@ private struct LeadDaysRow: View {
             HStack {
                 Text(label)
                 Spacer()
-                TextField("5, 1, 0", text: $text)
+                // A prompt, not a title: macOS draws a title as a visible label, so every row read
+                // "5, 1, 0" beside its real value. The width stops the field filling a wide pane.
+                TextField(label, text: $text, prompt: Text("5, 1, 0"))
+                    .labelsHidden()
+                    .frame(maxWidth: 120)
                     .multilineTextAlignment(.trailing)
                     .submitLabel(.done)
                     .onSubmit {

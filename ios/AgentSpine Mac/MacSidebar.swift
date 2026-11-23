@@ -17,8 +17,6 @@ struct MacSidebar: View {
     @Environment(AppState.self) private var state
     @Environment(Settings.self) private var settings
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("sidebarMoreExpanded") private var moreExpanded = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var prompt: ThreadPrompt?
     @State private var newTitle = ""
 
@@ -45,20 +43,6 @@ struct MacSidebar: View {
         VStack(spacing: 0) {
             header
             List(selection: $selection) {
-                Section {
-                    ForEach(MacSection.primary, id: \.self) { sectionRow($0) }
-                    DisclosureGroup(isExpanded: $moreExpanded) {
-                        ForEach(MacSection.more, id: \.self) { sectionRow($0) }
-                    } label: {
-                        // The whole word toggles, not just the chevron: a plain string label
-                        // only answers to the arrow (seen in the running app).
-                        Text("More")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture { withAnimation(reduceMotion ? nil : .default) { moreExpanded.toggle() } }
-                            .accessibilityAddTraits(.isButton)
-                    }
-                }
                 Section("Threads") { threadRows }
             }
             .listStyle(.sidebar)
@@ -69,6 +53,7 @@ struct MacSidebar: View {
                     prompt = .delete(c)
                 }
             }
+            MacSidebarMenu(selection: $selection)
             ConnectionFooter()
         }
         .background(Spine.Palette.bgSidebar)
@@ -175,25 +160,6 @@ struct MacSidebar: View {
     }
 
     // MARK: Rows
-
-    private func sectionRow(_ item: MacSection) -> some View {
-        // `.tag` goes last. With `.badge` applied after it the List cannot see the tag, so the
-        // row is not selectable and a click does nothing (reproduced in the running app).
-        Label(item.title, systemImage: item.symbol)
-            .badge(count(for: item))
-            .tag(MacSidebarItem.section(item))
-    }
-
-    /// Zero hides a badge. Builds has none: "a build" is a view over the actions log with no
-    /// cheap count that means anything.
-    private func count(for item: MacSection) -> Int {
-        switch item {
-        case .headsup: return state.headsupWaiting
-        case .tasks: return state.openTaskCount ?? 0
-        case .schedules: return state.scheduleCount ?? 0
-        default: return 0
-        }
-    }
 
     @ViewBuilder private var threadRows: some View {
         if !settings.isConfigured {

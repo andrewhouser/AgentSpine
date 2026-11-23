@@ -7,13 +7,21 @@ enum MacSection: String, CaseIterable, Hashable {
     case threads, headsup, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
     case builds, activity, memory, proposals, agents
 
-    /// The rows the design shows in the sidebar, in its order. Threads is not one of them: the
-    /// threads themselves are listed below the sections, so `.threads` is the state of having a
-    /// thread (or the new-thread screen) open rather than a row.
-    static let primary: [MacSection] = [.headsup, .tasks, .schedules, .meetings, .projects, .files, .inbox, .knowledge, .builds]
+    /// The menu order on a fresh install: the first six are pinned, the rest fold under More.
+    /// Threads is not here: the threads are listed above the menu, so `.threads` is the state of
+    /// having a thread (or the new-thread screen) open rather than a row.
+    static let defaultOrder: [MacSection] = [
+        .headsup, .tasks, .meetings, .inbox, .knowledge, .schedules,
+        .projects, .files, .builds, .study, .clients, .activity, .memory, .proposals, .agents,
+    ]
 
-    /// Everything else, folded under "More" so it does not push the threads off the screen.
-    static let more: [MacSection] = [.study, .clients, .activity, .memory, .proposals, .agents]
+    static let orderKey = "sidebarMenuOrder"
+
+    /// The saved order, repaired. An empty string is the default order.
+    static func ordered(_ stored: String) -> [MacSection] {
+        MenuLayout.reconcile(MenuLayout.decode(stored), all: defaultOrder.map(\.rawValue))
+            .compactMap(MacSection.init(rawValue:))
+    }
 
     var title: String {
         switch self {

@@ -12,14 +12,15 @@ extension FocusedValues {
     }
 }
 
-/// A Go menu: the sidebar's sections on Command-1 to 7, in the sidebar's order, so the app can
-/// be driven from the keyboard without the sidebar.
+/// A Go menu: the first nine sections on Command-1 to 9, in the order chosen for the sidebar menu,
+/// so the app can be driven from the keyboard without the sidebar.
 struct MacGoCommands: Commands {
     @FocusedBinding(\.macSection) private var section
+    @AppStorage(MacSection.orderKey) private var storedOrder = ""
 
     var body: some Commands {
         CommandMenu("Go") {
-            ForEach(Array(MacSection.primary.enumerated()), id: \.element) { index, target in
+            ForEach(Array(MacSection.ordered(storedOrder).prefix(9).enumerated()), id: \.element) { index, target in
                 Button(target.title) { section = target }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                     .disabled(section == nil)

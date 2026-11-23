@@ -17,6 +17,7 @@ import {
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
 import { CloudUsagePanel } from "../CloudUsagePanel/CloudUsagePanel.tsx";
 import { HeadsupPrefsPanel } from "../HeadsupPrefsPanel/HeadsupPrefsPanel.tsx";
+import { NavOrderPanel } from "../NavOrderPanel/NavOrderPanel.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PolicyProposals } from "../PolicyProposals/PolicyProposals.tsx";
 import { RecipesPanel } from "../RecipesPanel/RecipesPanel.tsx";
@@ -53,6 +54,7 @@ const TABS = [
   { id: "general", label: "General" },
   { id: "memory", label: "Memory" },
   { id: "headsup", label: "Heads-up" },
+  { id: "menu", label: "Menu" },
   { id: "system", label: "Cloud and policy" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -424,6 +426,8 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
       <WeeklyReviewPanel />
         </>
       )}
+
+      {tab === "menu" && <NavOrderPanel />}
 
       {tab === "system" && (
         <>

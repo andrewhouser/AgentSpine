@@ -37,16 +37,20 @@ enum Keychain {
         return query
     }
 
-    static func set(_ value: String, for account: String) {
+    /// Returns the keychain's status. Ignoring it hid a Mac build with no keychain entitlement: every
+    /// save failed with -34018, and the only symptom was a token gone at the next launch.
+    @discardableResult
+    static func set(_ value: String, for account: String) -> OSStatus {
         // Delete-then-add rather than SecItemUpdate: fewer branches, and the attributes are
         // rewritten every time so an item saved by an older build cannot keep a stale
         // accessibility class.
         remove(account)
-        guard !value.isEmpty, let data = value.data(using: .utf8) else { return }
+        guard !value.isEmpty else { return errSecSuccess }
+        guard let data = value.data(using: .utf8) else { return errSecParam }
         var query = identity(account)
         query[kSecValueData as String] = data
         query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(query as CFDictionary, nil)
+        return SecItemAdd(query as CFDictionary, nil)
     }
 
     /// What a read found. "Nothing saved" and "could not look" are different answers: the app treats

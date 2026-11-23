@@ -103,6 +103,32 @@
   grid-template-columns: 1fr 1fr;
 }
 
+/* Full width, under the pinned items: as a grid cell it got lost among what it had just opened. */
+.moreToggle {
+  align-items: center;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  display: flex;
+  font-size: 0.72rem;
+  margin-top: 4px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.moreToggle:hover,
+.moreToggle[aria-expanded="true"] {
+  color: var(--text);
+}
+
+.overflow {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+  padding: 4px;
+}
+
 .navToggle {
   align-items: center;
   background: none;

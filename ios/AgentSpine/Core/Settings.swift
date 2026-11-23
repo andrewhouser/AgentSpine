@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Security
 
 /// Where the server is, and the token that opens it.
 ///
@@ -30,9 +31,13 @@ final class Settings {
             // empty, and writing "" would delete the real token.
             guard token != oldValue, !restoringToken else { return }
             tokenUnreadable = false
-            Keychain.set(token, for: Key.token)
+            let status = Keychain.set(token, for: Key.token)
+            tokenSaveError = status == errSecSuccess ? nil : status
         }
     }
+
+    /// The keychain refused the last save, so the token works now but will be gone next launch.
+    private(set) var tokenSaveError: OSStatus?
 
     /// The keychain could not be read, so whether a token exists is unknown. The token field is
     /// empty, but this is not a sign-out and must not erase the offline copy.
