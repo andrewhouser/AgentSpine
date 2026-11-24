@@ -20,6 +20,7 @@ import {
   LLM_TIMEOUT_OVERHEAD_MS,
 } from "./config.ts";
 import { isStopRequested, StoppedError, stopSignal } from "./stop.ts";
+import { loopingReply } from "./reply-loop.ts";
 import { record as recordTiming } from "./timing.ts";
 
 /**
@@ -254,7 +255,16 @@ export interface ChatReply {
    * do JSON" rather than "the model ran out of room".
    */
   truncated: boolean;
+  /**
+   * The reply was repeating one block of lines and was stopped (src/reply-loop.ts). Its own
+   * flag rather than `truncated`: that one means "write less", and a loop written shorter is
+   * still a loop.
+   */
+  looped: boolean;
 }
+
+/** Our own finish reason for a stream we hung up on because it was looping. */
+const FINISH_LOOPED = "looped";
 
 /** The parts of a completion `chatReply` reads, whichever way it arrived. */
 interface Completion {
@@ -274,6 +284,8 @@ const readEventStream = async (res: Response, report: (text: string) => void): P
   let usage: Completion["usage"] = null;
 
   const line = (raw: string): boolean => {
+    // Hung up on already; whatever else arrived in the same read is more of the loop.
+    if (finishReason === FINISH_LOOPED) return true;
     if (!raw.startsWith("data:")) return false;
     const data = raw.slice(5).trim();
     if (data === "[DONE]") return true;
@@ -286,6 +298,11 @@ const readEventStream = async (res: Response, report: (text: string) => void): P
     if (typeof choice?.delta?.content === "string" && choice.delta.content) {
       text += choice.delta.content;
       report(text);
+      // Asked once per finished line, not per token: nothing can change in between.
+      if (choice.delta.content.includes("\n") && loopingReply(text)) {
+        finishReason = FINISH_LOOPED;
+        return true;
+      }
     }
     return false;
   };
@@ -443,7 +460,11 @@ export const chatReply = async (
       }
       throw new LLMError("unexpected response shape");
     }
-    return { text: stripControlTokens(text), truncated: res.choices?.[0]?.finish_reason === "length" };
+    const finish = res.choices?.[0]?.finish_reason;
+    // The stream reader hangs up on a loop as it happens. A reply that was not streamed has
+    // already cost its full length, but is still named for what it is.
+    const looped = finish === FINISH_LOOPED || loopingReply(`${text}\n`);
+    return { looped, text: stripControlTokens(text), truncated: !looped && finish === "length" };
   } catch (err) {
     // A failed call is time the user waited too, so it is recorded rather than dropped —
     // but only when the request itself failed. The two throws above have already timed

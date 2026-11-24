@@ -179,6 +179,26 @@ check("cut-off prose says so", /cut off/.test(readReply("Part of an answer", tru
 check("empty is not an answer", readReply("  ", false, true), null);
 check("unattended runs stay strict", readReply("All done.", false, false), null);
 
+/**
+ * Observed 2026-11-24: a chat turn whose whole reply was tool calls written as bare text, the
+ * last one repeated to the 4,096-token cap. LP1 read it as prose, so 13,286 characters of
+ * `web_search` / `query=…` were shown as the answer after 3m56s, with no tool run.
+ */
+console.log("\nTOOL CALLS WRITTEN AS TEXT ARE A FAILED ATTEMPT, NOT AN ANSWER");
+const textCalls = "memory_save\ntext=The user's sister is Mira Okafor.\nkind=personal\nweb_search\nquery=best tech gifts\nrecency=month";
+check("a text-form tool call is not an answer", readReply(textCalls, false, true), null);
+check("nor when it was cut off", readReply(textCalls, true, true), null);
+check("nor after a sentence of preamble", readReply(`Let me check.\n${textCalls}`, false, true), null);
+check("a looped reply is not an answer", readReply("The same line again and again.\n".repeat(6), false, true, true), null);
+check("a looped reply is not trusted for its JSON either", readReply('{"action":"final","reply":"x"}', false, true, true), null);
+check("prose naming a tool is still prose", readReply("I used web_search to find these.\nPrice=low is what to look for.", false, true)?.action, "final");
+check("a tool name alone on a line, then prose, is prose", readReply("The tool is called:\nweb_search\nIt searches the web.", false, true)?.action, "final");
+check("the re-ask names the mistake", /tool calls as plain text or repeated itself/.test(parseFailureNudge(false, true, true)), true);
+check("the re-ask shows the JSON form", parseFailureNudge(false, true, true).includes('{"action":"tool","tool":"<name>","args":{...}}'), true);
+check("the re-ask wins over the cut-off wording", /cut off at the length limit/.test(parseFailureNudge(true, true, true)), false);
+check("chat may still answer directly", /answer the user directly/.test(parseFailureNudge(false, true, true)), true);
+check("unattended is not offered prose", /answer the user directly/.test(parseFailureNudge(false, false, true)), false);
+
 console.log("\nSHARED — neither mode loses what both need");
 for (const [name, p] of [["chat", chat], ["job", job]]) {
   check(`${name}: knows the time`, /Current local time:/.test(p), true);

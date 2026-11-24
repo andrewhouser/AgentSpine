@@ -342,12 +342,13 @@ export interface AgentOpts {
 /** One tier up, for the retry after a malformed reply. `deep` has nowhere further to go. */
 const escalate = (tier: Tier): Tier => (tier === "fast" ? "standard" : "deep");
 
-const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, truncated: boolean) => any) => {
+const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, truncated: boolean, looped: boolean) => any) => {
   // The cap is explicit because the server's default is not "none" — see AGENT_STEP_MAX_TOKENS.
   const result = await route(messages, { maxTokens: AGENT_STEP_MAX_TOKENS, ...opts });
   return {
     actualTier: result.tier,
-    parsed: read(result.text, result.truncated),
+    looped: result.looped,
+    parsed: read(result.text, result.truncated, result.looped),
     text: result.text,
     truncated: result.truncated,
     via: result.via,
@@ -359,8 +360,15 @@ const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, tr
  * from a malformed one and needs a different instruction: "reply with valid JSON" to a model
  * that WROTE valid JSON, just too much of it, gets the same over-long reply back.
  */
-const parseFailureNudge = (truncated: boolean, conversational: boolean): string =>
-  truncated
+const parseFailureNudge = (truncated: boolean, conversational: boolean, astray = false): string =>
+  astray
+    ? "That reply could not be used: it " +
+      "wrote tool calls as plain text or repeated itself, so nothing ran. A tool only runs from " +
+      'one JSON object: {"action":"tool","tool":"<name>","args":{...}}. Reply with exactly one ' +
+      "such object for the single next call you need, and nothing else — you will see its result " +
+      "before choosing the next." +
+      (conversational ? " If you need no tool, answer the user directly instead." : "")
+    : truncated
     ? "Your reply was cut off at the length limit before the JSON object closed, so none of it " +
       "could be used. Reply again with one complete JSON object, and keep it shorter — " +
       (conversational
@@ -493,6 +501,23 @@ const safeJson = (text: string): any | null => {
   }
 };
 
+/**
+ * A tool call written as bare text: a line that is only a tool's name, then `key=value`.
+ *
+ * Observed 2026-11-24 (see src/reply-loop.ts): the reply opened `memory_save` / `text=…` /
+ * `kind=personal` / `memory_recall` / `query=…`. LP1 below reads prose as the answer, so that
+ * was shown to the user as one and no tool ran. It is a failed protocol attempt, the same as a
+ * broken JSON object. Not run from this form on purpose: the first call there was a write, and
+ * a write should not start from a guess at what the arguments were.
+ */
+const textToolCall = (body: string, tools: Record<string, Tool>): boolean => {
+  const lines = body.split("\n").map((l) => l.trim());
+  return lines.some((line, i) => Object.hasOwn(tools, line) && /^[a-z_][a-z0-9_]*\s*=/i.test(lines[i + 1] ?? ""));
+};
+
+/** How much of a looped reply is kept in the transcript: enough to show the mistake once. */
+const LOOPED_ECHO_CHARS = 600;
+
 const CUT_OFF_NOTE = "\n\n_This reply reached the length limit and was cut off._";
 
 /**
@@ -504,12 +529,22 @@ const CUT_OFF_NOTE = "\n\n_This reply reached the length limit and was cut off._
  * attempt rather than an answer. Unattended runs keep the strict format: nobody is there to
  * notice a run that stopped early because it wrote a sentence.
  */
-const readReply = (text: string, truncated: boolean, conversational: boolean, tools: Record<string, Tool>): any => {
+const readReply = (
+  text: string,
+  truncated: boolean,
+  conversational: boolean,
+  tools: Record<string, Tool>,
+  looped = false,
+): any => {
+  // A reply stopped for looping was cut mid-thought wherever it was, so none of it is trusted,
+  // not even a JSON object that happens to sit inside it.
+  if (looped) return null;
   const parsed = safeJson(text);
   if (!conversational) return parsed;
   const action = parsed?.action;
   if (action === "final" || action === "tool" || (typeof action === "string" && tools[action])) return parsed;
   const body = text.trim();
+  if (textToolCall(body, tools)) return null;
   if (!body || /^```(?:json)?\s*\{\s*"action"/.test(body)) return parsed;
   // Asked to "show a JSON object", the model opens with one and explains it, which is an answer.
   // Anything shaped like the protocol, or that does not parse, is still a failed attempt.
@@ -616,7 +651,8 @@ const runAgentLoop = async (
 
   /** Steps in a row whose reply could not be parsed, even after the tier-up re-ask. */
   let parseFailures = 0;
-  const read = (text: string, truncated: boolean): any => readReply(text, truncated, conversational, tools);
+  const read = (text: string, truncated: boolean, looped: boolean): any =>
+    readReply(text, truncated, conversational, tools, looped);
   // Only a chat turn has someone reading it as it is written (see AgentOpts.conversational).
   const answer = conversational ? answerPublisher((text) => publish(runId, { text, type: "answer" })) : null;
   const streaming = answer ? { onDelta: answer.update } : {};
@@ -627,7 +663,7 @@ const runAgentLoop = async (
     throwIfStopped(rootId);
     publish(runId, { step: step + 1, type: "step_start" });
 
-    let { text, parsed, actualTier, via, truncated } = await parseOr(messages, {
+    let { text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
       purpose: "step",
       runId,
       step: step + 1,
@@ -643,11 +679,15 @@ const runAgentLoop = async (
     // Not for a truncated one, though. That model did not fumble the protocol, it ran out
     // of room, and resending the identical prompt just buys the identical cut-off reply —
     // the nudge below, which asks for a shorter one, is what actually changes the outcome.
-    if (!parsed && !truncated) {
+    //
+    // Nor for one that went astray (looped, or wrote its tool calls as text): at this
+    // temperature the same prompt walks into the same loop, and the nudge names the mistake.
+    const astray = (): boolean => looped || textToolCall(text.trim(), tools);
+    if (!parsed && !truncated && !astray()) {
       // Attributed as its own purpose, not folded into the step: a model that fumbles the
       // JSON protocol costs a whole extra round-trip, and the point of timing is to find
       // out how often that is actually happening rather than to assume.
-      ({ text, parsed, actualTier, via, truncated } = await parseOr(messages, {
+      ({ text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
         purpose: "step-reask",
         runId,
         step: step + 1,
@@ -666,7 +706,10 @@ const runAgentLoop = async (
       publish(runId, { reason: "fallback", tier: actualTier, type: "tier", via });
       tierCorrected = true;
     }
-    messages.push({ role: "assistant", content: text });
+    // A looped reply goes back in short. The model has to see what it did for the nudge to
+    // make sense, but a non-streamed loop arrives whole (13,286 characters, observed), and
+    // that much repetition in context is an invitation to continue it.
+    messages.push({ role: "assistant", content: looped ? text.slice(0, LOOPED_ECHO_CHARS) : text });
 
     if (!parsed) {
       /**
@@ -679,12 +722,14 @@ const runAgentLoop = async (
       if (parseFailures >= MAX_PARSE_FAILURES) {
         return concludeStuck(
           step + 1,
-          truncated
+          astray()
+            ? "Kept repeating itself instead of answering."
+            : truncated
             ? "Kept running out of room before finishing a reply."
             : "Kept replying in a form that could not be read.",
         );
       }
-      messages.push({ role: "user", content: parseFailureNudge(truncated, conversational) });
+      messages.push({ role: "user", content: parseFailureNudge(truncated, conversational, astray()) });
       continue;
     }
     parseFailures = 0;
@@ -870,7 +915,8 @@ export const __test = {
   finalText,
   nextRepeat,
   parseFailureNudge,
-  readReply: (text: string, truncated: boolean, conversational: boolean) => readReply(text, truncated, conversational, registry),
+  readReply: (text: string, truncated: boolean, conversational: boolean, looped = false) =>
+    readReply(text, truncated, conversational, registry, looped),
   refusedNotifyText,
   REPEAT_LIMIT,
   settingTools,

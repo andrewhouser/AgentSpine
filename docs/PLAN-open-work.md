@@ -824,6 +824,14 @@ is built. Every measurement named below needs the model host, so every item is *
   snapshots, so a reconnect cannot duplicate text and a retry or tool call can clear it. Checked: the real loop on
   the model host with no tools (a 9.2s answer showed text at 3.3s, no tool JSON shown), and a scripted stream on web
   and the iPhone simulator (preview, retraction, growing answer).
+  **Text-form tool calls and looping replies rejected (2026-11-24).** A live chat turn (13,924 prompt tokens,
+  Qwen3.6-35B) wrote its tool calls as bare text (`web_search` / `query=...`), repeated one to the 4,096-token
+  cap, and the prose rule above showed all 13,286 characters as the answer after 3m56s with no tool run.
+  `readReply` now treats a tool name on its own line followed by `key=value` as a failed attempt, and
+  `src/reply-loop.ts` stops a streamed reply once one block of lines has repeated four times. Both get a re-ask
+  that shows the JSON tool form, not the "keep it shorter" one. Tested with a scripted stream only. Not checked:
+  that the re-ask gets a real tool call out of the live model, and that `mlx_lm.server` stops generating when the
+  stream is hung up on.
   **Live on the deployed dashboard (2026-11-23, `7ccac76`, web, local model).** A 500-word answer with 13,887
   prompt tokens showed its first text 56s after sending and then grew steadily; a second one showed text at 37s and
   finished at 65s. No tool JSON appeared. A weather request ran its tool, showed the card and answered. Stop ended
