@@ -11,8 +11,12 @@
  * sees whole lines: a loop with no newline in it still runs to the cap.
  */
 
-/** Consecutive identical blocks before it counts. Three can be a list; four of 24+ chars is a loop. */
-export const LOOP_REPEATS = 4;
+/**
+ * Consecutive identical blocks before it counts. Six, because "write this line five times" and
+ * a table of identical rows are honest replies, and the wait for the extra repeats is small:
+ * the observed three-line block is about 25 tokens, so six of them is roughly five seconds.
+ */
+export const LOOP_REPEATS = 6;
 /** The longest repeating block looked for, in lines. The observed one was three. */
 export const LOOP_MAX_BLOCK_LINES = 8;
 /** Shorter blocks repeat honestly: closing braces, table rules, "ha ha ha". */

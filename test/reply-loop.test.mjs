@@ -27,6 +27,8 @@ check("empty", loopingReply(""), false);
 check("a list with a shared prefix", loopingReply("- Price: around 40 dollars, on sale\n- Price: around 60 dollars, on sale\n- Price: around 80 dollars, on sale\n- Price: around 90 dollars, on sale\n- Price: around 99 dollars, on sale\n"), false);
 check("short repeated lines (closing braces)", loopingReply("{\n".repeat(6) + "  }\n".repeat(6)), false);
 check("a table rule repeated", loopingReply("| a | b |\n|---|---|\n".repeat(2) + "---\n---\n---\n---\n"), false);
+check("a line asked for five times", loopingReply("I will not leave the oven on overnight.\n".repeat(5)), false);
+check("five identical table rows", loopingReply("| Item | Price |\n|---|---|\n" + "| Smart speaker | 49 dollars |\n".repeat(5)), false);
 check("a loop that ended and moved on", loopingReply(call.repeat(LOOP_REPEATS) + "Here are five ideas worth a look this week.\n"), false);
 
 if (failed) {

@@ -828,10 +828,12 @@ is built. Every measurement named below needs the model host, so every item is *
   Qwen3.6-35B) wrote its tool calls as bare text (`web_search` / `query=...`), repeated one to the 4,096-token
   cap, and the prose rule above showed all 13,286 characters as the answer after 3m56s with no tool run.
   `readReply` now treats a tool name on its own line followed by `key=value` as a failed attempt, and
-  `src/reply-loop.ts` stops a streamed reply once one block of lines has repeated four times. Both get a re-ask
-  that shows the JSON tool form, not the "keep it shorter" one. Tested with a scripted stream only. Not checked:
-  that the re-ask gets a real tool call out of the live model, and that `mlx_lm.server` stops generating when the
-  stream is hung up on.
+  `src/reply-loop.ts` stops a streamed reply once one block of lines has repeated six times. Both get a re-ask
+  that shows the JSON tool form, not the "keep it shorter" one. Checked on the model host: a 5-token request
+  right after hanging up on a 3,000-token stream took 2.2s against a 2.2s baseline, so the hang-up frees the
+  server; and with the real chat system prompt, the text-form reply and the re-ask, 4 of 4 samples returned a
+  JSON tool call in 4-7s. Not reproduced: the same prompt without the live envelope gave a correct tool call 3 of
+  3 times, so what tipped the live turn into text form is unknown. Not re-run end to end on the dashboard.
   **Live on the deployed dashboard (2026-11-23, `7ccac76`, web, local model).** A 500-word answer with 13,887
   prompt tokens showed its first text 56s after sending and then grew steadily; a second one showed text at 37s and
   finished at 65s. No tool JSON appeared. A weather request ran its tool, showed the card and answered. Stop ended
