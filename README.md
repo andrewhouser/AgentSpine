@@ -23,7 +23,7 @@ Neither gate is a prompt the model could be talked out of — both are code.
 
 - **Node ≥ 24** (Node 26 recommended). Types are stripped at runtime, so there is **no
   build step** — `node src/*.ts` just runs. Uses the built-in `node:sqlite`.
-- Your **MLX-LM server** running (set `LOCAL_LLM_URL` to it, e.g. `http://192.168.1.50:8080/v1`).
+- Your **MLX-LM server** running (default `http://127.0.0.1:8080/v1`; set `LOCAL_LLM_URL` in `.env` for another machine, e.g. `http://192.168.1.50:8080/v1`).
 
 ## Setup
 

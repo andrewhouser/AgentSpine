@@ -24,11 +24,11 @@ console.log("\nwhich addresses count as public\n");
 const pub = [
   ["8.8.8.8", true], ["1.1.1.1", true], ["93.184.216.34", true], ["172.15.0.1", true], ["172.32.0.1", true], ["192.169.0.1", true], ["100.63.0.1", true], ["100.128.0.1", true],
   ["2606:4700:4700::1111", true], ["2001:4860:4860::8888", true],
-  ["127.0.0.1", false], ["127.5.5.5", false], ["10.0.0.1", false], ["172.16.0.1", false], ["172.31.255.255", false], ["192.168.0.150", false],
+  ["127.0.0.1", false], ["127.5.5.5", false], ["10.0.0.1", false], ["172.16.0.1", false], ["172.31.255.255", false], ["192.168.1.50", false],
   ["169.254.169.254", false], ["100.64.0.1", false], ["100.127.255.255", false], ["0.0.0.0", false], ["224.0.0.1", false], ["255.255.255.255", false],
   ["192.0.2.1", false], ["198.51.100.1", false], ["203.0.113.1", false], ["198.18.0.1", false],
   ["::1", false], ["::", false], ["fe80::1", false], ["fc00::1", false], ["fd12:3456::1", false], ["ff02::1", false],
-  ["::ffff:127.0.0.1", false], ["::ffff:192.168.0.150", false], ["::ffff:8.8.8.8", true], ["64:ff9b::7f00:1", false], ["2001:db8::1", false],
+  ["::ffff:127.0.0.1", false], ["::ffff:192.168.1.50", false], ["::ffff:8.8.8.8", true], ["64:ff9b::7f00:1", false], ["2001:db8::1", false],
   ["not an ip", false], ["", false], ["999.1.1.1", false], ["1.2.3", false],
 ];
 for (const [ip, want] of pub) check(`${ip || "(empty)"} is ${want ? "public" : "refused"}`, isPublicAddress(ip), want);
@@ -36,7 +36,7 @@ for (const [ip, want] of pub) check(`${ip || "(empty)"} is ${want ? "public" : "
 console.log("\nwhat it refuses outright\n");
 const refused = async (url, opts) => { const r = await safeGet(url, opts); return r.ok ? "FETCHED" : r.reason; };
 check("loopback by default", (await refused("http://127.0.0.1:1/")).includes("not a public address"), true);
-check("the model host's LAN address", (await refused("http://192.168.0.150:8080/v1/models")).includes("not a public address"), true);
+check("the model host's LAN address", (await refused("http://192.168.1.50:8080/v1/models")).includes("not a public address"), true);
 check("cloud metadata", (await refused("http://169.254.169.254/latest/meta-data/")).includes("not a public address"), true);
 check("an IPv6 loopback literal", (await refused("http://[::1]:8787/")).includes("not a public address"), true);
 check("a mapped IPv6 literal", (await refused("http://[::ffff:192.168.0.1]/")).includes("not a public address"), true);

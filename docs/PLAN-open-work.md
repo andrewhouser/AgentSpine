@@ -1024,8 +1024,8 @@ SQLite file per user rather than a `user_id` on every table).
   example LAN address `192.168.1.50`. Not rewritten, on purpose: this file and `docs/archive/` are your
   working history, so leave both out of the public repo. CLAUDE.md keeps its Machines section, marked
   as the author's setup, because Claude needs it when working on these machines.
-- **Model host default.** `LOCAL_BASE_URL` in `src/config.ts` defaults to your LAN address. Make sure
-  the Mini's `.env` sets `LOCAL_LLM_URL`, then change the default to `http://127.0.0.1:8080/v1`.
+- **Model host default (done 2026-11-24).** `LOCAL_BASE_URL` defaults to `http://127.0.0.1:8080/v1`;
+  the Mini's `.env` sets `LOCAL_LLM_URL` (checked by you that day).
 - **iPhone and Mac apps.** Bundle IDs (`com.houserphotography.*`) are in `ios/Supporting/Local.xcconfig`,
   the Mac target in `project.pbxproj` and the Mac entitlements. Move them all into a gitignored
   `Local.xcconfig` with a committed example, and make APNs use the configured topic, not one global one.

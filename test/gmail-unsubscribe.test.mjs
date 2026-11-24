@@ -88,7 +88,7 @@ console.log("\nTHE POST CANNOT BE AIMED AT ANYTHING PRIVATE");
 const refused = async (u) => (await net.postOneClickUnsubscribe(u)).ok;
 check("http is refused", await refused("http://e.example/u"), false);
 check("a loopback address is refused", await refused("https://127.0.0.1/u"), false);
-check("a LAN address is refused", await refused("https://192.168.0.150:8080/u"), false);
+check("a LAN address is refused", await refused("https://192.168.1.50:8080/u"), false);
 check("credentials in the URL are refused", await refused("https://user:pw@e.example/u"), false);
 check("not a URL is refused", await refused("nonsense"), false);
 

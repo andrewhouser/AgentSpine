@@ -16,11 +16,10 @@ try {
 const env = process.env;
 
 // --- Models ---
-// The model host is 192.168.0.150, a STATIC address as of 2026-09-08. It got there via
-// .145 -> .134 -> .150, each move silently turning every local call into a timeout, which
-// is why it is pinned now. A timeout here should mean the server is down, not that the
-// address moved again.
-export const LOCAL_BASE_URL = env.LOCAL_LLM_URL ?? "http://192.168.0.150:8080/v1";
+// Set LOCAL_LLM_URL in .env to your model host. Give that host a static LAN address: a
+// DHCP lease that moved it once turned every local call into a silent timeout, three times
+// over. The default is this machine, which is right when the model runs on the same box.
+export const LOCAL_BASE_URL = env.LOCAL_LLM_URL ?? "http://127.0.0.1:8080/v1";
 export const LOCAL_MODEL = env.LOCAL_MODEL ?? "local";
 
 // The `fast` tier: a SECOND, separately-pinned model server holding a small model

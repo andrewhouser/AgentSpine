@@ -3,7 +3,7 @@
  *
  * Heads-up research follows URLs it found on the open web: search results, then the product
  * pages and image links inside them. Those are attacker-controlled strings. A page that says
- * its image lives at http://192.168.0.150:8080/... or http://127.0.0.1:8787/api/... is trying to
+ * its image lives at http://192.168.1.50:8080/... or http://127.0.0.1:8787/api/... is trying to
  * make this machine, which sits next to the model host and the dashboard, fetch something on your
  * LAN on its behalf (SSRF). So every connection here is checked, not just the first URL:
  *
