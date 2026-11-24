@@ -12,8 +12,8 @@
  * Irreversible actions queue for confirmation, except where the user's own message asked
  * for exactly that action and policy.userDirected lists it — see `directed` below and the
  * broker's Gate 2. That is how "email Jeff that I'm running late" just happens, while the
- * same email proposed by a scheduled job, or addressed to someone the user never named,
- * still waits for a yes.
+ * same email addressed to someone the user never named still waits for a yes. A scheduled
+ * job is held to the same rule against its own task text: see `asksWhenUnattended` (F9).
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -200,6 +200,25 @@ const directed = (args: Args, run: RunContext): null | { action: string; reason:
   return reason ? { action, reason } : null;
 };
 
+/**
+ * F9 (2026-11-24). A schedule's pre-approval covered every send: with Mail or Messages on
+ * the allowlist, a scheduled run could mail any address unasked, and a job that has just
+ * read a hostile page or email is the one that would. That is a way out for whatever the
+ * run has read. So an unattended send asks unless the job's own text, written by the user
+ * when they set it up, tells it to send to that recipient: the same reading `directed`
+ * gives a chat message, for the same reason. An address the task mentions for another
+ * purpose ("archive mail from billing@…") does not count.
+ *
+ * It reads `approvedTask`, never `goal`, because a subagent's goal is the model's brief.
+ * Known cost: "text me the brief" names nobody, so it asks. Name the number or the contact
+ * in the schedule, or use `notify`, which is how a job is meant to reach its owner.
+ * Notes, reminders and events stay pre-approved: they do not leave the machine.
+ */
+const asksWhenUnattended = (args: Args, run?: RunContext): boolean => {
+  if (args?.action !== "send_mail" && args?.action !== "send_message") return false;
+  return directedBy(args.action, args, run?.approvedTask ?? "") === null;
+};
+
 const runTool = async (args: Args): Promise<string> => {
   switch (args.action) {
     case "activate":
@@ -342,6 +361,7 @@ export const macControl: Tool = {
     '"via"?: "sms"|"imessage", "due"?: string, "list"?: string, "notes"?: string, "text"?: string, "app"?: "<bundle id, for activate>" }',
   classify,
   checkPolicy,
+  confirmWhenUnattended: asksWhenUnattended,
   directed,
   run: (args: Args) => runTool(args),
 };

@@ -555,6 +555,10 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         // A schedule or the heartbeat was approved when the user set it up; asking again at
         // 3am would only stall it. See RunContext.preApproved.
         preApproved: harness.preApproved,
+        // What that approval was of: the schedule's (or the heartbeat's) own text, which the
+        // user wrote. A tool that must know whether the user asked for something in particular,
+        // such as a send to a named person, reads this and nothing the model wrote (F9).
+        approvedTask: harness.preApproved ? task : undefined,
         context,
         history,
         // Only a thread that actually holds an image is shown look_at_image — see

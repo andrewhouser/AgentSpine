@@ -173,6 +173,9 @@ export const subagent: Tool = {
         maxSteps: def.maxSteps,
         // A helper inside a scheduled run is part of the job the user already approved.
         preApproved: ctx.run?.preApproved ?? false,
+        // The root job's text, not `task`: the brief above is the model's writing, and a
+        // recipient named only there has not been approved by anyone.
+        approvedTask: ctx.run?.approvedTask,
         // A helper working inside a project files its work under that project too.
         projectId: ctx.run?.projectId ?? null,
         tier: def.tier,

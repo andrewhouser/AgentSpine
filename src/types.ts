@@ -292,6 +292,13 @@ export interface RunContext extends RunFacts {
   /** The user's message for this run, verbatim. */
   goal: string;
   /**
+   * For a `preApproved` run, the text the user approved when they set it up: the schedule's
+   * task or the heartbeat's goal, verbatim. A subagent gets its root's, unchanged, because its
+   * own `goal` is a brief the model wrote. Absent for every other run, and a tool that needs
+   * it treats absent as "nothing was approved" (F9, 2026-11-24).
+   */
+  approvedTask?: string;
+  /**
    * The project this run belongs to — the conversation's project, or one a schedule named.
    * Tools that create or file things (tasks) default to it, so work done inside a project
    * stays attributed to that project without the model having to know its numeric id.
@@ -353,8 +360,14 @@ export interface Tool {
    * that future unattended runs follow, since a job that reads a hostile page could otherwise
    * schedule itself more jobs. Set it on tools that edit AgentSpine's own standing work, the
    * schedule writes. It doesn't loosen anything: without it, a call is treated as before.
+   *
+   * `true` is every irreversible call; a function decides per call, for a tool where only some
+   * calls must ask. Two tools need it (F8 and F9, 2026-11-24). The browser reads the arguments:
+   * a scheduled job may submit a search form unasked, but not click "Place order". `mac_control`
+   * also reads `run.approvedTask`: a send asks unless the job's own text names the recipient.
+   * The function is plain code, and one that throws counts as "ask".
    */
-  confirmWhenUnattended?: boolean;
+  confirmWhenUnattended?: boolean | ((args: any, run?: RunContext) => boolean);
   /**
    * What this tool returns must never reach the cloud tier: meeting transcripts and
    * summaries, study material drawn from a project's documents. `true` is every call; a

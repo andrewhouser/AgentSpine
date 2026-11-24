@@ -71,6 +71,13 @@ check("the name only in a different sentence", yes("send_mail", jeff, "Sam River
 check("a name that is the trigger, not the recipient", yes("send_mail", jeff, "email me when Sam Rivera replies"), false);
 check("a condition after the recipient is fine", yes("send_mail", jeff, "Email Sam Rivera if the meeting moves"), true);
 check("no mail word at all", yes("send_mail", jeff, "Send Sam Rivera a text"), false);
+// "mail" is a send verb too, so a sender used to read as a recipient.
+check("a sender is not a recipient", yes("send_mail", { to: "billing@example.org" }, "Archive mail from billing@example.org"), false);
+check("'mail sent from X'", yes("send_mail", { to: "billing@example.org" }, "Label any mail sent from billing@example.org as bills"), false);
+check("a named sender", yes("send_mail", jeff, "Summarise the email from Sam Rivera"), false);
+check("from one person, to another", yes("send_mail", jeff, "Forward the email from Jeff to Sam Rivera"), true);
+check("... and not back to the sender", yes("send_mail", { to: "Jeff" }, "Forward the email from Jeff to Sam Rivera"), false);
+check("'from my account to X' still names X", yes("send_mail", { to: "jeff@example.com" }, "Send an email from my work account to jeff@example.com"), true);
 check("a follow-up with no request in it", yes("send_mail", jeff, "yes, send it"), false);
 check("no recipient", yes("send_mail", { to: "" }, "send an email"), false);
 

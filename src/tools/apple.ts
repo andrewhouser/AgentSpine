@@ -432,7 +432,15 @@ export const namesRecipient = (text: string, to: string): boolean => {
  * that sentence read as an instruction to text Jeff.
  */
 const recipientWindow = (sentence: string, end: number): string =>
-  sentence.slice(end, end + 120).split(/\b(when|whenever|if|after|before|once|until|while|because|unless|then)\b/i)[0];
+  sentence
+    .slice(end, end + 120)
+    .split(/\b(when|whenever|if|after|before|once|until|while|because|unless|then)\b/i)[0]
+    // Whoever follows "from" is a sender, not a recipient. "Archive mail from billing@…" read
+    // as an instruction to mail that address, because "mail" is also a send verb (found
+    // 2026-11-24 with F9: an inbox rule naming a sender had approved writing to them). The
+    // stretch is dropped up to the next "to", so "the email from Jeff to Sam Rivera" still
+    // names Sam Rivera.
+    .replace(/\bfrom\b.*?(?=\bto\b|$)/i, " ");
 
 const MAIL_VERB = /\b(send|write|compose|shoot|drop|e-?mail|mail)\b/;
 const MAIL_NOUN = /\b(e-?mails?|mail)\b/i;

@@ -81,6 +81,16 @@ irreversible actions run without asking again. The allowlist, budgets and dry ru
 One exception: a job can't change the standing work itself. `schedule_create`, `_update` and
 `_delete` still queue from a scheduled run, and `recipe_save` is refused there, so a job that
 reads a hostile page can't schedule itself more jobs or write itself new instructions.
+A second exception, for the same reason: a browser click or form submit that reads as buying,
+paying or moving money (buy, order, checkout, pay, transfer, withdraw, subscribe) still asks
+from a scheduled run. A plain submit does not, so a job can still use a search box. The test
+reads the model's own description of the button, so one labelled "Continue" gets past it;
+`BROWSER_MODE=headless` keeps scheduled jobs out of a signed-in Chrome altogether.
+A third: a scheduled job sends mail or a message without asking only to someone its own task
+text tells it to send to ("every Friday, email sam@example.com the numbers"). Any other
+recipient asks, because a job that has read a hostile email could otherwise post what it read
+to anyone. "Text me the brief" names nobody, so name the number or the contact, or have the
+job use `notify`.
 
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the

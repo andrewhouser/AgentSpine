@@ -12,10 +12,11 @@ buying or booking actions and most new proactive behaviour are deprioritized unt
 foundation (they are marked in section 3). Section 9 (harness awareness, added 2026-11-21, its three open questions settled by the proposed defaults) is being built in order, S1 and S2 first (done).
 Sections 1 to 7 are the rest, mostly verification that needs you. Section 10 (added 2026-11-22: Claude Desktop
 parity on local models, self-change and self-learning) is proposed and not yet placed in this order; that is
-its first open decision.
+its first open decision. Section 12 (added 2026-11-24: what Claude Duet does that AgentSpine does not) is
+proposed and not placed either; its own "Sequence and decisions" says what waits on what.
 
-Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9 and 10 are
-new, and 1 to 7 and 4a are as before.
+Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11 and
+12 are new, and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -33,7 +34,33 @@ I checked each finding against the code on 2026-11-21. **F1 to F5 and F7 are fix
 yet. Every reproduction below becomes a test in the same change as its fix, and each new suite is added by hand
 to the `npm test` list in `package.json`.
 
-**What is left in this section:** nothing in code. The "Local only" note and the filing question have not been seen rendered.
+**What is left in this section:** nothing in code. You: read your existing schedules against F9 below, since one that sends to someone its text does not name will now ask. The "Local only" note and the filing question have not been seen rendered.
+
+**F8 (found and fixed 2026-11-24): a scheduled run clicked buy, pay and transfer buttons without asking.** The
+`browser` tool did not set `confirmWhenUnattended`, so the scheduled pre-approval skipped gate 2 for its risky
+clicks and every form submit. That was the documented rule for schedules working as written, but the README
+already named the threat it left open (a job that reads a hostile page) and closed it only for standing work.
+Now `confirmWhenUnattended` may be a function of the arguments, and the browser's queues a click or submit
+that reads as buying, paying or moving money; a plain submit or send stays pre-approved. Suite:
+`test/unattended-asks.test.mjs`. What it does not close (a button labelled "Continue", delete clicks) is in
+section 12 D2.
+
+**F9 (found and fixed 2026-11-24): a scheduled run mailed or messaged anyone without asking.** `mac_control`
+sends took the same path as F8, and the tool's only check was the app allowlist. With Mail or Messages
+allowlisted, a job that had just read a hostile page or email could send what it had read to any address.
+Now an unattended `send_mail` or `send_message` asks unless the job's own task text tells it to send to that
+recipient, read by `directedBy` as a chat message is. The text is carried as `RunContext.approvedTask`, set
+by the runner for schedules and the heartbeat and handed unchanged to subagents, whose own goal is a brief
+the model wrote. Fixed with it: `directedBy` read "archive mail from billing@example.org" as an instruction
+to mail that address, in a chat too, because "mail" is also a send verb; whoever follows "from" is now
+dropped from the recipient window. Suites: `test/unattended-asks.test.mjs` (the rule),
+`test/mac-directed.test.mjs` (the reading of the text), and `test/unattended-handoff.test.mjs`, which starts
+real runs through the runner and reads the text a tool is given in a schedule, its subagent, the heartbeat
+and a chat turn. That last one was checked by breaking the wiring both ways: handing a subagent its own
+brief let a send to an address named only in the brief go out, and the suite failed on it.
+Costs, accepted: "text me the brief" names nobody, so it asks (name the number or contact, or use `notify`);
+a schedule that says only "run pi-brief" asks about every send, because the recipient is in the recipe and
+not in the task.
 
 **F1 to F7: all fixed 2026-11-21, numbers kept so they do not shift.** F6 (filed transcripts outliving the retention window): filing a meeting under a project asks whether the project keeps the full transcript searchable or only the summary, topics and decisions. The choice is stored as `meetings.keep_transcript`; summary-only meetings never put their words in the project index (`meeting-summary:<id>`), so the prune has nothing of theirs to leave behind, and the prune also drops any stray transcript copy of one. A kept transcript is an explicit retention opt-in and every screen says so. A meeting filed before the choice existed keeps its transcript, shown as such. Web, iPhone and Mac ask when you file after the fact, and each can change the choice later. Not yet asked: a meeting recorded or imported with a project already chosen files with the transcript kept, because there is no filing moment to ask at; change it from the meeting afterwards. Moving a meeting now carries its index copy to the new project, un-filing removes it, and delete clears copies from every project (2026-11-23, SPEC §15 phase 1 decision 9). Copies stranded by moves before that fix stay until someone runs `npm run meetings:orphans -- --apply`; the command without the flag only reports. Suite: `test/meeting-filing.test.mjs`. F1 (an overlay opening the browser to any domain): two non-empty allowlists that share nothing now set `browser.denyAll`, which `browser` and `web_read` test before the list. F5 (an overlay raising a budget): caps are compared as the broker applies them, so no tool ends above the base's effective cap. Suite: `test/narrow-policy-holes.test.mjs`. F2 (meeting transcripts reaching
 the cloud): a tool can declare `privateOutput` (`src/types.ts`), and once one has run, the agent loop pins every
@@ -1040,6 +1067,163 @@ SQLite file per user rather than a `user_id` on every table).
   the Mac target in `project.pbxproj` and the Mac entitlements. Move them all into a gitignored
   `Local.xcconfig` with a committed example, and make APNs use the configured topic, not one global one.
 - Committed `services/*/__pycache__/*.pyc` files: delete and gitignore.
+
+---
+
+## 12. What Claude Duet does that AgentSpine does not (added 2026-11-24)
+
+Source: Anthropic's announcement of Claude Duet (`claude.com/resources/articles/claude-duet`, dated
+2026-10-21, read 2026-11-24). Duet is a research-preview consumer app: a proactive assistant that checks your
+connected accounts every few hours, sends a morning brief, works in a cloud VM with its own browser while your
+devices are off, and shows you every send, payment, signature and delete before it happens. The page names no
+API, SDK or setting, so there is nothing to integrate. This section is the list of its behaviours that
+AgentSpine lacks and that fit this project's rules.
+
+**Already here, so not work:** the approval gate (the broker's two gates, approvals in chat and on the phone);
+working while you are away (the scheduler and watchers on the Mini, headless Chrome); telling you when
+something is done or waiting (APNs, ntfy, the confirm watchdog); a morning brief (the "Morning brief" schedule,
+and Heads-up); voice and typing in one thread; memory and recipes. A browser you can watch is
+`BROWSER_MODE=cdp`, which Duet says it cannot do yet.
+
+**Duet does it, and this plan already says no or not yet. Nothing here reopens these:**
+- Sending mail after approval is section 10 CP2 (user-directed send, after N2's live half). Unattended
+  auto-send stays in "Not doing".
+- Buying things (Link, Shop Pay) is section 3 H5 and H6: irreversible tier, queued, only if asked,
+  deprioritized.
+- Signing in to sites with stored logins (1Password) is section 7, "Credential vault and logged-in browsing":
+  parked.
+- A classifier model that approves actions is "Model-judged safety checks" in "Not doing". D2 and D3 below
+  are plain code for that reason.
+
+What I checked in the code on 2026-11-24, and what I did not: the broker has two reversibility values and no
+refusal tier (`src/broker.ts`, gate 2); the MCP client is HTTP with a static bearer token and no OAuth flow
+(`src/mcp/client.ts`); the browser's risky-click pattern is one regex that treats `transfer` and `withdraw`
+the same as `submit` (`src/tools/browser.ts`). Traced the same day: a scheduled run, which skips gate 2 as
+pre-approved, made those clicks without queueing. That was F8 in section 0. Fixing it turned up F9, the same
+path for mail and messages. Both are fixed, and D2 has what they leave open.
+
+### D1. The check-in sweep (Code, then You; blocked on a decision)
+
+What makes Duet feel proactive is one job that looks across everything and says what needs you. Here the
+pieces exist separately: watchers, Heads-up, the inbox cleanup, task reminders, the confirm watchdog. Nothing
+joins them. This is new proactive behaviour, which was deprioritized on 2026-11-21 until section 8 has a
+reliable foundation, so it does not start without a new decision.
+
+Proposed shape, with code owning the numbers:
+- **Code collects, the model only ranks.** One function per source returns items with a stable id: unread
+  mail since the last sweep (headers and snippet only, as now), calendar in the next 24 hours, tasks due or
+  overdue, approvals waiting, watcher results since the last sweep, open Heads-up offers. A `sweep_seen`
+  table means an item is mentioned once, and again only if it changes. The model gets the new items tagged
+  UNTRUSTED and returns an order and a line for each. It cannot add an item, and it calls no tools.
+- **Local only.** Mail and calendar are `privateOutput`, so the run is pinned to the local model. Expect the
+  ranking to be rougher than Duet's on Opus 5.5. Measure it before believing it (below).
+- **Interval in code:** every 4 hours by default, never inside quiet hours, and its pushes count toward the
+  daily cap of six (add it to `COUNTED_SOURCES`). Nothing new means no push, not a push saying so.
+- **It only reads.** Anything it suggests doing is a queued confirmation like any other.
+- **Settings** (web, Mac and iPhone together): each source on or off, and the interval.
+- **Rollout like Heads-up:** a Preview that reads and sends nothing, then log-only for a week, then pushes.
+  The number to watch is how many pushed items you acted on against how many you dismissed, a SQL count.
+- **Tests first:** the once-only rule, quiet hours, the cap, the empty sweep. A mail snippet that reaches a
+  ranking prompt is an injection surface, so add the sweep to N2's fixtures (section 4) before it pushes.
+
+Decide with it: whether the Morning brief becomes the first sweep of the day or stays its own schedule
+(proposed: stays, so nothing built changes), and whether Heads-up keeps its own morning push once its offers
+are a sweep source (proposed: yes until the sweep has a week of numbers).
+
+### D2. A third tier: refused, whoever approves (Code)
+
+Duet will not trade securities or move money between accounts even with your approval. Here every irreversible
+action can be approved, and `policy.autoApprove`, `policy.userDirected`, `policy.trust.chatAutoTools` and the
+scheduled-run pre-approval can each skip the queue.
+
+- **The trace (2026-11-24): it ran unqueued. That was F8, fixed the same day.** `scheduled` in
+  `src/broker.ts` was true for any irreversible call when `run.preApproved` was set and the tool lacked
+  `confirmWhenUnattended`, and `browser` lacked it. `preApproved` is set for run kinds `schedule` (watchers
+  included) and `heartbeat` (`isUnattendedKind`, `src/harness.ts`), and a subagent inherits it
+  (`src/tools/subagent.ts`). Measured by calling `executeCall` on the real `browser` tool with `dryRun` on
+  and a throwaway database, so nothing was clicked or queued. What a scheduled run would do:
+
+  | Call | Before | After the fix | Chat turn (unchanged) |
+  |---|---|---|---|
+  | click "Transfer $500 to external account" | execute | queue | queue |
+  | click "Place order" | execute | queue | queue |
+  | submit `form#pay` | execute | queue | queue |
+  | submit `form#search` | execute | execute | queue |
+  | click "Send message" | execute | execute | queue |
+  | click "Continue" | execute | execute | execute |
+
+- **The fix.** `confirmWhenUnattended` accepts a function of the arguments (a function that throws counts as
+  "ask"). The browser's returns true for a click or submit whose selector, description or text matches the
+  money words: buy, purchase, order, checkout, pay, payment, place order, transfer, withdraw, subscribe. The
+  money list and the rest of the risky words are two lists that the one risky-click regex is built from
+  (`src/tools/browser.ts`). Suite: `test/unattended-asks.test.mjs`. README ("Scheduled jobs are
+  pre-approved") and the run's own harness line say so.
+- **What F8's fix leaves open.**
+  - "Continue", the last row: a button whose label is on neither list is reversible everywhere, in a chat as
+    much as in a schedule. The test reads the model's description of the button, not the page. The
+    `forbidden` tier and `neverDomains` below are the answer to that, not a longer word list.
+  - Delete and remove clicks still run unasked from a schedule. Left out on purpose: you agreed to money and
+    purchases, and I did not check what a scheduled job legitimately deletes. Decide below.
+  - `BROWSER_MODE` defaults to `auto`, which attaches to a debugging Chrome when one is running, and that
+    profile may be signed in. `headless` on the Mini keeps unattended runs in a logged-out profile.
+  - `mac_control` sends were the same gap. That was F9, fixed 2026-11-24 (section 0). Still pre-approved
+    there, on purpose: notes, reminders and calendar events, which do not leave the machine.
+  - Not looked at: the other irreversible tools without `confirmWhenUnattended` (`draft`, `write_file`,
+    `git_write`, `gmail_triage` and the rest). F8 and F9 were found one tool at a time, so a pass over the
+    whole registry, asking of each "what can a steered scheduled run do with this", is worth doing once.
+- Add `forbidden` beside `reversible` and `irreversible`. The broker checks it before gate 2, none of the four
+  skips apply to it, and it is recorded and shown as an ordinary denial with its reason.
+- First members, listed in code: browser clicks and submits whose target reads as moving money or trading
+  (transfer, withdraw, wire, buy or sell shares), split out of the one risky-click regex. Buying goods stays
+  queued (H6).
+- A regex over button text is a heuristic and will miss a bank that labels the button "Continue". Say so in
+  the comment, and consider a `policy.browser.neverDomains` list that you fill with your bank and broker.
+- Tests: one per skip path, each proving the call is still refused.
+
+### D3. A check on text leaving the machine (Code, log-only first)
+
+Duet checks each outgoing message for card numbers and government IDs and refuses them. Here the only filter
+of that kind drops credential-shaped strings before they are stored as memories.
+
+- One function, applied in the broker to the text arguments of tools whose output leaves the machine: `draft`,
+  `mac_control` sends, `notify`, browser typing and submits, `web_search` queries, MCP tool arguments, an
+  Instagram caption. A tool declares which arguments those are, as it declares `privateOutput`.
+- Refuse on: 13 to 19 digits that pass the Luhn check, a US Social Security number pattern, and whatever the
+  memory filter already calls credential-shaped (reuse it, do not write a second one).
+- One number in ten passes Luhn by chance, so order and tracking numbers will trip it. Ship it log-only behind
+  a switch, as the outbox did with `OUTBOX_ENFORCE`, and enforce only when a fortnight's log shows what the
+  false positives are. The denial names what matched.
+- Duet's second tier (health and personal finance go out only when you say so) needs a model to judge, which
+  "Not doing" rules out. Proposed: do not build it. The local pin already keeps that material off the cloud
+  tier, which is the leak that matters here.
+
+### D4. Connectors (You decide; adds to CP1, starts no work)
+
+Duet reaches Slack, QuickBooks, Stripe and thousands more through hosted connectors. The equivalent here is a
+remote MCP server per service, and "MCP connectors beyond `docs/MCP.md`" is in "Not doing", with CP1 proposing
+to reopen it for local stdio servers only. What Duet adds to that decision:
+- Hosted services need OAuth (authorization code with PKCE, refresh tokens kept `0600` outside the repo). The
+  client has a static bearer token today, so this is new code, not configuration.
+- Every remote server is a third party that sees what is sent to it. It needs CP1's per-server
+  `privateOutput`, and Milliman and other workplace material never goes through one.
+
+Proposed: nothing beyond CP1. If you name a service you want, add it as one item, one server at a time.
+
+### Sequence and decisions
+
+Order: the registry pass in D2 first (F8 and F9, which the trace found, are fixed). Then the rest of D2 and
+D3, which are small, sit in the broker and need no decision beyond a yes. D1 waits on the
+proactive-behaviour decision. D4 waits on CP1.
+
+Open decisions for you:
+- Should delete and remove clicks in the browser also ask from a scheduled run? Proposed: yes, unless a
+  schedule of yours relies on one.
+- `BROWSER_MODE=headless` on the Mini. Proposed: yes, unless a scheduled job needs the signed-in profile.
+- Lift the 2026-11-21 hold on new proactive behaviour for D1. Proposed: not until section 8's K items you are
+  relying on are in daily use, since the sweep ranks better with that knowledge behind it.
+- D2 and D3 now, alongside section 8. Proposed: yes; both tighten what already runs unattended.
+- `policy.browser.neverDomains` in D2. Proposed: yes, empty by default.
+- A named service for D4. Proposed: none until you want one.
 
 ---
 

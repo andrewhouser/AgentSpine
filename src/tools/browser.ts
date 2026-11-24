@@ -16,6 +16,8 @@
  *   click                 -> reversible UNLESS the target looks like buy/submit/send/
  *                            delete/pay/confirm — then irreversible (queued)
  *   submit                -> always irreversible (queued)
+ * A scheduled run is pre-approved for those, except a click or submit that reads as buying,
+ * paying or moving money, which still asks (F8, see `asksWhenUnattended`).
  */
 import { chromium } from "playwright-core";
 import type { Browser, Page } from "playwright-core";
@@ -102,8 +104,33 @@ interface Args {
   description?: string;
 }
 
-const DANGER =
-  /\b(buy|purchase|order|checkout|pay|payment|place\s?order|submit|send|delete|remove|confirm|transfer|withdraw|subscribe|sign\s?up)\b/i;
+// The words that make a click irreversible, in two lists because they are not equally bad
+// unattended. MONEY words queue even from a scheduled run (see `asksWhenUnattended`); the
+// others are what a scheduled job's ordinary work looks like (a search box is a submit), so
+// its pre-approval covers them. DANGER is built from both, so a word is never in one test
+// and missing from the other.
+const MONEY_WORDS = ["buy", "purchase", "order", "checkout", "pay", "payment", "place\\s?order", "transfer", "withdraw", "subscribe"];
+const OTHER_RISKY_WORDS = ["submit", "send", "delete", "remove", "confirm", "sign\\s?up"];
+const anyWord = (words: string[]): RegExp => new RegExp(`\\b(${words.join("|")})\\b`, "i");
+const DANGER = anyWord([...MONEY_WORDS, ...OTHER_RISKY_WORDS]);
+const MONEY = anyWord(MONEY_WORDS);
+
+/** Everything the model said about where a click or submit lands: the text both word tests read. */
+const whereOf = (args: Args): string => `${args?.selector ?? ""} ${args?.description ?? ""} ${args?.text ?? ""}`;
+
+/**
+ * F8 (2026-11-24). A schedule's pre-approval let its run click "Place order" or "Transfer"
+ * unasked. In headless mode the profile is logged out and nothing completes, but `auto`
+ * attaches to a debugging Chrome that may be signed in, and a job that reads a page it does
+ * not control can be steered. So a click or submit that reads as buying, paying or moving
+ * money asks even when nobody is watching.
+ *
+ * This is a test over the model's own description of the button, like DANGER: a button
+ * labelled "Continue" passes both, in a chat as much as in a schedule. It narrows the gap,
+ * and the refusal tier in PLAN-open-work section 12 D2 is what would close it.
+ */
+const asksWhenUnattended = (args: Args): boolean =>
+  (args?.action === "click" || args?.action === "submit") && MONEY.test(whereOf(args));
 
 const hostOf = (url: string): string => {
   try {
@@ -114,7 +141,7 @@ const hostOf = (url: string): string => {
 };
 
 const classify = (args: Args): ClassifiedAction => {
-  const where = `${args?.selector ?? ""} ${args?.description ?? ""} ${args?.text ?? ""}`;
+  const where = whereOf(args);
   switch (args?.action) {
     case "navigate":
       return { reversibility: "reversible", target: hostOf(args.url ?? ""), summary: `Open ${args.url}` };
@@ -191,5 +218,6 @@ export const browserControl: Tool = {
   classify,
   available,
   checkPolicy,
+  confirmWhenUnattended: asksWhenUnattended,
   run: (args: Args, ctx) => run(args, ctx),
 };

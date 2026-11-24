@@ -277,6 +277,8 @@ export interface AgentOpts {
   conversational?: boolean;
   /** A scheduled run, approved when it was set up — see RunContext.preApproved. */
   preApproved?: boolean;
+  /** The text the user approved with it, passed down unchanged — see RunContext.approvedTask. */
+  approvedTask?: string;
   /**
    * Standing context injected as system messages ahead of the goal — the user profile
    * and auto-recalled memories. Assembled by the caller (`runner.ts`) so every run kind
@@ -812,6 +814,8 @@ const runAgentLoop = async (
         conversational,
         goal,
         preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
+        // Not `goal`: in a subagent that is the caller's brief, which the model wrote.
+        approvedTask: opts.approvedTask,
         projectId: opts.projectId ?? null,
       });
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);

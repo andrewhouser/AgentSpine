@@ -172,8 +172,21 @@ export const executeCall = async (
   // the run would stall exactly the jobs meant to need no one. Only the reversibility gate
   // is skipped — the allowlist and budgets above, and dry run below, still hold.
   // Except for tools that write the standing work itself (Tool.confirmWhenUnattended): a
-  // scheduled run may do its job without asking, but not schedule more jobs.
-  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved && !tool.confirmWhenUnattended;
+  // scheduled run may do its job without asking, but not schedule more jobs. The flag may be
+  // a function of the call, for a tool where only some calls must ask (the browser's money
+  // clicks, F8; a send to someone the job's text never named, F9). It is only consulted for
+  // a call that would otherwise skip the queue, and a function that throws means "ask": a
+  // bug there must not become a way through.
+  const asksWhenUnattended = (): boolean => {
+    const flag = tool.confirmWhenUnattended;
+    if (typeof flag !== "function") return !!flag;
+    try {
+      return flag(call.args, run) !== false;
+    } catch {
+      return true;
+    }
+  };
+  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved && !asksWhenUnattended();
   const mustConfirm =
     classified.reversibility === "irreversible" &&
     policy.autoExecute.irreversibleAlwaysConfirm &&
