@@ -53,7 +53,11 @@ struct ThreadBubble: View {
                 Text(text)
                     .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body))
                     .foregroundStyle(Spine.Palette.text)
+                    // Mac only. On the phone, selection also claims the long press, so the menu
+                    // below never opened; its Copy covers the message there.
+                    #if os(macOS)
                     .textSelection(.enabled)
+                    #endif
                     .padding(.horizontal, Spine.Space.md + 2)
                     .padding(.vertical, Spine.Space.sm + 2)
                     .background(Spine.Palette.accentSoft, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))

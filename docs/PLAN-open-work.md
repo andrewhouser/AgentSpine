@@ -836,8 +836,11 @@ is built. Every measurement named below needs the model host, so every item is *
   model time but no output tokens, so effective speed fell from 8.1 to 6.1 tok/s with output unchanged at 1,368.
   Speed is now taken over `reportedMs`, the time on calls that reported tokens. Recheck: a reader scrolled up stayed
   at 2,474px through the end of a reply, the scroll height never dropped, and the same thread read 8.1 tok/s again.
-  Not checked: the iPhone and Mac apps against the live dashboard, including both fixes (both build; the simulator
-  has no working connection and the real token is not available to Claude).
+  iPhone: checked by you against the live dashboard (2026-11-24). That test found the long-press menu on your own
+  message (Edit and resend, Retry, Copy) never opened, because text selection claimed the press. The phone bubble
+  now has no text selection, its Copy covers the message, and the menu was confirmed on the device. Not checked:
+  the Mac app against the live dashboard, including both fixes (it builds; the simulator has no working connection
+  and the real token is not available to Claude).
   First-token time is not stored, so the Tokens card still shows effective speed.
 - **LP2 "Local deep": thinking on for hard steps.** `NO_THINKING` is sent on every local call (`src/llm.ts`).
   A run that has read mail, a calendar, a file or a project is pinned local, and `resolveTier` turns `deep`
