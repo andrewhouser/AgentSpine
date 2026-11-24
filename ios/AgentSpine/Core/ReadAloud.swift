@@ -13,6 +13,9 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
     /// The text being read, so each reply's button can tell whether it is the one playing.
     private(set) var current: String?
     private(set) var error: String?
+    /// The text whose reading failed, so the error shows under that reply. `current` is cleared
+    /// when a reading ends, and before this a failure on the phone showed nowhere at all.
+    private(set) var failedText: String?
     private var task: Task<Void, Never>?
     private var player: AVAudioPlayer?
     private var finished: CheckedContinuation<Void, Never>?
@@ -37,6 +40,7 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
 
     private func start(_ text: String) {
         error = nil
+        failedText = nil
         speaking = true
         current = text
         task = Task {
@@ -58,28 +62,38 @@ final class ReadAloud: NSObject, AVAudioPlayerDelegate {
                         ? Task { try await APIClient.shared.speak(chunks[index + 1]) }
                         : nil
                     try Task.checkCancellation()
-                    await play(wav)
+                    try await play(wav)
                     try Task.checkCancellation()
                 }
             } catch is CancellationError {
             } catch {
                 self.error = error.localizedDescription
+                failedText = text
             }
             if !Task.isCancelled { speaking = false; current = nil }
         }
     }
 
-    private func play(_ wav: Data) async {
-        guard let player = try? AVAudioPlayer(data: wav) else { return }
+    /// Throws when the audio cannot be played, which used to end the reading in silence.
+    private func play(_ wav: Data) async throws {
+        let player: AVAudioPlayer
+        do {
+            player = try AVAudioPlayer(data: wav)
+        } catch {
+            throw APIError.server(0, "The voice audio could not be played (\(wav.count) bytes).")
+        }
         player.delegate = self
         self.player = player
+        var started = true
         await withCheckedContinuation { continuation in
             finished = continuation
             if !player.play() {
+                started = false
                 finished = nil
                 continuation.resume()
             }
         }
+        if !started { throw APIError.server(0, "The phone would not start playing the voice audio.") }
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {

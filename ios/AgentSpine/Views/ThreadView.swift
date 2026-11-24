@@ -806,6 +806,11 @@ struct TurnView: View {
             if let notice {
                 Text(notice).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
             }
+            if let summary = turn.summary, reader.failedText == summary, let error = reader.error {
+                Label("Couldn't read this aloud: \(error)", systemImage: "speaker.slash")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.danger)
+            }
         }
         .alert("Save to file", isPresented: $saving) {
             TextField("File name", text: $fileName)
