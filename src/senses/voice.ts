@@ -163,12 +163,20 @@ export const speak = async (text: string, voice?: string): Promise<Buffer> => {
   const input = speakable(text, VOICE_MAX_CHARS);
   if (!input) throw new Error("nothing to read aloud");
 
-  const res = await fetch(`${TTS_BASE_URL.replace(/\/$/, "")}/audio/speech`, {
-    body: JSON.stringify({ input, response_format: "wav", speed: TTS_SPEED, voice: voice || TTS_VOICE }),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-    signal: AbortSignal.timeout(60_000),
-  });
+  // A bare "fetch failed" reached the phone while the Kokoro LaunchAgent sat in a
+  // spawn loop (its plist named a home folder this machine doesn't have), so say what is down.
+  let res: Response;
+  try {
+    res = await fetch(`${TTS_BASE_URL.replace(/\/$/, "")}/audio/speech`, {
+      body: JSON.stringify({ input, response_format: "wav", speed: TTS_SPEED, voice: voice || TTS_VOICE }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (err) {
+    if ((err as Error).name === "TimeoutError") throw new Error("the speech service took over 60 s to answer");
+    throw new Error(`the speech service at ${TTS_BASE_URL} isn't answering; is com.local.tts running? (docs/VOICE.md)`);
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `speech service returned HTTP ${res.status}`);

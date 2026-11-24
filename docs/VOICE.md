@@ -72,6 +72,12 @@ To keep it running, copy `services/tts/com.local.tts.plist` to `~/Library/Launch
 If `TTS_URL` is unset or the service is down, **the chat page says so** next to the Hands-free
 button and in Settings → Voice. Listening still works; replies just appear on screen.
 
+If Read aloud fails and `launchctl print gui/$UID/com.local.tts` shows `last exit code = 78: EX_CONFIG`
+with a climbing `runs` count, launchd can't find a path the plist names, usually a `/Users/...` home
+on a machine whose home lives somewhere else. Run the `sed` line again on that machine, then
+`bootout` and `bootstrap`. (2026-11-24: the Mini looped like this 717 times; the phone saw only
+"fetch failed".)
+
 ## What was measured
 
 All on a heavily loaded 10-core Apple-silicon Mac (load average ~21), so treat these as pessimistic.
