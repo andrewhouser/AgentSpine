@@ -829,14 +829,15 @@ is built. Every measurement named below needs the model host, so every item is *
   finished at 65s. No tool JSON appeared. A weather request ran its tool, showed the card and answered. Stop ended
   the run within 0.2s and removed the partial text, and after a reload only "Stopped before it finished." remained.
   Scrolling up held the position while text grew.
-  **Two bugs from that test, fixed in code (2026-11-23, not yet deployed or rechecked live):** (1) when an answer
+  **Two bugs from that test, fixed in `f46dfb9` and rechecked live on web (2026-11-23):** (1) when an answer
   finished, the live text was removed a moment before the saved message rendered (scroll height 2,301 to 1,232 and
   back to 2,333), and the view then scrolled to the bottom even if the reader had scrolled up. All three clients now
   keep the live turn until the saved one has loaded and follow only a reader at the end. (2) A stopped call adds
   model time but no output tokens, so effective speed fell from 8.1 to 6.1 tok/s with output unchanged at 1,368.
-  Speed is now taken over `reportedMs`, the time on calls that reported tokens.
-  Not checked: the iPhone and Mac apps against the live dashboard (both build; the simulator has no working
-  connection and the real token is not available to Claude), including scroll-follow on a long reply.
+  Speed is now taken over `reportedMs`, the time on calls that reported tokens. Recheck: a reader scrolled up stayed
+  at 2,474px through the end of a reply, the scroll height never dropped, and the same thread read 8.1 tok/s again.
+  Not checked: the iPhone and Mac apps against the live dashboard, including both fixes (both build; the simulator
+  has no working connection and the real token is not available to Claude).
   First-token time is not stored, so the Tokens card still shows effective speed.
 - **LP2 "Local deep": thinking on for hard steps.** `NO_THINKING` is sent on every local call (`src/llm.ts`).
   A run that has read mail, a calendar, a file or a project is pinned local, and `resolveTier` turns `deep`
