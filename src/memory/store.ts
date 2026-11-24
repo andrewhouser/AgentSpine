@@ -1451,7 +1451,7 @@ export const vacuum = (): void => db.exec("VACUUM");
 /**
  * Small durable key/value store, separate from `memories` on purpose.
  *
- * Memory is fuzzy and semantic — great for "what do I know about Andrew", useless for
+ * Memory is fuzzy and semantic — great for "what do I know about Alex", useless for
  * "is this byte-for-byte what I saw last time". A watcher needs the second thing: exact
  * comparison, no embedding, no ranking, no chance the model half-remembers. That's this.
  */

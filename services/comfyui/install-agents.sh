@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Installs the image services as LaunchAgents so they survive a reboot: ComfyUI ("best") on
 # :8188 and MFLUX ("draft") on :8082, both loopback only. Paths come from this machine's $HOME,
-# because the checked-in MFLUX plist names /Users/... and this Mini's home is on WorkDrive.
+# because the checked-in MFLUX plist is a template with __REPO__ and __HOME__ in place of paths.
 # Safe to re-run. COMFYUI_DIR overrides where ComfyUI lives.
 set -eu
 repo="${0:A:h:h:h}"
@@ -12,7 +12,7 @@ domain="gui/$(id -u)"
 [[ -x "$HOME/.venvs/mflux/bin/uvicorn" ]] || { echo "no MFLUX venv at $HOME/.venvs/mflux" >&2; exit 1; }
 mkdir -p "$agents" "$HOME/Library/Logs"
 
-sed -e "s#/Users/andrewhouser/Developer/AgentSpine#$repo#g" -e "s#/Users/andrewhouser#$HOME#g" \
+sed -e "s#__REPO__#$repo#g" -e "s#__HOME__#$HOME#g" \
   "$repo/services/mflux/com.local.mflux.plist" > "$agents/com.local.mflux.plist"
 
 # --disable-auto-launch: without it every start opens a browser tab on a headless box.

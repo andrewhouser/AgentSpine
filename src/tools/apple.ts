@@ -231,8 +231,8 @@ export const lookupContact = async (query: string, kind: "email" | "phone" = "em
  *
  * Several people can match "Jeff" and one person can have several addresses. Guessing
  * between them is how an email goes to the wrong person, so anything but a single candidate
- * is handed back as a choice. An exact name match narrows first: "Jeff Houser" should not be
- * ambiguous merely because "Jeff Houserman" also exists.
+ * is handed back as a choice. An exact name match narrows first: "Sam Rivera" should not be
+ * ambiguous merely because "Sam Riveraman" also exists.
  */
 export const pickAddress = (query: string, matches: ContactAddress[]): { address: string; name: string } | { error: string } => {
   if (!matches.length) return { error: `no contact named "${query}" with an email address was found in Contacts.` };
@@ -400,15 +400,15 @@ const imperatives = (sentence: string, verb: RegExp): number[] => {
 /**
  * Lower-cased words, with the punctuation that ENDS a word stripped. The character class has
  * to admit "." and "@" so an address survives as one token, which also let a sentence's own
- * full stop ride along: "…to Jeffrey Houser." became the word "houser." and no longer
- * matched the recipient "Houser" — so every request that ended on the name queued.
+ * full stop ride along: "…to Samuel Rivera." became the word "rivera." and no longer
+ * matched the recipient "Rivera" — so every request that ended on the name queued.
  */
 const words = (s: string): string[] =>
   (s.toLowerCase().match(/[a-z0-9'@._+-]+/g) ?? []).map((w) => w.replace(/^[.'_+-]+|[.'_+-]+$/g, "")).filter(Boolean);
 
 /**
  * Whether a recipient is named in `text`. An address must appear verbatim; a name must
- * appear whole — every part of "Jeff Houser" — so a model that expands the user's "Jeff"
+ * appear whole — every part of "Sam Rivera" — so a model that expands the user's "Sam"
  * into a full name it found elsewhere is not treated as having been told to.
  */
 export const namesRecipient = (text: string, to: string): boolean => {
@@ -452,7 +452,7 @@ export const directedBy = (action: string, args: any, goal: string): null | stri
     switch (action) {
       case "send_mail": {
         if (!MAIL_NOUN.test(sentence)) break;
-        // The recipient has to follow the verb, in the same sentence: "Send Jeff Houser an
+        // The recipient has to follow the verb, in the same sentence: "Send Sam Rivera an
         // email", "email jeff@example.com that…". 120 characters reaches past "an email to".
         for (const end of imperatives(sentence, MAIL_VERB)) {
           if (namesRecipient(recipientWindow(sentence, end), args?.to)) {

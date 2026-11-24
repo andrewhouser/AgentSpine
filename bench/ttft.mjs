@@ -53,7 +53,7 @@ const promptFor = (extra = "") => [
   {
     role: "system",
     content:
-      "Standing context about the user.\nName: Andrew. Lives in Farmington, NH. " +
+      "Standing context about the user.\nName: Alex. Lives in Springfield. " +
       "Prefers short answers.\n" + extra,
   },
   {

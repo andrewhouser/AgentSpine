@@ -1,137 +1,123 @@
 {
   "version": 1,
-  "//": "The security boundary. Everything is deny-by-default; you grant surfaces here explicitly. Edit freely — it is re-read every heartbeat.",
-
+  "//": "The security boundary. Everything is deny-by-default; you grant surfaces here explicitly. Edit freely — it is re-read every heartbeat. This is the starting copy: npm run setup copies it to policy.json, which is yours and is never committed.",
   "autoExecute": {
     "//": "reversible: auto-run reversible allowlisted actions without asking. irreversibleAlwaysConfirm: queue every irreversible action for your confirmation even if it is allowlisted. dryRun: report what every call WOULD do and do neither — how to read a new schedule's task before letting it touch anything.",
     "reversible": true,
     "irreversibleAlwaysConfirm": true,
     "dryRun": false
   },
-
   "budgets": {
     "//": "Call caps counted from the actions audit log. 'default' applies to any tool without its own entry; 'tools' overrides per tool. Absent or 0 = unlimited. Only executed/queued calls count — a denial cost nothing and shouldn't eat the allowance. Example: { \"perRun\": { \"default\": 8 }, \"perDay\": { \"tools\": { \"web_search\": 50 } } }",
     "perRun": {},
-    "perDay": { "tools": { "notify": 20 } }
-  },
-
-  "apps": {
-    "//": "Bundle IDs the mac_control tool may touch. Empty = the agent can control no apps. Find an id with: osascript -e 'id of app \"Notes\"'",
-    "allow": ["com.apple.mail", "com.apple.MobileSMS", "com.apple.iCal", "com.apple.Notes", "com.apple.reminders", "com.apple.AddressBook"]
-  },
-
-  "userDirected": {
-    "//": "Irreversible actions that run WITHOUT confirmation when YOUR OWN chat message (typed or dictated) asked for exactly that action — 'email Jeff Houser that…', 'text Jeff Houser that…', 'add lunch with Sam Friday at noon to my calendar', 'remind me at 5 to…', 'make a note that…'. Entries are tool.action. send_mail and send_message additionally require the recipient to be someone you named in that sentence: an address or number the model found anywhere else (a web page, an incoming email) still queues for approval with the full message shown. Scheduled jobs, watchers, subagents and follow-ups like 'yes, send it' never qualify — they carry no request in your own words. Set enabled to false to confirm everything again.",
-    "enabled": true,
-    "actions": ["mac_control.send_mail", "mac_control.send_message", "mac_control.create_event", "mac_control.create_reminder", "mac_control.create_note"]
-  },
-
-  "trust": {
-    "//": "Tools whose irreversible calls run WITHOUT the confirmation queue, but only inside a live chat turn where you are typing. Schedules, watchers, the heartbeat and subagents still queue. Remove a name to put it back behind approval. Not listed on purpose: browser submit/buy/delete, and mac_control sends to anyone you did not name (those stay gated by userDirected).",
-    "chatAutoTools": ["schedule_create", "schedule_update", "schedule_delete", "draft"]
-  },
-
-  "web": {
-    "searchEnabled": true,
-    "//": "Domains a future read-only web_fetch tool may read.",
-    "fetchAllowlist": ["en.wikipedia.org", "developer.mozilla.org"]
-  },
-
-  "browser": {
-    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless.",
-    "enabled": true,
-    "navigateAllowlist": []
-  },
-
-  "google": {
-    "//": "Reads (gmail_search, calendar_upcoming, calendar_find) use a read-only token, npm run auth, whose scopes are read-only by construction and are never widened. Writes use a SEPARATE token, npm run auth -- write (gmail.modify + calendar.events), used only by the inbox cleanup: archive, label, trash, mark spam, and all-day events on the calendars named below. Decision of 2026-11-21, SPEC section 5. There is no send, no permanent delete and no calendar delete anywhere. Without that second token, enabled:true here does nothing.",
-    "enabled": true,
-    "write": {
-      "//": "calendars: the only calendars calendar_write may touch, by name; a missing one is reported, never created. maxChangesPerRun: the most Gmail changes one run may make. trashOverrideSenders: senders whose mail may be trashed even though you have emailed them (an address or a domain). Without an entry here, mail from anyone you have ever emailed is never trashed.",
-      "enabled": true,
-      "calendars": ["Bills"],
-      "maxChangesPerRun": 60,
-      "trashOverrideSenders": ["afs.ameriprise.com"]
-    }
-  },
-
-  "fs": {
-    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]. writableDirs is the (separate, narrower-by-default) list write_file may create text files in; absent or empty = it can write nothing. Overwriting or editing a file does NOT wait for approval — the old version is copied to backups/ first, which is why it is classified reversible. Two exceptions: a build manifest (package.json, Cargo.toml, build.rs, Package.swift, a lockfile, *.gradle) is queued for your approval because it decides what code the build fetches and runs, and AgentSpine's own policy.json, profile.md, goals.md and agents/*.md cannot be written by any tool at all.",
-    "readableDirs": ["~/Desktop", "~/Developer"],
-    "writableDirs": ["~/Developer"]
-  },
-
-  "mcp": {
-    "//": "Remote MCP servers (Streamable HTTP) whose tools the agent may call; see docs/MCP.md. Off until enabled. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
-    "enabled": true,
-    "servers": {
-      "archive": {
-        "url": "http://localhost:8081/mcp"
+    "perDay": {
+      "tools": {
+        "notify": 20
       }
     }
   },
-
+  "apps": {
+    "//": "Bundle IDs the mac_control tool may touch. Empty = the agent can control no apps. Find an id with: osascript -e 'id of app \"Notes\"'",
+    "allow": [
+      "com.apple.mail",
+      "com.apple.MobileSMS",
+      "com.apple.iCal",
+      "com.apple.Notes",
+      "com.apple.reminders",
+      "com.apple.AddressBook"
+    ]
+  },
+  "userDirected": {
+    "//": "Irreversible actions that run WITHOUT confirmation when YOUR OWN chat message (typed or dictated) asked for exactly that action — 'email Sam Rivera that…', 'text Sam Rivera that…', 'add lunch with Sam Friday at noon to my calendar', 'remind me at 5 to…', 'make a note that…'. Entries are tool.action. send_mail and send_message additionally require the recipient to be someone you named in that sentence: an address or number the model found anywhere else (a web page, an incoming email) still queues for approval with the full message shown. Scheduled jobs, watchers, subagents and follow-ups like 'yes, send it' never qualify — they carry no request in your own words. Set enabled to false to confirm everything again.",
+    "enabled": true,
+    "actions": [
+      "mac_control.send_mail",
+      "mac_control.send_message",
+      "mac_control.create_event",
+      "mac_control.create_reminder",
+      "mac_control.create_note"
+    ]
+  },
+  "trust": {
+    "//": "Tools whose irreversible calls run WITHOUT the confirmation queue, but only inside a live chat turn where you are typing. Schedules, watchers, the heartbeat and subagents still queue. Remove a name to put it back behind approval. Not listed on purpose: browser submit/buy/delete, and mac_control sends to anyone you did not name (those stay gated by userDirected).",
+    "chatAutoTools": [
+      "schedule_create",
+      "schedule_update",
+      "schedule_delete",
+      "draft"
+    ]
+  },
+  "web": {
+    "searchEnabled": true,
+    "//": "Domains a future read-only web_fetch tool may read.",
+    "fetchAllowlist": [
+      "en.wikipedia.org",
+      "developer.mozilla.org"
+    ]
+  },
+  "browser": {
+    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless.",
+    "enabled": false,
+    "navigateAllowlist": []
+  },
+  "google": {
+    "//": "Reads (gmail_search, calendar_upcoming, calendar_find) use a read-only token, npm run auth, whose scopes are read-only by construction and are never widened. Writes use a SEPARATE token, npm run auth -- write (gmail.modify + calendar.events), used only by the inbox cleanup: archive, label, trash, mark spam, and all-day events on the calendars named below. Decision of 2026-11-21, SPEC section 5. There is no send, no permanent delete and no calendar delete anywhere. Without that second token, enabled:true here does nothing.",
+    "enabled": false,
+    "write": {
+      "//": "calendars: the only calendars calendar_write may touch, by name; a missing one is reported, never created. maxChangesPerRun: the most Gmail changes one run may make. trashOverrideSenders: senders whose mail may be trashed even though you have emailed them (an address or a domain). Without an entry here, mail from anyone you have ever emailed is never trashed.",
+      "enabled": false,
+      "calendars": [
+        "Bills"
+      ],
+      "maxChangesPerRun": 60,
+      "trashOverrideSenders": []
+    }
+  },
+  "fs": {
+    "//": "Absolute directories read_file/list_dir may read from. Empty = no file access. e.g. [\"~/notes\", \"~/Developer/agentspine/data\"]. writableDirs is the (separate, narrower-by-default) list write_file may create text files in; absent or empty = it can write nothing. Overwriting or editing a file does NOT wait for approval — the old version is copied to backups/ first, which is why it is classified reversible. Two exceptions: a build manifest (package.json, Cargo.toml, build.rs, Package.swift, a lockfile, *.gradle) is queued for your approval because it decides what code the build fetches and runs, and AgentSpine's own policy.json, profile.md, goals.md and agents/*.md cannot be written by any tool at all.",
+    "readableDirs": [],
+    "writableDirs": []
+  },
+  "mcp": {
+    "//": "Remote MCP servers (Streamable HTTP) whose tools the agent may call; see docs/MCP.md. Off until enabled. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
+    "enabled": false,
+    "servers": {}
+  },
   "weather": {
     "//": "The weather tool (Open-Meteo, no API key). Gated not because the data is risky but because asking about your home town, on a schedule, tells a third party where you live. Set DEFAULT_LOCATION in .env so the location isn't restated in every run.",
     "enabled": true
   },
-
   "images": {
     "//": "The generate_image tool: renders a PNG via the local MFLUX service (IMAGE_URL) and saves it under ./images, returning a URL the UI displays. Classified REVERSIBLE, not irreversible like a draft: it writes a new file into a directory it owns, overwrites nothing, and deletes cleanly — there is no outbound send and nothing to review before the fact, so queuing every render for confirmation would be friction, not safety. Enabling it here lets it auto-execute under autoExecute.reversible. The real cost it carries is compute: a render is 15-30s and the pipeline shares this 16GB box with capture and Whisper, which is a resource decision (bounded by MFLUX_MAX_SIDE on the service), not a security one. Disable by setting enabled to false.",
-    "enabled": true
+    "enabled": false
   },
-
   "drafts": {
     "//": "SPEC §5, preferred path: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. This grants NO new OAuth scope — the Google token stays read-only by construction and still cannot send or modify anything.",
     "enabled": true,
     "dir": "./drafts"
   },
-
   "subagents": {
     "//": "Delegation to the units in agents/*.md. A subagent's tools are the INTERSECTION of what its file declares and what its caller could already reach, so this grants no capability the agent did not already have — it only lets work be split up. Every call a unit makes still passes through this same broker and this same policy, and per-run budgets are counted across the whole tree rather than reset per unit.",
     "enabled": true
   },
-
   "schedules": {
     "//": "Lets the agent read and change AgentSpine's OWN scheduler, so 'check for new movie trailers every day at noon' becomes a job on the Automations page instead of a thing done once. It grants a scheduled job nothing extra — a job runs through this same broker under this same policy. What it changes is when: a standing job acts while nobody is watching, and its task text is a prompt the model wrote, possibly influenced by something it read. So every create/update/delete is queued for your confirmation with the full task text shown, and nothing here can touch this file.",
     "enabled": true
   },
-
   "git": {
     "//": "Absolute repo directories git_status may read. Read-only: branch, uncommitted files, recent commits. Empty = no repo access. e.g. [\"~/Developer\"]",
-    "repoDirs": ["~/Developer"]
+    "repoDirs": []
   },
-
   "build": {
     "//": "The build loop. Each repo listed here is one the agent may work in: it can run the commands declared under it, and — with gitWrite — branch, stage, commit and diff. The model picks a repo and a command NAME; it can never supply a command line, and nothing it can call adds an entry here. Declaring a command is a statement that you trust THAT repo's build to run on this machine, since a test script and a build.rs are both code. allowPush is separate and absent by default; a push still waits for your approval even when allowed. parse names a reducer in src/tools/command-output.ts: cargo-json, eslint, tap, tsc, xcodebuild, or generic.",
-    "enabled": true,
-    "repos": {
-      "~/Developer/AgentSpine": {
-        "gitWrite": true,
-        "defaultBranch": "main",
-        "commands": {
-          "test": { "argv": ["npm", "run", "test"], "parse": "tap", "timeoutMs": 300000, "description": "the whole suite" },
-          "typecheck": { "argv": ["npx", "tsc", "-p", "tsconfig.json", "--noEmit"], "parse": "tsc", "timeoutMs": 180000, "description": "server types" },
-          "lint": { "argv": ["npx", "eslint", "."], "parse": "eslint", "timeoutMs": 180000, "description": "web client only — src/ is not linted" },
-          "webbuild": { "argv": ["npm", "run", "web:build"], "timeoutMs": 300000, "description": "vite build of web/" }
-        }
-      }
-      ,
-      "~/Developer/MetronomeApp": {
-        "gitWrite": true,
-        "defaultBranch": "main",
-        "commands": {
-          "build": { "argv": ["xcodebuild", "-project", "MetronomeApp.xcodeproj", "-scheme", "MetronomeApp", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "CODE_SIGNING_ALLOWED=NO", "build"], "parse": "xcodebuild", "timeoutMs": 600000, "description": "compile for the iOS simulator (no signing)" }
-        }
-      }
-    }
+    "enabled": false,
+    "repos": {}
   },
-
   "audio": {
     "//": "Microphone capture for meeting transcription. NOTE the inverted convention: devices is an allowlist and [] means NO device, not any device — an empty list is a safe default for reading web pages and an unsafe one for a microphone. List avfoundation input names exactly as `npm run listen devices` prints them. announce speaks a line out loud when capture starts, for a room where the people being recorded would not otherwise know; it is off unless set to exactly true, since the usual case is capturing your own meeting on your own Mac. macOS will also prompt for microphone permission the first time — a second enforcement layer the OS owns. remoteSources names clients allowed to send their own captured audio (the Mac app), same inversion: absent or [] means none.",
-    "enabled": true,
-    "devices": ["MacBook Pro Microphone", "USB PnP Sound Device"],
+    "enabled": false,
+    "devices": [],
     "announce": false,
-    "remoteSources": ["mac", "iphone"]
+    "remoteSources": []
   }
 }

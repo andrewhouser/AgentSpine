@@ -3,7 +3,13 @@
 <!--
   LaunchAgent for the Kokoro speech service. Install on the machine that runs the dashboard.
 
-  Copy to ~/Library/LaunchAgents/com.local.tts.plist, then:
+  A template: __REPO__ and __HOME__ stand for this clone and your home folder. Fill them in
+  while copying it to ~/Library/LaunchAgents, from the repo root:
+
+    sed -e "s#__REPO__#$PWD#g" -e "s#__HOME__#$HOME#g" services/tts/com.local.tts.plist \
+      > ~/Library/LaunchAgents/com.local.tts.plist
+
+  then:
 
     launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.tts.plist
     launchctl bootout   gui/$UID/com.local.tts
@@ -29,7 +35,7 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/andrewhouser/.venvs/tts/bin/uvicorn</string>
+    <string>__HOME__/.venvs/tts/bin/uvicorn</string>
     <string>server:app</string>
     <!-- Loopback only: there is no auth on this endpoint. -->
     <string>--host</string><string>127.0.0.1</string>
@@ -38,12 +44,12 @@
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/andrewhouser/Developer/AgentSpine/services/tts</string>
+  <string>__REPO__/services/tts</string>
 
   <key>EnvironmentVariables</key>
   <dict>
-    <key>HOME</key><string>/Users/andrewhouser</string>
-    <key>TTS_MODEL_DIR</key><string>/Users/andrewhouser/.kokoro-models</string>
+    <key>HOME</key><string>__HOME__</string>
+    <key>TTS_MODEL_DIR</key><string>__HOME__/.kokoro-models</string>
     <key>TTS_MODEL_FILE</key><string>kokoro-v1.0.int8.onnx</string>
     <key>TTS_VOICE</key><string>af_heart</string>
   </dict>
@@ -56,8 +62,8 @@
   <integer>10</integer>
 
   <key>StandardOutPath</key>
-  <string>/Users/andrewhouser/Library/Logs/tts-service.log</string>
+  <string>__HOME__/Library/Logs/tts-service.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/andrewhouser/Library/Logs/tts-service-error.log</string>
+  <string>__HOME__/Library/Logs/tts-service-error.log</string>
 </dict>
 </plist>

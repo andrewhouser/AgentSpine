@@ -40,7 +40,7 @@ const reset = () => {
 check("a quoted reply is cut", learn.stripQuoted("Sounds good, thanks.\n\nOn Mon, Jan 5, 2026 at 9:00 AM Ann <a@x.com> wrote:\n> the secret plan\n> more"), "Sounds good, thanks.");
 check("> lines are dropped even without a header", learn.stripQuoted("Yes.\n> earlier\nOk then."), "Yes.\nOk then.");
 check("a forwarded block is cut", learn.stripQuoted("FYI\n\n---------- Forwarded message ---------\nFrom: Bob\nSecret"), "FYI");
-check("the signature after -- is cut", learn.stripQuoted("Thanks!\n-- \nAndrew Phone 555"), "Thanks!");
+check("the signature after -- is cut", learn.stripQuoted("Thanks!\n-- \nAlex Phone 555"), "Thanks!");
 check("Outlook style original message is cut", learn.stripQuoted("Ok.\n\n-----Original Message-----\nFrom: x\nhidden"), "Ok.");
 const prep = learn.prepareSamples([
   { date: "", id: "1", subject: "", text: "Hey Sam, thanks for sending that over, talk soon", to: "Sam <sam@x.com>" },
@@ -51,8 +51,8 @@ const prep = learn.prepareSamples([
 check("duplicates, too-short and over-long are handled", [prep.length, prep[1].text.length], [2, 1200]);
 
 // --- the note check
-const avoid = learn.namesToAvoid([{ to: "Garrett Houser <garrett.houser@example.com>" }]);
-check("names come from display names and address parts", avoid.sort(), ["garrett", "houser"]);
+const avoid = learn.namesToAvoid([{ to: "Jordan Rivera <jordan.rivera@example.com>" }]);
+check("names come from display names and address parts", avoid.sort(), ["jordan", "rivera"]);
 const bad = (label, note) => check(label, learn.noteProblem(note, avoid) !== null, true);
 check("a clean note passes", learn.noteProblem("Short, warm, signs off with a first name. Uses 'Thanks!' a lot.", avoid), null);
 bad("an email address is refused", "Writes to ann@example.com often.");
@@ -61,7 +61,7 @@ bad("an amount is refused", "Mentions $4,500 a lot.");
 bad("a long number is refused", "Gives the code 123456.");
 bad("a phone number is refused", "Signs with (555) 123-4567.");
 bad("a secret-shaped value is refused", "Pastes api_key: abcdef123456.");
-bad("a recipient's name is refused", "Always opens with Hi Garrett.");
+bad("a recipient's name is refused", "Always opens with Hi Jordan.");
 bad("empty is refused", "   ");
 
 // --- learning, with a stubbed fetch and model

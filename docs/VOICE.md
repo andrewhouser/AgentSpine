@@ -66,8 +66,8 @@ Then point the dashboard at it and restart it:
 TTS_URL=http://127.0.0.1:8083/v1
 ```
 
-To keep it running, copy `services/tts/com.local.tts.plist` to `~/Library/LaunchAgents/`, check the
-paths in it, and `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.tts.plist`.
+To keep it running, copy `services/tts/com.local.tts.plist` to `~/Library/LaunchAgents/` with its
+`__REPO__` and `__HOME__` placeholders filled in (the `sed` line in its header comment does it), and `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.tts.plist`.
 
 If `TTS_URL` is unset or the service is down, **the chat page says so** next to the Hands-free
 button and in Settings → Voice. Listening still works; replies just appear on screen.

@@ -54,7 +54,7 @@ console.log("\nKIND-SCOPED RECALL — recipes and lessons come back by kind");
   const now = new Date().toISOString();
   rawDb.prepare("INSERT INTO memories (ts, kind, text, embedding, origin) VALUES (?, 'recipe', ?, NULL, 'reviewed_recipe')").run(now, "Recipe — when: checking model host health\n1. web_read the models endpoint\n2. a list means it is up");
   rawDb.prepare("INSERT INTO memories (ts, kind, text, embedding, origin) VALUES (?, 'lesson', ?, NULL, 'reviewed_lesson')").run(now,"On a task like host health, a past run fell short: it never checked the endpoint");
-  rawDb.prepare("INSERT INTO memories (ts, kind, text, embedding) VALUES (?, 'reflection', ?, NULL)").run(now, "Andrew runs the model on a LAN box");
+  rawDb.prepare("INSERT INTO memories (ts, kind, text, embedding) VALUES (?, 'reflection', ?, NULL)").run(now, "Alex runs the model on a LAN box");
 
   // The keyword fallback (no embedder in the test) matches the query as a literal substring,
   // so query with words that actually appear in the stored recipe. Semantic recall against a

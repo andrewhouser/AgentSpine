@@ -46,14 +46,14 @@ console.log("\ninstagram api client\n");
 
 console.log("verify the account");
 {
-  const f = meta({ body: { data: [{ account_type: "Business", user_id: "1784", username: "djhouserlive" }] }, status: 200 });
+  const f = meta({ body: { data: [{ account_type: "Business", user_id: "1784", username: "exampleshow" }] }, status: 200 });
   const me = await client(f).me();
   check("GET graph.instagram.com/v27.0/me with the three fields", f.calls[0].url, "https://graph.instagram.com/v27.0/me?fields=user_id%2Cusername%2Caccount_type");
   check("method is GET", f.calls[0].method, "GET");
   check("the token rides in the Authorization header", f.calls[0].headers.Authorization, `Bearer ${TOKEN}`);
   check("and never in the URL", f.calls[0].url.includes(TOKEN), false);
-  check("the wrapped answer the docs print is read", me, { accountType: "Business", userId: "1784", username: "djhouserlive" });
-  const flat = await client(meta({ body: { user_id: 1784, username: "djhouserlive" }, status: 200 })).me();
+  check("the wrapped answer the docs print is read", me, { accountType: "Business", userId: "1784", username: "exampleshow" });
+  const flat = await client(meta({ body: { user_id: 1784, username: "exampleshow" }, status: 200 })).me();
   check("a bare object is read too, numeric id included", [flat.userId, flat.accountType], ["1784", null]);
   const none = await caught(client(meta({ body: { data: [{}] }, status: 200 })).me());
   check("an answer with no username is an error, not a blank account", none instanceof InstagramApiError, true);

@@ -36,7 +36,7 @@ const row = (text) => {
 
 console.log("\nPROVENANCE IS WRITTEN");
 const runId = store.startRun({ kind: "chat", task: "provenance test" });
-check("a memory records its origin and run", (await rag.remember("Andrew keeps his notes in a folder called Field Notes.", "reflection", { origin: "reflection", runId }), row("Andrew keeps his notes in a folder called Field Notes.")), { kind: "reflection", origin: "reflection", runId });
+check("a memory records its origin and run", (await rag.remember("Alex keeps his notes in a folder called Field Notes.", "reflection", { origin: "reflection", runId }), row("Alex keeps his notes in a folder called Field Notes.")), { kind: "reflection", origin: "reflection", runId });
 check("a source with no run records the origin and a null run", (await rag.remember("The user dismissed a notification about parking.", "preference", { origin: "interrupt" }), row("The user dismissed a notification about parking.")), { kind: "preference", origin: "interrupt", runId: null });
 check("no source at all stores nulls, so the UI can say 'before provenance'", (await rag.remember("An old-style memory with no source given."), row("An old-style memory with no source given.")), { kind: "note", origin: null, runId: null });
 check("every origin in the vocabulary is accepted", (await Promise.all(rag.ORIGINS.map((o, i) => rag.remember(`A memory written through the ${o} route number ${i}.`, "note", { origin: o })))).every(Boolean), true);
@@ -48,7 +48,7 @@ check("a run id that is not a positive integer is stored as null", (await rag.re
 check("the memories table is still there", rawDb.prepare("SELECT count(*) AS n FROM memories").get().n > 0, true);
 
 console.log("\nA REFUSED DUPLICATE KEEPS THE ORIGINAL PROVENANCE");
-const first = "Andrew's team stand-up is at 9:15 on weekdays.";
+const first = "Alex's team stand-up is at 9:15 on weekdays.";
 await rag.remember(first, "reflection", { origin: "reflection", runId });
 const again = await rag.remember(first, "note", { origin: "tool", runId: undefined });
 check("the second write is refused", again, false);
@@ -67,7 +67,7 @@ rawDb.prepare("DELETE FROM messages WHERE run_id = ?").run(prunedRun);
 rawDb.prepare("DELETE FROM runs WHERE id = ?").run(prunedRun);
 const byText = (rows, text) => rows.find((r) => r.text === text);
 const all = rag.listMemories(500);
-const live = byText(all, "Andrew keeps his notes in a folder called Field Notes.");
+const live = byText(all, "Alex keeps his notes in a folder called Field Notes.");
 const pruned = byText(all, "A fact learned in a run that has since been pruned.");
 const old = byText(all, "A memory from before provenance was tracked.");
 check("a memory whose run exists is not marked pruned", [live.origin, live.runId, live.runPruned], ["reflection", runId, false]);

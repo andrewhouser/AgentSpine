@@ -108,8 +108,8 @@ console.log("\napproval is of the exact content");
   check("with no public URL the row cannot be approved", [q.getRow(id).image_url, q.approve(id, "test", NOW).ok], [null, false]);
   const again = seed(occ);
   check("seeding again with the base URL updates the row", again.updated, [id]);
-  const ok = q.approve(id, "andrew", NOW);
-  check("now it can be approved", [ok.ok, q.isApproved(q.getRow(id)), q.getRow(id).approved_by], [true, true, "andrew"]);
+  const ok = q.approve(id, "alex", NOW);
+  check("now it can be approved", [ok.ok, q.isApproved(q.getRow(id)), q.getRow(id).approved_by], [true, true, "alex"]);
   check("an unchanged re-import keeps the approval", [seed(occ).unchanged, q.isApproved(q.getRow(id))], [[id], true]);
 
   const edited = { ...kit.file, posts: kit.file.posts.map((p) => (p.id === "E1" ? { ...p, caption: `${p.caption} Edited.` } : p)) };
@@ -118,14 +118,14 @@ console.log("\napproval is of the exact content");
   check("and the new caption is on the row", q.getRow(id).caption.endsWith("Edited."), true);
 
   seed(occ);
-  q.approve(id, "andrew", NOW);
+  q.approve(id, "alex", NOW);
   fs.writeFileSync(path.join(kit.kitDir, "images", "evergreen.jpg"), jpeg(1080, 1350, 99));
   const img = seed(occ);
   check("a re-rendered image voids the approval", [img.voided, q.isApproved(q.getRow(id))], [[id], false]);
   fs.writeFileSync(path.join(kit.kitDir, "images", "evergreen.jpg"), kit.files["images/evergreen.jpg"]);
 
   seed(occ);
-  q.approve(id, "andrew", NOW);
+  q.approve(id, "alex", NOW);
   rawDb.prepare("UPDATE instagram_posts SET caption = 'swapped behind its back' WHERE id = ?").run(id);
   const tampered = q.getRow(id);
   check("a caption changed in the database is not an approved caption", [tampered.approved, q.isApproved(tampered)], [1, false]);
@@ -134,7 +134,7 @@ console.log("\napproval is of the exact content");
 
   check("approving an unknown row fails", q.approve("nope", "test", NOW).ok, false);
   check("approving after the window fails", q.approve(id, "test", at("2026-12-12 09:00")).ok, false);
-  q.approve(id, "andrew", NOW);
+  q.approve(id, "alex", NOW);
   check("an approval can be taken back", [q.revoke(id).ok, q.isApproved(q.getRow(id))], [true, false]);
 }
 
@@ -143,7 +143,7 @@ console.log("\nstatus moves by compare-and-set, and imports leave history alone"
   const id = "2026-12-15T12:00/E1/feed";
   const occ = [{ at: "2026-12-15 12:00", post: "E1" }];
   seed(occ);
-  q.approve(id, "andrew", NOW);
+  q.approve(id, "alex", NOW);
   check("pending to container, once", q.transition(id, "pending", "container", { container_id: "C1" }), true);
   check("the same move again does nothing", q.transition(id, "pending", "container", { container_id: "C2" }), false);
   check("the first writer's container id stands", q.getRow(id).container_id, "C1");

@@ -37,7 +37,7 @@
  * called `state_get` with an invented `summary` argument containing a verbatim fragment of
  * the profile preamble, wrote `state_set name=…` on a read-only question, recalled three
  * memories using the answer as its query, and finished by describing its own context block
- * instead of answering from it. `profile.md` had said `Name: Andrew.` the whole time.
+ * instead of answering from it. `profile.md` had said `Name: Alex.` the whole time.
  *
  * The first fix was another regex — exclude first-person pronouns. That is genuinely
  * narrower and still wrong, because "What's the wifi password?", "Who is Priya?" and

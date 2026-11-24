@@ -4,7 +4,13 @@
   LaunchAgent for the MFLUX image service. Install on the APP host (.85), not the model
   host — an image render pages the language models out and costs the next :8080 call 30-60s.
 
-  Copy to ~/Library/LaunchAgents/com.local.mflux.plist, then:
+  A template: __REPO__ and __HOME__ stand for this clone and your home folder. Fill them in
+  while copying it to ~/Library/LaunchAgents, from the repo root:
+
+    sed -e "s#__REPO__#$PWD#g" -e "s#__HOME__#$HOME#g" services/mflux/com.local.mflux.plist \
+      > ~/Library/LaunchAgents/com.local.mflux.plist
+
+  then:
 
     launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.mflux.plist
     launchctl bootout   gui/$UID/com.local.mflux
@@ -28,7 +34,7 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/andrewhouser/.venvs/mflux/bin/uvicorn</string>
+    <string>__HOME__/.venvs/mflux/bin/uvicorn</string>
     <string>server:app</string>
     <string>--host</string><string>127.0.0.1</string>
     <string>--port</string><string>8082</string>
@@ -37,13 +43,13 @@
 
   <!-- Required. uvicorn imports `server` from the working directory. -->
   <key>WorkingDirectory</key>
-  <string>/Users/andrewhouser/Developer/AgentSpine/services/mflux</string>
+  <string>__REPO__/services/mflux</string>
 
   <key>EnvironmentVariables</key>
   <dict>
     <!-- huggingface_hub resolves the weight cache from HOME; a LaunchAgent normally has it,
          but naming it explicitly removes one way for the 4.3GB cache to be missed. -->
-    <key>HOME</key><string>/Users/andrewhouser</string>
+    <key>HOME</key><string>__HOME__</string>
     <key>MFLUX_DEFAULT_SIDE</key><string>512</string>
     <key>MFLUX_MAX_SIDE</key><string>768</string>
     <!-- Bounds MLX's buffer cache. Unbounded it reached 24.9GB at 1024px and drove the test
@@ -69,8 +75,8 @@
   <integer>10</integer>
 
   <key>StandardOutPath</key>
-  <string>/Users/andrewhouser/Library/Logs/mflux-service.log</string>
+  <string>__HOME__/Library/Logs/mflux-service.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/andrewhouser/Library/Logs/mflux-service-error.log</string>
+  <string>__HOME__/Library/Logs/mflux-service-error.log</string>
 </dict>
 </plist>

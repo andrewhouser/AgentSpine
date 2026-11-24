@@ -153,7 +153,7 @@ console.log("\nthe token");
   check("the status line says so without inventing one", /none stored/.test(tokenLine(now)), true);
 
   const other = await storeToken("IGAA-other", ACCOUNT, { client: fakeClient({ me: async () => ({ accountType: "Business", userId: "9", username: "someone_else" }) }), now });
-  check("a token for another account is refused", [other.ok, /belongs to @someone_else, not @djhouserlive/.test(other.reason)], [false, true]);
+  check("a token for another account is refused", [other.ok, /belongs to @someone_else, not @exampleshow/.test(other.reason)], [false, true]);
   check("and nothing is written", fs.existsSync(tokenPath), false);
   check("the refusal does not repeat the token", other.reason.includes("IGAA-other"), false);
   const blank = await storeToken("  ", ACCOUNT, { client: fakeClient(), now });
@@ -165,7 +165,7 @@ console.log("\nthe token");
   check("a token for the right account is stored", [good.ok, good.username], [true, ACCOUNT]);
   check("the file is 0600", (fs.statSync(tokenPath).mode & 0o777).toString(8), "600");
   check("it holds the token and the verified account", [readToken().access_token, readToken().username, readToken().user_id], ["IGAA-good", ACCOUNT, "1784"]);
-  check("the status line names the account and the days left, not the token", [/stored for @djhouserlive, 5[89] day/.test(tokenLine(now)), tokenLine(now).includes("IGAA")], [true, false]);
+  check("the status line names the account and the days left, not the token", [/stored for @exampleshow, 5[89] day/.test(tokenLine(now)), tokenLine(now).includes("IGAA")], [true, false]);
 
   const client = fakeClient();
   check("a day-old token is not refreshed", [await refreshTokenIfDue(client, hours(now, 30)), client.count("refreshToken")], [false, 0]);

@@ -29,13 +29,15 @@ Neither gate is a prompt the model could be talked out of — both are code.
 
 ```bash
 npm install
-cp .env.example .env              # then edit: LOCAL_LLM_URL, optional OPENAI_API_KEY, TAVILY_API_KEY
-cp profile.example.md profile.md  # who you are — see "Active memory" below
+npm run setup                     # copies .env, policy.json, goals.md, profile.md and inbox-rules.md
+                                  # from their *.example files and adds a DASHBOARD_TOKEN to .env
+# then edit .env (LOCAL_LLM_URL, optional OPENAI_API_KEY, TAVILY_API_KEY), profile.md (who you are,
+# see "Active memory" below) and policy.json (deny-by-default: turn on what you want)
 npm run web:build                 # build the interface (once; only needed again when web/ changes)
 npm run dashboard                 # http://localhost:8787 — chat, scheduler, API
 ```
 
-Both copies are gitignored. `.env` holds your keys; `profile.md` holds standing facts about
+All of those copies are gitignored, so nothing that makes the install yours is committed. `.env` holds your keys; `policy.json` is what the agent may touch; `profile.md` holds standing facts about
 you and is injected as trusted context on every run, which makes it useful to the assistant
 and nobody else's business. AgentSpine runs fine without a profile — it just starts each run
 knowing less.
@@ -950,7 +952,8 @@ ios/                 the iPhone app — SwiftUI, no dependencies, installed from
 _archive/            the previous vanilla-JS dashboard, kept for reference
 docs/                design records: SPEC, LEARNING (+ROLLOUT), STUDY, MODELS, VOICE,
                      IMAGE_GENERATION, WATCHERS, and the PLAN-*.md build plans
-goals.md, profile.example.md   runtime files read from the repo root — they stay here
+*.example.{json,md}  starting copies of the runtime files read from the repo root (policy.json,
+                     goals.md, profile.md, inbox-rules.md); npm run setup copies them into place
 ```
 
 ## Active memory

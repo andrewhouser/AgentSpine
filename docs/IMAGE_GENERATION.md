@@ -146,11 +146,12 @@ Compare the peak against the table above; if it is materially higher on `.85`, l
 ### 5. launchd
 
 A ready plist ships at [`services/mflux/com.local.mflux.plist`](../services/mflux/com.local.mflux.plist).
-Check the three items called out in its header comment — `WorkingDirectory`, the uvicorn
+It is a template (`__REPO__` and `__HOME__` are filled in by the `sed` below). Check the three items called out in its header comment — `WorkingDirectory`, the uvicorn
 path, and `MFLUX_MAX_SIDE` — then:
 
 ```bash
-cp services/mflux/com.local.mflux.plist ~/Library/LaunchAgents/
+sed -e "s#__REPO__#$PWD#g" -e "s#__HOME__#$HOME#g" services/mflux/com.local.mflux.plist \
+  > ~/Library/LaunchAgents/com.local.mflux.plist
 launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.local.mflux.plist
 ```
 

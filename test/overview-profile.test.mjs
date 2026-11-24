@@ -59,7 +59,7 @@ check("an occasional error is not", texts({ tools: [{ errors7d: 1, name: "gmail_
 yes("a recipe never used since saving is flagged", texts({ recipes: [{ created: daysAgo(20), last_used: null, name: "pi-brief", uses: 0 }] })[0].includes("never been used"));
 check("a brand-new unused recipe is not", texts({ recipes: [{ created: daysAgo(2), last_used: null, name: "pi-brief", uses: 0 }] }), []);
 yes("a recipe idle for months is flagged", texts({ recipes: [{ created: daysAgo(200), last_used: daysAgo(90), name: "pi-brief", uses: 3 }] })[0].includes("over 60 days"));
-yes("a source that didn't index is a warning", texts({ projects: [{ badSources: ["/x: error: path not found"], chunks: 0, id: 2, name: "Milliman", sources: 1 }] })[0].includes("didn't index"));
+yes("a source that didn't index is a warning", texts({ projects: [{ badSources: ["/x: error: path not found"], chunks: 0, id: 2, name: "Acme", sources: 1 }] })[0].includes("didn't index"));
 yes("a memory kind near its cap is flagged", texts({ memory: [{ cap: 500, count: 470, kind: "reflection" }] })[0].includes("near the cap"));
 check("an uncapped kind never is", texts({ memory: [{ cap: null, count: 9000, kind: "note" }] }), []);
 yes("cards waiting on an idle topic are flagged", texts({ study: [{ cards: 10, due: 4, lastActivity: daysAgo(20), name: "Okta", projectId: null }] })[0].includes("4 cards"));

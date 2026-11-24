@@ -26,7 +26,7 @@ records live in `docs/`; finished plans are in `docs/archive/` (history, not a t
   active parameters. Dense models are far too slow on this bandwidth. Prefill, not generation, is
   the expensive part, so keep prompt prefixes stable and append-only.
 - **AgentSpine host**: a Mac Mini M4, **16 GB**. It runs the dashboard/API/scheduler as the
-  LaunchAgent `local.agentspine.dashboard`, from `/Volumes/WorkDrive/andrewhouser/Developer/AgentSpine`.
+  LaunchAgent `local.agentspine.dashboard`, from the clone on its WorkDrive volume.
   `update.sh` pulls, installs, builds and restarts it there. It can't host the LLM, so never move
   inference onto it.
 - **MacBook Pro** (M3 Pro, 18 GB): where development happens. Claude Code runs here and on the
@@ -84,8 +84,10 @@ Server code changes need a dashboard restart (see README → "Updating & restart
   queue, never straight into RAG. Volatile retrieved context goes **last** in the meeting prompt.
   Front-loading trusted context in `src/agent.ts` is correct for the ordinary loop, so don't
   "fix" it to match.
-- **Root files `goals.md` and `profile.example.md` are runtime files**, not docs. Leave them at
-  the root.
+- **Root runtime files** (`policy.json`, `goals.md`, `profile.md`, `inbox-rules.md`) are yours and
+  gitignored; their committed starting copies are the `*.example.*` files, and `npm run setup` copies
+  them into place. Leave them at the root. Personal details (names, addresses, accounts, employers)
+  go in those files, never in `src/`, tests or prompts in code: use invented names in tests.
 - Keep the project out of `~/Desktop`, `~/Documents` and `~/Downloads` (macOS TCC).
 
 ## Style

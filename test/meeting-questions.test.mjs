@@ -32,7 +32,7 @@ const check = (label, actual, expected) => {
 const yes = (label, v) => check(label, !!v, true);
 
 // --- a project with one document and one meeting transcript about the same thing ---
-const pid = projects.createProject("Milliman IntelliScript");
+const pid = projects.createProject("Acme Underwriting");
 const doc = projects.addSource(pid, "/k/04-okta.md", "path");
 projects.insertChunk(pid, doc, "/k/04-okta.md", 0, "t", "Okta org binding: each credential is bound to exactly one Okta org through the issuer URL; tokens from another org are rejected by the authorizer.", null);
 const mt = projects.addSource(pid, "meeting:99", "meeting");
@@ -88,8 +88,8 @@ check("two model calls: one to choose, one answer per kept question", prompts.le
 
 console.log("\naccept and dismiss\n");
 const a = mq.acceptQuestion(q.id, { question: "How is an Okta credential bound to an org?" });
-check("accepting files a card under a topic named for the project", a.topic, "Milliman IntelliScript");
-const topic = study.findTopic("Milliman IntelliScript");
+check("accepting files a card under a topic named for the project", a.topic, "Acme Underwriting");
+const topic = study.findTopic("Acme Underwriting");
 check("that topic is linked to the project, so it grades locally", topic.project_id, pid);
 const card = study.getCard(a.cardId);
 check("your edit to the question is the card", card.front, "How is an Okta credential bound to an org?");

@@ -1,8 +1,15 @@
 #!/bin/zsh
 set -e
-cd /Volumes/WorkDrive/andrewhouser/Developer/AgentSpine
+# Run from wherever this clone lives.
+cd "${0:A:h}"
+# policy.json and goals.md were tracked once. The pull that stopped tracking them deletes them,
+# so keep a copy first and put it back after. A no-op once both are untracked here.
+keep="$HOME/Library/Logs/agentspine-keep"
+mkdir -p "$keep"
+for f in policy.json goals.md; do [[ -f $f ]] && cp -p "$f" "$keep/$f"; done
 echo "Pulling latest from origin..."
 git pull origin
+for f in policy.json goals.md; do [[ -f $f || ! -f $keep/$f ]] || { cp -p "$keep/$f" "$f"; echo "restored $f"; }; done
 echo "Installing dependencies..."
 npm install
 echo "Building web client..."

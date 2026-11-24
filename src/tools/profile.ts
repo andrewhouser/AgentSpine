@@ -101,7 +101,7 @@ export const profileGaps: Tool = {
     return (
       `Not known yet (${missing.length} of ${FIELDS.length}). Ask these ONE AT A TIME, waiting for each answer:\n` +
       missing.map((f, i) => `${i + 1}. ${f.question}`).join("\n") +
-      "\n\nThen call profile_save with their answers, each as one third-person sentence (\"Andrew works 8 to 4 Eastern\"). " +
+      "\n\nThen call profile_save with their answers, each as one third-person sentence (\"Alex works 8 to 4 Eastern\"). " +
       "Skip anything they'd rather not say. Mention that facts which should ALWAYS apply (name, timezone, how to answer) " +
       "are best added to profile.md by hand, since nothing automated writes there."
     );

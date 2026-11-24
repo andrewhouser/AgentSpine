@@ -2,7 +2,7 @@
  * `notify` in a live conversation — the gate that is code rather than a prompt rule.
  *
  * Observed: asked "what's the weather like today?", the assistant pushed a notification to a
- * phone and then answered "Sent a weather notification for Farmington, NH". Two failures in
+ * phone and then answered "Sent a weather notification for Springfield". Two failures in
  * one — an interruption nobody asked for, and, having "delivered" the weather elsewhere, a
  * reply containing none of it.
  *

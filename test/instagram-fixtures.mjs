@@ -42,7 +42,7 @@ export const jpeg = (w, h, fill = 0) =>
     Buffer.from([0xff, 0xd9]),
   ]);
 
-export const ACCOUNT = "djhouserlive";
+export const ACCOUNT = "exampleshow";
 export const BASE_URL = "https://media.example.test/kit/";
 export const LIVE_URL = "https://show.example.test/api/status";
 

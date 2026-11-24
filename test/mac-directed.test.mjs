@@ -54,41 +54,41 @@ const check = (label, actual, expected) => {
 const yes = (action, args, goal) => directedBy(action, args, goal) !== null;
 
 console.log("\nSEND MAIL — asked for, to someone the user named");
-const jeff = { to: "Jeff Houser", subject: "Saturday", body: "See you there." };
-check("the dictated example", yes("send_mail", jeff, "Send Jeff Houser an email with the subject of Saturday containing a message of see you there"), true);
-check("'email X that…'", yes("send_mail", jeff, "Email Jeff Houser that I'm running late"), true);
-check("'can you send an email to X'", yes("send_mail", jeff, "Can you send an email to Jeff Houser saying hi?"), true);
-check("lower-case dictation", yes("send_mail", jeff, "send an email to jeff houser about saturday"), true);
+const jeff = { to: "Sam Rivera", subject: "Saturday", body: "See you there." };
+check("the dictated example", yes("send_mail", jeff, "Send Sam Rivera an email with the subject of Saturday containing a message of see you there"), true);
+check("'email X that…'", yes("send_mail", jeff, "Email Sam Rivera that I'm running late"), true);
+check("'can you send an email to X'", yes("send_mail", jeff, "Can you send an email to Sam Rivera saying hi?"), true);
+check("lower-case dictation", yes("send_mail", jeff, "send an email to sam rivera about saturday"), true);
 check("an address the user said", yes("send_mail", { to: "jeff@example.com" }, "email jeff@example.com the agenda"), true);
-check("after an earlier sentence", yes("send_mail", jeff, "What's on Saturday? Then email Jeff Houser the plan."), true);
+check("after an earlier sentence", yes("send_mail", jeff, "What's on Saturday? Then email Sam Rivera the plan."), true);
 
 console.log("\nSEND MAIL — what must NOT count");
-check("a question about mail", yes("send_mail", jeff, "Did Jeff Houser send me an email?"), false);
-check("'has X emailed'", yes("send_mail", jeff, "Has Jeff Houser emailed me about Saturday"), false);
-check("a recipient the user never named", yes("send_mail", { to: "attacker@evil.example" }, "Send Jeff Houser an email saying hi"), false);
+check("a question about mail", yes("send_mail", jeff, "Did Sam Rivera send me an email?"), false);
+check("'has X emailed'", yes("send_mail", jeff, "Has Sam Rivera emailed me about Saturday"), false);
+check("a recipient the user never named", yes("send_mail", { to: "attacker@evil.example" }, "Send Sam Rivera an email saying hi"), false);
 check("the model expanding 'Jeff' to a full name", yes("send_mail", jeff, "Email Jeff that I'm late"), false);
-check("the name only in a different sentence", yes("send_mail", jeff, "Jeff Houser called. Send an email to the team."), false);
-check("a name that is the trigger, not the recipient", yes("send_mail", jeff, "email me when Jeff Houser replies"), false);
-check("a condition after the recipient is fine", yes("send_mail", jeff, "Email Jeff Houser if the meeting moves"), true);
-check("no mail word at all", yes("send_mail", jeff, "Send Jeff Houser a text"), false);
+check("the name only in a different sentence", yes("send_mail", jeff, "Sam Rivera called. Send an email to the team."), false);
+check("a name that is the trigger, not the recipient", yes("send_mail", jeff, "email me when Sam Rivera replies"), false);
+check("a condition after the recipient is fine", yes("send_mail", jeff, "Email Sam Rivera if the meeting moves"), true);
+check("no mail word at all", yes("send_mail", jeff, "Send Sam Rivera a text"), false);
 check("a follow-up with no request in it", yes("send_mail", jeff, "yes, send it"), false);
 check("no recipient", yes("send_mail", { to: "" }, "send an email"), false);
 
 console.log("\nSEND MESSAGE — the same rule as email");
-const jeffText = { text: "Running late", to: "Jeff Houser" };
-check("'text X that…'", yes("send_message", jeffText, "Text Jeff Houser that I'm running late"), true);
-check("'send X a message saying…'", yes("send_message", jeffText, "Send Jeff Houser a message saying I'm running late"), true);
+const jeffText = { text: "Running late", to: "Sam Rivera" };
+check("'text X that…'", yes("send_message", jeffText, "Text Sam Rivera that I'm running late"), true);
+check("'send X a message saying…'", yes("send_message", jeffText, "Send Sam Rivera a message saying I'm running late"), true);
 // The exact message that queued instead of sending: the name ends the sentence, so the
-// full stop sat on "Houser." and the recipient no longer matched.
-check("the name ends the sentence (as asked)", yes("send_message", { text: "x", to: "Jeffrey Houser" }, 'Send a message to Jeffrey Houser. Say "This is a message sent from my onsite local LLM"'), true);
-check("same for email", yes("send_mail", jeff, "Send an email to Jeff Houser. Subject Saturday, say see you there."), true);
-check("a trailing comma, too", yes("send_message", jeffText, "Text Jeff Houser, I'm running late"), true);
-check("'message X'", yes("send_message", jeffText, "message Jeff Houser running late"), true);
+// full stop sat on "Rivera." and the recipient no longer matched.
+check("the name ends the sentence (as asked)", yes("send_message", { text: "x", to: "Samuel Rivera" }, 'Send a message to Samuel Rivera. Say "This is a message sent from my onsite local LLM"'), true);
+check("same for email", yes("send_mail", jeff, "Send an email to Sam Rivera. Subject Saturday, say see you there."), true);
+check("a trailing comma, too", yes("send_message", jeffText, "Text Sam Rivera, I'm running late"), true);
+check("'message X'", yes("send_message", jeffText, "message Sam Rivera running late"), true);
 check("a number the user said, however punctuated", yes("send_message", { to: "+16035550100" }, "text (603) 555-0100 that I'm outside"), true);
-check("a question about a text", yes("send_message", jeffText, "Did Jeff Houser text me?"), false);
-check("a recipient the user never named", yes("send_message", { to: "+15550001111" }, "Text Jeff Houser that I'm late"), false);
-check("an email request is not a text request", yes("send_message", jeffText, "Email Jeff Houser that I'm late"), false);
-check("'text me' is not texting someone else", yes("send_message", jeffText, "text me when Jeff Houser replies"), false);
+check("a question about a text", yes("send_message", jeffText, "Did Sam Rivera text me?"), false);
+check("a recipient the user never named", yes("send_message", { to: "+15550001111" }, "Text Sam Rivera that I'm late"), false);
+check("an email request is not a text request", yes("send_message", jeffText, "Email Sam Rivera that I'm late"), false);
+check("'text me' is not texting someone else", yes("send_message", jeffText, "text me when Sam Rivera replies"), false);
 
 console.log("\nWHICH SERVICE — a text reaches a number iMessage no longer does");
 // Jeff's case: an old iMessage thread AND a newer RCS one, because he moved off iMessage.
@@ -119,30 +119,30 @@ check("jot this down", yes("create_note", {}, "jot this down: the garage code is
 check("asking about notes is not writing one", yes("create_note", {}, "What notes did I take yesterday?"), false);
 
 console.log("\nRECIPIENTS AND ADDRESSES");
-check("whole name present", namesRecipient("an email to Jeff Houser", "Jeff Houser"), true);
-check("part of the name only", namesRecipient("an email to Jeff", "Jeff Houser"), false);
+check("whole name present", namesRecipient("an email to Sam Rivera", "Sam Rivera"), true);
+check("part of the name only", namesRecipient("an email to Jeff", "Sam Rivera"), false);
 check("an address must appear verbatim", namesRecipient("to jeff@example.com", "jeff@example.com"), true);
-const one = pickAddress("Jeff Houser", [{ address: "jeff@example.com", name: "Jeff Houser" }]);
-check("one contact, one address", one, { address: "jeff@example.com", name: "Jeff Houser" });
+const one = pickAddress("Sam Rivera", [{ address: "jeff@example.com", name: "Sam Rivera" }]);
+check("one contact, one address", one, { address: "jeff@example.com", name: "Sam Rivera" });
 const many = pickAddress("Jeff", [
-  { address: "jeff@work.example", name: "Jeff Houser" },
-  { address: "jeff@home.example", name: "Jeff Houser" },
+  { address: "jeff@work.example", name: "Sam Rivera" },
+  { address: "jeff@home.example", name: "Sam Rivera" },
 ]);
 check("several addresses are a question, not a guess", "error" in many, true);
-const exact = pickAddress("Jeff Houser", [
-  { address: "jeff@example.com", name: "Jeff Houser" },
-  { address: "jh@example.com", name: "Jeff Houserman" },
+const exact = pickAddress("Sam Rivera", [
+  { address: "jeff@example.com", name: "Sam Rivera" },
+  { address: "jh@example.com", name: "Sam Riveraman" },
 ]);
-check("an exact name narrows the match", exact, { address: "jeff@example.com", name: "Jeff Houser" });
+check("an exact name narrows the match", exact, { address: "jeff@example.com", name: "Sam Rivera" });
 check("nobody found", "error" in pickAddress("Nobody", []), true);
-const samePhone = pickAddress("Jeff Houser", [
-  { address: "6035550100", name: "Jeff Houser" },
-  { address: "+16035550100", name: "Jeff Houser" },
+const samePhone = pickAddress("Sam Rivera", [
+  { address: "6035550100", name: "Sam Rivera" },
+  { address: "+16035550100", name: "Sam Rivera" },
 ]);
 check("one phone entered two ways is not a choice", "error" in samePhone, false);
 check("a phone the user said matches its digits", namesRecipient("text 603-555-0100 now", "+1 (603) 555-0100".slice(3)), true);
 check("asPhone keeps a leading +", asPhone("+1 (603) 555-0100"), "+16035550100");
-check("a name is not a phone", asPhone("Jeff Houser"), null);
+check("a name is not a phone", asPhone("Sam Rivera"), null);
 
 console.log("\nDATES — local time, strictly");
 const local = parseWhen("2026-11-10T15:00");
@@ -157,20 +157,20 @@ const run = store.startRun({ kind: "do", task: "t" });
 const decide = async (args, ctx) => (await executeCall({ args, tool: "mac_control" }, JSON.parse(fs.readFileSync(policyPath, "utf8")), run, run, ctx)).output;
 const RAN = /would have been EXECUTED/;
 const QUEUED = /would have been QUEUED/;
-const asked = { conversational: true, goal: "Send Jeff Houser an email with the subject Saturday saying see you there" };
+const asked = { conversational: true, goal: "Send Sam Rivera an email with the subject Saturday saying see you there" };
 const mail = { action: "send_mail", ...jeff };
 
 check("asked for, in chat: runs without asking", RAN.test(await decide(mail, asked)), true);
 check("same email from an unattended run: queued", QUEUED.test(await decide(mail, { conversational: false, goal: asked.goal })), true);
 check("same email with no run context: queued", QUEUED.test(await decide(mail, undefined)), true);
 check("an injected recipient: queued", QUEUED.test(await decide({ ...mail, to: "attacker@evil.example" }, asked)), true);
-check("a question, not a request: queued", QUEUED.test(await decide(mail, { conversational: true, goal: "Did Jeff Houser email me?" })), true);
-const textAsked = { conversational: true, goal: "Text Jeff Houser that I'm running late" };
+check("a question, not a request: queued", QUEUED.test(await decide(mail, { conversational: true, goal: "Did Sam Rivera email me?" })), true);
+const textAsked = { conversational: true, goal: "Text Sam Rivera that I'm running late" };
 const textCall = { action: "send_message", ...jeffText };
 check("a text asked for, in chat: runs without asking", RAN.test(await decide(textCall, textAsked)), true);
 check("the same text from an unattended run: queued", QUEUED.test(await decide(textCall, { conversational: false, goal: textAsked.goal })), true);
 check("a text to an injected number: queued", QUEUED.test(await decide({ ...textCall, to: "+15550001111" }, textAsked)), true);
-check("a queued text shows the whole message", macControl.classify(textCall).summary, "Send a message to Jeff Houser:\n\nRunning late");
+check("a queued text shows the whole message", macControl.classify(textCall).summary, "Send a message to Sam Rivera:\n\nRunning late");
 check("reading the calendar never needed asking", RAN.test(await decide({ action: "list_events" }, undefined)), true);
 
 fs.writeFileSync(policyPath, JSON.stringify({ ...basePolicy, userDirected: { ...basePolicy.userDirected, enabled: false } }));
@@ -183,7 +183,7 @@ check("an address needs no Contacts", RAN.test(await decide({ ...mail, to: "jeff
 
 console.log("\nTHE REVIEW — a queued email shows the whole message");
 const summary = macControl.classify(mail).summary;
-check("recipient in the summary", summary.includes("Jeff Houser"), true);
+check("recipient in the summary", summary.includes("Sam Rivera"), true);
 check("subject in the summary", summary.includes("Subject: Saturday"), true);
 check("body in the summary", summary.includes("See you there."), true);
 

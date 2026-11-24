@@ -994,6 +994,44 @@ Open decisions for you:
 
 ---
 
+## 11. A version other people can install (added 2026-11-24)
+
+Goal: anyone can clone AgentSpine and run their own copy, with none of your data or preferences in
+it. Single user per install; logins and multi-user are a separate, later decision (if it comes, one
+SQLite file per user rather than a `user_id` on every table).
+
+**Built 2026-11-24:**
+- `policy.json` and `goals.md` are no longer tracked; `policy.example.json` (deny-by-default: no
+  folders, repos, MCP servers, microphones, browser or Google until you turn them on) and
+  `goals.example.md` are the committed starting copies. `npm run setup` (`scripts/setup.mjs`) copies
+  every `*.example` file into place, creates `.env` from `.env.example` and adds a `DASHBOARD_TOKEN`,
+  and never overwrites an existing file. `loadPolicy` says to run it when `policy.json` is missing.
+- The inbox-cleanup watcher's personal rules (named senders, the advisor, the employer) moved to
+  `inbox-rules.md` (gitignored, `inbox-rules.example.md` committed), pasted into the task at
+  `npm run watcher add inbox-cleanup`. An installed schedule keeps the text it was installed with.
+- `update.sh` runs from wherever its clone is, and keeps and restores `policy.json` and `goals.md`
+  across the pull that stops tracking them.
+- The MFLUX and TTS LaunchAgent plists are templates (`__REPO__`, `__HOME__`), like the dashboard's.
+- Code comments, prompt examples, the bench and the tests use invented names (Alex, Sam Rivera, Acme,
+  @exampleshow) in place of real people, accounts and employers.
+
+**Still to do:**
+- **Publish from a fresh repo, not this one.** The history still holds the old `policy.json`,
+  `goals.md`, the inbox rules and everything below, and the `backup-before-secret-scrub` branch may
+  hold secrets. A new repo with one starting commit of the cleaned tree is the safe route.
+- **Docs prose.** `README.md`, `docs/SPEC.md`, `docs/INSTAGRAM.md`, `docs/MODELS.md`,
+  `docs/LEARNING.md`, `docs/WATCHERS.md`, `docs/STUDY.md`, this file and `docs/archive/` name you,
+  your family, your employer, your home town, your Instagram account and your home paths. Either
+  rewrite them with invented names or leave this file and `docs/archive/` out of the public repo.
+- **`CLAUDE.md`** describes your machines (model host address, the Minis, the MacBook). Split it into
+  a generic project file and a per-machine note in `~/.claude`.
+- **Model host default.** `LOCAL_BASE_URL` in `src/config.ts` defaults to your LAN address. Make sure
+  the Mini's `.env` sets `LOCAL_LLM_URL`, then change the default to `http://127.0.0.1:8080/v1`.
+- **iPhone and Mac apps.** Bundle IDs (`com.houserphotography.*`) are in `ios/Supporting/Local.xcconfig`,
+  the Mac target in `project.pbxproj` and the Mac entitlements. Move them all into a gitignored
+  `Local.xcconfig` with a committed example, and make APNs use the configured topic, not one global one.
+- Committed `services/*/__pycache__/*.pyc` files: delete and gitignore.
+
 ---
 
 ## Ground rules (settled; not work)

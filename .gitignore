@@ -5,6 +5,12 @@ spine.db-*
 # Your own standing facts — name, family, employer, how you like things done. Injected as
 # trusted context on every run, and nobody else's business. Start from profile.example.md.
 profile.md
+# The same for the rest of what makes this install yours: what the agent may touch, what the
+# heartbeat works on, and your inbox rules. Each has a committed *.example copy, and
+# npm run setup copies it into place on a fresh clone.
+policy.json
+goals.md
+inbox-rules.md
 # Audio you captured. A meeting recording is other people's voices, recorded in a room they
 # were in; it does not belong in a repo whatever it was useful for.
 test_recording/

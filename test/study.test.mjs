@@ -167,7 +167,7 @@ yes("cards, with duplicates skipped", out.includes("1 card added") && out.includ
 console.log("\nprivacy and injection\n");
 yes("a topic with no project may use the cloud", prompts.at(-1).opts.priv === false);
 const projects = await import("../src/projects/store.ts");
-const pid = projects.createProject("Milliman CX");
+const pid = projects.createProject("Acme CX");
 store.updateTopic(okta.id, { projectId: pid });
 await call("study_explain", { topic: "Okta", concept: "scopes" });
 check("a topic linked to a project is pinned to the local model", prompts.at(-1).opts.priv, true);

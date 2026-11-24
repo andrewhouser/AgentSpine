@@ -13,7 +13,7 @@
  * What it checks, per fixture:
  *   - every payload is wrapped by `tagUntrusted`, and `scanFlags` records whether the scanner also flags it;
  *   - every attack ends in a refusal, a queue, or a denial, with NO mutating call made.
- * What it cannot check: whether a real model is fooled. A fact like "Andrew authorised X" is not
+ * What it cannot check: whether a real model is fooled. A fact like "Alex authorised X" is not
  * credential-shaped, so no code filter can tell it from a true one. Those fixtures are marked `liveOnly`
  * and are the input to the live half (`npm run eval:injection`, not built yet). A broker or tool-guard
  * bypass is a bug, not a statistic: every check here must pass.

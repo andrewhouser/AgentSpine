@@ -1031,6 +1031,8 @@ export const IMAGES_DIR = path.join(BASE, "images");
 
 /** Re-read the policy from disk every time it is needed, so edits take effect live. */
 export const loadPolicy = (): Policy => {
+  // policy.json is yours and not committed, so a fresh clone has none until npm run setup.
+  if (!fs.existsSync(POLICY_PATH)) throw new Error(`no policy at ${POLICY_PATH}. Run npm run setup to start from policy.example.json.`);
   const raw = fs.readFileSync(POLICY_PATH, "utf8");
   return JSON.parse(raw) as Policy;
 };

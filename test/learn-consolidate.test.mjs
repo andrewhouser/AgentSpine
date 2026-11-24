@@ -92,15 +92,15 @@ const insert = rawDb.prepare("INSERT INTO memories (ts, kind, text, embedding) V
 const ts = new Date().toISOString();
 const put = (kind, text, v) => Number(insert.run(ts, kind, text, v ? toBlob(v) : null).lastInsertRowid);
 
-const a = put("note", "Andrew's dog is a whippet called Biscuit.", vec(0, 0));
-const b = put("reflection", "Andrew has a whippet named Biscuit.", vec(0, 30));
+const a = put("note", "Alex's dog is a whippet called Biscuit.", vec(0, 0));
+const b = put("reflection", "Alex has a whippet named Biscuit.", vec(0, 30));
 const c = put("preference", "Wants replies kept short.", vec(1, 0));
 const d = put("note", "Likes brief replies.", vec(1, 10));
 put("note", "Saved while the embedder was down.", null);
 put("note", "Came from a different embedding model.", new Float32Array([1, 0, 0]));
 put("friction", "web_read: 3x timeout on PDF URLs", vec(0, 0)); // out of scope, identical vector to #a
 put("recipe", "when: checking the host. 1. web_read", vec(0, 0)); // out of scope too
-put("note", "ANDREW'S DOG IS A WHIPPET CALLED BISCUIT.  ", vec(0, 0)); // an exact copy of #a
+put("note", "ALEX'S DOG IS A WHIPPET CALLED BISCUIT.  ", vec(0, 0)); // an exact copy of #a
 
 const before = rawDb.prepare("SELECT COUNT(*) n FROM memories").get().n;
 scan = scanMemories();
@@ -122,14 +122,14 @@ check(
 check("friction and recipe rows never appear in a group", scan.groups.flatMap(ids).every((id) => id <= d), true);
 check(
   "the exact copy is collapsed rather than reported at 1.0",
-  scan.groups.flatMap((g) => g.members.map((m) => m.text)).some((t) => t.startsWith("ANDREW")),
+  scan.groups.flatMap((g) => g.members.map((m) => m.text)).some((t) => t.startsWith("ALEX")),
   false,
 );
 check("it wrote nothing: same row count", rawDb.prepare("SELECT COUNT(*) n FROM memories").get().n, before);
 check(
   "and changed no text",
   rawDb.prepare("SELECT text FROM memories WHERE id = ?").get(a).text,
-  "Andrew's dog is a whippet called Biscuit.",
+  "Alex's dog is a whippet called Biscuit.",
 );
 
 fs.rmSync(dbPath, { force: true });
