@@ -79,14 +79,13 @@ struct MacRecordingPanel: View {
                 HStack {
                     MacSourcesRow(recorder: recorder)
                     Spacer()
-                    Button(role: .destructive) {
+                    StopRecordingButton(stopping: stopping || recorder.phase == .finishing) {
                         stopping = true
                         Task {
                             await recorder.stop()
                             stopping = false
                         }
-                    } label: { Text(stopping || recorder.phase == .finishing ? "Stopping…" : "Stop recording") }
-                    .disabled(stopping || recorder.phase == .finishing)
+                    }
                 }
                 if case .buffering = recorder.link {
                     Text("Can't reach the server. \(recorder.unsentSeconds) s of audio is kept on this Mac and will be sent when it's back.")

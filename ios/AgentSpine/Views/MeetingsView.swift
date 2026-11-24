@@ -52,10 +52,8 @@ struct MeetingsView: View {
                                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
                         }
                     }
-                    Button("Stop recording", role: .destructive) {
-                        Task { await stop() }
-                    }
-                    .disabled(stopping)
+                    StopRecordingButton(stopping: stopping) { Task { await stop() } }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else if phone.isRecording {
                 // Between starting on the phone and the first poll, or while the server is
@@ -63,8 +61,8 @@ struct MeetingsView: View {
                 Section {
                     Label("Recording from this iPhone", systemImage: "record.circle")
                         .foregroundStyle(Spine.Palette.danger)
-                    Button("Stop recording", role: .destructive) { Task { await stop() } }
-                        .disabled(stopping)
+                    StopRecordingButton(stopping: stopping) { Task { await stop() } }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             Section {

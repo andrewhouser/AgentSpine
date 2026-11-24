@@ -278,10 +278,7 @@ struct MacLiveMeeting: View {
                 .background(Spine.Palette.accent.opacity(0.14), in: Capsule())
             Spacer()
             if recording {
-                Button(role: .destructive) { Task { await stop() } } label: {
-                    Text(stopping ? "Stopping…" : "Stop recording")
-                }
-                .disabled(stopping)
+                StopRecordingButton(stopping: stopping) { Task { await stop() } }
             }
         }
         .padding(.horizontal, Spine.Space.lg)

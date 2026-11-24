@@ -39,6 +39,7 @@
 				Design/Components/MarkdownText.swift,
 				Design/Components/Notices.swift,
 				Design/Components/PrettyJSON.swift,
+				Design/Components/RecordingButtons.swift,
 				Design/Components/SpineRow.swift,
 				Design/Components/SpineScreen.swift,
 				Design/Components/ThreadBubble.swift,
