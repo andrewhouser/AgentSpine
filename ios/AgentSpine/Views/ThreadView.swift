@@ -705,6 +705,7 @@ struct TurnView: View {
     @State private var fileName = ""
     @State private var notice: String?
     @State private var showContext = false
+    @State private var selecting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -748,7 +749,27 @@ struct TurnView: View {
                 if let card = WeatherCard.of(calls: turn.actions.map { ($0.tool, $0.output, $0.status == .executed) }) {
                     WeatherCardView(card: card)
                 }
-                MarkdownText(summary)
+                // The long-press menu needs selection off (see `MarkdownText`); Select text in it
+                // brings selection back in a sheet, for copying part of a reply.
+                MarkdownText(summary, selectable: false)
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = summary
+                            notice = "Copied"
+                        } label: { Label("Copy", systemImage: "doc.on.doc") }
+                        Button { selecting = true } label: { Label("Select text", systemImage: "selection.pin.in.out") }
+                        Button {
+                            if reader.speaking && reader.current != summary { reader.stop() }
+                            reader.toggle(summary)
+                        } label: {
+                            reader.current == summary && reader.speaking
+                                ? Label("Stop reading", systemImage: "stop.circle")
+                                : Label("Read aloud", systemImage: "speaker.wave.2")
+                        }
+                        Divider()
+                        replyActions
+                    }
             } else if turn.status == "failed" {
                 Label("This turn failed.", systemImage: "exclamationmark.triangle")
                     .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
@@ -765,24 +786,7 @@ struct TurnView: View {
                 if let summary = turn.summary, !summary.isEmpty {
                     Spacer()
                     Menu {
-                        Button {
-                            let next = !(starred ?? turn.starred ?? false)
-                            starred = next
-                            Task { try? await APIClient.shared.star(runID: turn.id, starred: next) }
-                        } label: {
-                            Label((starred ?? turn.starred ?? false) ? "Unstar" : "Star", systemImage: (starred ?? turn.starred ?? false) ? "star.slash" : "star")
-                        }
-                        Button {
-                            fileName = "reply-\(turn.id).md"
-                            saving = true
-                        } label: {
-                            Label("Save to file…", systemImage: "square.and.arrow.down")
-                        }
-                        if let used = turn.contextUsed, !used.isEmpty {
-                            Button { showContext = true } label: {
-                                Label("Context used (\(used.count))", systemImage: "brain")
-                            }
-                        }
+                        replyActions
                     } label: {
                         Image(systemName: (starred ?? turn.starred ?? false) ? "star.fill" : "ellipsis.circle")
                     }
@@ -827,6 +831,39 @@ struct TurnView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showContext = false } } }
             }
             .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $selecting) {
+            NavigationStack {
+                ScrollView {
+                    MarkdownText(turn.summary ?? "")
+                        .padding()
+                }
+                .navigationTitle("Select text")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { selecting = false } } }
+            }
+        }
+    }
+
+    /// Star, save and context, in both the footer's menu and the reply's long-press menu.
+    @ViewBuilder private var replyActions: some View {
+        Button {
+            let next = !(starred ?? turn.starred ?? false)
+            starred = next
+            Task { try? await APIClient.shared.star(runID: turn.id, starred: next) }
+        } label: {
+            Label((starred ?? turn.starred ?? false) ? "Unstar" : "Star", systemImage: (starred ?? turn.starred ?? false) ? "star.slash" : "star")
+        }
+        Button {
+            fileName = "reply-\(turn.id).md"
+            saving = true
+        } label: {
+            Label("Save to file…", systemImage: "square.and.arrow.down")
+        }
+        if let used = turn.contextUsed, !used.isEmpty {
+            Button { showContext = true } label: {
+                Label("Context used (\(used.count))", systemImage: "brain")
+            }
         }
     }
 }

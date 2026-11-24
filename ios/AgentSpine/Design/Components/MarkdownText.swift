@@ -36,13 +36,19 @@ private typealias ReplyPlatformImage = NSImage
 struct MarkdownText: View {
     private let blocks: [Block]
     private let compact: Bool
+    private let selectable: Bool
 
     /// `compact` is for the places a reply is quoted rather than read — a delegated unit's
     /// summary inside a collapsed card. Everything shrinks together, so a heading there is
     /// still visibly a heading without taking over the card it sits in.
-    init(_ text: String, compact: Bool = false) {
+    ///
+    /// `selectable: false` is for a caller that puts a long-press menu on the text: on the
+    /// phone, selection claims the long press and the menu never opens (found on the device,
+    /// 2026-11-24). That caller offers its own way to select.
+    init(_ text: String, compact: Bool = false, selectable: Bool = true) {
         self.blocks = BlockCache.shared.blocks(for: text)
         self.compact = compact
+        self.selectable = selectable
     }
 
     var body: some View {
@@ -56,7 +62,7 @@ struct MarkdownText: View {
         // not per block so a caller's own foregroundStyle on a parent still reads as intended.
         .foregroundStyle(compact ? Spine.Palette.textDim : Spine.Palette.text)
         .tint(Spine.Palette.accent)
-        .textSelection(.enabled)
+        .modifier(SelectableText(enabled: selectable))
     }
 
     // MARK: - Rendering
@@ -478,5 +484,18 @@ final class BlockCache {
         let parsed = MarkdownText.Block.parse(text)
         cache.setObject(Box(parsed), forKey: key)
         return parsed
+    }
+}
+
+/// `textSelection` takes a type, not a Bool, so turning it off needs a branch.
+private struct SelectableText: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.textSelection(.enabled)
+        } else {
+            content.textSelection(.disabled)
+        }
     }
 }

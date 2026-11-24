@@ -838,7 +838,9 @@ is built. Every measurement named below needs the model host, so every item is *
   at 2,474px through the end of a reply, the scroll height never dropped, and the same thread read 8.1 tok/s again.
   iPhone: checked by you against the live dashboard (2026-11-24). That test found the long-press menu on your own
   message (Edit and resend, Retry, Copy) never opened, because text selection claimed the press. The phone bubble
-  now has no text selection, its Copy covers the message, and the menu was confirmed on the device. Not checked:
+  now has no text selection, its Copy covers the message, and the menu was confirmed on the device. A finished
+  reply has a long-press menu too (Copy, Select text in a sheet, Read aloud, Star, Save to file, Context used),
+  also confirmed on the device; a streaming reply has none. Not checked:
   the Mac app against the live dashboard, including both fixes (it builds; the simulator has no working connection
   and the real token is not available to Claude).
   First-token time is not stored, so the Tokens card still shows effective speed.
