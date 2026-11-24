@@ -823,8 +823,20 @@ is built. Every measurement named below needs the model host, so every item is *
   `src/answer-stream.ts` holds back anything that could still be a tool call and sends whole-text `answer`
   snapshots, so a reconnect cannot duplicate text and a retry or tool call can clear it. Checked: the real loop on
   the model host with no tools (a 9.2s answer showed text at 3.3s, no tool JSON shown), and a scripted stream on web
-  and the iPhone simulator (preview, retraction, growing answer). Not checked: a live chat on the deployed
-  dashboard, the Mac app at runtime (it builds), or following the scroll position on a long reply on Mac or iPhone.
+  and the iPhone simulator (preview, retraction, growing answer).
+  **Live on the deployed dashboard (2026-11-23, `7ccac76`, web, local model).** A 500-word answer with 13,887
+  prompt tokens showed its first text 56s after sending and then grew steadily; a second one showed text at 37s and
+  finished at 65s. No tool JSON appeared. A weather request ran its tool, showed the card and answered. Stop ended
+  the run within 0.2s and removed the partial text, and after a reload only "Stopped before it finished." remained.
+  Scrolling up held the position while text grew.
+  **Two bugs from that test, fixed in code (2026-11-23, not yet deployed or rechecked live):** (1) when an answer
+  finished, the live text was removed a moment before the saved message rendered (scroll height 2,301 to 1,232 and
+  back to 2,333), and the view then scrolled to the bottom even if the reader had scrolled up. All three clients now
+  keep the live turn until the saved one has loaded and follow only a reader at the end. (2) A stopped call adds
+  model time but no output tokens, so effective speed fell from 8.1 to 6.1 tok/s with output unchanged at 1,368.
+  Speed is now taken over `reportedMs`, the time on calls that reported tokens.
+  Not checked: the iPhone and Mac apps against the live dashboard (both build; the simulator has no working
+  connection and the real token is not available to Claude), including scroll-follow on a long reply.
   First-token time is not stored, so the Tokens card still shows effective speed.
 - **LP2 "Local deep": thinking on for hard steps.** `NO_THINKING` is sent on every local call (`src/llm.ts`).
   A run that has read mail, a calendar, a file or a project is pinned local, and `resolveTier` turns `deep`

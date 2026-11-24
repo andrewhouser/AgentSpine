@@ -188,6 +188,8 @@ struct RunUsage: Codable, Hashable {
     let calls: Int
     let completionTokens: Int
     let promptTokens: Int
+    /// Time on calls that reported output tokens. Nil from a server or saved copy older than this field.
+    let reportedMs: Int?
     let unreported: Int
 }
 

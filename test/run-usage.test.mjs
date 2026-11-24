@@ -34,6 +34,8 @@ store.logLlmCall({ model: "big", ms: 300, runId: 9003, tier: "standard" });
 const n = store.usageForRuns([9003]);
 check("counts as a call, adds no tokens, and is flagged", [n.calls, n.promptTokens, n.unreported], [1, 0, 1]);
 
+check("its time stays out of the speed calculation", store.usageForRuns([9001, 9003]).reportedMs, 1500);
+
 console.log("A run with no calls");
 check("is empty rather than an error", store.usageForRuns([424242]).calls, 0);
 

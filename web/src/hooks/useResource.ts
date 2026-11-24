@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export const useResource = <T>(load: () => Promise<T>, initial: T): [T, () => void] => {
+export const useResource = <T>(load: () => Promise<T>, initial: T): [T, () => void, (value: T) => void] => {
   const [data, setData] = useState<T>(initial);
   const [key, setKey] = useState(0);
   const loadRef = useRef(load);
@@ -33,5 +33,5 @@ export const useResource = <T>(load: () => Promise<T>, initial: T): [T, () => vo
     };
   }, [key]);
 
-  return [data, useCallback(() => setKey((k) => k + 1), [])];
+  return [data, useCallback(() => setKey((k) => k + 1), []), setData];
 };

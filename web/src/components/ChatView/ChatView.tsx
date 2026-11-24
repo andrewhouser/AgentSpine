@@ -9,6 +9,7 @@ import { useRunStream } from "../../hooks/useRunStream.ts";
 import { useVoiceConfig } from "../../hooks/useVoiceConfig.ts";
 import { useVoiceSession } from "../../hooks/useVoiceSession.ts";
 import { api } from "../../lib/api.ts";
+import { keepsFollowing } from "../../lib/scroll-follow.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { Composer } from "../Composer/Composer.tsx";
 import { ThreadInspector } from "../ThreadInspector/ThreadInspector.tsx";
@@ -72,7 +73,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
   // AppShell keys this component on the conversation, so switching threads remounts it and
   // no state has to be reset by hand.
   const load = useCallback(() => api.thread(conversationId), [conversationId]);
-  const [thread, reloadThread] = useResource<null | Thread>(load, null);
+  const [thread, reloadThread, setThread] = useResource<null | Thread>(load, null);
   const [active, setActive] = useState<ActiveRun | null>(null);
   // Remembered across threads and reloads, like the Mac app's inspector.
   const [showInspector, setShowInspector] = useState(() => {
@@ -116,6 +117,9 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
     setActive({ attachments: inFlight.attachments, runId: inFlight.id, task: inFlight.task ?? "" });
   }
   const bottom = useRef<HTMLDivElement>(null);
+  // Whether new content should carry the view with it; see lib/scroll-follow.ts.
+  const following = useRef(true);
+  const lastScrollTop = useRef(0);
   // "Edit and resend" hands its text to the composer; a fresh object each time so the same
   // message can be edited twice. When each message was sent, for the run that has no row yet.
   const [draft, setDraft] = useState<{ text: string } | null>(null);
@@ -134,6 +138,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
       // The attachments are carried into the live turn rather than refetched: they are already
       // in hand, and the turn has to render them the moment it appears — waiting for the thread
       // to reload would show a question about a photograph with no photograph under it.
+      following.current = true;
       setActive({ attachments, runId: id, task });
       setSentAt((prev) => ({ ...prev, [id]: new Date().toISOString() }));
     },
@@ -150,18 +155,28 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
   const { notifyReply } = voice;
 
   const onRunComplete = useCallback(() => {
-    // The persisted turn supersedes the streamed one, so clear the live turn and refetch.
+    // The persisted turn supersedes the streamed one, but only once it is here. Clearing the
+    // live turn first removed the answer for a moment, which collapsed the scroll height
+    // (2,301px to 1,232px, measured live) and moved anyone reading further up.
     if (runId != null) setSettledRunId(runId);
-    setActive(null);
-    reloadThread();
+    const clearLive = (): void => setActive((current) => (current?.runId === runId ? null : current));
     onTitleMayHaveChanged();
     // The spoken reply comes from the persisted turn, not the stream: the ledger is the record
     // of what the run actually concluded, and it also says whether the run failed.
-    void api.thread(conversationId).then((t) => {
-      const turn = t.turns.find((x) => x.id === runId);
-      notifyReply(turn && turn.status !== "failed" ? turn.summary : null);
-    });
-  }, [conversationId, notifyReply, onTitleMayHaveChanged, reloadThread, runId]);
+    api
+      .thread(conversationId)
+      .then((t) => {
+        setThread(t);
+        clearLive();
+        const turn = t.turns.find((x) => x.id === runId);
+        notifyReply(turn && turn.status !== "failed" ? turn.summary : null);
+      })
+      .catch(() => {
+        clearLive();
+        reloadThread();
+        notifyReply(null);
+      });
+  }, [conversationId, notifyReply, onTitleMayHaveChanged, reloadThread, runId, setThread]);
 
   const live = useRunStream(active, onRunComplete);
 
@@ -204,18 +219,15 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
     onTitleMayHaveChanged();
   }, [onTitleMayHaveChanged, reloadThread]);
 
-  // Stick to the bottom as content arrives, the way a chat should.
+  // Stick to the bottom as content arrives, unless the reader has scrolled up.
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth" });
+    if (following.current) bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread, live?.step, live?.toolCalls.length, live?.summary]);
 
   // Follow a streaming answer only while the reader is at the bottom. It updates several times
   // a second, so following unconditionally would make it impossible to scroll up and read.
   useEffect(() => {
-    const end = bottom.current;
-    if (live?.answer && end && end.getBoundingClientRect().top <= window.innerHeight + 60) {
-      end.scrollIntoView({ behavior: "auto" });
-    }
+    if (live?.answer && following.current) bottom.current?.scrollIntoView({ behavior: "auto" });
   }, [live?.answer]);
 
   const turns = thread?.turns ?? [];
@@ -274,7 +286,18 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
           model. Start a new chat to use the cloud tier.
         </p>
       )}
-      <div className={styles.scroll}>
+      <div
+        className={styles.scroll}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          following.current = keepsFollowing(following.current, {
+            distanceFromBottom: el.scrollHeight - el.clientHeight - el.scrollTop,
+            previousTop: lastScrollTop.current,
+            top: el.scrollTop,
+          });
+          lastScrollTop.current = el.scrollTop;
+        }}
+      >
         {tab === "trace" && (
           <div className={styles.column}>
             <TraceView turns={traceTurns} />

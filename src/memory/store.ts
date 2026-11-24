@@ -1767,11 +1767,13 @@ export interface RunUsage {
   calls: number;
   completionTokens: number;
   promptTokens: number;
+  /** Time on calls that reported output tokens, the only time tokens per second can be taken over. */
+  reportedMs: number;
   unreported: number;
 }
 
 export const usageForRuns = (runIds: number[]): RunUsage => {
-  const out: RunUsage = { byModel: [], calls: 0, completionTokens: 0, promptTokens: 0, unreported: 0 };
+  const out: RunUsage = { byModel: [], calls: 0, completionTokens: 0, promptTokens: 0, reportedMs: 0, unreported: 0 };
   const by = new Map<string, RunUsage["byModel"][number]>();
   for (const id of runIds) {
     for (const c of llmCallsForRun(id)) {
@@ -1785,6 +1787,7 @@ export const usageForRuns = (runIds: number[]): RunUsage => {
       out.calls += 1;
       out.promptTokens += c.prompt_tokens ?? 0;
       out.completionTokens += c.completion_tokens ?? 0;
+      if (c.completion_tokens != null) out.reportedMs += c.ms;
       if (c.prompt_tokens == null && c.completion_tokens == null) out.unreported += 1;
     }
   }

@@ -20,6 +20,9 @@ struct MacThreadDetail: View {
     @State private var loadError: String?
     @State private var stream = RunStream()
     @State private var nearBottom = true
+    /// The run has ended and its saved turn is still loading. The stream keeps drawing it until
+    /// then, because dropping it first collapses the scroll height and moves the reader.
+    @State private var isSettling = false
     @State private var liveTask: String?
     /// When the live message was sent, for the time under it before the ledger row has loaded.
     @State private var liveSentAt: Date?
@@ -86,13 +89,20 @@ struct MacThreadDetail: View {
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: stream.calls.count) { _, _ in
+                    guard nearBottom else { return }
                     withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
+                // A new turn is the reader's own action, so it goes to the end wherever they were.
+                .onChange(of: stream.runID) { _, id in
+                    if id != nil { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
                 .onChange(of: stream.answerText) { _, text in
                     if nearBottom, !text.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
-                .onChange(of: thread?.turns.count) { _, _ in
-                    proxy.scrollTo("bottom", anchor: .bottom)
+                // The first load opens at the end. After that a finished turn must not pull a reader
+                // who scrolled up back down (measured on web, 2026-11-23).
+                .onChange(of: thread?.turns.count) { old, _ in
+                    if old == nil || nearBottom { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
 
@@ -137,8 +147,10 @@ struct MacThreadDetail: View {
             if !stream.isLive { isStopping = false }
             switch phase {
             case .failed, .finished:
+                isSettling = true
                 Task {
                     await load()
+                    isSettling = false
                     liveTask = nil
                     hub.nudge(conversationID, from: viewID)
                     await state.refreshConversations()
@@ -304,7 +316,7 @@ struct MacThreadDetail: View {
         return nil
     }
 
-    private var showsLiveTurn: Bool { stream.isLive || stream.transportNote != nil }
+    private var showsLiveTurn: Bool { stream.isLive || isSettling || stream.transportNote != nil }
 
     private var liveLedgerTurn: Turn? {
         guard let live = stream.runID else { return nil }

@@ -810,6 +810,8 @@ export interface RunUsage {
   calls: number;
   completionTokens: number;
   promptTokens: number;
+  /** Time spent on calls that reported output tokens. Absent from a server older than this field. */
+  reportedMs?: number;
   unreported: number;
 }
 

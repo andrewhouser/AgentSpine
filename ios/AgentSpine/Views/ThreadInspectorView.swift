@@ -196,16 +196,21 @@ struct ThreadInspectorView: View {
 
     private var totalModelMs: Int { usages.reduce(0) { $0 + $1.byModel.reduce(0) { $0 + $1.ms } } }
 
+    /// A stopped call has time and no token count, so speed is taken over the calls that reported.
+    private var totalReportedMs: Int {
+        usages.reduce(0) { $0 + ($1.reportedMs ?? $1.byModel.reduce(0) { $0 + $1.ms }) }
+    }
+
     /// "Effective" because no first-token time is recorded: `ms` is the whole request, prefill included,
     /// so on a 22k-token prompt this reads far below the model's 28 tok/s decode speed.
     private var effectiveSpeedLine: String? {
-        guard totalModelMs > 0 else { return nil }
+        guard totalModelMs > 0, totalReportedMs > 0 else { return nil }
         let exactSeconds = Double(totalModelMs) / 1000
         let seconds = Int(exactSeconds.rounded())
         let time = seconds < 60 ? "\(seconds)s"
             : seconds < 3600 ? "\(seconds / 60)m \(seconds % 60)s"
             : "\(seconds / 3600)h \((seconds % 3600) / 60)m"
-        let speed = (Double(totalOut) / exactSeconds).formatted(.number.precision(.fractionLength(1)))
+        let speed = (Double(totalOut) / (Double(totalReportedMs) / 1000)).formatted(.number.precision(.fractionLength(1)))
         return "Effective: \(speed) tok/s · \(time) model time"
     }
 

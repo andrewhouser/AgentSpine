@@ -106,6 +106,7 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
   let calls = 0;
   let unreported = 0;
   let modelMs = 0;
+  let reportedMs = 0;
   const byModel = new Map<string, { calls: number; completion: number; model: string; prompt: number; tier: null | string }>();
   for (const t of turns) {
     const u = t.usage;
@@ -114,6 +115,7 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
     tokensOut += u.completionTokens;
     calls += u.calls;
     unreported += u.unreported;
+    reportedMs += u.reportedMs ?? u.byModel.reduce((sum, m) => sum + m.ms, 0);
     for (const m of u.byModel) {
       modelMs += m.ms;
       const key = `${m.tier ?? ""}|${m.model}`;
@@ -134,7 +136,9 @@ export const ThreadInspector = ({ thread }: ThreadInspectorProps) => {
       : modelSeconds < 3600
         ? `${Math.floor(modelSeconds / 60)}m ${modelSeconds % 60}s`
         : `${Math.floor(modelSeconds / 3600)}h ${Math.floor((modelSeconds % 3600) / 60)}m`;
-  const effectiveSpeed = modelMs > 0 ? (tokensOut / (modelMs / 1000)).toFixed(1) : null;
+  // Over the calls that reported tokens: a stopped call has time and no count, and dividing by
+  // its time took the card from 8.1 to 6.1 tok/s with the output unchanged.
+  const effectiveSpeed = reportedMs > 0 ? (tokensOut / (reportedMs / 1000)).toFixed(1) : null;
 
   const byTool = new Map<string, BrokerStatus[]>();
   for (const a of actions) byTool.set(a.tool, [...(byTool.get(a.tool) ?? []), a.decision]);

@@ -17,6 +17,9 @@ struct ThreadView: View {
     @State private var showInspector = false
     @State private var stream = RunStream()
     @State private var nearBottom = true
+    /// The run has ended and its saved turn is still loading. The stream keeps drawing it until
+    /// then, because dropping it first collapses the scroll height and moves the reader.
+    @State private var isSettling = false
     @State private var draft = ""
     /// The thread failing to arrive, shown at the top of an empty scroll.
     @State private var loadError: String?
@@ -94,13 +97,20 @@ struct ThreadView: View {
                 .padding(.top, 12)
             }
             .onChange(of: stream.calls.count) { _, _ in
+                guard nearBottom else { return }
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            // A new turn is the reader's own action, so it goes to the end wherever they were.
+            .onChange(of: stream.runID) { _, id in
+                if id != nil { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: stream.answerText) { _, text in
                 if nearBottom, !text.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .onChange(of: thread?.turns.count) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+            // The first load opens at the end. After that a finished turn must not pull a reader
+            // who scrolled up back down (measured on web, 2026-11-23).
+            .onChange(of: thread?.turns.count) { old, _ in
+                if old == nil || nearBottom { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: openQuestionCount) { old, new in
                 if new > old { withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
@@ -138,8 +148,10 @@ struct ThreadView: View {
             if !stream.isLive { isStopping = false }
             switch phase {
             case .failed, .finished:
+                isSettling = true
                 Task {
                     await load()
+                    isSettling = false
                     liveTask = nil
                     await state.refreshConversations()
                     Task { await state.refreshUntilTitled(conversationID) }
@@ -180,7 +192,7 @@ struct ThreadView: View {
     }
 
     /// Whether the turn in flight is being drawn from the stream.
-    private var showsLiveTurn: Bool { stream.isLive || stream.transportNote != nil }
+    private var showsLiveTurn: Bool { stream.isLive || isSettling || stream.transportNote != nil }
 
     /// The live run's own row in the ledger, once a reload has fetched it.
     private var liveLedgerTurn: Turn? {
