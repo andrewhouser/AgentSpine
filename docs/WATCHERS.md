@@ -19,7 +19,7 @@ AgentSpine has two places to put things it learns, and picking the wrong one is 
 way watchers go bad.
 
 `memory_save` / `memory_recall` are **semantic**: embeddings, cosine ranking, fuzzy recall.
-Right for "what do I know about Andrew's setup". Wrong for change detection, because
+Right for "what do I know about the user's setup". Wrong for change detection, because
 "roughly the same as last time" is exactly the judgment you don't want a small model
 making at 3am. It cries wolf on a reworded headline and sleeps through a version bump.
 

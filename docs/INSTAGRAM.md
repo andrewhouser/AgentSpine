@@ -1,8 +1,8 @@
 # Instagram publishing
 
 Scheduled image posts to one Instagram professional account, with results reported once a week.
-Built 2026-11-22 for @djhouserlive (the DJ Houser Live show and CueForge). The content comes from
-the marketing kit in the djlive repo (`docs/marketing`).
+Built 2026-11-22 for one show's account (written here as @exampleshow). The content comes from a
+marketing kit you keep in your own repo (a folder of images plus a weekly plan).
 
 **Status: built and tested against a mocked API. It has never called Meta.** No Meta app exists,
 no token is stored, no image is hosted, and nothing has been published. It is off until
@@ -114,10 +114,10 @@ what next week still needs approved, and a warning when the token is within 10 d
 
 Nothing below has been done. In order:
 
-1. **Confirm the account type.** @djhouserlive must be a professional account (Business or
+1. **Confirm the account type.** @exampleshow (your account) must be a professional account (Business or
    Creator). No Facebook Page is needed for this API.
 2. **Create the Meta app.** At developers.facebook.com create an app of type Business, add the
-   Instagram product, and open "API setup with Instagram business login". Add @djhouserlive to
+   Instagram product, and open "API setup with Instagram business login". Add your account to
    the app there (the Dashboard walks through it). Permissions:
    `instagram_business_basic`, `instagram_business_content_publish`,
    `instagram_business_manage_insights`. Standard Access covers an account you own, so no App
@@ -126,16 +126,16 @@ Nothing below has been done. In order:
    under one base URL, so that `<base>/images/show/S01-new-here.jpg` resolves. The R2 bucket
    DJLive already uses is the obvious place, under its own prefix. Serve them as `image/jpeg`
    and unmodified: a CDN that resizes or re-encodes changes the bytes, and the runner will hold
-   the post because the sha256 no longer matches. Stories need `images/show/stories/` and
-   `images/cueforge/stories/` too.
+   the post because the sha256 no longer matches. Stories need `images/show/stories/` (and a stories folder for any
+   other product you post about) too.
 4. **Deploy and enable, without publishing.** On the Mini run `./update.sh`, then add to
    `policy.json`:
 
    ```json
    "instagram": {
      "enabled": true,
-     "account": "djhouserlive",
-     "liveStatusUrl": "https://djhouser.live/api/status"
+     "account": "exampleshow",
+     "liveStatusUrl": "https://example.com/api/status"
    }
    ```
 
@@ -218,5 +218,5 @@ published, without an id, and so without insights).
 - Nothing pins a post. S01, S02 and C01 are marked "Pin it" in the plan as a reminder.
 - Release conditions such as "only if the show is confirmed" are shown at approval and enforced
   by your approval, not by code. Code enforces the window and the live gate.
-- Account-level numbers (follows, profile visits) and CueForge download clicks are not collected.
+- Account-level numbers (follows, profile visits) and app download clicks are not collected.
 - The plan is a file you extend each week. Nothing rotates posts automatically.

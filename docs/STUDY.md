@@ -73,7 +73,7 @@ Every model call here is `sensitivity: "private"`, like all meeting work.
 
 Link a topic to a project (`study_topic set` with `project: "this"`, or create it from inside a
 project's conversation) and questions, explanations and grading are drawn from that project's
-indexed documents, for example the Milliman CX knowledge. A topic linked to a project is **pinned
+indexed documents, for example a work team's knowledge base. A topic linked to a project is **pinned
 to the local model**: project documents are work material and a study aid is not a reason to send
 them to the cloud. Topics with no project may use the cloud tier like any other call.
 

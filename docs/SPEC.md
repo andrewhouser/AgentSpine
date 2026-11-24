@@ -44,7 +44,7 @@ stripping — no build step**; run `.ts` directly. Deps: `openai`, `playwright-c
 `npm audit` = **0 vulnerabilities** (a maintained value — see gotchas).
 
 **Runtime**
-- Chat model: local **MLX-LM** server, OpenAI-spec, `http://192.168.0.150:8080/v1`
+- Chat model: local **MLX-LM** server, OpenAI-spec, `http://192.168.1.50:8080/v1`
   (`LOCAL_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit-DWQ` since 2026-09-08; the host address is
   static as of the same date, after two DHCP moves from `.145`; the owner confirmed `.150`
   on 2026-11-21 when `CLAUDE.md` still said `.145`). It is a *reasoning* model,
@@ -354,7 +354,7 @@ allowlisted repo.
 
 > ### Recorded decision — 2026-07-25
 >
-> **Andrew chose the preferred path: draft-not-send. No OAuth scope was added, and none is
+> **The user chose the preferred path: draft-not-send. No OAuth scope was added, and none is
 > to be added without a new, explicit decision.** "It would be more convenient" does not
 > count as one. `GOOGLE_SCOPES` remains exactly `calendar.readonly` + `gmail.readonly`;
 > the token still *physically cannot* send mail or change a calendar. Also recorded in
@@ -412,7 +412,7 @@ is to keep it.
 
 > ### Amendment — 2026-11-21: a separate write token, for the inbox cleanup
 >
-> Andrew asked for the recurring Gmail cleanup (until now a cloud task) to run on AgentSpine, which
+> The user asked for the recurring Gmail cleanup (until now a cloud task) to run on AgentSpine, which
 > needs archive, label, trash, mark spam, and creating bill events. **This is a new, explicit decision
 > and it narrows, not repeals, the one above.**
 >
@@ -428,10 +428,10 @@ is to keep it.
 >   `policy.google.write.maxChangesPerRun` per run), `calendar_write` (create or update all-day events on the calendars
 >   named in `policy.google.write.calendars`, default "Bills", which it never creates), `calendar_find` (read).
 >   No permanent delete, no empty trash, no calendar delete, no settings or filters.
-> - Protections that are code, not prompt: only inbox mail; never mail from anyone Andrew has emailed (looked up in
+> - Protections that are code, not prompt: only inbox mail; never mail from anyone the user has emailed (looked up in
 >   Sent), unless the sender is on `trashOverrideSenders` in his own `policy.json`; never starred or sent mail.
 > - Tiers: archive and label are reversible; trash and spam are irreversible, so they queue in a chat and run
->   unattended in a schedule Andrew set up. Calendar writes are reversible and limited to one named calendar.
+>   unattended in a schedule the user set up. Calendar writes are reversible and limited to one named calendar.
 > - Not carried over from the cloud task: unsubscribing through a browser. Reading remains headers and snippet
 >   only, never a full body (the one exception, your own sent mail for writing styles, is the amendment below).
 >   Unsubscribing is the amendment below.
@@ -441,7 +441,7 @@ is to keep it.
 
 > ### Amendment — 2026-11-21: one-click unsubscribe in the inbox cleanup
 >
-> Andrew's rule for the cleanup: a message with an unsubscribe link is unsubscribed and moved to Trash, unless it is a
+> The user's rule for the cleanup: a message with an unsubscribe link is unsubscribed and moved to Trash, unless it is a
 > financial bill with a due date and an amount. The cloud task did this through a browser; the local one could only
 > list senders. `gmail_unsubscribe` (`src/tools/gmail-unsubscribe.ts`) does it without one, and narrows nothing above.
 >
@@ -453,9 +453,9 @@ is to keep it.
 >   nothing here does, and a link that needs a page click is not followed. Those messages are still trashed and the summary
 >   says "unsubscribe by hand".
 > - The model passes ids, never a URL. The link is read by code and never appears in a tool result (host name only).
-> - Irreversible tier, like trash: queued in a chat, run unattended in a schedule Andrew set up. Counts against
->   `maxChangesPerRun`. The prompt keeps "no unsubscribe" for the Ameriprise, LinkedIn and Starbucks standing
->   instructions and for mail that may be phishing, where unsubscribing would confirm the address is live.
+> - Irreversible tier, like trash: queued in a chat, run unattended in a schedule the user set up. Counts against
+>   `maxChangesPerRun`. The prompt keeps "no unsubscribe" for the user's standing
+>   instructions (`inbox-rules.md`) and for mail that may be phishing, where unsubscribing would confirm the address is live.
 
 ---
 
@@ -664,7 +664,7 @@ npm run tick | loop    # legacy single-goal heartbeat
 >
 > The obvious design (one model server, a `model` field per request, a cheap classifier
 > choosing) is **worse than not routing at all** on this hardware. Measured against the M4
-> Mini (then at 192.168.0.145, now 192.168.0.150):
+> Mini that hosts the models:
 >
 > ```
 > model swap on one server ....... 1.7s to reach a 3B, 7.9s to get back to the 30B

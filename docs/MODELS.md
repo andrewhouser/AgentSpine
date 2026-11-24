@@ -1,13 +1,13 @@
-# Model host setup (the M4 Mini at 192.168.0.150)
+# Model host setup (an M4 Mini on the LAN)
 
-> **The host is `192.168.0.150`, and that address is now static** (set 2026-09-08). It was
-> `.145`, then briefly `.134` on a DHCP lease; each move turned every local call into a
-> timeout with nothing in any log to say why, which is the reason it is pinned.
+> **Give the model host a static address.** The examples here use `192.168.1.50`; use yours.
+> On a DHCP lease the address can move, and each move turns every local call into a timeout
+> with nothing in any log to say why.
 >
-> A hostname is not the answer here: the router calls the Mini `Mac.lan` and calls the
-> AgentSpine machine at `.85` the same thing, so the IP is what the config carries. If local
-> calls ever start timing out again, `arp -n 192.168.0.150` returning `(incomplete)` means
-> the host is off or off the network — not that it moved.
+> A hostname is not always the answer either: some routers give two Macs the same `Mac.lan`
+> name, so an IP is the safer thing for the config to carry. If local calls ever start timing
+> out, `arp -n 192.168.1.50` returning `(incomplete)` means the host is off or off the
+> network, not that it moved.
 
 Everything here runs on the **model host**, not on the machine running AgentSpine.
 
@@ -88,9 +88,9 @@ Then on the AgentSpine machine:
 
 ```bash
 # .env
-LOCAL_LLM_URL=http://192.168.0.150:8080/v1
+LOCAL_LLM_URL=http://192.168.1.50:8080/v1
 LOCAL_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit-DWQ
-FAST_LLM_URL=http://192.168.0.150:8081/v1
+FAST_LLM_URL=http://192.168.1.50:8081/v1
 FAST_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit
 ```
 
@@ -121,7 +121,7 @@ system Python — see "Two Python stacks" below for why.
   <key>Label</key><string>com.local.mlx-server</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/andrewhouser/.venvs/mlx-lm/bin/mlx_lm.server</string>
+    <string>/Users/you/.venvs/mlx-lm/bin/mlx_lm.server</string>
     <string>--model</string>
     <string>mlx-community/Qwen3.6-35B-A3B-4bit-DWQ</string>
     <string>--host</string><string>0.0.0.0</string>
@@ -129,8 +129,8 @@ system Python — see "Two Python stacks" below for why.
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ThrottleInterval</key><integer>60</integer>
-  <key>StandardOutPath</key><string>/Users/andrewhouser/Library/Logs/mlx-server.log</string>
-  <key>StandardErrorPath</key><string>/Users/andrewhouser/Library/Logs/mlx-server-error.log</string>
+  <key>StandardOutPath</key><string>/Users/you/Library/Logs/mlx-server.log</string>
+  <key>StandardErrorPath</key><string>/Users/you/Library/Logs/mlx-server-error.log</string>
 </dict>
 </plist>
 ```
@@ -170,7 +170,7 @@ the `model` field back; a resident model answers in under a second, a swap takes
 Confirm both are answering:
 
 ```bash
-curl -s http://192.168.0.150:8080/v1/models && curl -s http://192.168.0.150:8081/v1/models
+curl -s http://192.168.1.50:8080/v1/models && curl -s http://192.168.1.50:8081/v1/models
 ```
 
 ## Seeing — the `vision` server on 8082
@@ -220,7 +220,7 @@ Then, on the app host:
 
 ```bash
 # .env
-VISION_LLM_URL=http://192.168.0.150:8082/v1
+VISION_LLM_URL=http://192.168.1.50:8082/v1
 VISION_MODEL=mlx-community/Qwen3-VL-4B-Instruct-4bit
 ```
 
@@ -342,7 +342,7 @@ Two rules follow:
 To check what a tier is *actually* serving rather than what it was launched with:
 
 ```bash
-curl -s http://192.168.0.150:8080/v1/chat/completions -H 'Content-Type: application/json' \
+curl -s http://192.168.1.50:8080/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"mlx-community/Qwen3.6-35B-A3B-4bit-DWQ","messages":[{"role":"user","content":"hi"}],"max_tokens":1,"chat_template_kwargs":{"enable_thinking":false}}' \
   | python3 -c "import json,sys; print(json.load(sys.stdin).get('model'))"
 ```

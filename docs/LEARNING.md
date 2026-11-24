@@ -275,7 +275,7 @@ shape approved twenty times with zero rejections is the **strongest safety signa
 system**, and it currently evaporates.
 
 **The mechanism:** count `confirmations` grouped by `tool` and a normalized args shape
-(structure and target, never values — "email to andrew@…" not "email saying X"). When a
+(structure and target, never values — "email to alex@…" not "email saying X"). When a
 shape crosses a threshold — say 10 approvals, 0 rejections, spanning 14 days — generate a
 **narrowed policy proposal**: the minimum rule that would let *that shape* auto-execute,
 never a whole tool or a whole domain.
@@ -349,7 +349,7 @@ Stored as kind `recipe`, recalled by task similarity in `buildContext`, injected
 ```
 You have done something like this before. Your own notes on how:
   when: checking whether the LAN model host is healthy
-  1. web_read http://192.168.0.150:8080/v1/models
+  1. web_read http://192.168.1.50:8080/v1/models
   2. if it returns a model list, it is up; the tier is the endpoint, not the name
 ```
 

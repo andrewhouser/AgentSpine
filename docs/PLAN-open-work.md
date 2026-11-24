@@ -1019,12 +1019,11 @@ SQLite file per user rather than a `user_id` on every table).
 - **Publish from a fresh repo, not this one.** The history still holds the old `policy.json`,
   `goals.md`, the inbox rules and everything below, and the `backup-before-secret-scrub` branch may
   hold secrets. A new repo with one starting commit of the cleaned tree is the safe route.
-- **Docs prose.** `README.md`, `docs/SPEC.md`, `docs/INSTAGRAM.md`, `docs/MODELS.md`,
-  `docs/LEARNING.md`, `docs/WATCHERS.md`, `docs/STUDY.md`, this file and `docs/archive/` name you,
-  your family, your employer, your home town, your Instagram account and your home paths. Either
-  rewrite them with invented names or leave this file and `docs/archive/` out of the public repo.
-- **`CLAUDE.md`** describes your machines (model host address, the Minis, the MacBook). Split it into
-  a generic project file and a per-machine note in `~/.claude`.
+- **Docs prose (done 2026-11-24).** README, SPEC, INSTAGRAM, MODELS, LEARNING, WATCHERS, STUDY,
+  ROLLOUT-heads-up and CLAUDE.md use invented names (Alex, Jordan, @exampleshow, Springfield) and the
+  example LAN address `192.168.1.50`. Not rewritten, on purpose: this file and `docs/archive/` are your
+  working history, so leave both out of the public repo. CLAUDE.md keeps its Machines section, marked
+  as the author's setup, because Claude needs it when working on these machines.
 - **Model host default.** `LOCAL_BASE_URL` in `src/config.ts` defaults to your LAN address. Make sure
   the Mini's `.env` sets `LOCAL_LLM_URL`, then change the default to `http://127.0.0.1:8080/v1`.
 - **iPhone and Mac apps.** Bundle IDs (`com.houserphotography.*`) are in `ios/Supporting/Local.xcconfig`,

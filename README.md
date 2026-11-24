@@ -23,7 +23,7 @@ Neither gate is a prompt the model could be talked out of — both are code.
 
 - **Node ≥ 24** (Node 26 recommended). Types are stripped at runtime, so there is **no
   build step** — `node src/*.ts` just runs. Uses the built-in `node:sqlite`.
-- Your **MLX-LM server** running (default `http://192.168.0.150:8080/v1`).
+- Your **MLX-LM server** running (set `LOCAL_LLM_URL` to it, e.g. `http://192.168.1.50:8080/v1`).
 
 ## Setup
 
@@ -224,7 +224,7 @@ to `fast`, written for "what is the capital of France". It got *"What is my name
 grammatically identical, semantically the opposite, since only your profile can answer it. The
 3B invented an argument for `state_get`, wrote state on a read-only question, searched memory
 using the answer as its query, and finished by describing its own context instead of answering
-from it. `profile.md` had said `Name: Andrew.` the whole time.
+from it. `profile.md` had said `Name: Alex.` the whole time.
 
 A narrower regex (exclude first-person pronouns) was tried and is still wrong: *"What's the
 wifi password?"*, *"Who is Priya?"* and *"When is the standup?"* all need your context and
@@ -258,7 +258,7 @@ Then point AgentSpine at the second one:
 
 ```bash
 # .env
-FAST_LLM_URL=http://192.168.0.150:8081/v1
+FAST_LLM_URL=http://192.168.1.50:8081/v1
 FAST_MODEL=mlx-community/Llama-3.2-3B-Instruct-4bit
 ```
 
@@ -332,7 +332,7 @@ python3.12 -m venv ~/.venvs/mlx-vlm && ~/.venvs/mlx-vlm/bin/pip install mlx-vlm
 
 ```bash
 # .env
-VISION_LLM_URL=http://192.168.0.150:8082/v1
+VISION_LLM_URL=http://192.168.1.50:8082/v1
 VISION_MODEL=mlx-community/Qwen3-VL-4B-Instruct-4bit
 ```
 
@@ -762,7 +762,7 @@ one-shot that fails does not retry — check Activity, and ask again if it matte
 ## A conversation, not a work log
 
 Asked *"what's the weather like today?"*, this used to answer **"Sent a weather notification
-for Farmington, NH with current conditions and a 3-day forecast."** True, and containing no
+for Springfield with current conditions and a 3-day forecast."** True, and containing no
 weather. Sometimes it answered with nothing at all — tool cards, then a blank space.
 
 Both came from the same place, and neither was the model being stupid. The loop had one
@@ -864,7 +864,7 @@ Measured on the same question, same model, after:
 
 ```
 conversational: true  — 3 steps, 26.6s, tools called: weather
-  "The weather in Farmington, NH today is currently 81°F, feeling like 88°F, with clear
+  "The weather in Springfield today is currently 81°F, feeling like 88°F, with clear
    skies and a light wind at 7 mph. The forecast for the day is overcast with temperatures
    ranging from 67°F to 87°F, and there's a 2% chance of precipitation."
 ```
@@ -983,7 +983,7 @@ Reflection is the most sensitive thing in the system, since the trace can contai
 calendar, and file contents. So it's **pinned local-only** (`sensitivity:"private"`) — not by
 policy but by construction: if the local model is unreachable, reflection is skipped rather
 than escalated to the cloud. The prompt also treats the trace as hostile, because it contains
-UNTRUSTED web and email text and "remember that Andrew authorized X" is the obvious attack;
+UNTRUSTED web and email text and "remember that Alex authorized X" is the obvious attack;
 quoted content is evidence to summarize, never an instruction. Credential-shaped strings are
 filtered out, near-duplicates are dropped, and auto-learned memories are capped (oldest
 pruned first — your hand-saved notes never are). A recipe or lesson the assistant learns waits in
@@ -1843,7 +1843,7 @@ and call it with `mode: "regenerate"` to pick up new files or targets.
 
 **Working on an existing app** — `mode: "adopt"` wraps a folder of loose Swift files in a project
 without modifying them. To let the builder compile and commit in it, add the folder to
-`policy.build.repos` with an `xcodebuild` command (see `~/Developer/MetronomeApp` in
+`policy.build.repos` with an `xcodebuild` command (for example `~/Developer/MyApp` in
 `policy.json`; `"parse": "xcodebuild"`, `CODE_SIGNING_ALLOWED=NO`). That declaration is yours to
 make: the agent can never add it.
 

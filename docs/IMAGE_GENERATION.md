@@ -212,14 +212,14 @@ IMAGE_URL=http://127.0.0.1:8082/v1
 ```
 
 Loopback, because the service and AgentSpine are on the same machine. Use
-`http://192.168.0.85:8082/v1` only if something off-box needs it, and bind the service to
+`http://<this-machine's-LAN-address>:8082/v1` only if something off-box needs it, and bind the service to
 `0.0.0.0` in that case.
 
 > **`.env` is resolved relative to the process working directory.** `src/config.ts` calls
 > `process.loadEnvFile()` with no argument. If the launchd job for AgentSpine has no
 > `WorkingDirectory` pointing at the repo root, `.env` is silently skipped and *every* value
 > falls back to its default — including `LOCAL_LLM_URL`, whose default is
-> `192.168.0.150` (it was the dead `.145` when this was written). That failure mode looks exactly like the model host being down. Confirm
+> your LAN model host, which is wrong for this machine. That failure mode looks exactly like the model host being down. Confirm
 > the job's `WorkingDirectory` before blaming the network.
 
 ## One thing to know about failover while testing

@@ -21,7 +21,9 @@ records live in `docs/`; finished plans are in `docs/archive/` (history, not a t
 
 ## Machines
 
-- **Model host** `192.168.0.150` (static since 2026-09-08): a base M4 Mac Mini, 32 GB, **~120 GB/s**. It runs
+The author's setup, as an example of the split this project expects; yours will differ.
+
+- **Model host** (a fixed LAN address, set as `LOCAL_LLM_URL` in each machine's `.env`): a base M4 Mac Mini, 32 GB, **~120 GB/s**. It runs
   `mlx_lm.server` on :8080 (`standard`) and :8081 (`fast`). Only recommend MoE models with about 3B
   active parameters. Dense models are far too slow on this bandwidth. Prefill, not generation, is
   the expensive part, so keep prompt prefixes stable and append-only.

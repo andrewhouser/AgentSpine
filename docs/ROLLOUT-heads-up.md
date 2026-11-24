@@ -69,7 +69,7 @@ Off-switch: `HEADSUP_ENABLED=false`, or untick a kind in Settings (anything alre
 
 ## Rung 2: Dates you tell it in chat
 
-Say "Garrett's birthday is March 4" in a chat. A card should appear within seconds, and it is
+Say "Jordan's birthday is March 4" in a chat. A card should appear within seconds, and it is
 stored as a remembered date, not a calendar event.
 
 - [ ] A date stated in chat becomes a card, and shows in the Heads-up tab.
