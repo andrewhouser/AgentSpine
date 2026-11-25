@@ -39,7 +39,7 @@ const VIEW_TITLES: Record<string, string> = {
   clients: "Clients",
   files: "Files",
   headsup: "Heads-up",
-  inbox: "Inbox",
+  inbox: "Drop zone",
   knowledge: "Knowledge",
   meetings: "Meetings",
   overview: "Overview",

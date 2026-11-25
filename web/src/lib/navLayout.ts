@@ -11,23 +11,23 @@ import type { View } from "../components/Sidebar/Sidebar.tsx";
 
 export const PINNED_SLOTS = 6;
 
-/** In the order a fresh browser shows them. */
-export const NAV_ITEMS: { key: View; label: string }[] = [
-  { key: "headsup", label: "Heads-up" },
-  { key: "checkin", label: "Check-in" },
-  { key: "tasks", label: "Tasks" },
-  { key: "meetings", label: "Meetings" },
-  { key: "inbox", label: "Inbox" },
-  { key: "knowledge", label: "Knowledge" },
-  { key: "schedules", label: "Schedules" },
-  { key: "search", label: "Search" },
-  { key: "files", label: "Files" },
-  { key: "builds", label: "Builds" },
-  { key: "study", label: "Study" },
-  { key: "clients", label: "Clients" },
-  { key: "activity", label: "Activity" },
-  { key: "overview", label: "Overview" },
-  { key: "settings", label: "Settings" },
+/** In the order a fresh browser shows them. `hint` is the hover tooltip: what the page is for, in a line. */
+export const NAV_ITEMS: { hint: string; key: View; label: string }[] = [
+  { hint: "Birthdays, bills and trips it spotted", key: "headsup", label: "Heads-up" },
+  { hint: "New mail from people, and what else is waiting", key: "checkin", label: "Check-in" },
+  { hint: "To-dos and follow-ups", key: "tasks", label: "Tasks" },
+  { hint: "Recorded meetings, transcripts and summaries", key: "meetings", label: "Meetings" },
+  { hint: "Drop in files, scans or notes for it to remember", key: "inbox", label: "Drop zone" },
+  { hint: "Decisions and commitments to review", key: "knowledge", label: "Knowledge" },
+  { hint: "Recurring jobs and watchers", key: "schedules", label: "Schedules" },
+  { hint: "Search every conversation and document", key: "search", label: "Search" },
+  { hint: "Files the assistant wrote for you", key: "files", label: "Files" },
+  { hint: "Commands and diffs from coding runs", key: "builds", label: "Builds" },
+  { hint: "Flash cards and learning topics", key: "study", label: "Study" },
+  { hint: "Clients and time tracking", key: "clients", label: "Clients" },
+  { hint: "Every run, with its full trace", key: "activity", label: "Activity" },
+  { hint: "Health summary and what is worth a look", key: "overview", label: "Overview" },
+  { hint: "Appearance, memory, recipes and policy", key: "settings", label: "Settings" },
 ];
 
 const KEY = "sidebar-nav-order";

@@ -33,7 +33,7 @@ enum MacSection: String, CaseIterable, Hashable {
         case .schedules: return "Schedules"
         case .projects: return "Projects"
         case .files: return "Files"
-        case .inbox: return "Inbox"
+        case .inbox: return "Drop zone"
         case .knowledge: return "Knowledge"
         case .clients: return "Clients"
         case .meetings: return "Meetings"
@@ -42,6 +42,29 @@ enum MacSection: String, CaseIterable, Hashable {
         case .memory: return "Memory"
         case .proposals: return "Auto-approvals"
         case .agents: return "Agents"
+        }
+    }
+
+    /// The hover tooltip: what the section is for, in a line.
+    var hint: String {
+        switch self {
+        case .headsup: return "Birthdays, bills and trips it spotted"
+        case .checkin: return "New mail from people, and what else is waiting"
+        case .tasks: return "To-dos and follow-ups"
+        case .study: return "Flash cards and learning topics"
+        case .schedules: return "Recurring jobs and watchers"
+        case .projects: return "Workspaces with their own context and documents"
+        case .files: return "Files the assistant wrote for you"
+        case .inbox: return "Drop in files, scans or notes for it to remember"
+        case .knowledge: return "Decisions and commitments to review"
+        case .clients: return "Clients and time tracking"
+        case .meetings: return "Recorded meetings, transcripts and summaries"
+        case .builds: return "Commands and diffs from coding runs"
+        case .activity: return "Every run, with its full trace"
+        case .memory: return "What it has learned about you"
+        case .proposals: return "Suggested rules to skip repeat approvals"
+        case .agents: return "Sub-agents and the model tier each uses"
+        case .threads: return "Your conversations"
         }
     }
 

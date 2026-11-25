@@ -96,7 +96,7 @@ export const InboxView = ({ projects }: InboxViewProps) => {
     <div className={styles.page}>
       <PageHeader
         subtitle="Add anything you want to remember. It is read on this Mac, kept private, and searchable at once; you decide which project it belongs to."
-        title="Inbox"
+        title="Drop zone"
       />
 
       {status && !status.ocr && (

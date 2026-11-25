@@ -126,14 +126,17 @@ export const Sidebar = ({
     }
   };
 
-  const navButton = (key: View) => (
+  const navButton = (key: View) => {
+    const item = NAV_ITEMS.find((entry) => entry.key === key);
+    return (
     <button
       className={`${styles.navItem} ${view === key ? styles.navActive : ""}`}
       key={key}
       onClick={() => onSelectView(key)}
+      title={item?.hint}
       type="button"
     >
-      {NAV_ITEMS.find((item) => item.key === key)?.label ?? key}
+      {item?.label ?? key}
       {key === "schedules" && ` (${status.schedules})`}
       {key === "headsup" && status.headsupsWaiting > 0 && (
         <span aria-label={`${status.headsupsWaiting} waiting for you`} className={styles.badge}>
@@ -141,7 +144,8 @@ export const Sidebar = ({
         </span>
       )}
     </button>
-  );
+    );
+  };
 
   const setProjectFolded = (id: number, folded: boolean): void => {
     const next = new Set(foldedProjects);

@@ -45,6 +45,6 @@ export const retentionRules = (): RetentionRule[] => [
     setting: null,
   },
   { artifact: "Summaries and extractions", rule: "kept until the meeting is deleted", setting: null },
-  { artifact: "Inbox items and their index", rule: "kept until you delete them", setting: null },
+  { artifact: "Drop zone items and their index", rule: "kept until you delete them", setting: null },
   { artifact: "Deletion and retention records", rule: "kept, without content, and never pruned with the run ledger", setting: null },
 ];

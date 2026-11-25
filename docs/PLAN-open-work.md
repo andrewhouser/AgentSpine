@@ -338,6 +338,13 @@ Left to do:
   **Not done:** looking at any of it on a running app; on Mac, deleting the project shown in the detail pane
   leaves the pane to be changed by hand.
 
+- **Files page folders (built 2026-11-25).** Files are grouped by the project they were written in, with a General
+  folder last for the rest; **All** keeps the flat list and a search box covers both. `GET /api/files` now returns
+  `project_id` and `project_name` (joined run, conversation, project in `src/deliverables.ts`, no new column) and
+  returns up to 500 files, up from 200. Web (`FilesView.tsx`, `web/src/lib/fileGroups.ts`) and iPhone and Mac
+  (`FilesView.swift`, `FileGroup` in `Models.swift`) share the rules. Suite: `test/file-groups.test.mjs` (server join
+  and web grouping). **Not done:** the Swift half has no test of its own, and I have not seen it on a running app.
+
 **Open decisions:** how many tabs the iPhone bar should allow now that Heads-up sits second (the mock shows four
 plus More); whether to cut a Swift package once there is a compiler to check the `public` changes.
 
@@ -437,7 +444,7 @@ baseline, and the meeting recall number is still unmeasured.
   threshold on it. `GET /api/knowledge/search` exposes it. Suite: `test/knowledge-search.test.mjs`. The vector
   floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. Not built: the structured path (people,
   decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
-  and a person and team filter. Search everything is on the Inbox screen on web, iPhone and Mac (native added
+  and a person and team filter. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
   2026-11-22, built but not seen running). The agent tool is built (2026-11-22): `knowledge_search`
   declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.
@@ -455,16 +462,16 @@ baseline, and the meeting recall number is still unmeasured.
   applied only when a person files it, and filing moves its chunks. Deleting removes the original, the text and
   the index and leaves an audit row. API: `GET /api/inbox/status`, `GET /api/inbox`, `POST /api/inbox/files`,
   `POST /api/inbox/paste`, `PATCH`, `POST .../reprocess` and `DELETE /api/inbox/:id`. Suite: `test/inbox.test.mjs`.
-  **Screens:** web has an Inbox entry (drop or choose files, paste a thread or type a note, search everything with
+  **Screens:** web has a Drop zone entry (called Inbox until 2026-11-25, renamed because Inbox reads as email; routes, `/api/inbox` and the hidden "Knowledge Inbox" project keep the old name) (drop or choose files, paste a thread or type a note, search everything with
   the path that found each hit shown, items with an honest status, the suggested project with a one-click file,
   a project picker, try again, delete); iPhone and Mac share one `InboxView` (add files, paste text, context menu
   and swipe actions) and an Inbox tab or sidebar row. `InboxView` is in `Views/InboxView.swift`, shared by both targets. I looked at the web screen through the page's own DOM (the pane
   was not on screen), not by eye. A PDF's own date is now read from its Info dictionary or XMP (`src/inbox/metadata.ts`)
   when nobody gave one, and each ready item records known people whose names appear in it and tags already in use
-  whose words appear in it (`suggested_people`, `suggested_tags`); the web Inbox shows them, with one click to add
+  whose words appear in it (`suggested_people`, `suggested_tags`); the web Drop zone shows them, with one click to add
   the tags, and nothing is applied by itself (2026-11-21; a PDF whose metadata sits in a compressed object stream
   gives no date, and the item keeps the day it was added). **Dictated notes (built 2026-11-22; the microphone path
-  not run on any client):** web has Dictate in the Inbox's text card, and iPhone and Mac have "Dictate a note…". The
+  not run on any client):** web has Dictate in the Drop zone's text card, and iPhone and Mac have "Dictate a note…". The
   transcript waits in an editable box and nothing is stored until Add, because Whisper mishears names; the item records
   `via: dictation`. The Mac had no dictation, so a small recorder for it lives in the shared `InboxView.swift`.
   **Not built:** the iPhone share sheet; adopting the existing Milliman
@@ -525,7 +532,7 @@ baseline, and the meeting recall number is still unmeasured.
   needs its own review step), and teaching an alias for a project name, because projects are not knowledge entities.
   **Added 2026-11-22 on web, iPhone and Mac (built, not seen running; extraction not run on the live model):** "Teach
   a name" for a person, team or topic (`POST /api/knowledge/entities/:id/aliases`). A name that already belongs to
-  another entity changes nothing until you confirm the merge, because a merge cannot be undone. An Inbox button runs
+  another entity changes nothing until you confirm the merge, because a merge cannot be undone. A Drop zone button runs
   model extraction on request, and what it finds arrives as proposed claims.
 - **K6. Briefs and synthesis operations (backend built 2026-11-21; the screens are not).** `src/knowledge/briefs.ts`:
   briefs are ASSEMBLED from reviewed claims by code, with a fixed recipe and output shape per operation, never written

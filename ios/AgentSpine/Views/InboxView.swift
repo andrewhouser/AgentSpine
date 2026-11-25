@@ -150,7 +150,7 @@ struct InboxView: View {
                 }
             }
         }
-        .navigationTitle("Inbox")
+        .navigationTitle("Drop zone")
         .refreshable { await load() }
         .task { await load() }
         .toolbar {

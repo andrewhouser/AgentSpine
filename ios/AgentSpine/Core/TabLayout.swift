@@ -17,7 +17,7 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
         case .schedules: return "Schedules"
         case .projects: return "Projects"
         case .files: return "Files"
-        case .inbox: return "Inbox"
+        case .inbox: return "Drop zone"
         case .knowledge: return "Knowledge"
         case .clients: return "Clients"
         case .search: return "Search"

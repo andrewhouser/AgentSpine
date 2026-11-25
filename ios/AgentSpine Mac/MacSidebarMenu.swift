@@ -52,6 +52,7 @@ struct MacSidebarMenu: View {
             cell(title: item.title, symbol: item.symbol, count: count(for: item), active: selection == .section(item))
         }
         .buttonStyle(.plain)
+        .help(item.hint)
         .accessibilityAddTraits(selection == .section(item) ? .isSelected : [])
     }
 
