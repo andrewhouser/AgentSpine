@@ -239,6 +239,7 @@ export const webSearch: Tool = {
     "publish date when known. Set recency to only get results published within that window — use it " +
     "whenever the question is about a recent period (today, this week, latest news).",
   argsSchema: '{ "query": string, "recency"?: "day" | "week" | "month" | "year" }',
+  outgoingText: (a: { query?: unknown }) => [String(a?.query ?? "")],
   classify,
   available,
   checkPolicy,

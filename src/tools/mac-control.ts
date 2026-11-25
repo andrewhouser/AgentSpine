@@ -359,6 +359,9 @@ export const macControl: Tool = {
     '"to"?: string, "subject"?: string, "body"?: string, ' +
     '"title"?: string, "start"?: string, "end"?: string, "durationMinutes"?: number, "allDay"?: boolean, "location"?: string, "calendar"?: string, "days"?: number, ' +
     '"via"?: "sms"|"imessage", "due"?: string, "list"?: string, "notes"?: string, "text"?: string, "app"?: "<bundle id, for activate>" }',
+  // Only the two sends leave the machine; a note, reminder or event stays on it.
+  outgoingText: (a: Args) =>
+    a?.action === "send_mail" ? [a.subject, a.body].map((x) => String(x ?? "")) : a?.action === "send_message" ? [String(a.text ?? "")] : [],
   classify,
   checkPolicy,
   confirmWhenUnattended: asksWhenUnattended,

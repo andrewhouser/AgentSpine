@@ -589,6 +589,11 @@ export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true"
 // The outbox (docs/archive/PLAN-outbox.md) always RECORDS every notification. With this off, the default,
 // it only records what it would have done (quiet hours, repeats, the daily cap) and delivers
 // everything as before. Turn it on after a week of `npm run digest` shows the numbers are right.
+// The outgoing-text check (src/outgoing.ts) always RECORDS a card number, Social Security number
+// or secret in text a tool is about to send out, on the audit row. With this off, the default, it
+// only records. Card numbers are matched by the Luhn check, which one number in ten passes by
+// chance, so turn it on after a fortnight of `npm run outgoing` shows what the false positives are.
+export const OUTGOING_ENFORCE = (env.OUTGOING_ENFORCE ?? "false") === "true";
 export const OUTBOX_ENFORCE = (env.OUTBOX_ENFORCE ?? "false") === "true";
 
 /**

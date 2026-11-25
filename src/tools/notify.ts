@@ -68,6 +68,7 @@ export const notifyTool: Tool = {
     "to send it to their phone. Never use it to report progress or to confirm you finished a " +
     "task. Priority 4-5 overrides Do Not Disturb, so keep those for urgent things.",
   argsSchema: '{ "title": string, "body": string, "priority"?: 1|2|3|4|5 }',
+  outgoingText: (a: Args) => [a?.title, a?.body].map((x) => String(x ?? "")),
   classify: (a: Args): ClassifiedAction => ({
     reversibility: "reversible",
     target: "notifications",

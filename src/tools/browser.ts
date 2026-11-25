@@ -256,6 +256,8 @@ export const browserControl: Tool = {
   available,
   checkPolicy,
   confirmWhenUnattended: asksWhenUnattended,
+  // Typing into a page is how text leaves through a form: a card number into a field is the case.
+  outgoingText: (a: Args) => (a?.action === "type" || a?.action === "submit" ? [String(a.text ?? "")] : []),
   refuse,
   run: (args: Args, ctx) => run(args, ctx),
 };

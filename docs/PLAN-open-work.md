@@ -1261,6 +1261,19 @@ scheduled-run pre-approval can each skip the queue.
 
 ### D3. A check on text leaving the machine (Code, log-only first)
 
+**Built 2026-11-25, log-only. Still yours: leave `OUTGOING_ENFORCE` off for a fortnight, read `npm run outgoing`,
+then decide.** `src/outgoing.ts` holds the scanner and `Tool.outgoingText(args)` is how a tool says which of
+its arguments leave the machine. The broker scans them right after the refused-tier check and puts a note
+(`[outgoing check, log only: contains a card number]`) on that call's audit row, whatever happens to the call.
+With `OUTGOING_ENFORCE=true` it denies the call and names what matched. A finding never repeats the value.
+Declared so far: `draft` (subject, body), `notify` (title, body), `web_search` (query), `mac_control` sends,
+the browser's typed text, and every string argument to an MCP tool. The secret rule is the recipe filter
+(`looksLikeSecretValue`), reused as the plan said, so its "32 or more opaque characters" clause will catch some
+long URLs; the fortnight's log is what tells you. Suite: `test/outgoing.test.mjs`. Not done: Instagram
+captions (the tools take a row id, so the caption is checked nowhere yet; the place for it is where the
+queue row is written), and URLs the browser and `web_read` are sent to, which can carry text out in a query string.
+Proposed and not built, as before: Duet's second tier of health and finance text, which needs a model to judge.
+
 Duet checks each outgoing message for card numbers and government IDs and refuses them. Here the only filter
 of that kind drops credential-shaped strings before they are stored as memories.
 

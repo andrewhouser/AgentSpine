@@ -363,6 +363,13 @@ export interface Tool {
    */
   refuse?(args: any, run?: RunContext, policy?: Policy): null | string;
   /**
+   * The argument strings of a call that leave the machine: a message body, a notification, a
+   * search query. The broker scans them for card numbers, Social Security numbers and secrets
+   * (src/outgoing.ts) and records what it finds; with `OUTGOING_ENFORCE` on it refuses the call.
+   * Declare only text that goes out, as `privateOutput` declares only what comes back.
+   */
+  outgoingText?(args: any): string[];
+  /**
    * Whether the user's own message, in a live chat turn, asked for exactly this call — and
    * if so, which named action it is and why. Optional; a tool without it never skips
    * confirmation this way. Read only off `run.goal`, never off the model's arguments alone,

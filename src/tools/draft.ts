@@ -129,6 +129,8 @@ export const draft: Tool = {
     '{ "kind": "email_reply"|"email"|"event"|"text", "to"?: string, "subject"?: string, ' +
     '"body": string, "style"?: string, "start"?: string, "duration"?: string, "location"?: string, "reason"?: string }',
 
+  // A draft is text meant to be sent onward as the user's own, so it is checked like a send.
+  outgoingText: (a: Args) => [a?.subject, a?.body].map((x) => String(x ?? "")),
   classify: (a: Args): ClassifiedAction => ({
     // Irreversible so the broker queues it. Not because writing text is dangerous — it
     // isn't — but because a draft's entire purpose is to reach a human before anything

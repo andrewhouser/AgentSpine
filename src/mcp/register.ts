@@ -16,6 +16,7 @@
 import { McpClient } from "./client.ts";
 import type { McpToolInfo } from "./client.ts";
 import { clip } from "../stash.ts";
+import { stringLeaves } from "../outgoing.ts";
 import { registry, tools } from "../tools/index.ts";
 import type { ClassifiedAction, McpServerPolicy, Policy, PolicyDecision, Tool } from "../types.ts";
 
@@ -73,6 +74,8 @@ export const makeTool = (server: string, client: McpClient, info: McpToolInfo): 
       };
     },
     confirmWhenUnattended: !readOnly,
+    // Everything sent to a remote server is text that leaves the machine, whatever the tool is for.
+    outgoingText: (args: any) => stringLeaves(args),
     description:
       `[MCP server "${server}"${readOnly ? ", read-only" : ", asks for approval"}] ` +
       (oneLine(info.description, DESCRIPTION_MAX) || oneLine(info.annotations?.title, 80) || info.name),

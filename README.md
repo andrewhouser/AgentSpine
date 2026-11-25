@@ -1491,6 +1491,12 @@ matches the host and its subdomains: put your bank and broker there. The first i
 the model's own description of the button, so one labelled "Continue" gets past it, and the
 host list is the answer to that. Buying goods still queues for your approval as before.
 
+Text a tool is about to send out (a draft, a message, a notification, a web search, typing into a
+page, anything sent to an MCP server) is also checked for a card number, a Social Security number
+or a secret. It only writes a note on the audit row until you set `OUTGOING_ENFORCE=true`, because
+order and tracking numbers will sometimes look like card numbers. Read what it found with
+`npm run outgoing [days]`.
+
 ### Web search vs. page reading — use the right tool
 
 The honest split, because public search engines serve a CAPTCHA to headless browsers:
