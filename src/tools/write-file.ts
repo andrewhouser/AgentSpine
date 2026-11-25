@@ -39,6 +39,7 @@ import { recordDeliverable } from "../deliverables.ts";
 import { expand, insideWritable, real, realForWrite } from "../fs-scope.ts";
 import { listSources } from "../projects/store.ts";
 import * as store from "../memory/store.ts";
+import { diffPreview, protectedPathOf } from "../protected-paths.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
 interface Args {
@@ -333,6 +334,21 @@ export const textTargetGate = (policy: Policy, target: string, { ext = true } = 
 /** An absolute path from an arbitrary argument, relative to the current default folder. */
 export const resolveArg = (raw: unknown): string => resolveTarget({ path: String(raw ?? "") });
 
+const readOr = (target: string): string => {
+  try {
+    return fs.readFileSync(target, "utf8");
+  } catch {
+    return "";
+  }
+};
+
+/** The card for a change to one of AgentSpine's own gate files (SC6): what it is, and the change itself. */
+const protectedCard = (rel: string, target: string, before: string, after: string): ClassifiedAction => ({
+  reversibility: "irreversible",
+  summary: `Change PROTECTED FILE ${rel} (${target}), which enforces AgentSpine's own safety gates. Read the change:\n${diffPreview(before, after)}`,
+  target,
+});
+
 const bodyOf = (a: Args): { error?: string; text?: string } => {
   if (a?.from_run != null && String(a.from_run) !== "") {
     const run = store.getRun(Number(a.from_run));
@@ -359,7 +375,8 @@ export const writeFile: Tool = {
     "Shell scripts (.sh .command), server-executed source (.php .pl), macOS automation (.plist .scpt) " +
     "and hidden files are refused. Build manifests (package.json, Cargo.toml, build.rs, Package.swift, " +
     "lockfiles) can be written but WAIT for the user's approval, because they decide what code the " +
-    "build fetches and runs. AgentSpine's own policy.json, profile.md, goals.md and agents/*.md " +
+    "build fetches and runs. So do changes to the files that enforce AgentSpine's own safety gates (the broker, " +
+    "confirmations, the local-only pin and a few more): the user sees the change first. AgentSpine's own policy.json, profile.md, goals.md and agents/*.md " +
     "cannot be written at all. The previous version of a replaced file is backed up automatically, " +
     "so an ordinary file write never needs to ask first.",
   argsSchema: '{ "path": string, "content"?: string, "from_run"?: number, "mode"?: "write" | "append" }',
@@ -371,6 +388,12 @@ export const writeFile: Tool = {
     const target = resolveTarget(a);
     const exists = !!target && fs.existsSync(target);
     const verb = a?.mode === "append" ? "Append to" : exists ? "Replace (old version backed up)" : "Create";
+    const guarded = protectedPathOf(target);
+    if (guarded) {
+      const before = readOr(target);
+      const text = bodyOf(a).text ?? "";
+      return protectedCard(guarded, target, before, a?.mode === "append" && before ? `${before}${before.endsWith("\n") ? "" : "\n"}${text}` : text);
+    }
     // A manifest is the one write that can make the build fetch and run new code, so it is
     // the one write a person should see before it happens. See MANIFEST_BASENAMES.
     if (isManifest(target)) {
@@ -443,6 +466,14 @@ export const editFile: Tool = {
   confirmWhenUnattended: true,
   classify: (a: EditArgs): ClassifiedAction => {
     const target = resolveArg(a?.path);
+    const guarded = protectedPathOf(target);
+    if (guarded) {
+      const before = readOr(target);
+      const find = String(a?.find ?? "");
+      const replace = String(a?.replace ?? "");
+      const after = !find ? before : a?.all ? before.split(find).join(replace) : before.replace(find, () => replace);
+      return protectedCard(guarded, target, before, after);
+    }
     if (isManifest(target)) {
       return {
         reversibility: "irreversible",
@@ -505,6 +536,14 @@ export const moveFile: Tool = {
   classify: (a: MoveArgs): ClassifiedAction => {
     const from = resolveArg(a?.from);
     const to = resolveArg(a?.to);
+    const guarded = protectedPathOf(from) ?? protectedPathOf(to);
+    if (guarded) {
+      return {
+        reversibility: "irreversible",
+        summary: `Move ${from || "?"} to ${to || "?"}: this moves or replaces PROTECTED FILE ${guarded}, which enforces AgentSpine's own safety gates`,
+        target: to,
+      };
+    }
     const manifest = isManifest(from) || isManifest(to);
     return {
       reversibility: manifest ? "irreversible" : "reversible",

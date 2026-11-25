@@ -977,10 +977,16 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
 - **SC5 Propose, then patch.** A change starts as a proposal card in the confirmation queue: what, why, the
   files, the test plan, and the runs that prompted it. Approving starts the builder on an `agentspine/` branch.
   Merge, push, `update.sh` and the restart stay yours, so the service never restarts onto code you have not read.
-- **SC6 Guard the gates in code, not only in policy.** A builder that cannot write `policy.json` can still
-  edit `src/broker.ts`, `src/sensitivity.ts`, `src/confirmations.ts`, `src/learn/promote.ts` or
-  `test/architecture.test.mjs`. Add a protected-paths list in code: an edit to one queues with the diff shown,
-  as a build manifest does today, and the architecture test pins the list.
+- **SC6 Guard the gates in code, not only in policy (built 2026-11-25).** A builder that cannot write `policy.json`
+  could still edit the code that reads it. `src/protected-paths.ts` lists eleven files (the five named here, the
+  Google and Instagram write modules, and `src/outgoing.ts`, `src/tools/browser.ts` and the list itself). An edit,
+  whole-file write, append or move touching one is irreversible, so it queues in a chat and from a schedule, and the
+  card carries the change (`diffPreview`, cut at 40 lines with a note to read the rest). A protected path is matched
+  in any checkout whose package.json is named `agentspine`, so a separate builder clone (SC7) is covered, ignoring
+  case (the Mac's disk does) and following symlinks. `test/architecture.test.mjs` pins the list and is on it.
+  Suite: `test/protected-paths.test.mjs`. Like a build manifest, a protected edit can still skip the queue through
+  `policy.trust.chatAutoTools` (if you list `write_file` or `edit_file` there) or a person-approved `autoApprove`
+  shape for that exact file; whether protected edits should ignore both is an open decision below.
 - **SC7 Which checkout it works in (You).** Not checked: whether the builder on the Mini would branch inside
   the checkout the LaunchAgent serves from. If so, give it a separate clone, so a half-made branch is never
   what the next restart loads.
@@ -1051,18 +1057,22 @@ Order: SL1 (nearest to done, and N2 gates the rest); LP1, LP2 and LP5; SC2, SC4,
 three-change measurement; SL2 feeding SC5; LP3, LP4 and LP6; the CP items as each decision is made. Within SL, the
 answer key (SL6) comes first because candidate testing (SL7) depends on it. SL8 can follow in either order.
 
+Decided 2026-11-25:
+
+- Placement: section 10 is the main code direction now, because section 8's code is done and waits on K1. Order,
+  by what can be finished and tested off the model host: SC6, then LP5, then LP3; then LP2, LP4 and LP6 (which need
+  the model host to prove), and SC5 once SC6 exists. SL1 stays yours, as before.
+- CP1: yes, local stdio MCP servers only, with a per-server `privateOutput`.
+- CP2: yes to Gmail drafts and timed events; send only after N2's live half has a baseline.
+- CP3: yes, no network, enabled per project by you.
+- SC6's list: the eight proposed files plus `src/outgoing.ts` and `src/tools/browser.ts` (and the list's own file).
+- Source folders stay inside the local pin until SC1's measurement says the local builder is not good enough.
+
 Open decisions for you:
 
-- Where this section sits against section 8. Proposed: LP and SL1 alongside section 8, since both make
-  section 8 better; SC after LP2; CP last.
-- Reopen "MCP connectors beyond `docs/MCP.md`" for CP1. Proposed: yes, for local stdio servers only.
-- Amend the Google-writes ground rule for CP2. Proposed: yes to Gmail drafts and timed events now; send only
-  after N2's live half has a baseline.
-- CP3's scratch interpreter. Proposed: yes, no network, You-enabled per project.
-- SC6's protected-paths list. Proposed: the five files named there, plus `src/google/write.ts`,
-  `src/instagram/api.ts` and `src/instagram/token.ts`.
-- Whether source folders may be exempt from the local pin so the builder can use the cloud tier. Proposed: no,
-  until SC1's measurement shows the local builder is not good enough.
+- Should an edit to a protected file (SC6) ignore `policy.trust.chatAutoTools` and `autoApprove`, so it always shows
+  the card? Today it behaves like a build manifest: both can skip the queue, though neither grants it unless you set
+  it up. Proposed: yes, always show the card; it costs a click only on the rare change to a gate.
 
 ---
 

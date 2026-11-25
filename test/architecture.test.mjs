@@ -185,5 +185,28 @@ const claimAt = igRunner.search(/transition\(r\.id,\s*"container",\s*"publishing
 check("the row is claimed as 'publishing' before the publish request is sent", claimAt > 0 && claimAt < igRunner.search(/\.publishContainer\s*\(/), true);
 check("the tools reach publishing only through the runner's publishNow", /\bpublishNow\b/.test(sources["src/tools/instagram.ts"]) && !/publishContainer|createImageContainer/.test(sources["src/tools/instagram.ts"]), true);
 
+console.log("\nSC6: THE FILES THAT ENFORCE THE GATES ARE PROTECTED");
+// A builder that cannot write policy.json could still edit the code that reads it. These files queue with the change
+// shown (src/protected-paths.ts). The list is pinned here, so shortening it means editing this file, which is itself on it.
+{
+  const { PROTECTED_PATHS } = await import("../src/protected-paths.ts");
+  const PINNED = [
+    "src/broker.ts",
+    "src/confirmations.ts",
+    "src/google/write.ts",
+    "src/instagram/api.ts",
+    "src/instagram/token.ts",
+    "src/learn/promote.ts",
+    "src/outgoing.ts",
+    "src/protected-paths.ts",
+    "src/sensitivity.ts",
+    "src/tools/browser.ts",
+    "test/architecture.test.mjs",
+  ];
+  check("the protected list is exactly the pinned one", [...PROTECTED_PATHS], PINNED);
+  check("every protected path exists, so a rename cannot quietly unprotect it", PINNED.filter((p) => !fs.existsSync(path.join(ROOT, p))), []);
+  check("the write tools consult it", /protectedPathOf/.test(sources["src/tools/write-file.ts"]), true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);
