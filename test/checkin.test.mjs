@@ -231,5 +231,27 @@ console.log("\nWHAT THE PUSH SAYS, AND WHAT IT LEAVES OUT");
   check("and is never held by the outbox, since it keeps quiet hours itself", outboxRules.GOVERNED_SOURCES.has("checkin"), false);
 }
 
+console.log("\nEACH SOURCE ON OR OFF (D1)");
+{
+  const sorted = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+  reset({
+    approvals: [{ id: 8, summary: "Approve a draft" }],
+    mail: [SAM],
+    tasks: [{ due: at(9).toISOString(), id: 12, kind: "task", title: "Renew the parking permit" }],
+  });
+  check("all sources are on until one is turned off", sorted(seen.sourcePrefs()), { approval: true, calendar: true, headsup: true, mail: true, task: true });
+  const after = seen.setSourcePrefs({ mail: false, nonsense: false, task: "no" });
+  check("turning mail off keeps the rest, and ignores junk", sorted(after), { approval: true, calendar: true, headsup: true, mail: false, task: true });
+  check("and it is kept", seen.sourcePrefs().mail, false);
+  const noMail = { ...deps, mail: async () => { throw new Error("mail was read while switched off"); } };
+  const { errors, items } = await collect(at(12), noMail, undefined, seen.sourcePrefs());
+  check("a source that is off is not read at all", [errors, items.some((i) => i.kind === "mail")], [[], false]);
+  check("the others still are", items.some((i) => i.kind === "task") && items.some((i) => i.kind === "approval"), true);
+  const preview = await previewCheckin(at(12), noMail);
+  check("the preview follows the setting too", preview.items.some((i) => i.kind === "mail"), false);
+  seen.setSourcePrefs({ mail: true });
+  check("and mail comes back when turned on", seen.sourcePrefs().mail, true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -123,7 +123,7 @@ export const composeNotification = (mail: Item[], rest: Item[], detail: PushDeta
 
 /** Read everything and mark what is new. Writes nothing. */
 const look = async (now: Date, deps: CheckinDeps): Promise<{ errors: string[]; items: SeenItem[] }> => {
-  const { errors, items } = await collect(now, deps);
+  const { errors, items } = await collect(now, deps, undefined, store.sourcePrefs());
   return { errors, items: items.map((i) => ({ ...i, fresh: store.isFresh(i) })) };
 };
 

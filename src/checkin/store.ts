@@ -8,7 +8,7 @@
  */
 import { kvGet, kvSet, rawDb } from "../memory/store.ts";
 import { RUNS_KEPT, SEEN_RETENTION_DAYS } from "./rules.ts";
-import type { Item } from "./sources.ts";
+import type { Item, ItemKind } from "./sources.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS checkin_seen (
@@ -90,4 +90,29 @@ export const resetForTests = (): void => {
   rawDb.exec("DELETE FROM checkin_seen; DELETE FROM checkin_runs;");
   kvSet(LAST_RUN, "");
   kvSet(LAST_ERROR, "");
+};
+
+// --- which sources a check-in reads (PLAN-open-work section 12 D1, 2026-11-25) ---
+
+const SOURCES = "checkin:sources";
+export const SOURCE_KINDS: readonly ItemKind[] = ["mail", "calendar", "task", "approval", "headsup"];
+
+/** Each source on or off. All on until someone turns one off; an unreadable stored value means all on. */
+export const sourcePrefs = (): Record<ItemKind, boolean> => {
+  const all = Object.fromEntries(SOURCE_KINDS.map((k) => [k, true])) as Record<ItemKind, boolean>;
+  try {
+    const saved = JSON.parse(kvGet(SOURCES)?.value || "{}") as Partial<Record<ItemKind, unknown>>;
+    for (const k of SOURCE_KINDS) if (saved[k] === false) all[k] = false;
+  } catch {
+    /* all on */
+  }
+  return all;
+};
+
+/** Change some sources. Unknown names and anything not a boolean are ignored; the rest is kept. */
+export const setSourcePrefs = (change: Record<string, unknown>): Record<ItemKind, boolean> => {
+  const next = sourcePrefs();
+  for (const k of SOURCE_KINDS) if (typeof change?.[k] === "boolean") next[k] = change[k] as boolean;
+  kvSet(SOURCES, JSON.stringify(next));
+  return next;
 };

@@ -85,10 +85,19 @@ const timeOf = (iso: string): string => {
  * Read every source. One failing does not lose the rest: you would rather hear about your
  * tasks than nothing because Gmail returned a 503. Failures come back named by source.
  */
-export const collect = async (now: Date, deps: SourceDeps, calendarHours = CALENDAR_HOURS): Promise<{ errors: string[]; items: Item[] }> => {
+export const collect = async (
+  now: Date,
+  deps: SourceDeps,
+  calendarHours = CALENDAR_HOURS,
+  // Which sources to read, from the stored preference (store.sourcePrefs). A source that is off is not read at all,
+  // so switching mail off means Gmail is not asked, not that its answer is hidden.
+  on: Partial<Record<ItemKind, boolean>> = {},
+): Promise<{ errors: string[]; items: Item[] }> => {
   const items: Item[] = [];
   const errors: string[] = [];
+  const kindOf: Record<string, ItemKind> = { approvals: "approval", calendar: "calendar", headsup: "headsup", mail: "mail", tasks: "task" };
   const guard = async (source: string, read: () => Promise<Item[]> | Item[]): Promise<void> => {
+    if (on[kindOf[source]] === false) return;
     try {
       items.push(...(await read()));
     } catch (err) {

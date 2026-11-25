@@ -1263,9 +1263,12 @@ first thing the preview will show.
   (unsigned, outside the sandbox), and the web screen was looked at in a browser against a throwaway server
   with tasks, an approval and a log, including Check now. **Not seen:** the iPhone and Mac screens rendered,
   the Mail section with real mail on any client, and a tap on a real push.
-- **Not built: Settings for each source on or off.** It needs stored preferences on the server first.
-- `.env.example` has no entry for `CHECKIN_MODE` or `CHECKIN_PUSH_DETAIL`: the sandbox Claude ran in could not
-  read or write that file. Add both, commented out, by hand.
+- **Each source on or off (built 2026-11-25, web).** Stored on the server (`checkin:sources`, all on by default,
+  `sourcePrefs` and `setSourcePrefs` in `src/checkin/store.ts`), returned by `GET /api/checkin` and changed with
+  `POST /api/checkin/sources`. A source that is off is not read at all, by the check-in or its preview, so mail off
+  means Gmail is not asked. The web Check-in screen has a "What a check-in reads" row. Suite: the D1 section of
+  `test/checkin.test.mjs`. Not done: the same switches on iPhone and Mac.
+- `.env.example` now has `CHECKIN_MODE` and `CHECKIN_PUSH_DETAIL`, commented out (2026-11-25).
 - The interval and the mode are code and env today. Whether they should be settings waits on the log.
 - A model's sense of urgency ("this one is from your landlord and has a deadline") is what this version
   gives up. If the log shows Gmail's sorting is too coarse, the next step is a local model ordering the new

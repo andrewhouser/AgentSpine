@@ -762,7 +762,11 @@ export interface CheckinStatus {
   mode: "log" | "off" | "push";
   pushDetail: "senders" | "subjects";
   runs: CheckinRun[];
+  /** Which sources a check-in reads. Absent from an older server, which reads them all. */
+  sources?: Record<CheckinSource, boolean>;
 }
+
+export type CheckinSource = "approval" | "calendar" | "headsup" | "mail" | "task";
 
 /** What "Check now" reports. */
 export interface CheckinResult {

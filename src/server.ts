@@ -2036,10 +2036,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           lastRun: checkinStore.lastRun(),
           mode: CHECKIN_MODE,
           pushDetail: CHECKIN_PUSH_DETAIL,
+          // Which sources a check-in reads; each can be switched off from the screen (POST /api/checkin/sources).
+          sources: checkinStore.sourcePrefs(),
           runs: checkinStore.listRuns(Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))),
         });
       if (m === "GET" && seg.length === 3 && seg[2] === "preview") return sendJson(res, 200, await previewCheckin());
       if (m === "POST" && seg.length === 3 && seg[2] === "run") return sendJson(res, 200, await runCheckin(new Date(), { force: true }));
+      if (m === "POST" && seg.length === 3 && seg[2] === "sources") return sendJson(res, 200, checkinStore.setSourcePrefs(await readBody(req)));
     }
 
     // /api/headsups — proactive suggestions (src/headsup, docs/archive/PLAN-heads-up.md).

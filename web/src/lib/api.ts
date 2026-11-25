@@ -17,6 +17,7 @@ import type {
   ChatMessage,
   CheckinPreview,
   CheckinResult,
+  CheckinSource,
   CheckinStatus,
   Client,
   CloseoutPlan,
@@ -485,14 +486,13 @@ export const api = {
   run: (id: number) => request<{ actions: unknown[]; notes?: RunNote[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runCheckin: () => post<CheckinResult>("/api/checkin/run"),
-
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
+
   /** Save the close-out, all of it or none. */
   saveMeetingCloseout: (id: number, plan: CloseoutPlan & { keepTranscript: boolean }) =>
     request<CloseoutSaved>(`/api/meetings/${id}/closeout`, { body: JSON.stringify(plan), method: "POST" }),
-
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
     post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
 
@@ -503,6 +503,7 @@ export const api = {
   scheduleVersions: (id: number) => request<{ versions: ScheduleVersion[] }>(`/api/schedules/${id}/versions`),
 
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
+
   /**
    * Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. `note` is the
    * server's word on a filter it could only partly apply (a team with no recorded members), sent as a header so the
@@ -525,7 +526,6 @@ export const api = {
     if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
     return { hits: body as KnowledgeHit[], note: res.headers.get("X-Search-Note") ?? "" };
   },
-
   sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
     post<{ conversationId: number; runId: number }>(`/api/conversations/${conversationId}/messages`, {
       attachmentIds,
@@ -534,6 +534,9 @@ export const api = {
 
   /** "Something I wish I'd been told", stored as a preference memory. */
   sendOutboxWish: (text: string) => post<{ remembered: boolean }>("/api/outbox/wish", { text }),
+
+  /** Switch check-in sources on or off; the server keeps the rest as they were and returns all of them. */
+  setCheckinSources: (change: Partial<Record<CheckinSource, boolean>>) => post<Record<CheckinSource, boolean>>("/api/checkin/sources", change),
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),

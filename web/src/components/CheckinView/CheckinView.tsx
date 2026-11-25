@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { CheckinPreview, CheckinStatus } from "../../lib/types.ts";
+import type { CheckinPreview, CheckinSource, CheckinStatus } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -24,6 +24,15 @@ const when = (iso: string): string => new Date(iso).toLocaleString([], { dateSty
  * Subjects are shown here whatever the push is set to say. That setting is about what leaves
  * the machine in a notification; this page is yours.
  */
+/** The sources in the order the screen lists them, with the words it uses. */
+const SOURCE_LABELS: [CheckinSource, string][] = [
+  ["mail", "Mail from people"],
+  ["calendar", "Calendar"],
+  ["task", "Tasks"],
+  ["approval", "Approvals"],
+  ["headsup", "Heads-up"],
+];
+
 export const CheckinView = () => {
   const [status, refreshStatus] = useResource(() => api.checkinStatus().catch(() => NO_STATUS), NO_STATUS);
   const [error, setError] = useState("");
@@ -48,6 +57,19 @@ export const CheckinView = () => {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      refreshStatus();
+      refreshPreview();
+    }
+  };
+
+  // Each source on or off (D1). Off means it is not read at all, by the check-in or by this preview.
+  const toggleSource = async (kind: CheckinSource, on: boolean): Promise<void> => {
+    setError("");
+    try {
+      await api.setCheckinSources({ [kind]: on });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
       refreshStatus();
       refreshPreview();
     }
@@ -121,6 +143,24 @@ export const CheckinView = () => {
           ))}
         </section>
       ))}
+
+      {status?.sources && (
+        <section>
+          <div className={own.section}>What a check-in reads</div>
+          <div className={own.sources}>
+            {SOURCE_LABELS.map(([kind, label]) => (
+              <label className={own.source} key={kind}>
+                <input
+                  checked={status.sources?.[kind] !== false}
+                  onChange={(e) => void toggleSource(kind, e.target.checked)}
+                  type="checkbox"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </section>
+      )}
 
       {status && status.runs.length > 0 && (
         <section>

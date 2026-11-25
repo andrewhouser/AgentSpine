@@ -68,3 +68,18 @@
   font-size: 0.7188rem;
   width: 9.5rem;
 }
+
+/* Each source on or off (D1): a wrapping row of checkboxes, so it fits a phone. */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 6px 0 14px;
+}
+
+.source {
+  align-items: center;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 6px;
+}
