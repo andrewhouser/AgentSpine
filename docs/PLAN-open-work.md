@@ -362,8 +362,15 @@ plus More); whether to cut a Swift package once there is a compiler to check the
 ## 6. Your Claude setup and small leftovers (`docs/archive/PLAN-video-ideas.md`)
 
 All You, on your own machines.
-- **A8 Spoken "I need you" on the dashboard (optional).** Kokoro TTS exists. A Settings, Voice option: when a
-  long run finishes or an approval is waiting, the open tab speaks one line. Per browser, off by default.
+- **A8 Spoken "I need you" on the dashboard (built 2026-11-25, web; not heard with the real voice yet).**
+  Settings, Voice, "Say when I am needed": an open tab speaks one fixed line through `/api/voice/speak` when an
+  approval starts waiting, or when a run someone waits on (chat, approval, build, CLI) finishes after at least 60
+  seconds while the tab is hidden or on another thread. `GET /api/status` gains `lastRun` (id, kind, seconds, thread;
+  never the task or answer). Nothing present at page load is announced, lines are at least 20 seconds apart and
+  what arrives in between is said together, and nothing is held while it is off. Per browser, off by default
+  (`web/src/lib/spokenAlerts.ts`, `useSpokenAlerts`). Suite: `test/spoken-alerts.test.mjs`; checked end to end in a
+  browser with the speak request intercepted. Not done: hearing it on the Mini with Kokoro, and quiet hours (it
+  speaks whenever the tab is open and the switch is on).
 - **B2 Project skills** for repeated chores (`add-tool`, `ship`, `ios-check`), each written from a real session
   after you have done the job by hand twice.
 - **B4 Stale auto-mode environment, on each Mac.** `~/.claude/settings.json` `autoMode.environment` may still

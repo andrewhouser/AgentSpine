@@ -518,6 +518,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         // local. The model name is not a secret; the key never leaves config.
         cloud: cloudStatus(),
         schedules: store.listSchedules().length,
+        // The newest finished run someone waits on (a chat turn, the builder): id, kind, seconds and thread only, for
+        // the dashboard's optional spoken alert (A8). Never its task or answer.
+        lastRun: store.lastFinishedRun(),
         // Open tasks, for the Mac sidebar's badge. Same cap as GET /api/tasks, so a count of 300
         // means "at least 300"; nobody needs that precision on a badge.
         tasks: listTasks({ limit: 300, status: "open" }).length,

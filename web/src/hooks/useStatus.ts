@@ -6,6 +6,8 @@
  */
 import { useEffect, useState } from "react";
 
+import type { FinishedRun } from "../lib/spokenAlerts.ts";
+
 import { api } from "../lib/api.ts";
 
 const POLL_MS = 5000;
@@ -14,6 +16,8 @@ export interface Status {
   depth: number;
   /** Heads-ups offered and waiting on an answer, plus remembered dates waiting to be confirmed. */
   headsupsWaiting: number;
+  /** The newest finished run someone waits on, for the spoken alert (A8). Null before the first one, or offline. */
+  lastRun: FinishedRun | null;
   /** Open questions across every thread. Used as a change signal for the blue dots. */
   pendingConfirmations: number;
   reachable: boolean;
@@ -21,7 +25,7 @@ export interface Status {
   schedules: number;
 }
 
-const OFFLINE: Status = { depth: 0, headsupsWaiting: 0, pendingConfirmations: 0, reachable: false, running: false, schedules: 0 };
+const OFFLINE: Status = { depth: 0, headsupsWaiting: 0, lastRun: null, pendingConfirmations: 0, reachable: false, running: false, schedules: 0 };
 
 export const useStatus = (refreshKey: number): Status => {
   const [status, setStatus] = useState<Status>(OFFLINE);
@@ -44,6 +48,7 @@ export const useStatus = (refreshKey: number): Status => {
           // Only `offered` is waiting on you: a snoozed item waits on the clock and a tracked flight is
           // informational, and a badge on either stops meaning anything. Same rule as the iPhone.
           headsupsWaiting: offered.filter((h) => h.state === "offered").length + (dates?.proposals.length ?? 0),
+          lastRun: s.lastRun ?? null,
           pendingConfirmations: confirmations.filter((c) => c.state === "pending").length,
           reachable: true,
           running: s.queue?.running ?? false,

@@ -154,6 +154,12 @@ Kokoro service in `services/tts/`. See [VOICE.md](docs/VOICE.md) for setup, what
 the limits — notably that a wake word matched on a transcript trades missed wakes against
 near-homophone false ones, and that the microphone is deaf while it speaks.
 
+**It can say when it needs you.** In **Settings → Voice**, *Say when I am needed* makes an open tab
+speak one short line, in the same local voice, when an approval starts waiting or when a reply that
+took over a minute finishes while you are looking at something else ("An approval is waiting.",
+"A reply is ready.", "The builder has finished."). The lines are fixed in code and never read out a
+thread's title or what a reply says. It is per browser and off until you turn it on.
+
 **Conversations have memory of themselves.** Each turn sees what was asked and concluded in
 earlier turns of the same thread — not the prior tool traces, which would exhaust a local
 model's context in about three turns. Tune with `CHAT_HISTORY_TURNS` and

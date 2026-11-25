@@ -2121,3 +2121,32 @@ export const runNotes = (runId: number): RunNote[] =>
     kind: r.kind,
     ts: r.ts,
   }));
+
+// --- the last finished run a person waits on (A8) ---
+
+/** Run kinds a person is waiting on when they finish: a chat turn, an approval carried out, the builder, the CLI. */
+const WAITED_ON_KINDS = ["approval", "build", "chat", "do"];
+
+export interface FinishedRun {
+  conversationId: null | number;
+  id: number;
+  kind: string;
+  seconds: number;
+}
+
+/**
+ * The newest finished top-level run of a kind someone waits on, with how long it took. Read by the dashboard's spoken
+ * alert (PLAN-open-work section 6, A8): only the id, kind, duration and thread, never its task or answer.
+ */
+export const lastFinishedRun = (): FinishedRun | null => {
+  const r = db
+    .prepare(
+      `SELECT id, kind, started, finished, conversation_id FROM runs
+        WHERE finished IS NOT NULL AND parent_run_id IS NULL AND kind IN (${WAITED_ON_KINDS.map(() => "?").join(",")})
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .get(...WAITED_ON_KINDS) as undefined | { conversation_id: null | number; finished: string; id: number; kind: string; started: string };
+  if (!r) return null;
+  const seconds = Math.max(0, Math.round((Date.parse(r.finished) - Date.parse(r.started)) / 1000));
+  return { conversationId: r.conversation_id, id: r.id, kind: r.kind, seconds: Number.isFinite(seconds) ? seconds : 0 };
+};

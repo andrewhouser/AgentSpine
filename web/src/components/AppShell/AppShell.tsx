@@ -6,6 +6,7 @@ import type { View } from "../Sidebar/Sidebar.tsx";
 
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useResource } from "../../hooks/useResource.ts";
+import { useSpokenAlerts } from "../../hooks/useSpokenAlerts.ts";
 import { useStatus } from "../../hooks/useStatus.ts";
 import { api } from "../../lib/api.ts";
 import { isWaiting, needsYou } from "../../lib/attention.ts";
@@ -106,6 +107,8 @@ export const AppShell = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [setHidden, sidebarHidden]);
   const status = useStatus(statusKey);
+  // A spoken line when you are needed, if this browser has it on (Settings, Voice; A8).
+  useSpokenAlerts(status, route.view === "chat" ? route.conversationId : null);
 
   // The blue dots come with the conversation list, so refetch it whenever the number of open
   // questions anywhere changes — a scheduled job finishing or a background turn asking
