@@ -56,10 +56,26 @@ export interface BuildRepo {
   gitWrite?: boolean;
 }
 
-/** One remote MCP server (Streamable HTTP), as declared in policy.json. */
+/**
+ * One MCP server, as declared in policy.json: remote over Streamable HTTP (`url`), or a local program over stdio
+ * (`command`, CP1). Exactly one of the two.
+ */
 export interface McpServerPolicy {
+  /** A local server: the program and its arguments, spawned directly (never through a shell). */
+  command?: string[];
+  /** Working folder for a local server. */
+  cwd?: string;
   /** Set false to switch one server off without deleting its entry. */
   enabled?: boolean;
+  /** Plain values a local server is given. Not for secrets; name those in `envFrom`. */
+  env?: Record<string, string>;
+  /** Names of this process's environment variables a local server is given (a token in .env, say). Nothing else is passed. */
+  envFrom?: string[];
+  /**
+   * Whether what this server's tools return must stay off the cloud tier, as calendar and file reads do. Defaults to
+   * true for a local server (they usually read your files or repos) and false for a remote one.
+   */
+  privateOutput?: boolean;
   /** Name of the environment variable holding a bearer token. The token itself never lives in policy.json. */
   tokenEnv?: string;
   /**
@@ -67,7 +83,8 @@ export interface McpServerPolicy {
    * exposed tool's description is part of the prompt, and prefill is the expensive part here.
    */
   tools?: string[];
-  url: string;
+  /** A remote server's endpoint. */
+  url?: string;
 }
 
 export interface Policy {

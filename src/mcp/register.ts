@@ -15,6 +15,31 @@
  */
 import { McpClient } from "./client.ts";
 import type { McpToolInfo } from "./client.ts";
+import { StdioMcpClient } from "./stdio.ts";
+
+/** What a tool needs from a server, whichever way it is reached. */
+export interface McpConnection {
+  callTool(name: string, args: object): Promise<string>;
+  close?(): void;
+  listTools(): Promise<McpToolInfo[]>;
+  readonly name: string;
+}
+
+/** Remote over HTTP, or local over stdio: exactly one, as the entry says. */
+export const connect = (server: string, s: McpServerPolicy): McpConnection => {
+  if (s.command && s.url) throw new Error('give "url" or "command", not both');
+  if (s.command) return new StdioMcpClient(server, { command: s.command, cwd: s.cwd, env: s.env, envFrom: s.envFrom });
+  if (!s.url) throw new Error('needs a "url" (remote) or a "command" (local)');
+  const token = s.tokenEnv ? process.env[s.tokenEnv] : undefined;
+  if (s.tokenEnv && !token) throw new Error(`${s.tokenEnv} is not set`);
+  return new McpClient(server, s.url, token);
+};
+
+/** Local servers are private by default; remote ones say so explicitly (CP1). */
+export const isPrivateServer = (s: McpServerPolicy): boolean => s.privateOutput ?? Boolean(s.command);
+
+/** The connections made at the last discovery, so a re-discovery can stop the local processes it replaces. */
+let open: McpConnection[] = [];
 import { clip } from "../stash.ts";
 import { stringLeaves } from "../outgoing.ts";
 import { registry, tools } from "../tools/index.ts";
@@ -52,7 +77,7 @@ const serverPolicy = (policy: Policy, server: string): McpServerPolicy | null =>
 };
 
 /** Build the broker Tool for one tool on one server. Exported for the tests. */
-export const makeTool = (server: string, client: McpClient, info: McpToolInfo): Tool => {
+export const makeTool = (server: string, client: McpConnection, info: McpToolInfo, privateOutput = false): Tool => {
   const name = mcpToolName(server, info.name);
   const readOnly = info.annotations?.readOnlyHint === true;
   const brief = (args: any): string => oneLine(JSON.stringify(args ?? {}), 160);
@@ -74,8 +99,11 @@ export const makeTool = (server: string, client: McpClient, info: McpToolInfo): 
       };
     },
     confirmWhenUnattended: !readOnly,
-    // Everything sent to a remote server is text that leaves the machine, whatever the tool is for.
+    // Everything sent to a server is checked as outgoing text: a remote one is a third party, and a local one may
+    // well go online itself (a fetch or search server).
     outgoingText: (args: any) => stringLeaves(args),
+    // A server marked private (every local one, unless its entry says otherwise) pins the run local, like a file read.
+    ...(privateOutput ? { privateOutput: true } : {}),
     description:
       `[MCP server "${server}"${readOnly ? ", read-only" : ", asks for approval"}] ` +
       (oneLine(info.description, DESCRIPTION_MAX) || oneLine(info.annotations?.title, 80) || info.name),
@@ -105,6 +133,7 @@ const unregisterAll = (): void => {
 export const syncMcpTools = async (policy: Policy): Promise<string[]> => {
   const lines: string[] = [];
   const fresh: Tool[] = [];
+  const connections: McpConnection[] = [];
   const servers = policy.mcp?.enabled ? Object.entries(policy.mcp.servers ?? {}) : [];
 
   for (const [server, s] of servers) {
@@ -112,19 +141,24 @@ export const syncMcpTools = async (policy: Policy): Promise<string[]> => {
       lines.push(`${server}: disabled`);
       continue;
     }
+    let client: McpConnection | undefined;
     try {
-      const token = s.tokenEnv ? process.env[s.tokenEnv] : undefined;
-      if (s.tokenEnv && !token) throw new Error(`${s.tokenEnv} is not set`);
-      const client = new McpClient(server, s.url, token);
+      client = connect(server, s);
       const listed = (await client.listTools()).filter((t) => !s.tools || s.tools.includes(t.name));
-      for (const info of listed) fresh.push(makeTool(server, client, info));
-      lines.push(`${server}: ${listed.length} tool(s)`);
+      const priv = isPrivateServer(s);
+      for (const info of listed) fresh.push(makeTool(server, client, info, priv));
+      connections.push(client);
+      lines.push(`${server}: ${listed.length} tool(s)${s.command ? ", local" : ""}${priv ? ", private" : ""}`);
     } catch (err) {
+      client?.close?.();
       lines.push(`${server}: unavailable (${err instanceof Error ? err.message : String(err)})`);
     }
   }
 
   unregisterAll();
+  // The local processes behind the tools just removed are stopped; the new connections take their place.
+  for (const c of open) c.close?.();
+  open = connections;
   for (const t of fresh) {
     // A built-in can never be shadowed by a server's tool; the prefix makes this unreachable
     // in practice, and the check keeps it that way if the naming ever changes.

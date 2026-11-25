@@ -80,7 +80,7 @@
     "writableDirs": []
   },
   "mcp": {
-    "//": "Remote MCP servers (Streamable HTTP) whose tools the agent may call; see docs/MCP.md. Off until enabled. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
+    "//": "MCP servers whose tools the agent may call; see docs/MCP.md. Off until enabled. A server is remote (url, Streamable HTTP) or a local program (command, an argument list run without a shell; env for plain values, envFrom for names of .env variables to pass through, nothing else is inherited). A local server's tools keep the run on the local model unless its entry sets privateOutput false. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
     "enabled": false,
     "servers": {}
   },

@@ -956,10 +956,16 @@ is built. Every measurement named below needs the model host, so every item is *
 
 ### CP. Capabilities (each waits on a decision below)
 
-- **CP1 MCP over stdio, and a privacy flag per server.** The client is HTTP-only (`src/mcp/client.ts`), and
-  MCP tools do not declare `privateOutput`. Most MCP servers people run with Claude Desktop are local stdio
-  processes, which are more private than a remote one. Add stdio transport, a per-server `privateOutput` in
-  `policy.mcp.servers`, and keep the existing gating (deny by default, `readOnlyHint` or the queue).
+- **CP1 MCP over stdio, and a privacy flag per server (built 2026-11-25; no real server run yet).**
+  `src/mcp/stdio.ts`: a server entry gives `url` (remote) or `command` (a local program, an argument list spawned
+  without a shell). The child gets a minimal environment (PATH, HOME, locale, plus the entry's `env` values and the
+  `envFrom` names), not this process's keys and tokens. It starts on first use, is restarted once if it died, and is
+  stopped on re-discovery and at exit; a request from the server (sampling, roots) is refused and a ping answered.
+  `privateOutput` per server: on by default for a local server, off for a remote one, so a local server's tools pin
+  the run local like a file read. Gating is unchanged (deny by default, the `tools` list, `readOnlyHint` or the
+  queue, `confirmWhenUnattended`, the outgoing-text check on arguments). Suite: `test/mcp-stdio.test.mjs` with a
+  fake server in `test/fixtures/mcp/`. Not done: a real server (the filesystem or git server) on the Mini, and LP6,
+  which keeps every exposed tool's description out of the prompt prefix until asked for; until then set `tools`.
 - **CP2 Google: real drafts, timed events, user-directed send.** `policy.userDirected` already sends mail
   through Apple Mail when your own message names the recipient (`mac_control.send_mail`). Proposed: Gmail
   drafts created in Gmail, timed events and RSVPs, and send under the same named-recipient rule. Unattended
@@ -1400,8 +1406,8 @@ Still open:
 - **UI changes are built for web, Mac and iPhone together.**
 
 **Not doing.** Model-judged safety checks (revisit only if N2 shows the code gates cost real approval fatigue);
-MCP connectors beyond `docs/MCP.md` (section 10 CP1 proposes reopening this for local stdio servers; still
-not doing until you decide); Docker workspace containers; Telegram or WhatsApp (a second place for
+MCP connectors beyond `docs/MCP.md` (reopened 2026-11-25 for local stdio servers only, which CP1 built; hosted
+connectors with OAuth are still not doing); Docker workspace containers; Telegram or WhatsApp (a second place for
 approvals to be dismissed unseen); usage telemetry (local-first); auto-sending email; a live "agent thinking"
 dashboard; unsubscribing through a browser in the inbox cleanup (one-click unsubscribe is built, SPEC section 5, 2026-11-21; senders
 whose link needs a page click are listed as "unsubscribe by hand").
