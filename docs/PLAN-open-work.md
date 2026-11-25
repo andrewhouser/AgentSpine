@@ -211,8 +211,17 @@ Section 0 is the priority in this area. What is left of the Nod items:
   attempted. Run it once per model change and before any ROLLOUT step that switches on a learner, and record the
   baseline in SPEC or MODELS. Fixtures marked `liveOnly` (a plausible false fact, a recipe from a hostile file)
   can only be judged here. A broker bypass must be zero by construction; any other threshold is set after the
-  baseline. Not covered: Heads-up. Its scanner parses event titles in plain code and I did not trace whether an
-  event title reaches a search query or a card, so that path is unchecked. The write token raised the value of
+  baseline. Heads-up was traced 2026-11-25: an event title (written by whoever sent the invite) becomes a heads-up's
+  `subject`. It never reaches a web search query: gift and dinner queries are built from a fixed shape, and only the
+  local model's re-validated summary fills it, with every protected name checked out (`assertAnonymous`). It reaches
+  push text (your own phone) and travel watches (the event's location goes to the routing provider, by design).
+  Two holes found and fixed: `headsup_status`, which the scheduled morning brief calls, returned titles bare and
+  without `privateOutput`, so an invite's title reached the model as plain text and could reach the cloud tier (now
+  tagged untrusted and declared private); and gift research gave the whole title to the local model as "who" when
+  it was not "X's birthday", so a crafted title could steer which remembered facts became search words (now a title
+  that is not name-shaped gives no "who", no recall and no model call, and the name it does give is labelled data).
+  Suites: `test/headsup-brief.test.mjs`, `test/headsup-research.test.mjs`. The fixtures above do not yet include a
+  calendar-title payload for the live run. The write token raised the value of
   this work, since a hostile email is now worth more to an attacker.
 - **N1 memory provenance.** Built 2026-11-21: a friction note now records the run that first met the error
   (`recordFriction` takes the run id from the broker). Nothing uses `origin` to change recall or pruning, by design.
