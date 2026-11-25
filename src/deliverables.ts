@@ -10,6 +10,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { rawDb } from "./memory/store.ts";
+// Side effect only: makes sure the projects table exists for the join in listDeliverables.
+import "./projects/store.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS deliverables (
@@ -30,6 +32,9 @@ export interface Deliverable {
   modified: null | string;
   name: string;
   path: string;
+  /** The project the file was written in, or null for "General". A deleted project counts as none. */
+  project_id: null | number;
+  project_name: null | string;
   run_id: null | number;
   ts: string;
 }
@@ -46,14 +51,31 @@ export const recordDeliverable = (file: string, action: string, runId: null | nu
     .run(file, action, runId ?? null, bytes, new Date().toISOString());
 };
 
-/** Latest row per path, newest first, with whether the file is still on disk. */
-export const listDeliverables = (limit = 200): Deliverable[] => {
+/**
+ * Latest row per path, newest first, with whether the file is still on disk and which project
+ * it came from. The link is run -> conversation -> project: a run keeps its conversation_id and a
+ * conversation its project_id, so no new column is needed and an old file groups correctly. A run
+ * outside any conversation (a scheduled job) or in a since-deleted project lands under General.
+ * The project join is on the row, so it names the project as it is now (a rename follows).
+ */
+export const listDeliverables = (limit = 500): Deliverable[] => {
   const rows = rawDb
     .prepare(
-      "SELECT d.* FROM deliverables d JOIN (SELECT path, MAX(id) AS mid FROM deliverables GROUP BY path) m ON d.id = m.mid " +
+      "SELECT d.*, p.id AS project_id, p.name AS project_name FROM deliverables d " +
+        "JOIN (SELECT path, MAX(id) AS mid FROM deliverables GROUP BY path) m ON d.id = m.mid " +
+        "LEFT JOIN runs r ON r.id = d.run_id LEFT JOIN conversations c ON c.id = r.conversation_id " +
+        "LEFT JOIN projects p ON p.id = c.project_id " +
         "ORDER BY d.id DESC LIMIT ?",
     )
-    .all(limit) as unknown as { action: string; bytes: number; path: string; run_id: null | number; ts: string }[];
+    .all(limit) as unknown as {
+    action: string;
+    bytes: number;
+    path: string;
+    project_id: null | number;
+    project_name: null | string;
+    run_id: null | number;
+    ts: string;
+  }[];
   return rows.map((r) => {
     let exists = false;
     let modified: null | string = null;

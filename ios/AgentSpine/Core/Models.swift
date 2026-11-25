@@ -642,8 +642,46 @@ struct SavedFile: Codable, Identifiable, Hashable {
     let bytes: Int
     let exists: Bool
     let ts: String
+    /// The project the file was written in; nil (or an offline copy from before this existed) is "General".
+    var project_id: Int? = nil
+    var project_name: String? = nil
 
     var id: String { path }
+}
+
+/// One folder on the Files page. Same rules as `groupFiles` in web/src/lib/fileGroups.ts:
+/// a folder per project A to Z, General last, newest first inside each.
+struct FileGroup: Identifiable {
+    let id: String
+    let name: String
+    let files: [SavedFile]
+
+    static func group(_ files: [SavedFile]) -> [FileGroup] {
+        var order: [String] = []
+        var buckets: [String: (name: String, files: [SavedFile], isGeneral: Bool)] = [:]
+        for f in files {
+            let general = f.project_id == nil || (f.project_name ?? "").isEmpty
+            let key = general ? "general" : "p\(f.project_id!)"
+            if buckets[key] == nil {
+                buckets[key] = (general ? "General" : f.project_name!, [], general)
+                order.append(key)
+            }
+            buckets[key]!.files.append(f)
+        }
+        return order.sorted { a, b in
+            let x = buckets[a]!, y = buckets[b]!
+            if x.isGeneral != y.isGeneral { return y.isGeneral }
+            let c = x.name.localizedCaseInsensitiveCompare(y.name)
+            return c == .orderedSame ? a < b : c == .orderedAscending
+        }.map { FileGroup(id: $0, name: buckets[$0]!.name, files: buckets[$0]!.files) }
+    }
+
+    /// Case-insensitive match on name, path or project name; empty keeps everything.
+    static func filter(_ files: [SavedFile], _ query: String) -> [SavedFile] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        if q.isEmpty { return files }
+        return files.filter { "\($0.name)\n\($0.path)\n\($0.project_name ?? "General")".lowercased().contains(q) }
+    }
 }
 
 struct FileContent: Codable {

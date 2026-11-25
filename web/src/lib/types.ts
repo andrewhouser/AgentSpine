@@ -838,6 +838,8 @@ export interface SavedFile {
   modified: null | string;
   name: string;
   path: string;
+  project_id: null | number;
+  project_name: null | string;
   run_id: null | number;
   ts: string;
 }

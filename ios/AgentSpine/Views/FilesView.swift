@@ -7,6 +7,11 @@ struct FilesView: View {
     @State private var loadError: String?
     @State private var opened: SavedFile?
     @State private var cachedAt: Date?
+    @State private var showAll = false
+    @State private var query = ""
+    @State private var collapsed: Set<String> = []
+
+    private var shown: [SavedFile] { FileGroup.filter(files, query) }
 
     var body: some View {
         List {
@@ -30,35 +35,68 @@ struct FilesView: View {
                 .listRowBackground(Color.clear)
             }
 
-            ForEach(files) { file in
-                Button {
-                    if file.exists { opened = file }
-                } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(file.name)
-                            .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
-                            .foregroundStyle(file.exists ? Spine.Palette.text : Spine.Palette.textDim)
-                        Text(file.path)
-                            .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
-                            .foregroundStyle(Spine.Palette.textFaint)
-                            .lineLimit(2)
-                        Text(
-                            "\(ByteCountFormatter.string(fromByteCount: Int64(file.bytes), countStyle: .file)) · "
-                                + "\(file.action) \(SpineDate.relative(file.ts))"
-                                + (file.exists ? "" : " · no longer on disk")
-                        )
-                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                        .foregroundStyle(Spine.Palette.textDim)
-                    }
+            if !files.isEmpty {
+                Picker("View", selection: $showAll) {
+                    Text("Folders").tag(false)
+                    Text("All").tag(true)
                 }
-                .buttonStyle(.plain)
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+            }
+
+            if showAll {
+                ForEach(shown) { row($0) }
+            } else {
+                // A search opens every folder that has a match.
+                ForEach(FileGroup.group(shown)) { group in
+                    let open = !query.isEmpty || !collapsed.contains(group.id)
+                    Button {
+                        if collapsed.contains(group.id) { collapsed.remove(group.id) } else { collapsed.insert(group.id) }
+                    } label: {
+                        HStack {
+                            Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption)
+                            Image(systemName: "folder")
+                            Text(group.name).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                            Spacer()
+                            Text("\(group.files.count)").foregroundStyle(Spine.Palette.textDim)
+                        }
+                        .foregroundStyle(Spine.Palette.text)
+                    }
+                    .buttonStyle(.plain)
+                    if open { ForEach(group.files) { row($0).padding(.leading, 18) } }
+                }
             }
         }
         .listStyle(.plain)
         .navigationTitle("Files")
+        .searchable(text: $query, prompt: "Name, folder or project")
         .refreshable { await load() }
         .task { await load() }
         .sheet(item: $opened) { FilePreview(file: $0) }
+    }
+
+    private func row(_ file: SavedFile) -> some View {
+        Button {
+            if file.exists { opened = file }
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(file.name)
+                    .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                    .foregroundStyle(file.exists ? Spine.Palette.text : Spine.Palette.textDim)
+                Text(file.path)
+                    .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                    .foregroundStyle(Spine.Palette.textFaint)
+                    .lineLimit(2)
+                Text(
+                    "\(ByteCountFormatter.string(fromByteCount: Int64(file.bytes), countStyle: .file)) · "
+                        + "\(file.action) \(SpineDate.relative(file.ts))"
+                        + (file.exists ? "" : " · no longer on disk")
+                )
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func load() async {

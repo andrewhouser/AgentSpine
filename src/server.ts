@@ -1948,7 +1948,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
     // /api/files — what the assistant has written for you (src/deliverables.ts).
     if (seg[1] === "files") {
-      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listDeliverables(200));
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listDeliverables(500));
 
       // GET /api/files/content?path= — only paths in the ledger are served, whatever the policy
       // says about the folder around them.

@@ -1897,7 +1897,11 @@ becomes a push (re-nudged daily while overdue). A follow-up is a task with `wait
 
 **Files** — `write_file` (create, replace, `mode: "append"`), `edit_file`, `move_file`,
 `make_dir`; `read_file` also reads `.docx/.rtf/.html` and PDFs (PDFKit, no install). Everything
-written is listed on the Files page; each reply has **Save to file**.
+written is listed on the Files page; each reply has **Save to file**. Files are grouped in folders, one
+per project (A to Z) and a **General** folder, last, for files from no project or from one since deleted. A
+file's project is the project of the conversation of the run that wrote it, so older files group correctly
+too. **All** shows the old flat list, newest first, and the search box (name, path or project) works in both
+and opens every folder with a match. Web, iPhone and Mac all have it.
 
 **iOS apps** — `scaffold_ios_app` creates a whole buildable project in one call: `project.yml`,
 the `.xcodeproj`, Info.plist, asset catalog, SwiftUI app, optional unit-test target and push
