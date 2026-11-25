@@ -1236,6 +1236,11 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       return sendJson(res, 200, found.hits);
     }
 
+    // /api/refusals — calls refused whoever approves (D2), newest first, without their arguments.
+    if (m === "GET" && seg[1] === "refusals" && seg.length === 2) {
+      return sendJson(res, 200, store.listRefusals(Number(url.searchParams.get("limit") ?? 50) || 50));
+    }
+
     // /api/data-events — the deletion and retention audit trail (ids, names and counts, never content).
     if (m === "GET" && seg[1] === "data-events" && seg.length === 2) {
       return sendJson(res, 200, store.listDataEvents(Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 100) || 100)), url.searchParams.get("kind") ?? undefined));

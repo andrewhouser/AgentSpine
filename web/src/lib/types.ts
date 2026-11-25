@@ -1002,6 +1002,15 @@ export interface PlanStep {
 }
 
 /** What a turn looks like while it is still running. */
+/** A call refused whoever approves (GET /api/refusals, D2). No arguments: they can carry the refused text. */
+export interface Refusal {
+  id: number;
+  reason: string;
+  runId: null | number;
+  tool: string;
+  ts: string;
+}
+
 /** What happened to a run along the way that is not a tool call (GET /api/runs/:id `notes`; LP3, LP5). */
 export interface RunNote {
   detail: Record<string, unknown>;

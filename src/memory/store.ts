@@ -2150,3 +2150,28 @@ export const lastFinishedRun = (): FinishedRun | null => {
   const seconds = Math.max(0, Math.round((Date.parse(r.finished) - Date.parse(r.started)) / 1000));
   return { conversationId: r.conversation_id, id: r.id, kind: r.kind, seconds: Number.isFinite(seconds) ? seconds : 0 };
 };
+
+// --- refusals (D2) ---
+
+export interface Refusal {
+  id: number;
+  reason: string;
+  runId: null | number;
+  tool: string;
+  ts: string;
+}
+
+/**
+ * Calls refused whoever approves, newest first, apart from ordinary denials. The reason is the broker's own sentence;
+ * the arguments are left out, because they can carry the very text that was refused.
+ */
+export const listRefusals = (limit = 50): Refusal[] =>
+  (db
+    .prepare("SELECT id, ts, run_id, tool, output FROM actions WHERE decision = 'denied' AND output LIKE 'DENIED (refused, whoever approves):%' ORDER BY id DESC LIMIT ?")
+    .all(Math.min(500, Math.max(1, limit))) as { id: number; output: string; run_id: null | number; tool: string; ts: string }[]).map((r) => ({
+    id: r.id,
+    reason: String(r.output).replace(/^DENIED \(refused, whoever approves\):\s*/, "").split("\n")[0],
+    runId: r.run_id,
+    tool: r.tool,
+    ts: r.ts,
+  }));

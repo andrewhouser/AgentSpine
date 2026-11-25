@@ -5,6 +5,41 @@
   width: 100%;
 }
 
+/* Refused calls (D2), listed apart from the runs: what no approval could have let through. */
+.refusals {
+  margin-bottom: 20px;
+}
+
+.refusedHead {
+  font-size: 0.875rem;
+  margin: 0 0 4px;
+}
+
+.refusedNote {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  margin: 0 0 8px;
+}
+
+.refusal {
+  background: none;
+  border: 0;
+  border-left: 2px solid var(--danger-line);
+  color: var(--text);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 0.8125rem;
+  margin: 4px 0;
+  padding: 4px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.refusal:disabled {
+  cursor: default;
+}
+
 .empty {
   color: var(--text-faint);
   padding: 24px 0;

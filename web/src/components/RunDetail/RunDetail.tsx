@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { Action, Run, RunNote } from "../../lib/types.ts";
 
 import { api } from "../../lib/api.ts";
+import { isRefused } from "../../lib/refusals.ts";
 import { describeRunNote } from "../../lib/runNotes.ts";
 import { DecisionBadge } from "../DecisionBadge/DecisionBadge.tsx";
 import styles from "./RunDetail.module.css";
@@ -77,7 +78,7 @@ export const RunDetail = ({ onBack, runId }: RunDetailProps) => {
               <div className={styles.actionHead}>
                 <code className={styles.tool}>{a.tool}</code>
                 {a.target && <span className={styles.target}>{a.target}</span>}
-                <DecisionBadge status={a.decision} />
+                <DecisionBadge refused={isRefused(a.output)} status={a.decision} />
               </div>
               <pre className={styles.pre}>{a.args}</pre>
               {a.output && <pre className={styles.pre}>{a.output}</pre>}

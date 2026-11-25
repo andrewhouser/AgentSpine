@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { Run } from "../../lib/types.ts";
+import type { Refusal, Run } from "../../lib/types.ts";
 
 import { api } from "../../lib/api.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
@@ -17,9 +17,13 @@ import styles from "./ActivityView.module.css";
  */
 export const ActivityView = ({ onSelectRun, runId }: { onSelectRun: (id: null | number) => void; runId: null | number }) => {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [refusals, setRefusals] = useState<Refusal[]>([]);
 
   useEffect(() => {
     void api.listRuns(100).then(setRuns);
+    // Refusals (D2) are listed apart: they are what no approval could have let through, so a list of them is a list
+    // of what something tried and the code stopped, worth seeing without reading every denial.
+    void api.listRefusals(20).then(setRefusals).catch(() => setRefusals([]));
   }, []);
 
   // The selected run lives in the URL (/activity/12) rather than here, so a memory in Settings can
@@ -32,6 +36,28 @@ export const ActivityView = ({ onSelectRun, runId }: { onSelectRun: (id: null | 
         subtitle="Every agent cycle — chat turns, scheduled jobs, watchers — with the broker's decision on each tool call."
         title="Activity"
       />
+
+      {refusals.length > 0 && (
+        <section className={styles.refusals}>
+          <h2 className={styles.refusedHead}>Refused, whoever approves</h2>
+          <p className={styles.refusedNote}>
+            Calls the code stopped outright, such as moving money or trading through the browser, or a page on a
+            never-visit domain. No approval could have let these through.
+          </p>
+          {refusals.map((r) => (
+            <button
+              className={styles.refusal}
+              disabled={r.runId === null}
+              key={r.id}
+              onClick={() => r.runId !== null && onSelectRun(r.runId)}
+              type="button"
+            >
+              <span className={styles.mono}>{new Date(r.ts).toLocaleString()}</span> <code>{r.tool}</code> {r.reason}
+              {r.runId !== null && <span className={styles.mono}> · run #{r.runId}</span>}
+            </button>
+          ))}
+        </section>
+      )}
 
       {runs.length === 0 && <div className={styles.empty}>Nothing has run yet.</div>}
 

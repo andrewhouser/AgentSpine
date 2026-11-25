@@ -37,6 +37,12 @@ import { NOTIFY_ON_CONFIRMATION, OUTGOING_ENFORCE } from "./config.ts";
 import { describeFindings, scanOutgoing } from "./outgoing.ts";
 import { recordFriction } from "./learn/friction.ts";
 
+/**
+ * How a refused call's audit row begins (D2): an ordinary denial to the loop, but one that no approval could have
+ * changed. The store's refusal list and the web's "refused" badge read this exact text.
+ */
+export const REFUSED_PREFIX = "DENIED (refused, whoever approves):";
+
 const startOfToday = (): string => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -156,7 +162,7 @@ export const executeCall = async (
     } catch {
       reason = "the check on this call failed, so it is refused";
     }
-    if (reason) return record(classified, "denied", `DENIED (refused, whoever approves): ${reason}`);
+    if (reason) return record(classified, "denied", `${REFUSED_PREFIX} ${reason}`);
   }
 
   // The outgoing-text check (D3). Log-only unless OUTGOING_ENFORCE: the note rides on the audit

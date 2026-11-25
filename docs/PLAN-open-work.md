@@ -1285,8 +1285,10 @@ navigation to a host in `policy.browser.neverDomains` (also checked by `web_read
 got to one by a redirect or link). A project overlay can add to `neverDomains` and cannot remove the base's.
 Money words that are not trades (buy, order, pay, checkout, subscribe) still queue, as H6 says. Suites:
 `test/refused-tier.test.mjs` (one row per skip path, and that nothing is queued) and the changed rows in
-`test/unattended-asks.test.mjs`. Not done: a screen that lists refusals apart from other denials, and the
-bank and broker hosts, which are yours to put in `policy.json`.
+`test/unattended-asks.test.mjs`. Refusals listed apart (2026-11-25): `GET /api/refusals` (time, tool, the
+broker's reason and the run, never the arguments), a "Refused, whoever approves" section on the web Activity page,
+and a "refused" badge in a run's tool calls (`REFUSED_PREFIX`, pinned by `test/refused-web.test.mjs`). Not done:
+the same on iPhone and Mac, and the bank and broker hosts, which are yours to put in `policy.json`.
 
 Duet will not trade securities or move money between accounts even with your approval. Here every irreversible
 action can be approved, and `policy.autoApprove`, `policy.userDirected`, `policy.trust.chatAutoTools` and the

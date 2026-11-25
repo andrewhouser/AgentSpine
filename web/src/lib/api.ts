@@ -55,6 +55,7 @@ import type {
   ProjectSource,
   PromotionProposal,
   Recipe,
+  Refusal,
   RetentionRule,
   Run,
   RunNote,
@@ -378,6 +379,7 @@ export const api = {
 
   listRecipes: () => request<Recipe[]>("/api/recipes"),
 
+  listRefusals: (limit = 20) => request<Refusal[]>(`/api/refusals?limit=${limit}`),
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
   listSchedules: () => request<Schedule[]>("/api/schedules"),
 
