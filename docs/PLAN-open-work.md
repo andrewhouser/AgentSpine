@@ -1360,9 +1360,11 @@ With `OUTGOING_ENFORCE=true` it denies the call and names what matched. A findin
 Declared so far: `draft` (subject, body), `notify` (title, body), `web_search` (query), `mac_control` sends,
 the browser's typed text, and every string argument to an MCP tool. The secret rule is the recipe filter
 (`looksLikeSecretValue`), reused as the plan said, so its "32 or more opaque characters" clause will catch some
-long URLs; the fortnight's log is what tells you. Suite: `test/outgoing.test.mjs`. Not done: Instagram
-captions (the tools take a row id, so the caption is checked nowhere yet; the place for it is where the
-queue row is written), and URLs the browser and `web_read` are sent to, which can carry text out in a query string.
+long URLs; the fortnight's log is what tells you. Suite: `test/outgoing.test.mjs`. Added 2026-11-25:
+Instagram captions are checked where the queue row is written (`seed`): a finding is a note on the row, shown on
+the approval card, and becomes a blocking problem once `OUTGOING_ENFORCE` is on; and `web_read` and browser
+navigation declare the decoded query-string values and fragment of their address (`urlOutgoingParts`), not the
+host or path, whose long ids would trip the long-string rule on nearly every page.
 Proposed and not built, as before: Duet's second tier of health and finance text, which needs a model to judge.
 
 Duet checks each outgoing message for card numbers and government IDs and refuses them. Here the only filter

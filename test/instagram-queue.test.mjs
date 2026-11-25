@@ -178,4 +178,17 @@ console.log("\nwhat a person is shown");
   check("upcoming() is soonest first and ignores finished rows", q.upcoming(NOW, 3).map((r) => r.id)[0], "2026-11-23T09:00/E1/feed");
 }
 
+console.log("\nseeding: the outgoing-text check on a caption (D3)");
+{
+  const file = { ...kit.file, posts: [...kit.file.posts, { caption: "Raffle tonight. Pay with 4111 1111 1111 1111.", id: "C1", image: "images/evergreen.jpg", kind: "evergreen", story_image: null }] };
+  seed([{ at: "2026-12-04 09:00", post: "C1" }], { file });
+  const row = q.getRow("2026-12-04T09:00/C1/feed");
+  check("a card number in a caption is noted on the row", /outgoing check, log only: the caption contains a card number/.test(row.note ?? ""), true);
+  check("the note names what matched, never the number", (row.note ?? "").includes("4111"), false);
+  check("log only: it does not block approval", q.blockers(row), []);
+  check("and the approval card shows the note", /Note:\s+outgoing check, log only/.test(q.describeRow(row)), true);
+  const clean = q.getRow("2026-11-23T09:00/E1/feed");
+  check("a clean caption gets no such note", /outgoing check/.test(clean.note ?? ""), false);
+}
+
 done();

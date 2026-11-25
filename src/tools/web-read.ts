@@ -8,6 +8,7 @@
  * Output is tagged UNTRUSTED and injection-scanned, and clipped reversibly: a page longer
  * than the cap keeps its tail where read_more can reach it.
  */
+import { urlOutgoingParts } from "../outgoing.ts";
 import { openScratchPage } from "./browser.ts";
 import { clip } from "../stash.ts";
 import { saveSource } from "../research/sources.ts";
@@ -79,6 +80,8 @@ export const webRead: Tool = {
   name: "web_read",
   description: "Fetch a known URL with the headless browser and return its readable text.",
   argsSchema: '{ "url": string }',
+  // The query string and fragment of the address are text that leaves the machine (D3).
+  outgoingText: (a: Args) => urlOutgoingParts(a?.url),
   classify,
   available,
   checkPolicy,

@@ -75,6 +75,9 @@ if (!enforcing) {
   check("mac_control: a note stays on the machine", registry.mac_control.outgoingText({ action: "create_note", body: "B" }), []);
   check("browser: typing", registry.browser.outgoingText({ action: "type", selector: "#a", text: "T" }), ["T"]);
   check("browser: a click sends no text", registry.browser.outgoingText({ action: "click", text: "T" }), []);
+  check("web_read: only the query string and fragment of the address", registry.web_read.outgoingText({ url: "https://example.com/a/0123456789abcdef0123456789abcdef01234567?q=card%204111&x=1#frag" }), ["card 4111", "1", "frag"]);
+  check("browser: a navigation's query string too", registry.browser.outgoingText({ action: "navigate", url: "https://example.com/?ssn=123-45-6789" }), ["123-45-6789"]);
+  check("an address that is not a URL gives nothing", registry.web_read.outgoingText({ url: "not a url" }), []);
   const mcp = makeTool("shop", { callTool: async () => "" }, { description: "d", inputSchema: { properties: { note: { type: "string" } } }, name: "order" });
   check("an MCP tool: every string argument", mcp.outgoingText({ note: "N", n: { deep: "D" } }), ["N", "D"]);
 }

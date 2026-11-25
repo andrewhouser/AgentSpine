@@ -22,6 +22,7 @@
 import { chromium } from "playwright-core";
 import type { Browser, Page } from "playwright-core";
 import { CHROME_CDP_URL, BROWSER_MODE, CHROME_PATH } from "../config.ts";
+import { urlOutgoingParts } from "../outgoing.ts";
 import { clip } from "../stash.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
 
@@ -260,7 +261,9 @@ export const browserControl: Tool = {
   checkPolicy,
   confirmWhenUnattended: asksWhenUnattended,
   // Typing into a page is how text leaves through a form: a card number into a field is the case.
-  outgoingText: (a: Args) => (a?.action === "type" || a?.action === "submit" ? [String(a.text ?? "")] : []),
+  // And a navigation's query string and fragment, which can carry text out as well as a form can (D3).
+  outgoingText: (a: Args) =>
+    a?.action === "type" || a?.action === "submit" ? [String(a.text ?? "")] : a?.action === "navigate" ? urlOutgoingParts(a.url) : [],
   refuse,
   run: (args: Args, ctx) => run(args, ctx),
 };

@@ -78,3 +78,19 @@ export const stringLeaves = (value: unknown, depth = 0): string[] => {
   if (depth > 4 || value === null || typeof value !== "object") return [];
   return Object.values(value as Record<string, unknown>).flatMap((v) => stringLeaves(v, depth + 1));
 };
+
+/**
+ * The parts of a URL that can carry text out: the decoded values of its query string, and its fragment. Not the host
+ * or the path, whose long ids (a 40-character commit, a video id) would trip the long-string rule on nearly every
+ * page while carrying nothing anyone typed. Added 2026-11-25 for web_read and browser navigation (D3).
+ */
+export const urlOutgoingParts = (url: unknown): string[] => {
+  try {
+    const u = new URL(String(url ?? ""));
+    const values = [...u.searchParams.values()];
+    const fragment = decodeURIComponent(u.hash.replace(/^#/, ""));
+    return [...values, ...(fragment ? [fragment] : [])].filter(Boolean);
+  } catch {
+    return [];
+  }
+};

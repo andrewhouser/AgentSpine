@@ -25,7 +25,9 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { OUTGOING_ENFORCE } from "../config.ts";
 import { rawDb } from "../memory/store.ts";
+import { describeFindings, scanOutgoing } from "../outgoing.ts";
 import {
   CAPTION_MAX_CHARS,
   CAPTION_MAX_HASHTAGS,
@@ -501,6 +503,12 @@ export const seed = (
     // A Story carries no caption through the API, so none is stored: the row holds what will be sent.
     const caption = surface === "story" ? "" : String(post.caption ?? "");
     rowProblems.push(...captionProblems(caption));
+    // The outgoing-text check (D3), on a caption that will be public. Like every other surface it only notes what it
+    // found until OUTGOING_ENFORCE is on; then it blocks approval, naming what matched and never the value.
+    const found = caption ? scanOutgoing([caption]) : [];
+    const outgoing = found.length ? `the caption contains a ${describeFindings(found)}` : "";
+    if (outgoing && OUTGOING_ENFORCE) rowProblems.push(outgoing);
+    const outgoingNote = outgoing && !OUTGOING_ENFORCE ? `outgoing check, log only: ${outgoing}` : "";
 
     const next = {
       account,
@@ -510,7 +518,7 @@ export const seed = (
       image_sha256: facts.sha256,
       image_url: imagePath ? publicUrl(o.baseUrl, imagePath) : null,
       kind,
-      note: occ.note ? String(occ.note) : null,
+      note: [occ.note ? String(occ.note) : "", outgoingNote].filter(Boolean).join(" · ") || null,
       problem: rowProblems.length ? rowProblems.join("; ") : null,
       publish_at: iso(at),
       publish_local: occ.at.trim(),
