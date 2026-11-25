@@ -1076,6 +1076,8 @@ export interface InboxStatus {
 
 /** One hit from searching everything that has been indexed. `via` says which paths found it. */
 export interface KnowledgeHit {
+  /** What the passage's source is backed by (src/knowledge/retrieval.ts). The server always sends it. */
+  evidence?: { claims: number; level: "conflicting" | "inferred" | "machine-extracted" | "none" | "reviewed"; reviewed: number; unreviewed: number };
   id: number;
   kind: string;
   mtime: null | string;
@@ -1084,6 +1086,17 @@ export interface KnowledgeHit {
   score: number;
   text: string;
   via: string[];
+}
+
+/** Narrowing for GET /api/knowledge/search. Every field is optional; an empty one is left off the request. */
+export interface KnowledgeSearchFilters {
+  /** What backs the source: `reviewed` claims, `extracted` ones nobody has reviewed, or `none` analysed. */
+  evidence?: "" | "extracted" | "none" | "reviewed";
+  person?: number;
+  project?: number;
+  since?: string;
+  team?: number;
+  until?: string;
 }
 
 /** One extracted item in a meeting close-out, with the earlier claims it could replace. */

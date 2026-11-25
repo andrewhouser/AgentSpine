@@ -455,8 +455,12 @@ baseline, and the meeting recall number is still unmeasured.
   `person`, `team`, `evidence` and `kind`; `GET /api/knowledge/search` takes `person`, `team`, `evidence` and `asOf`
   and keeps its array shape. Fixed with it: `knowledge_claims` did not keep a project run to its own project, as
   `knowledge_search` did, so a project chat could read another project's claims; it is pinned now. Suite:
-  `test/knowledge-filters.test.mjs`. Not built: the filters on the Drop zone search screens (web, iPhone, Mac), and
-  any measurement of whether they help, which is K1's questions again. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
+  `test/knowledge-filters.test.mjs`. The web Drop zone's "Search everything" has
+  them (2026-11-25): project, a person or team picker (people and teams from the knowledge store), what backs the
+  source, and From and As of dates; a change re-runs the search on screen, and each hit now shows its project, date
+  and what backs it. Checked in a real browser against a seeded database, desktop and phone width. Not built: the
+  same filters on iPhone and Mac (`InboxView.swift`), and any measurement of whether they help, which is K1's
+  questions again. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
   2026-11-22, built but not seen running). The agent tool is built (2026-11-22): `knowledge_search`
   declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.

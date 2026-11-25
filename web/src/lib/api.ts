@@ -39,6 +39,7 @@ import type {
   KnowledgeConflict,
   KnowledgeEntity,
   KnowledgeHit,
+  KnowledgeSearchFilters,
   LiveStatus,
   Meeting,
   MeetingExtraction,
@@ -498,12 +499,27 @@ export const api = {
   scheduleVersions: (id: number) => request<{ versions: ScheduleVersion[] }>(`/api/schedules/${id}/versions`),
 
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
-  /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */
-  searchKnowledge: (q: string, opts: { kind?: string; project?: number } = {}) => {
+  /**
+   * Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. `note` is the
+   * server's word on a filter it could only partly apply (a team with no recorded members), sent as a header so the
+   * body stays the plain list other clients read. An unknown person or team comes back as an error.
+   */
+  searchKnowledge: async (q: string, opts: KnowledgeSearchFilters & { kind?: string } = {}): Promise<{ hits: KnowledgeHit[]; note: string }> => {
     const params = new URLSearchParams({ q });
     if (opts.project) params.set("project", String(opts.project));
     if (opts.kind) params.set("kind", opts.kind);
-    return request<KnowledgeHit[]>(`/api/knowledge/search?${params}`);
+    if (opts.person) params.set("person", String(opts.person));
+    if (opts.team) params.set("team", String(opts.team));
+    if (opts.evidence) params.set("evidence", opts.evidence);
+    if (opts.since) params.set("since", opts.since);
+    // A passage is dated by its day, so "until" a day means through the end of it.
+    if (opts.until) params.set("until", `${opts.until}T23:59:59`);
+    const token = getToken();
+    const res = await fetch(`/api/knowledge/search?${params}`, { headers: token ? { "X-Dashboard-Token": token } : {} });
+    if (res.status === 401) throw new UnauthorizedError("dashboard token required");
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+    return { hits: body as KnowledgeHit[], note: res.headers.get("X-Search-Note") ?? "" };
   },
 
   sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
