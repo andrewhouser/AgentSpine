@@ -7,7 +7,20 @@
  * step, which is where small-model tool-calling unreliability gets absorbed.
  */
 import { answerPublisher, PROMISE_MAX_CHARS, PROMISE_ONLY } from "./answer-stream.ts";
-import { AGENT_STEP_MAX_TOKENS, MAX_PARSE_FAILURES, MAX_STEPS } from "./config.ts";
+import {
+  AGENT_STEP_MAX_TOKENS,
+  COMPACT_AT_TOKENS,
+  COMPACT_KEEP_RECENT,
+  COMPACT_TO,
+  MAX_PARSE_FAILURES,
+  MAX_STEPS,
+  RUN_BUDGET_WARN_AT,
+  RUN_MS_PER_STEP,
+  RUN_TOKENS_PER_STEP,
+} from "./config.ts";
+import { compactMessages, estimateTokens } from "./compact.ts";
+import { usageForRuns } from "./memory/store.ts";
+import { holdText } from "./stash.ts";
 import { route } from "./router.ts";
 import type { RouteOpts } from "./router.ts";
 import type { Tier } from "./tiers.ts";
@@ -316,8 +329,12 @@ export interface AgentOpts {
    * watcher and the CLI never carry the tool.
    */
   imagesAvailable?: boolean;
-  /** Step cap for this loop. Subagents get a tighter one than the top-level run. */
+  /** Step ceiling for this loop. Subagents get a tighter one than the top-level run. */
   maxSteps?: number;
+  /** Tokens this loop may spend (LP3). Defaults to the ceiling times RUN_TOKENS_PER_STEP. */
+  tokenBudget?: number;
+  /** Wall-clock milliseconds this loop may take, not counting time paused for a person. Defaults to the ceiling times RUN_MS_PER_STEP. */
+  timeBudgetMs?: number;
   /**
    * Which model tier drives this loop. The broker gates every call identically whatever
    * this says — a cheaper tier buys a worse plan, never a wider permission.
@@ -616,6 +633,21 @@ const runAgentLoop = async (
   ];
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
+  // LP3: the step count is a ceiling; tokens and time are the budget. Scaled from the ceiling, so a unit whose file
+  // asks for more steps gets proportionally more of both (see RUN_TOKENS_PER_STEP in config.ts).
+  const budget = { ms: opts.timeBudgetMs ?? maxSteps * RUN_MS_PER_STEP, tokens: opts.tokenBudget ?? maxSteps * RUN_TOKENS_PER_STEP };
+  const startedAt = Date.now();
+  let pausedMs = 0;
+  let estimatedSpend = 0;
+  let warned = false;
+  /** Tokens spent so far: the host's own counts when it reported every call, else the running estimate. */
+  const spent = (): number => {
+    if (runId == null) return estimatedSpend;
+    const u = usageForRuns([runId]);
+    return u.calls > 0 && u.unreported === 0 ? u.promptTokens + u.completionTokens : estimatedSpend;
+  };
+  /** Where the run's own messages start: everything before is the prefix that compaction leaves alone. */
+  const prefixEnd = messages.length;
 
   // The pin is per root run: a subagent reading a transcript pins its parent, and one started
   // after the parent read a transcript starts pinned. See src/sensitivity.ts.
@@ -668,9 +700,42 @@ const runAgentLoop = async (
     // once they are done. Nothing about this run changes while it waits. A stop asked for meanwhile lands on resume.
     const waitedFrom = Date.now();
     if (await yieldToPerson()) {
+      pausedMs += Date.now() - waitedFrom;
       publish(runId, { type: "paused_for_person", waitedMs: Date.now() - waitedFrom });
       throwIfStopped(rootId);
     }
+
+    // The budget (LP3). Over it, the run is closed out with what it gathered, as the step ceiling always did. Near
+    // it, the model is told once, on the end of the message it is about to read, so the prefix stays as it was.
+    const used = spent();
+    const elapsed = Date.now() - startedAt - pausedMs;
+    if (used >= budget.tokens || elapsed >= budget.ms) {
+      publish(runId, { elapsedMs: elapsed, reason: used >= budget.tokens ? "tokens" : "time", tokens: used, type: "budget" });
+      return concludeStuck(step, used >= budget.tokens ? "Used its whole token budget without concluding." : "Ran out of time without concluding.");
+    }
+    if (!warned && step > 0 && (used >= budget.tokens * RUN_BUDGET_WARN_AT || elapsed >= budget.ms * RUN_BUDGET_WARN_AT)) {
+      warned = true;
+      const nudge =
+        "You have used most of this run's budget. Do not start anything new: finish now with what you have" +
+        (conversational ? ", answering the user in plain prose." : ', with {"action":"final","summary":"..."}.');
+      const last = messages[messages.length - 1];
+      if (last.role === "user" && typeof last.content === "string") last.content = `${last.content}\n\n${nudge}`;
+      else messages.push({ content: nudge, role: "user" });
+    }
+
+    // Compaction (LP3, src/compact.ts): only when a held result can be read back, so nothing is dropped for good.
+    if (tools.read_more && runId != null) {
+      const c = compactMessages(messages, {
+        atTokens: COMPACT_AT_TOKENS,
+        from: prefixEnd,
+        hold: (text) => holdText(runId, "an earlier tool result in this run", text),
+        keepRecent: COMPACT_KEEP_RECENT,
+        toFraction: COMPACT_TO,
+      });
+      if (c.stubs) publish(runId, { after: c.after, before: c.before, stubs: c.stubs, type: "compacted" });
+    }
+
+    estimatedSpend += estimateTokens(messages);
     publish(runId, { step: step + 1, type: "step_start" });
 
     let { text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
@@ -697,6 +762,8 @@ const runAgentLoop = async (
       // Attributed as its own purpose, not folded into the step: a model that fumbles the
       // JSON protocol costs a whole extra round-trip, and the point of timing is to find
       // out how often that is actually happening rather than to assume.
+      // The re-ask sends the whole prompt again, so it is spent again.
+      estimatedSpend += estimateTokens(messages) + estimateTokens([{ content: text, role: "assistant" }]);
       ({ text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
         purpose: "step-reask",
         runId,
@@ -706,6 +773,8 @@ const runAgentLoop = async (
         ...sens(),
       }, read));
     }
+
+    estimatedSpend += estimateTokens([{ content: text, role: "assistant" }]);
 
     // Whatever this step showed was not the answer after all, so it comes back off the screen.
     if (!(parsed?.action === "final" && finalText(parsed))) answer?.retract();
@@ -913,6 +982,7 @@ const runAgentLoop = async (
   // Out of steps, and the same reasoning applies: a run that gathered the answer and then
   // failed to say it should still say it. `maxSteps`, not MAX_STEPS — a subagent has its own
   // tighter cap, and reporting the top-level one here was simply wrong.
+  publish(runId, { reason: "steps", type: "budget" });
   return concludeStuck(maxSteps, "Reached the step cap without concluding.");
 };
 

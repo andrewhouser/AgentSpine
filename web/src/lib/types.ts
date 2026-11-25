@@ -945,6 +945,8 @@ export interface RunEvent {
   ts: string;
   type:
     | "answer"
+    | "budget"
+    | "compacted"
     | "confirmation"
     | "error"
     | "final"

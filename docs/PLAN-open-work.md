@@ -922,10 +922,20 @@ is built. Every measurement named below needs the model host, so every item is *
   sized `deep`, the plan step and a re-ask after a failed step run on the same endpoint with thinking on and a
   larger token cap. Code decides when; no model switch, so no reload cost. Measure the added seconds per step
   and whether the builder and multi-part chat tasks finish more often.
-- **LP3 Budgets by tokens, with compaction at a threshold.** `MAX_STEPS` is 10, a subagent gets 6, and chat
-  history is 8 turns in 6,000 characters. Replace the step cap with a token and wall-clock budget, and when a
-  run's context passes a threshold, replace old tool results with short stubs (the full text stays reachable
-  through `read_more`). Compact rarely, since each compaction rewrites the prefix and pays prefill again.
+- **LP3 Budgets by tokens, with compaction at a threshold (built 2026-11-25; numbers not yet set on the model
+  host).** The step count is now a ceiling (`MAX_STEPS` 10, a subagent 6, a unit's own `maxSteps`, all unchanged),
+  and each loop also has a token budget and a wall-clock budget scaled from it: `RUN_TOKENS_PER_STEP` (22,000) and
+  `RUN_MS_PER_STEP` (72 s) in `src/config.ts`, both settable in `.env`. Tokens are the host's own counts when it
+  reported every call, else a characters-over-four estimate. Time paused for a person (LP5) does not count. Over
+  budget, the run is closed out with what it gathered, as at the step cap; at 80% of either, the model is told once
+  to finish (appended to the message it is about to read, so the prefix holds). With coarse steps the warning can
+  be skipped, when one step jumps from under 80% to over the budget. Compaction (`src/compact.ts`): once the loop's
+  own messages pass `COMPACT_AT_TOKENS` (30,000 estimated), older tool results become stubs down to 60% of that,
+  keeping the newest two whole and never touching the prefix before the run's goal; each full result is held under
+  a ref `read_more` opens, and a run without `read_more` is never compacted. Events: `budget`, `compacted`. Suite:
+  `test/run-budget.test.mjs`, whose compaction rows fail with compaction switched off. Not done: setting the three
+  numbers from a week of real runs, and raising `MAX_STEPS` so the token budget, not the count, is what binds;
+  chat history (8 turns in 6,000 characters) is unchanged.
 - **LP4 More than one tool call per step (measure first).** The protocol is one JSON action per turn and every
   step pays prefill. Bench native tool calling on the standard model through `mlx_lm.server` against the current
   protocol: parse failures, steps per task, seconds per task. Switch only if it wins. Not checked: how well

@@ -182,6 +182,20 @@ export const EMBEDDINGS_API_KEY = env.EMBEDDINGS_API_KEY ?? "";
 // --- Loop ---
 export const HEARTBEAT_MS = Number(env.HEARTBEAT_MINUTES ?? "30") * 60_000;
 export const MAX_STEPS = Number(env.MAX_STEPS ?? "10");
+// LP3 (PLAN-open-work section 10, 2026-11-25). The step count is now a ceiling, and each run also has a token and a
+// wall-clock budget scaled from it, so a run whose steps are cheap is not cut short by a count and one whose context
+// has ballooned stops before it grinds on (an eighteen-minute runaway was observed). First guesses: a chat step on
+// the model host is about 14,000 prompt tokens, so 22,000 a step leaves room; 72 seconds a step is a long step at
+// 28 tok/s plus prefill. Time paused for a person (LP5) does not count. Set both from a week of runs on the Mini.
+export const RUN_TOKENS_PER_STEP = Number(env.RUN_TOKENS_PER_STEP ?? "22000");
+export const RUN_MS_PER_STEP = Number(env.RUN_MS_PER_STEP ?? "72000");
+// The run is warned once, at this share of either budget, to finish with what it has.
+export const RUN_BUDGET_WARN_AT = 0.8;
+// Compaction (src/compact.ts): once the loop's messages reach about this many tokens, older tool results become
+// stubs that read_more can open, down to COMPACT_TO of it, keeping the newest COMPACT_KEEP_RECENT whole.
+export const COMPACT_AT_TOKENS = Number(env.COMPACT_AT_TOKENS ?? "30000");
+export const COMPACT_TO = 0.6;
+export const COMPACT_KEEP_RECENT = 2;
 // Completion cap for each agent-loop step. Sent explicitly because leaving it unset does
 // not mean "unlimited": mlx-lm applies its own default of 512, which is plenty for a tool
 // call and nowhere near enough for a research answer written inside {"action":"final"}.

@@ -116,6 +116,18 @@ export const clip = (ctx: ClipCtx, text: string): string => {
   );
 };
 
+/**
+ * Hold a whole earlier tool result for a run, so the loop can drop it from context and `read_more` can bring it back
+ * (LP3, src/compact.ts). The text already carries its own UNTRUSTED tags, and is marked untrusted again so a read
+ * back is tagged like any other held content. Returns the ref, or null when there is no run to hold it for.
+ */
+export const holdText = (runId: number | null, source: string, text: string, window = 4000): null | string => {
+  if (runId == null) return null;
+  const ref = newRef();
+  store.stashPut(runId, { content: text.slice(0, STASH_MAX_CHARS), ref, shown: window, source, tool: "compaction", untrusted: true });
+  return ref;
+};
+
 export interface ReadMoreResult {
   ok: boolean;
   text: string;
