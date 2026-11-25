@@ -35,6 +35,7 @@ import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
 import { subagent } from "./subagent.ts";
 import { proposeChange } from "./propose-change.ts";
+import { toolHelp } from "./tool-help.ts";
 import { clientList, clientUpsert, timeLog, timeReportTool } from "./clients.ts";
 import { sourceRead, sourcesList } from "./sources.ts";
 import { taskAdd, taskDone, taskList, taskUpdate } from "./tasks.ts";
@@ -119,6 +120,7 @@ export const tools: Tool[] = [
   styleLearn,
   harnessStatus,
   proposeChange,
+  toolHelp,
   ...instagramTools,
 ];
 

@@ -950,9 +950,16 @@ is built. Every measurement named below needs the model host, so every item is *
   its parent. A paused run publishes `paused_for_person` with how long it waited; the clients ignore it for now.
   Suite: `test/queue-lanes.test.mjs`, whose real-run row fails with the yield removed. Not checked: how long a chat
   waits in practice on the Mini (one step of a job, which is one model call; measure it with a watcher running).
-- **LP6 Load tool descriptions on demand.** Every visible tool's description and schema is in the prompt
-  prefix (`toolDocs` in `src/agent.ts`). Keep a small core set there and let the model ask for the rest by
-  name. This is a precondition for CP1, which would otherwise grow the prefix with every server.
+- **LP6 Load tool descriptions on demand (built 2026-11-25, off by default until measured).** Measured: tool
+  descriptions were about 40,000 characters (about 10,000 tokens) of a chat run's 11,500-token system prompt, 85
+  tools. `src/tool-docs.ts`: with `TOOL_DOCS_MODE=core`, sixteen core tools (memory, web, `read_more`, knowledge,
+  tasks, Gmail and Calendar reads, file reads, weather, `tool_help`) keep their full description and the rest are one
+  line each (name and first sentence), about 11,500 characters in all. The new read-only `tool_help` returns full
+  instructions for tools this run can use, appended to the history so the cached prefix holds. A run with 20 tools
+  or fewer (a unit) still sees all of them in full. A failed call to a tool whose instructions were never read is
+  told to read them. In the default mode nothing changes and `tool_help` is not offered. Suite:
+  `test/tool-docs.test.mjs`. Not done: the bench on the model host (does the model read before it guesses, and what
+  does the first request of a run save), then switching the default.
 
 ### CP. Capabilities (each waits on a decision below)
 

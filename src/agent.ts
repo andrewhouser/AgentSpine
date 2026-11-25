@@ -33,7 +33,7 @@ import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts"
 import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
-import { frictionDocs } from "./learn/friction.ts";
+import { fullyShown, toolDocs, toolDocsMode } from "./tool-docs.ts";
 import { yieldToPerson } from "./queue.ts";
 import { linkRun, throwIfStopped } from "./stop.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
@@ -64,6 +64,11 @@ const settingTools = (
   imagesAvailable = false,
 ): Record<string, Tool> => {
   let out = tools;
+  // `tool_help` exists for the one-line index (LP6). With every description in full there is nothing to look up.
+  if (out.tool_help && toolDocsMode() !== "core") {
+    const { tool_help: _help, ...rest } = out;
+    out = rest;
+  }
   // `look_at_image` is listed only when this conversation actually holds an image. The same
   // reasoning as `notify` above, arrived at from the other direction: a tool the model can
   // see is a tool it will reach for, and offering one whose every invocation must answer
@@ -78,20 +83,7 @@ const settingTools = (
   return rest;
 };
 
-const toolDocs = (tools: Record<string, Tool>): string =>
-  Object.values(tools)
-    .map((t) => {
-      // Recent failures with this tool, appended to its own description (LEARNING Phase 1.2).
-      // Synchronous SQL, inference-free; never throws, so a lookup failure just omits the line.
-      let friction = "";
-      try {
-        friction = frictionDocs(t.name);
-      } catch {
-        /* a learner must not break prompt assembly */
-      }
-      return `- ${t.name}: ${t.description}${friction ? `\n    ${friction}` : ""}\n    args: ${t.argsSchema}`;
-    })
-    .join("\n");
+// The tool descriptions in the prompt: src/tool-docs.ts (LP6), in full or core-and-index by TOOL_DOCS_MODE.
 
 /**
  * What the model knows about the application it is running inside.
@@ -648,6 +640,8 @@ const runAgentLoop = async (
   };
   /** Where the run's own messages start: everything before is the prefix that compaction leaves alone. */
   const prefixEnd = messages.length;
+  // LP6: the tools whose instructions the model has: those shown in full, and those it read with tool_help.
+  const docsRead = fullyShown(tools);
 
   // The pin is per root run: a subagent reading a transcript pins its parent, and one started
   // after the parent read a transcript starts pinned. See src/sensitivity.ts.
@@ -954,12 +948,21 @@ const runAgentLoop = async (
         return concludeStuck(step + 1, "Kept repeating the same tool call without concluding.");
       }
 
+      if (call.tool === "tool_help" && result.status === "executed") {
+        for (const n of Array.isArray(call.args?.names) ? call.args.names : [call.args?.names]) if (n) docsRead.add(String(n));
+      }
+      // A failed call to a tool listed in one line, whose instructions it never read, says how to read them.
+      const unread =
+        result.status !== "executed" && result.status !== "queued" && result.status !== "dry-run" && !docsRead.has(call.tool) && tools.tool_help
+          ? `\n\nYou called ${call.tool} without reading its instructions. Read them first: {"action":"tool","tool":"tool_help","args":{"names":["${call.tool}"]}}`
+          : "";
       messages.push({
         role: "user",
         content:
           `tool result [${result.status}]:\n${result.output}` +
           renderResultEnvelope(describeResult(call.tool, result.status, result.output, result.confirmationId)) +
           pinMessage +
+          unread +
           // One warning first, on the second identical call, so a model that can take the
           // hint gets to finish properly rather than being cut off.
           (repeats > 1

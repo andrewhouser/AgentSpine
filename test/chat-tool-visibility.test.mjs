@@ -51,8 +51,9 @@ console.log("A LIVE CHAT TURN DOES NOT CARRY notify — replying IS the delivery
 check("'What is the weather like today?'", has(chat("What is the weather like today?"), "notify"), false);
 check("'What is on my calendar tomorrow?'", has(chat("What is on my calendar tomorrow?"), "notify"), false);
 check("'send me the weather' means tell me, not push me", has(chat("Send me the weather for Concord."), "notify"), false);
-// Two are withheld from an ordinary chat turn: notify, and look_at_image (no image here).
-check("every other tool survives the filter", Object.keys(chat("What is the weather?")).length, Object.keys(registry).length - 2);
+// Three are withheld from an ordinary chat turn: notify, look_at_image (no image here), and tool_help, which exists
+// only for LP6's one-line index and so is dropped while every description is shown in full (the default).
+check("every other tool survives the filter", Object.keys(chat("What is the weather?")).length, Object.keys(registry).length - 3);
 check("the original registry is not mutated", has(registry, "notify"), true);
 
 console.log("\nBUT A USER WHO ASKS FOR A PUSH STILL SEES IT LISTED");
@@ -64,18 +65,19 @@ check("'alert me'", has(chat("Alert me if it is going to storm."), "notify"), tr
 console.log("\nUNATTENDED RUNS ARE UNTOUCHED — reaching someone away is the point");
 check("a scheduled brief keeps notify", has(job("Compile the morning brief."), "notify"), true);
 check("a watcher keeps notify", has(job("Check the forecast and notify me if it changed."), "notify"), true);
-// A job keeps notify and loses only look_at_image — it has no conversation, so no images.
-check("nothing else changes for a job", Object.keys(job("Compile the morning brief.")).length, Object.keys(registry).length - 1);
+// A job keeps notify and loses look_at_image (no conversation, so no images) and, by default, tool_help.
+check("nothing else changes for a job", Object.keys(job("Compile the morning brief.")).length, Object.keys(registry).length - 2);
 check("a job never carries look_at_image", has(job("Compile the morning brief."), "look_at_image"), false);
 
 console.log("\nA RESTRICTED REGISTRY WITHOUT notify PASSES THROUGH UNCHANGED");
 const restricted = Object.fromEntries(Object.entries(registry).filter(([n]) => n !== "notify"));
-check("chat over a notify-less registry", Object.keys(settingTools(restricted, true, "hi")).length, Object.keys(restricted).length - 1);
+check("chat over a notify-less registry", Object.keys(settingTools(restricted, true, "hi")).length, Object.keys(restricted).length - 2);
 
 console.log("\nlook_at_image IS LISTED ONLY WHEN THE THREAD ACTUALLY HOLDS AN IMAGE");
 check("an imageless chat turn does not carry it", has(chat("What is the weather?"), "look_at_image"), false);
 check("a thread with an image does", has(chatWithImage("Is that a weed?"), "look_at_image"), true);
-check("and it is the ONLY thing that changes", Object.keys(chatWithImage("Is that a weed?")).length, Object.keys(registry).length - 1);
+// Against the text-only turn: only look_at_image comes back (notify and, by default, tool_help stay out of both).
+check("and it is the ONLY thing that changes", Object.keys(chatWithImage("Is that a weed?")).length, Object.keys(chat("What is the weather?")).length + 1);
 check("the image rule does not resurrect notify", has(chatWithImage("Is that a weed?"), "notify"), false);
 check("both filters can apply at once", has(chatWithImage("Is that a weed? Text me."), "notify"), true);
 check("the original registry is still not mutated", has(registry, "look_at_image"), true);
