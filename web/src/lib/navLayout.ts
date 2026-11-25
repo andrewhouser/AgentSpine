@@ -25,6 +25,7 @@ export const NAV_ITEMS: { hint: string; key: View; label: string }[] = [
   { hint: "Commands and diffs from coding runs", key: "builds", label: "Builds" },
   { hint: "Flash cards and learning topics", key: "study", label: "Study" },
   { hint: "Clients and time tracking", key: "clients", label: "Clients" },
+  { hint: "Posts waiting for their slot, to read and approve", key: "instagram", label: "Instagram" },
   { hint: "Every run, with its full trace", key: "activity", label: "Activity" },
   { hint: "Health summary and what is worth a look", key: "overview", label: "Overview" },
   { hint: "Appearance, memory, recipes and policy", key: "settings", label: "Settings" },

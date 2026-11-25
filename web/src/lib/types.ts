@@ -1006,6 +1006,30 @@ export interface PlanStep {
 }
 
 /** What a turn looks like while it is still running. */
+/** One post in the Instagram queue, as GET /api/instagram/queue gives it (src/instagram/queue.ts rowForClient). */
+export interface InstagramQueueRow {
+  approved: boolean;
+  /** Approved once, but the content changed since, so the approval no longer counts. */
+  approvedChanged: boolean;
+  blockers: string[];
+  /** The post exactly as it will go out: the approval card's text. */
+  card: string;
+  /** The content digest an approval must name. */
+  hash: string;
+  id: string;
+  kind: string;
+  permalink: null | string;
+  publishAt: string;
+  status: string;
+  surface: string;
+}
+
+export interface InstagramQueue {
+  enabled: boolean;
+  live: boolean;
+  rows: InstagramQueueRow[];
+}
+
 /** A call refused whoever approves (GET /api/refusals, D2). No arguments: they can carry the refused text. */
 export interface Refusal {
   id: number;

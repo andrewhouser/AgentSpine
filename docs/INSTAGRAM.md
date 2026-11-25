@@ -162,6 +162,10 @@ Nothing below has been done. In order:
    publishing never makes an unread draft publishable. To stop everything at once, remove
    `"publish": true`.
 
+The dashboard has the same queue under **Instagram** (in the sidebar's More): every row as the approval
+card prints it, with Approve and Take the approval back. Approve sends the content hash that was on
+screen, so a row re-seeded with a new caption after the page loaded is refused rather than approved unread.
+
 Each week after that: render the new dated flyer in djlive, add its occurrences to
 `instagram-plan.json`, upload the image, seed again, approve.
 

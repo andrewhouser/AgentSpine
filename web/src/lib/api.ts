@@ -36,6 +36,8 @@ import type {
   InboxItem,
   InboxStatus,
   IngestResult,
+  InstagramQueue,
+  InstagramQueueRow,
   KnowledgeAliasResult,
   KnowledgeClaim,
   KnowledgeConflict,
@@ -191,6 +193,8 @@ export const api = {
   applyProposal: (tool: string, target: string) =>
     post<{ message: string; ok: boolean }>("/api/proposals", { target, tool }),
   approveConfirmation: (id: number) => post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/approve`),
+  /** Approve one queued post, naming the content hash that was on screen; a changed post is refused (409). */
+  approveInstagram: (id: string, hash: string) => post<InstagramQueueRow>(`/api/instagram/queue/${encodeURIComponent(id)}/approve`, { hash }),
   archiveConversation: (id: number) =>
     request<Conversation>(`/api/conversations/${id}`, {
       body: JSON.stringify({ archived: true }),
@@ -205,13 +209,13 @@ export const api = {
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
   checkinStatus: () => request<CheckinStatus>("/api/checkin"),
+
   /** Cloud tokens against the caps (src/cloud-cap.ts). Read-only. */
   cloudUsage: () => request<CloudUsage>("/api/cloud-usage"),
 
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
 
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
-
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
   createSchedule: (name: string, schedule: string, task: string) =>
@@ -226,10 +230,11 @@ export const api = {
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
-  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
 
+  deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
+
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -297,6 +302,8 @@ export const api = {
   inboxTags: (id: number, tags: string[]) =>
     request<InboxItem>(`/api/inbox/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
 
+  instagramQueue: () => request<InstagramQueue>("/api/instagram/queue"),
+
   /**
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
@@ -345,7 +352,6 @@ export const api = {
     request<Confirmation[]>(`/api/confirmations${state ? `?state=${encodeURIComponent(state)}` : ""}`),
 
   listConversations: () => request<Conversation[]>("/api/conversations"),
-
   listenForTurn: (audio: Blob, wake: string, aliases: string[], sounds: boolean) =>
     request<{ text: string }>(voiceListenPath("turn", wake, aliases, sounds), {
       body: audio,
@@ -365,11 +371,12 @@ export const api = {
       method: "POST",
     }),
   listFiles: () => request<SavedFile[]>("/api/files"),
-
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
+
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
+
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
 
@@ -377,19 +384,16 @@ export const api = {
 
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
-
   listRecipes: () => request<Recipe[]>("/api/recipes"),
-
   listRefusals: (limit = 20) => request<Refusal[]>(`/api/refusals?limit=${limit}`),
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
   listSchedules: () => request<Schedule[]>("/api/schedules"),
-
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
+
   /** One utterance said to an assistant that is already listening. */
   listStyles: () => request<StylesState>("/api/styles"),
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
-
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
 
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
@@ -408,10 +412,10 @@ export const api = {
 
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
+
   /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
-
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
@@ -448,11 +452,11 @@ export const api = {
   /** How the briefs would change. Writes nothing. */
   previewMeetingCloseout: (id: number, plan: CloseoutPlan) =>
     request<CloseoutPreview>(`/api/meetings/${id}/closeout/preview`, { body: JSON.stringify(plan), method: "POST" }),
+
   project: (id: number) =>
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,
     ),
-
   reindexProject: (id: number, force = false) =>
     post<{ result: IngestResult }>(`/api/projects/${id}/sources/reindex`, { force }),
 
@@ -460,9 +464,9 @@ export const api = {
     post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/reject`, { reason }),
 
   rejectStyleProposal: (name: string) => request<{ name: string; removed: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
   removeProjectSource: (projectId: number, sourceId: number) =>
     request<{ ok: boolean }>(`/api/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
-
   renameConversation: (id: number, title: string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
 
@@ -471,10 +475,10 @@ export const api = {
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
   researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
+
   /** Queue a job's earlier text for approval. It changes nothing by itself. */
   restoreScheduleVersion: (id: number, versionId: number) =>
     post<{ confirmationId: number; message: string }>(`/api/schedules/${id}/versions/${versionId}/restore`),
-
   retention: () => request<RetentionRule[]>("/api/retention"),
 
   /**
@@ -483,6 +487,8 @@ export const api = {
    * untouched and retrying is safe.
    */
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
+
+  revokeInstagram: (id: string) => post<InstagramQueueRow>(`/api/instagram/queue/${encodeURIComponent(id)}/revoke`),
   run: (id: number) => request<{ actions: unknown[]; notes?: RunNote[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runCheckin: () => post<CheckinResult>("/api/checkin/run"),

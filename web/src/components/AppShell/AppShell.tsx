@@ -19,6 +19,7 @@ import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
 import { HeadsupView } from "../HeadsupView/HeadsupView.tsx";
 import { InboxView } from "../InboxView/InboxView.tsx";
+import { InstagramView } from "../InstagramView/InstagramView.tsx";
 import { KnowledgeView } from "../KnowledgeView/KnowledgeView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { OverviewView } from "../OverviewView/OverviewView.tsx";
@@ -253,6 +254,7 @@ export const AppShell = () => {
         {route.view === "files" && <FilesView />}
         {route.view === "clients" && <ClientsView />}
         {route.view === "inbox" && <InboxView projects={projects} />}
+        {route.view === "instagram" && <InstagramView />}
         {route.view === "knowledge" && <KnowledgeView projects={projects} />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
         {route.view === "project" && route.projectId !== null && (

@@ -191,4 +191,25 @@ console.log("\nseeding: the outgoing-text check on a caption (D3)");
   check("a clean caption gets no such note", /outgoing check/.test(clean.note ?? ""), false);
 }
 
+console.log("\nthe dashboard screen: approval names the content it showed");
+{
+  const id = "2026-11-23T09:00/E1/feed";
+  q.revoke(id);
+  const shown = q.rowForClient(q.getRow(id));
+  check("the screen gets the approval card's exact text", shown.card, q.describeRow(q.getRow(id)));
+  check("and the hash an approval must name", shown.hash, q.contentHash(q.getRow(id)));
+  check("a wrong hash is refused, and nothing is approved", [q.approveIfUnchanged(id, "not-the-hash", "dashboard", NOW).ok, q.isApproved(q.getRow(id))], [false, false]);
+  const ok = q.approveIfUnchanged(id, shown.hash, "dashboard", NOW);
+  check("the hash that was shown approves it, by the dashboard", [ok.ok, q.getRow(id).approved_by], [true, "dashboard"]);
+  check("the screen then shows it approved", q.rowForClient(q.getRow(id)).approved, true);
+  // A re-seed with a new caption between the page loading and the click.
+  const changed = { ...kit.file, posts: kit.file.posts.map((p) => (p.id === "E1" ? { ...p, caption: "A different caption." } : p)) };
+  q.revoke(id);
+  const before = q.rowForClient(q.getRow(id)).hash;
+  seed([{ at: "2026-11-23 09:00", post: "E1" }], { file: changed });
+  const stale = q.approveIfUnchanged(id, before, "dashboard", NOW);
+  check("a post changed after it was read is refused, saying why", [stale.ok, /changed after you read it/.test(stale.ok ? "" : stale.reason)], [false, true]);
+  check("an unknown row is refused", q.approveIfUnchanged("no/such/row", "x", "dashboard").ok, false);
+}
+
 done();

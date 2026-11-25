@@ -331,6 +331,36 @@ export const describeRow = (r: QueueRow): string => {
   return lines.join("\n");
 };
 
+/**
+ * One row for the dashboard's queue screen (section 1, item 6, built 2026-11-25). `card` is describeRow's exact text,
+ * caption and all, because what is approved is what was read; `hash` is the content digest that approval must name,
+ * so the screen cannot approve a row that changed after it was shown.
+ */
+export const rowForClient = (r: QueueRow) => ({
+  approved: isApproved(r),
+  approvedChanged: r.approved === 1 && !isApproved(r),
+  blockers: blockers(r),
+  card: describeRow(r),
+  hash: contentHash(r),
+  id: r.id,
+  kind: r.kind,
+  permalink: r.permalink,
+  publishAt: r.publish_at,
+  status: r.status,
+  surface: r.surface,
+});
+
+/**
+ * Approve from the dashboard: only if the row still has the content the person read. A re-seed that changed the
+ * caption or image between the page loading and the click is refused, not approved unseen.
+ */
+export const approveIfUnchanged = (id: string, seenHash: string, by: string, now: Date = new Date()): Outcome => {
+  const row = getRow(id);
+  if (!row) return { ok: false, reason: `no row ${id}` };
+  if (contentHash(row) !== seenHash) return { ok: false, reason: "the post changed after you read it. Read it again before approving." };
+  return approve(id, by, now);
+};
+
 // ---- seeding -----------------------------------------------------------------------------
 
 export interface SeedPost {

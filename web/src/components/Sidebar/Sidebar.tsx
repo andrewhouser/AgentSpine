@@ -19,6 +19,7 @@ export type View =
   | "files"
   | "headsup"
   | "inbox"
+  | "instagram"
   | "knowledge"
   | "meetings"
   | "overview"

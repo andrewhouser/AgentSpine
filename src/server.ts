@@ -90,6 +90,7 @@ import { answerLesson, openLessons } from "./learn/lessons.ts";
 import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
 import { answerAfterCheck, openAfterChecks, queueRestore, scheduleHistory } from "./learn/versions.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
+import * as igQueue from "./instagram/queue.ts";
 import { INTERVAL_HOURS as CHECKIN_INTERVAL_HOURS } from "./checkin/rules.ts";
 import { previewCheckin, runCheckin, sweepCheckin } from "./checkin/run.ts";
 import * as checkinStore from "./checkin/store.ts";
@@ -1234,6 +1235,27 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       // array, which every client reads; a note about a filter goes in a header so the shape does not change.
       if (found.note) res.setHeader("X-Search-Note", found.note);
       return sendJson(res, 200, found.hits);
+    }
+
+    // /api/instagram/queue — the posting queue, for the dashboard screen (docs/INSTAGRAM.md). Approval is of the exact
+    // content: the screen sends the content hash it showed, and a row that changed since is refused. Row ids contain
+    // slashes, so the client encodes them and they are decoded here.
+    if (seg[1] === "instagram" && seg[2] === "queue") {
+      if (m === "GET" && seg.length === 3) {
+        const rows = igQueue.listRows({ limit: Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 100)) });
+        const policy = loadPolicy();
+        return sendJson(res, 200, {
+          enabled: policy.instagram?.enabled === true,
+          live: policy.instagram?.enabled === true && policy.instagram.publish === true,
+          rows: rows.map(igQueue.rowForClient),
+        });
+      }
+      if (m === "POST" && seg.length === 5 && (seg[4] === "approve" || seg[4] === "revoke")) {
+        const id = decodeURIComponent(seg[3]);
+        const b = seg[4] === "approve" ? await readBody(req) : {};
+        const r = seg[4] === "approve" ? igQueue.approveIfUnchanged(id, String(b?.hash ?? ""), "dashboard") : igQueue.revoke(id);
+        return r.ok ? sendJson(res, 200, igQueue.rowForClient(r.row)) : sendJson(res, 409, { error: r.reason });
+      }
     }
 
     // /api/refusals — calls refused whoever approves (D2), newest first, without their arguments.
