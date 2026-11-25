@@ -11,6 +11,7 @@
  *
  * Run with `node test/confirm-race.test.mjs`.
  */
+import "./helpers/example-policy.mjs";
 import os from "node:os";
 import path from "node:path";
 
