@@ -107,7 +107,9 @@ const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
   if (!store.claimConfirmation(id)) return lost();
 
   try {
-    const output = await enqueue(() => tool.run(args, { policy }));
+    // The run that queued it rides along under its own name, so a tool can judge the context it was proposed in (the
+    // draft tool's work-material rule, CP2). Not as `runId`: that would change what other tools record on approval.
+    const output = await enqueue(() => tool.run(args, { policy, queuedByRunId: row.run_id ?? null }));
     store.setConfirmation(id, "done", output);
     return { ok: true, message: `#${id} executed: ${output}` };
   } catch (err) {

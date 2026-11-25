@@ -203,6 +203,9 @@ addColumn("runs", "tier", "TEXT");
 addColumn("runs", "served", "TEXT");
 addColumn("runs", "parent_run_id", "INTEGER");
 addColumn("runs", "agent", "TEXT");
+// 1 when the run started with work-private context: inside a project, or with recalled memories not marked
+// cloud_safe. Read by the draft tool (CP2) to keep such text out of Gmail, at the time it runs and on a later approval.
+addColumn("runs", "work_private", "INTEGER NOT NULL DEFAULT 0");
 addColumn("conversations", "tier", "TEXT");
 // Cross-conversation memory: the ISO time this thread was last summarised into a
 // `conversation` memory, or null if never. Lets the summariser skip threads it has already
@@ -2029,3 +2032,45 @@ export const namespaceWatcherState = (): void => {
   }
 };
 namespaceWatcherState();
+
+// --- work-private runs (CP2) ---
+
+export const markRunWorkPrivate = (runId: number): void => {
+  db.prepare("UPDATE runs SET work_private = 1 WHERE id = ?").run(runId);
+};
+
+/**
+ * Every run that shares this one's context: its root's conversation (all its turns) or, without one, the root alone,
+ * plus each of their subagents. What a draft could have drawn on.
+ */
+export const contextRunIds = (runId: number): number[] => {
+  let root = db.prepare("SELECT id, parent_run_id, conversation_id FROM runs WHERE id = ?").get(runId) as undefined | { conversation_id: null | number; id: number; parent_run_id: null | number };
+  for (let i = 0; root?.parent_run_id != null && i < 10; i++) {
+    root = db.prepare("SELECT id, parent_run_id, conversation_id FROM runs WHERE id = ?").get(root.parent_run_id) as typeof root;
+  }
+  if (!root) return [];
+  const ids = new Set<number>(
+    root.conversation_id != null
+      ? (db.prepare("SELECT id FROM runs WHERE conversation_id = ?").all(root.conversation_id) as { id: number }[]).map((r) => r.id)
+      : [root.id],
+  );
+  for (let added = true, depth = 0; added && depth < 10; depth++) {
+    added = false;
+    const list = [...ids];
+    const kids = db.prepare(`SELECT id FROM runs WHERE parent_run_id IN (${list.map(() => "?").join(",")})`).all(...list) as { id: number }[];
+    for (const k of kids) if (!ids.has(k.id)) (ids.add(k.id), (added = true));
+  }
+  return [...ids];
+};
+
+/** For a set of runs: whether any started work-private, whether their conversation is in a project, and the tools they ran. */
+export const contextFacts = (ids: number[]): { inProject: boolean; tools: string[]; workPrivate: boolean } => {
+  if (!ids.length) return { inProject: false, tools: [], workPrivate: false };
+  const q = ids.map(() => "?").join(",");
+  const workPrivate = Boolean(db.prepare(`SELECT 1 FROM runs WHERE id IN (${q}) AND work_private = 1 LIMIT 1`).get(...ids));
+  const inProject = Boolean(
+    db.prepare(`SELECT 1 FROM runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.id IN (${q}) AND c.project_id IS NOT NULL LIMIT 1`).get(...ids),
+  );
+  const tools = (db.prepare(`SELECT DISTINCT tool FROM actions WHERE run_id IN (${q}) AND decision = 'executed'`).all(...ids) as { tool: string }[]).map((r) => r.tool);
+  return { inProject, tools, workPrivate };
+};

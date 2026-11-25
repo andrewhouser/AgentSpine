@@ -942,7 +942,7 @@ src/                 the agent — no build step, two runtime dependencies
     command-output.ts  reduces a build log to the verdict and the first failure
     look-at-file.ts look_at_file — point the vision tier at an image on disk, e.g. a screenshot
     digest.ts      digest — computed summary of its own recent activity
-    draft.ts       draft — composes mail/events for YOU to send; adds no OAuth scope
+    draft.ts       draft — composes mail/events for YOU to send; optionally into Gmail Drafts or a named calendar
     recipes.ts     recipe_save / recipe_use / recipe_list — named procedures you approve
   google/
     auth.ts        one-time OAuth: `npm run auth` (read-only) or `npm run auth -- write` (separate write token)
@@ -2103,7 +2103,7 @@ the confirmation queue with the **full proposed text**, not a description of it:
 ```
 #1  [draft]  Reply to sam@example.com — "Re: Q3 budget"
 
-     DRAFT (email_reply) — nothing has been sent, created, or scheduled.
+     DRAFT (email_reply) — nothing is sent to anyone. Approving saves it: in Gmail Drafts or on your calendar when those are switched on, otherwise as a file.
 
      To:      sam@example.com
      Subject: Re: Q3 budget
@@ -2114,15 +2114,37 @@ the confirmation queue with the **full proposed text**, not a description of it:
 ```
 
 Approving writes it to `drafts/` and hands you the path; you open it and send it yourself.
-That file is the *only* side effect — `src/tools/draft.ts` contains no Google client, no
-`fetch`, and no URL, so "it cannot send" is a property of the code rather than a promise
-about the prompt. Rejecting with a reason teaches it, via the preference memory above:
+With the Gmail and calendar switches below it saves into your Gmail Drafts or onto a calendar
+instead, through `src/google/write.ts`, which has no send function: "it cannot send" is a
+property of the code rather than a promise about the prompt, and the architecture test pins it. Rejecting with a reason teaches it, via the preference memory above:
 
 ```bash
 npm run confirm reject 2 never commit to a renewal on my behalf, always ask me first
 ```
 
 `drafts/` is gitignored — approved drafts are unsent correspondence.
+
+### Into Gmail Drafts, or onto your calendar (optional)
+
+With the separate write token set up (`npm run auth -- write`, `google.write.enabled`), a draft can land
+where you would send it from instead of in a file:
+
+```jsonc
+// policy.json
+"drafts": { "enabled": true, "dir": "./drafts", "gmail": true, "calendar": "Home" },
+"google": { "enabled": true, "write": { "enabled": true, "calendars": ["Bills", "Home"] } }
+```
+
+- **Email drafts** are saved in Gmail's Drafts folder, and a reply is threaded onto the message it answers.
+  Nothing is sent: you open Gmail and send it, or delete it. The write module has no send at all, not even
+  for a saved draft.
+- **Event drafts** with an exact start (`2026-12-02T15:00`) go onto the calendar you name, which must be on
+  the `calendars` list and is never created. No one is ever invited, because an invitation is an email. A
+  vague start ("Tuesday 2pm") stays a file, with the reason.
+- **Work text stays a file.** A draft written in a project, or in a conversation that read meetings, project
+  sources, files or private recalled memories, is never put into your Google account, whatever the switches say.
+- **Scheduled runs ask** before a draft goes to Gmail or the calendar. In a chat the card still shows, unless
+  you add `"draft"` to `trust.chatAutoTools`; then chat drafts go straight in (events too).
 
 ### Writing styles
 

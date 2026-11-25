@@ -93,7 +93,7 @@
     "enabled": false
   },
   "drafts": {
-    "//": "SPEC §5, preferred path: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. This grants NO new OAuth scope — the Google token stays read-only by construction and still cannot send or modify anything.",
+    "//": "SPEC §5: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. Optional (SPEC §5, third amendment): gmail true saves email drafts in your Gmail Drafts instead, and calendar names one of google.write.calendars to put events with an exact start there, with no one invited. Both need google.write. Work-derived drafts always stay files. Nothing is ever sent. To skip the card in a live chat, add \"draft\" to trust.chatAutoTools; scheduled runs still ask.",
     "enabled": true,
     "dir": "./drafts"
   },

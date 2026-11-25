@@ -132,12 +132,17 @@ check("the token's file name appears only where config sets it", filesMatching(/
 check("only config and auth name the write scopes", filesMatching(/\bGOOGLE_WRITE_SCOPES\b/), ["src/config.ts", "src/google/auth.ts"]);
 
 console.log("\nTHE GOOGLE WRITE TOKEN: WHO CAN REACH THE MODULE THAT HOLDS IT");
-check("only the two tools built for it import src/google/write.ts", filesMatching(/from\s+"[^"]*google\/write(\.ts)?"/), ["src/tools/calendar-write.ts", "src/tools/gmail-triage.ts"]);
+// The draft tool joined them on 2026-11-25 (SPEC section 5, third amendment, CP2): Gmail drafts and timed events.
+check("only the three tools built for it import src/google/write.ts", filesMatching(/from\s+"[^"]*google\/write(\.ts)?"/), ["src/tools/calendar-write.ts", "src/tools/draft.ts", "src/tools/gmail-triage.ts"]);
 check("nothing imports it dynamically", filesMatching(/import\s*\(\s*["'`][^"'`]*google\/write/), []);
 
 console.log("\nTHE GOOGLE WRITE TOKEN: WHAT THE MODULE CANNOT DO");
 const writeTs = sources["src/google/write.ts"];
-check("it has no send endpoint", /\/send\b|messages\/send|drafts/.test(writeTs), false);
+check("it has no send endpoint, a draft's included", /\/send\b|messages\/send|drafts\/send/.test(writeTs), false);
+// Since CP2 it may save a draft: exactly one drafts endpoint, the plain create, and nothing under it.
+check("its only drafts endpoint is the plain create", [...writeTs.matchAll(/drafts[^`"'\s]*/g)].map((m) => m[0]).filter((d) => d !== "drafts"), []);
+check("no event it creates carries attendees", /attendees/.test(writeTs), false);
+check("an event is created with no notifications sent", /events\?sendUpdates=none/.test(writeTs), true);
 check("it has no permanent delete or empty-trash call", /batchDelete|trash\/empty|emptyTrash|["'`]DELETE["'`]/.test(writeTs), false);
 // The type annotation is gone from the stripped text, so the signature is read from the raw file, and the
 // methods actually used are read from the stripped code.

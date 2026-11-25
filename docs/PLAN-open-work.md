@@ -966,10 +966,16 @@ is built. Every measurement named below needs the model host, so every item is *
   queue, `confirmWhenUnattended`, the outgoing-text check on arguments). Suite: `test/mcp-stdio.test.mjs` with a
   fake server in `test/fixtures/mcp/`. Not done: a real server (the filesystem or git server) on the Mini, and LP6,
   which keeps every exposed tool's description out of the prompt prefix until asked for; until then set `tools`.
-- **CP2 Google: real drafts, timed events, user-directed send.** `policy.userDirected` already sends mail
-  through Apple Mail when your own message names the recipient (`mac_control.send_mail`). Proposed: Gmail
-  drafts created in Gmail, timed events and RSVPs, and send under the same named-recipient rule. Unattended
-  auto-send stays in "Not doing". Run N2's live half first (section 4).
+- **CP2 Google: real drafts, timed events, user-directed send (drafts and timed events built 2026-11-25; send and
+  RSVPs wait for N2).** Recorded as SPEC section 5's third amendment. The `draft` tool, on approval, saves an email
+  draft in Gmail Drafts (`policy.drafts.gmail`), threaded by `replyTo`, or puts an event with an exact start on the
+  calendar named by `policy.drafts.calendar` (one of `google.write.calendars`), with no attendees and no
+  notifications; `src/google/write.ts` gains `createDraft` and `createTimedEvent` and still has no send. Work text
+  stays a file: a project run, a conversation with a private recall (`runs.work_private`, set by the runner) or a
+  private non-Google tool call. The same check runs on approval, from the run that queued the card
+  (`ToolContext.queuedByRunId`). Scheduled runs ask; a chat skips the card only with `draft` in
+  `policy.trust.chatAutoTools`, which you chose. Suite: `test/draft-google.test.mjs` (Google stubbed). Not done:
+  a real draft and event against your account, and send and RSVPs, which wait for N2's live baseline.
 - **CP3 A scratch interpreter.** `run_command` runs only declared commands, so there is nothing like Claude's
   analysis tool for arithmetic over a file. A `sandbox-exec` scratch directory with no network and a time
   limit. This is not the Docker workspace container that "Not doing" rules out, but it is close enough to need

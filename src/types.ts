@@ -151,7 +151,14 @@ export interface Policy {
    * drafts are proposed text reviewed in the confirmation queue, and approving one writes
    * a file. The Google token remains read-only by construction.
    */
-  drafts?: { enabled: boolean; dir?: string };
+  drafts?: {
+    enabled: boolean;
+    dir?: string;
+    /** CP2: save email drafts in Gmail Drafts (needs google.write). Off unless exactly true. */
+    gmail?: boolean;
+    /** CP2: put event drafts with an exact start on this calendar, which must be in google.write.calendars. */
+    calendar?: string;
+  };
   /**
    * Call caps, counted from the audit log. `default` applies to any tool without its own
    * entry; `tools` overrides per tool. Absent or 0 means no limit — budgets are a rail you
@@ -339,6 +346,8 @@ export interface RunContext extends RunFacts {
 
 export interface ToolContext {
   policy: Policy;
+  /** On an approval, the run that queued the call (CP2). Absent when the call runs inside its own run. */
+  queuedByRunId?: number | null;
   run?: RunContext;
   /**
    * The run this call belongs to. A tool needs it only to reach run-scoped storage — today

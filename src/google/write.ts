@@ -5,9 +5,14 @@
  * events. It holds its own token (`npm run auth -- write`), separate from the read-only one that
  * everything else uses, so revoking it removes every write at once and leaves reads working.
  *
+ * Since 2026-11-25 (SPEC section 5, third amendment, PLAN-open-work CP2) it can also save a Gmail DRAFT and put a
+ * TIMED event, with no attendees, on a named calendar. A draft sits in Drafts until you send it yourself.
+ *
  * What is deliberately NOT here, and must not be added without a new decision recorded in SPEC.md:
- *   - sending, replying or forwarding. gmail.modify technically allows a send, so the guarantee is
- *     this file: there is no function that sends, and nothing else in the repo reads this token.
+ *   - sending, replying or forwarding, including sending a saved draft (`drafts/send`). gmail.modify technically
+ *     allows a send, so the guarantee is this file: there is no function that sends, and nothing else in the repo
+ *     reads this token.
+ *   - attendees on an event, and answering an invitation: both make Google email other people.
  *   - permanent deletion, and emptying the trash. Trash is recoverable for 30 days; a permanent
  *     delete is not.
  *   - deleting calendar events, or creating or renaming calendars.
@@ -93,6 +98,50 @@ export const spamMessage = (id: string): Promise<any> => modify(id, ["SPAM"], ["
 export const addLabels = (id: string, labelIds: string[]): Promise<any> => modify(id, labelIds, []);
 export const removeLabels = (id: string, labelIds: string[]): Promise<any> => modify(id, [], labelIds);
 
+/** A header value with its line breaks removed, so text that came from an email cannot add a header of its own. */
+const headerValue = (v: unknown): string => String(v ?? "").replace(/[\r\n]+/g, " ").trim();
+
+/** A subject in plain ASCII as is, anything else as an RFC 2047 encoded word, which every client reads. */
+const encodeSubject = (s: string): string => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, "utf8").toString("base64")}?=`);
+
+export interface NewDraft {
+  body: string;
+  /** The Gmail id of the message this answers. The draft then joins that conversation, threaded as a reply. */
+  replyTo?: string;
+  subject: string;
+  to: string;
+}
+
+/**
+ * Save a draft in Gmail's Drafts folder. Nothing is sent: the draft waits there for you to open and send it, or
+ * delete it. A reply is threaded by the original's Message-ID, read here with the same token.
+ */
+export const createDraft = async (d: NewDraft): Promise<{ id: string; threaded: boolean }> => {
+  let threadId = "";
+  const extra: string[] = [];
+  if (d.replyTo) {
+    const m = await call("GET", `${GMAIL}/messages/${assertId(d.replyTo)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`);
+    const h = Object.fromEntries((m.payload?.headers ?? []).map((x: any) => [String(x.name).toLowerCase(), String(x.value)]));
+    threadId = String(m.threadId ?? "");
+    const msgId = headerValue(h["message-id"]);
+    if (msgId) extra.push(`In-Reply-To: ${msgId}`, `References: ${headerValue([h.references, msgId].filter(Boolean).join(" "))}`);
+  }
+  const raw = [
+    `To: ${headerValue(d.to)}`,
+    `Subject: ${encodeSubject(headerValue(d.subject))}`,
+    ...extra,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    String(d.body ?? ""),
+  ].join("\r\n");
+  const created = await call("POST", `${GMAIL}/drafts`, {
+    message: { raw: Buffer.from(raw, "utf8").toString("base64url"), ...(threadId ? { threadId } : {}) },
+  });
+  return { id: String(created.id), threaded: Boolean(threadId) };
+};
+
 const LABEL_NAME = /^[A-Za-z0-9][A-Za-z0-9 _/-]{0,39}$/;
 
 /** The id of a user label, creating it if it does not exist. System labels cannot be created or renamed here. */
@@ -131,6 +180,42 @@ export const createAllDayEvent = async (calendarId: string, e: NewAllDayEvent): 
     end: { date: nextDay(e.date) },
     reminders: { overrides: [{ method: "email", minutes: Math.round(e.remindDaysBefore * 1440) }], useDefault: false },
     start: { date: e.date },
+    summary: e.title,
+  });
+  return { id: String(created.id) };
+};
+
+export interface NewTimedEvent {
+  description?: string;
+  location?: string;
+  minutes: number;
+  /** Local wall time, YYYY-MM-DDTHH:MM, read in `timeZone`. */
+  start: string;
+  timeZone: string;
+  title: string;
+}
+
+const TIMED = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+/** A wall-clock time plus minutes, still as wall-clock time: both ends are read in the same time zone. */
+const addMinutes = (start: string, minutes: number): string => {
+  const d = new Date(`${start}:00Z`);
+  d.setUTCMinutes(d.getUTCMinutes() + minutes);
+  return d.toISOString().slice(0, 16);
+};
+
+/**
+ * Put a timed event on a calendar. There is no attendees field and Google is told to send no updates, because an
+ * attendee gets an invitation email, which is a send. The calendar must already exist; this never creates one.
+ */
+export const createTimedEvent = async (calendarId: string, e: NewTimedEvent): Promise<{ id: string }> => {
+  if (!TIMED.test(e.start)) throw new Error("an event needs a start like 2026-12-02T15:00");
+  const minutes = Math.max(5, Math.min(12 * 60, Math.round(e.minutes)));
+  const created = await call("POST", `${CAL}/${encodeURIComponent(calendarId)}/events?sendUpdates=none`, {
+    ...(e.description ? { description: e.description } : {}),
+    end: { dateTime: `${addMinutes(e.start, minutes)}:00`, timeZone: e.timeZone },
+    ...(e.location ? { location: e.location } : {}),
+    start: { dateTime: `${e.start}:00`, timeZone: e.timeZone },
     summary: e.title,
   });
   return { id: String(created.id) };

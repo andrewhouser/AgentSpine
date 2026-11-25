@@ -541,6 +541,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         project != null || recalled.private || (conversationId != null && store.getConversation(conversationId)?.local_only === 1);
       // Kept here because the loop releases its pin when it ends, before the learners below ask what this run saw.
       let runWasPrivate = startPrivate;
+      // Recorded on the run, for the draft tool (CP2): a project or a private recall is work context, and a draft
+      // written from it stays a local file rather than going to Gmail, now or when its card is approved later.
+      if (project != null || recalled.private) store.markRunWorkPrivate(runId);
       watchPin(runId, () => {
         runWasPrivate = true;
         if (conversationId != null) store.setConversationLocalOnly(conversationId);
