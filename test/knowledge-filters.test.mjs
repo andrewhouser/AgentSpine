@@ -9,7 +9,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-kfilters-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-kfilters-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 
 const projects = await import("../src/projects/store.ts");

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-served-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-served-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 
 const store = await import("../src/memory/store.ts");

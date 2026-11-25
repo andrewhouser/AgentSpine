@@ -11,7 +11,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-stop-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-stop-${process.pid}-${Date.now()}.db`);
 
 // A model host that accepts every request and never answers — a long generation.
 let hits = 0;

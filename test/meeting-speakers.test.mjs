@@ -6,7 +6,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-speakers-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-speakers-${process.pid}-${Date.now()}.db`);
 const { endsSentence, isHallucination, planClips, splitSentences, utterancesFromText } = await import("../src/meetings/utterances.ts");
 const store = await import("../src/meetings/store.ts");
 const { anchor, render, stripLabel } = await import("../src/meetings/extract.ts");

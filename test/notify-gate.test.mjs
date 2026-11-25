@@ -19,7 +19,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-notify-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-notify-${process.pid}-${Date.now()}.db`);
 
 const { notifyTool } = await import("../src/tools/notify.ts");
 

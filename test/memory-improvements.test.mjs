@@ -14,7 +14,7 @@
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-mem-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-mem-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 // No embeddings endpoint: forces the keyword-fallback path so we can prove the floor is
 // ignored there. The embedded-path floor is tested directly against cosine() below.

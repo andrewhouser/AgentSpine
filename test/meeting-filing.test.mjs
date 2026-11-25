@@ -11,7 +11,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-filing-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-filing-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 process.env.MEETING_EXTRACT_ENABLED = "false";
 

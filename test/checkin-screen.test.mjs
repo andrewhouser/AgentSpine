@@ -13,7 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-checkin-screen-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-checkin-screen-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 
 const { checkinGroups, checkinModeLine, checkinRunLabel, checkinRunNote, checkinSendLine } = await import("../web/src/lib/checkin.ts");

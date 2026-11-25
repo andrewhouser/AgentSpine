@@ -16,7 +16,7 @@ import path from "node:path";
 
 // Set before import: config reads env once, and process.loadEnvFile does not override
 // variables that are already set — so the real key and provider order in .env stay unused.
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-websearch-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-websearch-${process.pid}-${Date.now()}.db`);
 process.env.TAVILY_API_KEY = "test-key";
 process.env.WEB_SEARCH_ORDER = "tavily"; // never launch the headless browser from a test
 

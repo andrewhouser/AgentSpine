@@ -11,7 +11,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-keval-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-keval-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 
 // A stand-in embedder: unit vectors chosen per topic word, so "meaning" is controlled by the test.

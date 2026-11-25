@@ -15,7 +15,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-consolidate-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-consolidate-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.EMBEDDINGS_URL = ""; // no network: this test never embeds anything
 

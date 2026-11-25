@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 
 const policyPath = path.join(os.tmpdir(), `agentspine-directed-policy-${process.pid}.json`);
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-directed-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-directed-${process.pid}-${Date.now()}.db`);
 process.env.POLICY_PATH = policyPath;
 
 // dryRun: the broker reports its decision and stops before tool.run — the property that lets

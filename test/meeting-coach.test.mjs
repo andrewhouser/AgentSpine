@@ -30,7 +30,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-coach-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-coach-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.MEETING_COACH_MAX_SEGMENTS = "100";
 process.env.MEETING_COACH_BLOCK = "20";

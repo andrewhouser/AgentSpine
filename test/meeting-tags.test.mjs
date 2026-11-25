@@ -5,7 +5,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-tags-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-tags-${process.pid}-${Date.now()}.db`);
 const store = await import("../src/meetings/store.ts");
 const { meetingList, meetingTag } = await import("../src/tools/meetings.ts");
 

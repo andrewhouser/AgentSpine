@@ -22,7 +22,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-visibility-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-visibility-${process.pid}-${Date.now()}.db`);
 
 const { __test } = await import("../src/agent.ts");
 const { registry } = await import("../src/tools/index.ts");

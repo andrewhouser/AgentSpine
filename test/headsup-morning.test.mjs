@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-headsup-morning-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-headsup-morning-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 
 const { runMorningHeadsup, composeNotification, describeOffer, whenText } = await import("../src/headsup/morning.ts");

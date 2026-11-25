@@ -12,7 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-denials-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-denials-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 // Pin the thresholds the assertions below assume, so a change to the defaults can't
 // silently invalidate the test.

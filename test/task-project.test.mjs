@@ -6,7 +6,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-taskproj-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-taskproj-${process.pid}-${Date.now()}.db`);
 const projects = await import("../src/projects/store.ts");
 const { taskAdd, taskList, taskUpdate } = await import("../src/tools/tasks.ts");
 const { getTask, listTasks } = await import("../src/tasks/store.ts");

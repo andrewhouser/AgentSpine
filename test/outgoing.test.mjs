@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 
 const enforcing = process.argv.includes("--enforce");
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-outgoing-${enforcing ? "e" : "l"}-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-outgoing-${enforcing ? "e" : "l"}-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 process.env.NOTIFY_ON_CONFIRMATION = "false";
 process.env.OUTGOING_ENFORCE = enforcing ? "true" : "false";

@@ -9,7 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-protected-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-protected-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 process.env.NOTIFY_ON_CONFIRMATION = "false";
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "spine-sc6-")));
