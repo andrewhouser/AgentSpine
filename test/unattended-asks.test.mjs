@@ -56,6 +56,10 @@ for (const [label, args] of [
   ["pay", click("Pay $42.00")],
   ["subscribe", click("Subscribe for $9 a month")],
   ["submitting a payment form", { action: "submit", selector: "form#pay" }],
+  // Decided 2026-11-25 (D2): deleting or removing something asks from a schedule too.
+  ["delete", click("Delete account")],
+  ["remove", click("Remove from list")],
+  ["delete, named only by the selector", click(undefined, "button.delete-item")],
 ]) {
   check(label, await wouldBe(args, scheduled), "QUEUED");
 }

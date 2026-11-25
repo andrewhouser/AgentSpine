@@ -104,16 +104,18 @@ interface Args {
   description?: string;
 }
 
-// The words that make a click irreversible, in two lists because they are not equally bad
-// unattended. MONEY words queue even from a scheduled run (see `asksWhenUnattended`); the
-// others are what a scheduled job's ordinary work looks like (a search box is a submit), so
-// its pre-approval covers them. DANGER is built from both, so a word is never in one test
-// and missing from the other.
+// The words that make a click irreversible, in three lists because they are not equally bad
+// unattended. MONEY and DESTRUCTIVE words queue even from a scheduled run (see
+// `asksWhenUnattended`); the others are what a scheduled job's ordinary work looks like (a search
+// box is a submit), so its pre-approval covers them. DANGER is built from all three, so a word is
+// never in one test and missing from another. Delete and remove joined the unattended asks on
+// 2026-11-25 (PLAN-open-work section 12 D2, decided by you; no schedule relied on them).
 const MONEY_WORDS = ["buy", "purchase", "order", "checkout", "pay", "payment", "place\\s?order", "transfer", "withdraw", "subscribe"];
-const OTHER_RISKY_WORDS = ["submit", "send", "delete", "remove", "confirm", "sign\\s?up"];
+const DESTRUCTIVE_WORDS = ["delete", "remove"];
+const OTHER_RISKY_WORDS = ["submit", "send", "confirm", "sign\\s?up"];
 const anyWord = (words: string[]): RegExp => new RegExp(`\\b(${words.join("|")})\\b`, "i");
-const DANGER = anyWord([...MONEY_WORDS, ...OTHER_RISKY_WORDS]);
-const MONEY = anyWord(MONEY_WORDS);
+const DANGER = anyWord([...MONEY_WORDS, ...DESTRUCTIVE_WORDS, ...OTHER_RISKY_WORDS]);
+const ASKS_UNATTENDED = anyWord([...MONEY_WORDS, ...DESTRUCTIVE_WORDS]);
 
 /** Everything the model said about where a click or submit lands: the text both word tests read. */
 const whereOf = (args: Args): string => `${args?.selector ?? ""} ${args?.description ?? ""} ${args?.text ?? ""}`;
@@ -123,14 +125,15 @@ const whereOf = (args: Args): string => `${args?.selector ?? ""} ${args?.descrip
  * unasked. In headless mode the profile is logged out and nothing completes, but `auto`
  * attaches to a debugging Chrome that may be signed in, and a job that reads a page it does
  * not control can be steered. So a click or submit that reads as buying, paying or moving
- * money asks even when nobody is watching.
+ * money asks even when nobody is watching. So, since 2026-11-25, does one that reads as deleting or
+ * removing something.
  *
  * This is a test over the model's own description of the button, like DANGER: a button
  * labelled "Continue" passes both, in a chat as much as in a schedule. It narrows the gap,
  * and the refusal tier in PLAN-open-work section 12 D2 is what would close it.
  */
 const asksWhenUnattended = (args: Args): boolean =>
-  (args?.action === "click" || args?.action === "submit") && MONEY.test(whereOf(args));
+  (args?.action === "click" || args?.action === "submit") && ASKS_UNATTENDED.test(whereOf(args));
 
 // D2: the refused tier. Moving money and trading are never done through the browser, whoever
 // approves, so these are not in MONEY_WORDS (which only ask). Buying goods stays a queued ask.

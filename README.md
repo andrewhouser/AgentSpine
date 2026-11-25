@@ -82,11 +82,12 @@ One exception: a job can't change the standing work itself. `schedule_create`, `
 `_delete` still queue from a scheduled run, and `recipe_save` is refused there, so a job that
 reads a hostile page can't schedule itself more jobs or write itself new instructions.
 A second exception, for the same reason: a browser click or form submit that reads as buying,
-paying or moving money (buy, order, checkout, pay, transfer, withdraw, subscribe) still asks
-from a scheduled run (transfers, withdrawals, wires and trades are refused in every run, see
-the browser section). A plain submit does not ask, so a job can still use a search box. The test
-reads the model's own description of the button, so one labelled "Continue" gets past it;
-`BROWSER_MODE=headless` keeps scheduled jobs out of a signed-in Chrome altogether.
+paying or moving money (buy, order, checkout, pay, transfer, withdraw, subscribe), or as
+deleting or removing something, still asks from a scheduled run (transfers, withdrawals, wires
+and trades are refused in every run, see the browser section). A plain submit does not ask, so
+a job can still use a search box. The test reads the model's own description of the button, so
+one labelled "Continue" gets past it. That is why the always-on host runs with
+`BROWSER_MODE=headless`: scheduled jobs then never attach to a signed-in Chrome at all.
 A third: a scheduled job sends mail or a message without asking only to someone its own task
 text tells it to send to ("every Friday, email sam@example.com the numbers"). Any other
 recipient asks, because a job that has read a hostile email could otherwise post what it read

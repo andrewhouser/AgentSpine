@@ -1211,8 +1211,8 @@ Decided with it, as proposed: the Morning brief stays its own schedule, and Head
 
 ### D2. A third tier: refused, whoever approves (Code)
 
-**Built 2026-11-25: the refused tier, `neverDomains` and the registry pass. Still open: the two decisions at the end
-of this section.** Shape: not a third
+**Built 2026-11-25: the refused tier, `neverDomains`, the registry pass, and delete and remove clicks asking from a
+schedule. Nothing left in code; setting `BROWSER_MODE=headless` on the Mini is yours.** Shape: not a third
 `Reversibility` value but an optional `Tool.refuse(args, run, policy)` that returns a reason or null. The broker
 calls it right after the allowlist, before budgets and before every way past the queue, records the result as
 a denial, and queues nothing. A refuser that throws refuses. Members so far: the browser's click or submit that
@@ -1254,8 +1254,8 @@ scheduled-run pre-approval can each skip the queue.
   - "Continue", the last row: a button whose label is on neither list is reversible everywhere, in a chat as
     much as in a schedule. The test reads the model's description of the button, not the page. The
     `forbidden` tier and `neverDomains` below are the answer to that, not a longer word list.
-  - Delete and remove clicks still run unasked from a schedule. Left out on purpose: you agreed to money and
-    purchases, and I did not check what a scheduled job legitimately deletes. Decide below.
+  - Delete and remove clicks ran unasked from a schedule. Decided 2026-11-25: they ask now (see the end of this
+    section).
   - `BROWSER_MODE` defaults to `auto`, which attaches to a debugging Chrome when one is running, and that
     profile may be signed in. `headless` on the Mini keeps unattended runs in a logged-out profile.
   - `mac_control` sends were the same gap. That was F9, fixed 2026-11-24 (section 0). Still pre-approved
@@ -1334,14 +1334,19 @@ Order: the registry pass in D2 first (F8 and F9, which the trace found, are fixe
 D3, which are small, sit in the broker and need no decision beyond a yes. D1 is built with its screens: its rollout
 is yours. D4 waits on CP1.
 
-Open decisions for you:
-- Should delete and remove clicks in the browser also ask from a scheduled run? Proposed: yes, unless a
-  schedule of yours relies on one.
-- `BROWSER_MODE=headless` on the Mini. Proposed: yes, unless a scheduled job needs the signed-in profile.
+Decided 2026-11-25:
+- Delete and remove clicks in the browser ask from a scheduled run, like money words (built: `DESTRUCTIVE_WORDS`
+  in `src/tools/browser.ts`, rows in `test/unattended-asks.test.mjs`). No schedule relied on them.
+- `BROWSER_MODE=headless` on the Mini. **You: set it in the Mini's `.env` and restart the dashboard.** The default
+  stays `auto` for a laptop; `.env.example` and the README say which machine wants which.
+- No schedule pushes with `git_write` or writes a build manifest, so the registry pass's new asks change nothing
+  that runs today.
+- D2 and D3 alongside section 8: done. `policy.browser.neverDomains`: built, empty by default; your bank and
+  broker hosts are yours to add.
+
+Still open:
 - (Decided 2026-11-24: the hold on new proactive behaviour is lifted for D1 only.)
 - After a week of D1's log: is Gmail's sorting good enough, or does new mail need a local model to order it?
-- D2 and D3 now, alongside section 8. Proposed: yes; both tighten what already runs unattended.
-- `policy.browser.neverDomains` in D2. Proposed: yes, empty by default.
 - A named service for D4. Proposed: none until you want one.
 
 ---
