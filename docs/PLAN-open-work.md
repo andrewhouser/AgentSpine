@@ -984,9 +984,9 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
   card carries the change (`diffPreview`, cut at 40 lines with a note to read the rest). A protected path is matched
   in any checkout whose package.json is named `agentspine`, so a separate builder clone (SC7) is covered, ignoring
   case (the Mac's disk does) and following symlinks. `test/architecture.test.mjs` pins the list and is on it.
-  Suite: `test/protected-paths.test.mjs`. Like a build manifest, a protected edit can still skip the queue through
-  `policy.trust.chatAutoTools` (if you list `write_file` or `edit_file` there) or a person-approved `autoApprove`
-  shape for that exact file; whether protected edits should ignore both is an open decision below.
+  Suite: `test/protected-paths.test.mjs`. Decided 2026-11-25: a protected edit always shows its card. Its
+  classification carries `alwaysConfirm`, and the broker then ignores `autoApprove`, `userDirected`,
+  `trust.chatAutoTools`, a schedule's pre-approval and `irreversibleAlwaysConfirm` being off.
 - **SC7 Which checkout it works in (You).** Not checked: whether the builder on the Mini would branch inside
   the checkout the LaunchAgent serves from. If so, give it a separate clone, so a half-made branch is never
   what the next restart loads.
@@ -1068,11 +1068,7 @@ Decided 2026-11-25:
 - SC6's list: the eight proposed files plus `src/outgoing.ts` and `src/tools/browser.ts` (and the list's own file).
 - Source folders stay inside the local pin until SC1's measurement says the local builder is not good enough.
 
-Open decisions for you:
-
-- Should an edit to a protected file (SC6) ignore `policy.trust.chatAutoTools` and `autoApprove`, so it always shows
-  the card? Today it behaves like a build manifest: both can skip the queue, though neither grants it unless you set
-  it up. Proposed: yes, always show the card; it costs a click only on the rare change to a gate.
+- An edit to a protected file always shows its card, whatever trust or auto-approval is set (built, SC6).
 
 ---
 

@@ -11,6 +11,12 @@ export interface ClassifiedAction {
   target: string;
   /** Human-readable one-liner shown in the confirmation queue. */
   summary: string;
+  /**
+   * Queue this call whatever would otherwise let it through: `autoApprove`, `userDirected`, `trust.chatAutoTools`, a
+   * scheduled run's pre-approval, and `irreversibleAlwaysConfirm` being off. Set only with `irreversible`. Today only
+   * an edit to a file that enforces the gates sets it (src/protected-paths.ts, SC6, decided 2026-11-25).
+   */
+  alwaysConfirm?: true;
 }
 
 export interface PolicyDecision {

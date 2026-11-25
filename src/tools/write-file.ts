@@ -344,6 +344,8 @@ const readOr = (target: string): string => {
 
 /** The card for a change to one of AgentSpine's own gate files (SC6): what it is, and the change itself. */
 const protectedCard = (rel: string, target: string, before: string, after: string): ClassifiedAction => ({
+  // Always the card: no chat trust, auto-approval or schedule skips a change to a gate (decided 2026-11-25).
+  alwaysConfirm: true,
   reversibility: "irreversible",
   summary: `Change PROTECTED FILE ${rel} (${target}), which enforces AgentSpine's own safety gates. Read the change:\n${diffPreview(before, after)}`,
   target,
@@ -540,6 +542,7 @@ export const moveFile: Tool = {
     if (guarded) {
       return {
         reversibility: "irreversible",
+        alwaysConfirm: true,
         summary: `Move ${from || "?"} to ${to || "?"}: this moves or replaces PROTECTED FILE ${guarded}, which enforces AgentSpine's own safety gates`,
         target: to,
       };

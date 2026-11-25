@@ -85,11 +85,45 @@ console.log("\nTHROUGH THE BROKER: IT ASKS, IN A CHAT AND FROM A SCHEDULE");
   check("a chat edit to the broker queues", await would("edit_file", { find: "line one", path: broker, replace: "LINE ONE" }, chat), "QUEUED");
   check("a scheduled edit to the broker queues", await would("edit_file", { find: "line one", path: broker, replace: "LINE ONE" }, job), "QUEUED");
   check("a whole-file write from a chat queues", await would("write_file", { content: "z", path: broker }, chat), "QUEUED");
-  const trusted = { ...policy, trust: { chatAutoTools: ["edit_file", "write_file"] } };
-  const runId = store.startRun({ kind: "chat", task: "probe" });
-  const r = await executeCall({ args: { content: "z", path: broker }, tool: "write_file" }, trusted, runId, runId, chat);
-  check("trusting write_file in chat does skip the queue, as that setting says", /would have been EXECUTED/.test(r.output), true);
+  // Decided 2026-11-25: a change to a gate always shows its card, whatever else is set.
+  const as = async (p, run, args = { content: "z", path: broker }, tool = "write_file") => {
+    const runId = store.startRun({ kind: run.preApproved ? "schedule" : "chat", task: "probe" });
+    const r = await executeCall({ args, tool }, { ...policy, ...p }, runId, runId, run);
+    return /would have been (EXECUTED|QUEUED)/.exec(r.output)?.[1] ?? r.output.slice(0, 80);
+  };
+  check("chat trust for write_file does not skip it", await as({ trust: { chatAutoTools: ["edit_file", "write_file"] } }, chat), "QUEUED");
+  check("an auto-approval for that exact file does not skip it", await as({ autoApprove: [{ target: broker, tool: "write_file" }] }, chat), "QUEUED");
+  check("nor does a schedule's pre-approval, with chat trust set as well", await as({ trust: { chatAutoTools: ["write_file"] } }, job), "QUEUED");
+  check("nor irreversibleAlwaysConfirm switched off", await as({ autoExecute: { ...policy.autoExecute, irreversibleAlwaysConfirm: false } }, chat), "QUEUED");
+  check("a move onto a gate file is held the same way", await as({ trust: { chatAutoTools: ["move_file"] } }, chat, { from: path.join(clone, "src", "notes.ts"), to: path.join(clone, "src", "sensitivity.ts") }, "move_file"), "QUEUED");
+  check("chat trust still works for an ordinary file", await as({ trust: { chatAutoTools: ["write_file"] } }, chat, { content: "z", path: path.join(clone, "src", "notes.ts") }), "EXECUTED");
   check("an ordinary file still saves without asking", await would("write_file", { content: "z", path: path.join(clone, "src", "notes.ts") }, job), "EXECUTED");
+}
+
+console.log("\nTHE FLAG ITSELF, ON ANY TOOL");
+{
+  // alwaysConfirm is a broker rule, not a write_file one, so it is checked on a stand-in tool too.
+  let ran = 0;
+  registry.__fake_gate = {
+    argsSchema: "{}",
+    checkPolicy: () => ({ allowed: true }),
+    classify: () => ({ alwaysConfirm: true, reversibility: "irreversible", summary: "change a gate", target: "gate" }),
+    description: "test",
+    name: "__fake_gate",
+    run: async () => {
+      ran++;
+      return "done";
+    },
+  };
+  const loose = {
+    autoApprove: [{ target: "gate", tool: "__fake_gate" }],
+    autoExecute: { dryRun: false, irreversibleAlwaysConfirm: false, reversible: true },
+    trust: { chatAutoTools: ["__fake_gate"] },
+  };
+  const runId = store.startRun({ kind: "schedule", task: "probe" });
+  const r = await executeCall({ args: {}, tool: "__fake_gate" }, loose, runId, runId, { conversational: true, goal: "x", preApproved: true });
+  check("every skip set at once, and it still queues without running", [r.status, ran], ["queued", 0]);
+  delete registry.__fake_gate;
 }
 
 console.log("\nTHE PREVIEW");

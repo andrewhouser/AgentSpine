@@ -186,7 +186,10 @@ export const executeCall = async (
   // (LEARNING Phase 2) — the narrowest possible grant, one (tool, target) pair, written to
   // policy.json only by a human clicking a proposal. It lets exactly this shape skip the
   // queue; every other irreversible action still confirms.
+  // A call that must always show its card (an edit to a gate file, SC6) takes none of the skips below.
+  const pinned = classified.reversibility === "irreversible" && classified.alwaysConfirm === true;
   const preApproved =
+    !pinned &&
     classified.reversibility === "irreversible" &&
     (policy.autoApprove ?? []).some((s) => s.tool === call.tool && s.target === classified.target);
   // The user asked for exactly this, in their own words, in this chat turn — "email Jeff
@@ -195,13 +198,14 @@ export const executeCall = async (
   // never the model's), and policy.userDirected must list the action. A schedule, a watcher,
   // a subagent and a later approval carry no conversational goal, so they never qualify.
   const directed =
-    classified.reversibility === "irreversible" && run?.conversational && policy.userDirected?.enabled && tool.directed
+    !pinned && classified.reversibility === "irreversible" && run?.conversational && policy.userDirected?.enabled && tool.directed
       ? tool.directed(call.args, run)
       : null;
   const userDirected = !!directed && (policy.userDirected?.actions ?? []).includes(`${call.tool}.${directed.action}`);
   // Standing trust for a named tool, honoured only while a person is in the chat (see
   // Policy.trust). `run.conversational` is set by the runner for chat turns alone.
   const chatTrusted =
+    !pinned &&
     classified.reversibility === "irreversible" &&
     !!run?.conversational &&
     (policy.trust?.chatAutoTools ?? []).includes(call.tool);
@@ -224,14 +228,15 @@ export const executeCall = async (
       return true;
     }
   };
-  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved && !asksWhenUnattended();
+  const scheduled = !pinned && classified.reversibility === "irreversible" && !!run?.preApproved && !asksWhenUnattended();
   const mustConfirm =
-    classified.reversibility === "irreversible" &&
+    pinned ||
+    (classified.reversibility === "irreversible" &&
     policy.autoExecute.irreversibleAlwaysConfirm &&
     !preApproved &&
     !userDirected &&
     !chatTrusted &&
-    !scheduled;
+    !scheduled);
   const canAutoRun =
     classified.reversibility === "reversible" ? policy.autoExecute.reversible : !mustConfirm;
 
