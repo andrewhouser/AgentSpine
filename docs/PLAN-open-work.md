@@ -454,8 +454,12 @@ baseline, and the meeting recall number is still unmeasured.
   care about (some with changed information, some whose right answer is "not enough evidence"), then run it on
   the Mini before changing retrieval again; `VECTOR_MIN_SIMILARITY` is set from the result: run it with `KNOWLEDGE_VECTOR_MIN=0.15`, `0.25` and `0.35` in front of the command and keep the value with the best recall and no new leaks. `eval/questions.example.json` is an invented template to copy outside the repo. Suite:
   `test/knowledge-eval.test.mjs`, which shows each path winning its own kind of question and the fused mode
-  winning both. Not built: citation correctness, stale-answer rate and extraction acceptance rate (they need
-  K4's records and K6's answers). This also still measures meeting recall (section 4a) once questions exist.
+  winning both. Answer metrics (built 2026-11-25, `src/eval/answers.ts`, printed by the same command): per question,
+  optional `expectClaims`, `staleClaims`, `expectStatus` and `asOf` give citation recall and precision, the
+  stale-answer rate (a superseded claim cited as current) and status accuracy, all through `gatherEvidence`, no
+  model; and the extraction acceptance rate (of model- and meeting-proposed claims a person decided on, the share
+  accepted, by method) needs no questions. Suite: `test/knowledge-eval-answers.test.mjs`; the example file shows
+  the fields. This also still measures meeting recall (section 4a) once questions exist.
 - **K2. Hybrid global retrieval (built 2026-11-21, structured lookup waits for K4).** `src/projects/search.ts`:
   an FTS5 index over `chunks` (kept in step by triggers, built into `node:sqlite`, no dependency) and the existing
   vector search, fused by reciprocal-rank fusion with the path that found each hit recorded, a per-source quota
