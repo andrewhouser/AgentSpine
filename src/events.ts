@@ -30,6 +30,8 @@ export type RunEventType =
   | "confirmation"
   | "error"
   | "final"
+  // A background run handed the model to a person and is carrying on (LP5, src/queue.ts).
+  | "paused_for_person"
   | "plan"
   | "queue_wait"
   | "run_end"

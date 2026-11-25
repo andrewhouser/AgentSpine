@@ -21,6 +21,7 @@ import { describeResult, harnessContract, pinNotice, renderResultEnvelope, regis
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
 import { frictionDocs } from "./learn/friction.ts";
+import { yieldToPerson } from "./queue.ts";
 import { linkRun, throwIfStopped } from "./stop.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
@@ -663,6 +664,13 @@ const runAgentLoop = async (
     // The user pressed stop. Checked here, between steps, so a tool that was already running
     // finished cleanly rather than being cut off halfway (see src/stop.ts).
     throwIfStopped(rootId);
+    // A person is waiting (LP5): a background run hands the model over here, at the same boundary, and carries on
+    // once they are done. Nothing about this run changes while it waits. A stop asked for meanwhile lands on resume.
+    const waitedFrom = Date.now();
+    if (await yieldToPerson()) {
+      publish(runId, { type: "paused_for_person", waitedMs: Date.now() - waitedFrom });
+      throwIfStopped(rootId);
+    }
     publish(runId, { step: step + 1, type: "step_start" });
 
     let { text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {

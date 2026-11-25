@@ -948,6 +948,7 @@ export interface RunEvent {
     | "confirmation"
     | "error"
     | "final"
+    | "paused_for_person"
     | "plan"
     | "queue_wait"
     | "run_end"

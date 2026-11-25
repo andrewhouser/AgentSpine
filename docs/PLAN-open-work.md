@@ -930,9 +930,16 @@ is built. Every measurement named below needs the model host, so every item is *
   step pays prefill. Bench native tool calling on the standard model through `mlx_lm.server` against the current
   protocol: parse failures, steps per task, seconds per task. Switch only if it wins. Not checked: how well
   `mlx_lm.server` handles native tool calls.
-- **LP5 Chat goes ahead of scheduled work.** Runs are serialized (`queue_wait` in `src/runner.ts`), so a chat
-  turn waits behind a scheduled job. Let a chat turn take the model at the next step boundary of a background
-  run, the same boundary the stop button uses, and resume the job afterwards.
+- **LP5 Chat goes ahead of scheduled work (built 2026-11-25; not yet seen on the model host).** `src/queue.ts` has two
+  lanes: `person` (a chat turn, an approval being carried out, a command-line run) and `background` (a schedule, a
+  watcher, the heartbeat). A person's work starts before any background work still waiting, and a background run
+  already going hands the model over at its next step boundary, where the loop checks for a stop (`yieldToPerson`
+  in `src/agent.ts`), then resumes ahead of other background work. It is paused, not stopped; a stop asked for while
+  paused lands when it resumes. A model call in flight is not interrupted, so a chat can still wait for one step's
+  call, which keeps each run's prompt prefix whole. The lane rides on AsyncLocalStorage, so a subagent pauses with
+  its parent. A paused run publishes `paused_for_person` with how long it waited; the clients ignore it for now.
+  Suite: `test/queue-lanes.test.mjs`, whose real-run row fails with the yield removed. Not checked: how long a chat
+  waits in practice on the Mini (one step of a job, which is one model call; measure it with a watcher running).
 - **LP6 Load tool descriptions on demand.** Every visible tool's description and schema is in the prompt
   prefix (`toolDocs` in `src/agent.ts`). Keep a small core set there and let the model ask for the rest by
   name. This is a precondition for CP1, which would otherwise grow the prefix with every server.

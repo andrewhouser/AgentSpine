@@ -362,8 +362,10 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
 
   publish(runId, { attachments: attachmentIds.length, conversationId, kind, task, type: "run_start" });
 
-  // Agent cycles are serialized, so this run may genuinely be waiting on a scheduled job.
-  // Saying so beats a spinner that looks identical to a hang.
+  // Agent cycles take turns on the model, so this run may genuinely be waiting. Saying so beats a spinner that looks
+  // identical to a hang. A person's run goes ahead of background work, and a background run already going hands the
+  // model over at its next step (src/queue.ts, LP5), so the wait is one step of a job, not the whole job.
+  const lane = isUnattendedKind(kind) ? "background" : "person";
   const { depth } = queueStatus();
   if (depth > 0) publish(runId, { depth, type: "queue_wait" });
 
@@ -689,7 +691,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       }
       throw err;
     }
-  }));
+  }), lane);
 
   return { done, runId };
 };
