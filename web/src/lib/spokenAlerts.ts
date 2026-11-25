@@ -8,7 +8,8 @@
  *
  * Off by default and kept per browser, like the wake word: the machine in the study may talk, the one in the
  * kitchen may not. Nothing that was already true when the page loaded is announced, and lines are spaced out so a
- * burst of events is one sentence, not five.
+ * burst of events is one sentence, not five. During quiet hours (the same setting the outbox and Heads-up use) it
+ * says nothing, and what happened then is not saved for the morning: the sidebar dot still shows it.
  */
 
 /** A run shorter than this finished while you were still looking; saying so would be noise. */

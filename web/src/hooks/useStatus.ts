@@ -20,12 +20,14 @@ export interface Status {
   lastRun: FinishedRun | null;
   /** Open questions across every thread. Used as a change signal for the blue dots. */
   pendingConfirmations: number;
+  /** Quiet hours now, by the server's preference: the spoken alert stays silent (A8). */
+  quiet: boolean;
   reachable: boolean;
   running: boolean;
   schedules: number;
 }
 
-const OFFLINE: Status = { depth: 0, headsupsWaiting: 0, lastRun: null, pendingConfirmations: 0, reachable: false, running: false, schedules: 0 };
+const OFFLINE: Status = { depth: 0, headsupsWaiting: 0, lastRun: null, pendingConfirmations: 0, quiet: false, reachable: false, running: false, schedules: 0 };
 
 export const useStatus = (refreshKey: number): Status => {
   const [status, setStatus] = useState<Status>(OFFLINE);
@@ -50,6 +52,7 @@ export const useStatus = (refreshKey: number): Status => {
           headsupsWaiting: offered.filter((h) => h.state === "offered").length + (dates?.proposals.length ?? 0),
           lastRun: s.lastRun ?? null,
           pendingConfirmations: confirmations.filter((c) => c.state === "pending").length,
+          quiet: s.quiet === true,
           reachable: true,
           running: s.queue?.running ?? false,
           schedules: s.schedules ?? 0,

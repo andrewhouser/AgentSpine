@@ -60,6 +60,16 @@ console.log("\nHELD WHILE THE LAST LINE IS STILL RECENT");
   check("nothing held, nothing said", lineFor({}), null);
 }
 
+console.log("\nQUIET HOURS");
+{
+  // The hook drops everything while quiet (useSpokenAlerts reads status.quiet); here, that the hook says so.
+  const fs = await import("node:fs");
+  const hook = fs.readFileSync(new URL("../web/src/hooks/useSpokenAlerts.ts", import.meta.url), "utf8");
+  check("the hook is silent and holds nothing while quiet", /if \(!loadSpokenAlerts\(\) \|\| status\.quiet\) \{\s*held\.current = \{\};\s*return;/.test(hook), true);
+  const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+  check("the server reports quiet hours from the shared preference", /quiet: \(\(\) => \{\s*try \{\s*return isQuietNow\(new Date\(\)\);/.test(server), true);
+}
+
 console.log("\nWHAT THE SERVER REPORTS");
 {
   check("no runs yet", store.lastFinishedRun(), null);

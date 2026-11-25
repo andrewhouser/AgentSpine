@@ -37,7 +37,7 @@ export const useSpokenAlerts = (status: Status, viewingConversationId: null | nu
     const next: AlertState = { lastRun: status.lastRun, pending: status.pendingConfirmations };
     const found = alertFor(prev.current, next, { hidden: document.hidden, viewingConversationId });
     prev.current = next;
-    if (!loadSpokenAlerts()) {
+    if (!loadSpokenAlerts() || status.quiet) {
       held.current = {};
       return;
     }

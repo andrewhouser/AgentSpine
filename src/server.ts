@@ -112,7 +112,7 @@ import { readImage } from "./headsup/research/cards.ts";
 import { RESEARCH_KINDS, researchHeadsup, startResearch } from "./headsup/research/run.ts";
 import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
 import { sweepWatches } from "./headsup/watch/loop.ts";
-import { updatePrefs } from "./headsup/prefs.ts";
+import { isQuietNow, updatePrefs } from "./headsup/prefs.ts";
 import { prefsForClient } from "./headsup/prefs-view.ts";
 import { enableWatch } from "./headsup/watch/enable.ts";
 import { sweepDueCards } from "./study/sweep.ts";
@@ -521,6 +521,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         // The newest finished run someone waits on (a chat turn, the builder): id, kind, seconds and thread only, for
         // the dashboard's optional spoken alert (A8). Never its task or answer.
         lastRun: store.lastFinishedRun(),
+        // Whether it is quiet hours now (the outbox's and Heads-up's preference), so the spoken alert stays silent too.
+        quiet: (() => {
+          try {
+            return isQuietNow(new Date());
+          } catch {
+            return false;
+          }
+        })(),
         // Open tasks, for the Mac sidebar's badge. Same cap as GET /api/tasks, so a count of 300
         // means "at least 300"; nobody needs that precision on a badge.
         tasks: listTasks({ limit: 300, status: "open" }).length,

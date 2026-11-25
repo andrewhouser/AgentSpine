@@ -369,8 +369,9 @@ All You, on your own machines.
   never the task or answer). Nothing present at page load is announced, lines are at least 20 seconds apart and
   what arrives in between is said together, and nothing is held while it is off. Per browser, off by default
   (`web/src/lib/spokenAlerts.ts`, `useSpokenAlerts`). Suite: `test/spoken-alerts.test.mjs`; checked end to end in a
-  browser with the speak request intercepted. Not done: hearing it on the Mini with Kokoro, and quiet hours (it
-  speaks whenever the tab is open and the switch is on).
+  browser with the speak request intercepted. Quiet hours (2026-11-25): `GET /api/status` reports `quiet` from the
+  shared preference (`isQuietNow`), and the tab says nothing then and saves nothing for later. Not done: hearing it
+  on the Mini with Kokoro.
 - **B2 Project skills** for repeated chores (`add-tool`, `ship`, `ios-check`), each written from a real session
   after you have done the job by hand twice.
 - **B4 Stale auto-mode environment, on each Mac.** `~/.claude/settings.json` `autoMode.environment` may still

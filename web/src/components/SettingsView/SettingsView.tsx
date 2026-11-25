@@ -365,7 +365,8 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
               <span className={styles.fieldHint}>
                 While this tab is open, it says one short line when an approval starts waiting, or when a reply
                 that took over {LONG_RUN_SECONDS} seconds finishes while you are looking at something else. It never
-                reads out a thread's title or what the reply says. This browser only; off unless you turn it on.
+                reads out a thread's title or what the reply says, and it is silent during quiet hours. This browser only;
+                off unless you turn it on.
               </span>
               <div className={styles.sliderRow}>
                 <button className={styles.segment} disabled={!voiceStatus.speakReady} onClick={tryAlert} type="button">

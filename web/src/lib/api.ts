@@ -581,7 +581,7 @@ export const api = {
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
 
   status: () =>
-    request<{ cloud?: { configured: boolean; host: null | string; model: null | string }; inbox?: null | number; lastRun?: FinishedRun | null; queue: { depth: number; running: boolean }; schedules: number }>("/api/status"),
+    request<{ cloud?: { configured: boolean; host: null | string; model: null | string }; inbox?: null | number; lastRun?: FinishedRun | null; queue: { depth: number; running: boolean }; quiet?: boolean; schedules: number }>("/api/status"),
 
   stopDictation: () => post<{ text: string }>("/api/dictate/stop"),
 
