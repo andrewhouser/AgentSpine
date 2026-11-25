@@ -92,6 +92,9 @@ text tells it to send to ("every Friday, email sam@example.com the numbers"). An
 recipient asks, because a job that has read a hostile email could otherwise post what it read
 to anyone. "Text me the brief" names nobody, so name the number or the contact, or have the
 job use `notify`.
+A fourth: a scheduled job's `git_write` (push, restore), a write to a build manifest such as
+`package.json`, and deleting a study topic still ask. A job that has read a hostile page could
+otherwise push code out, change what the build runs, or erase study history.
 
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the

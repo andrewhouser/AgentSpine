@@ -363,6 +363,10 @@ export const writeFile: Tool = {
     "cannot be written at all. The previous version of a replaced file is backed up automatically, " +
     "so an ordinary file write never needs to ask first.",
   argsSchema: '{ "path": string, "content"?: string, "from_run"?: number, "mode"?: "write" | "append" }',
+  // Registry pass (2026-11-25): the only irreversible call here is a build manifest, which decides
+  // what code the build fetches and runs. A scheduled run that read a hostile page must not write
+  // one unasked, so it queues from a schedule like it does from a chat.
+  confirmWhenUnattended: true,
   classify: (a: Args): ClassifiedAction => {
     const target = resolveTarget(a);
     const exists = !!target && fs.existsSync(target);
@@ -433,6 +437,10 @@ export const editFile: Tool = {
     "\"find\" must match exactly once (pass \"all\": true to replace every occurrence), so quote enough " +
     "surrounding text to be unambiguous. Use write_file with mode \"append\" to add to the end instead.",
   argsSchema: '{ "path": string, "find": string, "replace": string, "all"?: boolean }',
+  // Registry pass (2026-11-25): the only irreversible call here is a build manifest, which decides
+  // what code the build fetches and runs. A scheduled run that read a hostile page must not write
+  // one unasked, so it queues from a schedule like it does from a chat.
+  confirmWhenUnattended: true,
   classify: (a: EditArgs): ClassifiedAction => {
     const target = resolveArg(a?.path);
     if (isManifest(target)) {
@@ -490,6 +498,10 @@ export const moveFile: Tool = {
   argsSchema: '{ "from": string, "to": string }',
   // Either end being a manifest is enough: moving a file ONTO package.json replaces it, and
   // moving package.json away is how you would get a build to fall back to a different one.
+  // Registry pass (2026-11-25): the only irreversible call here is a build manifest, which decides
+  // what code the build fetches and runs. A scheduled run that read a hostile page must not write
+  // one unasked, so it queues from a schedule like it does from a chat.
+  confirmWhenUnattended: true,
   classify: (a: MoveArgs): ClassifiedAction => {
     const from = resolveArg(a?.from);
     const to = resolveArg(a?.to);

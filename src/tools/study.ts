@@ -114,6 +114,9 @@ export const studyTopic: Tool = {
     a?.action === "delete"
       ? { reversibility: "irreversible", summary: `Delete study topic "${String(a?.topic ?? "")}" and all its cards`, target: "study" }
       : { reversibility: "reversible", summary: "Study topics", target: "study" },
+  // Registry pass (2026-11-25): delete is the only irreversible action, and it takes a topic's
+  // cards and history with it. A scheduled run asks first, like any other standing change.
+  confirmWhenUnattended: true,
   checkPolicy: allow,
   run: guard(async (a, ctx) => {
     const action = String(a?.action ?? "list");

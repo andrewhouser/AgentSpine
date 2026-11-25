@@ -166,6 +166,10 @@ export const gitWrite: Tool = {
       target: `${repo}@${currentBranch(repo) ?? "(no branch)"}`,
     };
   },
+  // Registry pass (2026-11-25): the irreversible verbs are push, restore, and a commit off the
+  // agent's own branch. A scheduled run that has read a hostile page could push code out or
+  // overwrite files unasked, and the build loop is run from chat, so no schedule needs this.
+  confirmWhenUnattended: true,
   available: (policy): PolicyDecision =>
     policy.build?.enabled
       ? { allowed: true, reason: "policy.build.enabled is set" }

@@ -115,6 +115,42 @@ console.log("\nTHE FLAG AS A FUNCTION — decided per call, by code");
   delete registry.__fake_shop;
 }
 
+
+// --- Registry pass (2026-11-25) --------------------------------------------------------------
+// Every other tool with an irreversible call was asked "what can a steered scheduled run do with
+// this". These four could do something that leaves the machine or changes what code runs, and
+// no schedule needs them unasked, so they now queue from one. The rest were left as they are on
+// purpose, and the reason for each is in PLAN-open-work section 12 D2.
+console.log("\nREGISTRY PASS — a scheduled run asks before these");
+const fs = await import("node:fs");
+const { execFileSync } = await import("node:child_process");
+const probe = fs.mkdtempSync(path.join(os.tmpdir(), "spine-regpass-"));
+fs.writeFileSync(path.join(probe, "package.json"), "{}\n");
+fs.writeFileSync(path.join(probe, "x.json"), "{}\n");
+execFileSync("git", ["init", "-q", probe]);
+const regPolicy = {
+  autoExecute: { dryRun: true, irreversibleAlwaysConfirm: true, reversible: true },
+  build: { enabled: true, repos: { [probe]: { allowPush: true, gitWrite: true } } },
+  fs: { readableDirs: [probe], writableDirs: [probe] },
+};
+const regWouldBe = async (tool, args, run) => {
+  const runId = store.startRun({ kind: run.preApproved ? "schedule" : "chat", task: "probe" });
+  const r = await executeCall({ args, tool }, regPolicy, runId, runId, run);
+  return /would have been (EXECUTED|QUEUED)/.exec(r.output)?.[1] ?? r.output.slice(0, 60);
+};
+for (const [label, tool, args] of [
+  ["write a build manifest", "write_file", { content: "{}", path: `${probe}/package.json` }],
+  ["edit a build manifest", "edit_file", { find: "a", path: `${probe}/package.json`, replace: "b" }],
+  ["move a build manifest away", "move_file", { from: `${probe}/package.json`, to: `${probe}/old-package.json` }],
+  ["delete a study topic", "study_topic", { action: "delete", topic: "anything" }],
+]) {
+  check(label, await regWouldBe(tool, args, scheduled), "QUEUED");
+}
+check("an ordinary file write in a schedule still runs", await regWouldBe("write_file", { content: "x", path: `${probe}/notes.md` }, scheduled), "EXECUTED");
+check("listing study topics in a schedule still runs", await regWouldBe("study_topic", { action: "list" }, scheduled), "EXECUTED");
+check("git push asks from a schedule", await regWouldBe("git_write", { repo: probe, verb: "push" }, scheduled), "QUEUED");
+check("git diff in a schedule still runs", await regWouldBe("git_write", { repo: probe, verb: "diff" }, scheduled), "EXECUTED");
+
 // --- F9: mail and messages from a scheduled run ---------------------------------------------
 //
 // `mac_control` sends took the same path: with Mail or Messages allowlisted, a scheduled run
@@ -176,4 +212,5 @@ check("a scheduled job still writes a note unasked", await macWouldBe({ action: 
 check("a send nobody pre-approved queues, as before", await macWouldBe(mail("sam@example.com"), { conversational: false, goal: digestJob }), "QUEUED");
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
+fs.rmSync(probe, { force: true, recursive: true });
 process.exit(failed ? 1 : 0);

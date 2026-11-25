@@ -1184,8 +1184,8 @@ Decided with it, as proposed: the Morning brief stays its own schedule, and Head
 
 ### D2. A third tier: refused, whoever approves (Code)
 
-**Built 2026-11-25: the refused tier and `neverDomains`. Still open: the registry pass (the last bullet under
-"What F8's fix leaves open") and the two decisions at the end of this section.** Shape: not a third
+**Built 2026-11-25: the refused tier, `neverDomains` and the registry pass. Still open: the two decisions at the end
+of this section.** Shape: not a third
 `Reversibility` value but an optional `Tool.refuse(args, run, policy)` that returns a reason or null. The broker
 calls it right after the allowlist, before budgets and before every way past the queue, records the result as
 a denial, and queues nothing. A refuser that throws refuses. Members so far: the browser's click or submit that
@@ -1233,9 +1233,23 @@ scheduled-run pre-approval can each skip the queue.
     profile may be signed in. `headless` on the Mini keeps unattended runs in a logged-out profile.
   - `mac_control` sends were the same gap. That was F9, fixed 2026-11-24 (section 0). Still pre-approved
     there, on purpose: notes, reminders and calendar events, which do not leave the machine.
-  - Not looked at: the other irreversible tools without `confirmWhenUnattended` (`draft`, `write_file`,
-    `git_write`, `gmail_triage` and the rest). F8 and F9 were found one tool at a time, so a pass over the
-    whole registry, asking of each "what can a steered scheduled run do with this", is worth doing once.
+  - **Registry pass (done 2026-11-25).** Every tool that can make an irreversible call, asked "what can a
+    steered scheduled run do with this". Changed, so each now queues from a schedule (suite:
+    `test/unattended-asks.test.mjs`): `git_write` (push, restore and a commit off the agent's branch could send
+    code out or overwrite files; the build loop runs from chat, so no schedule needs it), `write_file`,
+    `edit_file` and `move_file` (their only irreversible call is a build manifest, which decides what code the
+    build runs), and `study_topic` (delete takes a topic's cards and history). Left as they are, on purpose:
+    - `gmail_triage` and `gmail_unsubscribe` are what the inbox-cleanup schedule is for. Their protections are
+      code (inbox only, never mail you sent, starred or replied to, 60 changes a run), and the unsubscribe link is
+      read by code from the message header and never shown to the model, so a steered run cannot aim it.
+    - `draft` writes proposed text to the drafts folder and sends nothing. A steered run could leave a
+      misleading draft for you to find, which is a nuisance and not a leak.
+    - `schedule_*`, `date_remember`, `headsup_kind_set` and the Instagram tools already ask. `recipe_save` and
+      `profile_save` already refuse any run that is not a live chat.
+    - Reversible tools I looked at and did not change: `run_command` (only commands declared in `policy.build`
+      run), `notify`, `calendar_write` (all-day events on a named calendar), `memory_save` and `state_set`.
+      `memory_save` is the one worth a later look: a steered run could plant a memory that later runs recall.
+      The provenance work in `test/memory-provenance.test.mjs` is the guard today; I did not re-audit it.
 - Add `forbidden` beside `reversible` and `irreversible`. The broker checks it before gate 2, none of the four
   skips apply to it, and it is recorded and shown as an ordinary denial with its reason.
 - First members, listed in code: browser clicks and submits whose target reads as moving money or trading
