@@ -1316,6 +1316,14 @@ mail subjects, and draft bodies. (An ntfy account buys you a *reserved* topic, w
 stops anyone else publishing **to** you under that name — worth having eventually on the
 public server, not urgent to start.)
 
+**The Mac banner.** When no push delivers, the fallback is a banner on the Mac. By default
+(`MAC_BANNER=app`) the server only records it in the outbox and the AgentSpine Mac app shows it,
+within about 30 seconds, under its own icon. The app is the one that has to be running: it polls
+`GET /api/outbox/banners`, starts after whatever was sent before it opened, and leaves approvals
+to its own approval banner. Set `MAC_BANNER=osascript` for the old behaviour, where the server
+runs `display notification`; macOS attributes that to Script Editor (a generic script icon) and a
+click does not open AgentSpine.
+
 ### Self-hosting ntfy — worth doing eventually
 
 Start on ntfy.sh to confirm the loop works end to end. Then move to your own server, which

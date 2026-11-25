@@ -18,7 +18,9 @@
  * learning to trust the app; unset NTFY_TOPIC when you do.
  *
  * The Mac banner is a true fallback and fires only when no push transport delivered,
- * because a banner on a headless Mini is a notification nobody receives.
+ * because a banner on a headless Mini is a notification nobody receives. By default
+ * (MAC_BANNER=app) the server only records it and the Mac app shows it under its own icon;
+ * `osascript` banners belong to Script Editor, whose generic icon is what they show.
  *
  * Nothing here throws. A notification is a side channel: failing to deliver one must
  * never fail the work that triggered it. Every path returns a NotifyResult instead.
@@ -30,6 +32,7 @@ import {
   NTFY_URL,
   NTFY_TOPIC,
   NTFY_TOKEN,
+  MAC_BANNER,
   NTFY_ENABLED,
   DASHBOARD_PUBLIC_URL,
 } from "./config.ts";
@@ -94,11 +97,14 @@ export interface NotifyResult {
 /** Escape for an AppleScript double-quoted literal. */
 const esc = (s: string): string => String(s ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-/** macOS notification banner. Silently unavailable off macOS. */
+/** macOS notification banner. Silently unavailable off macOS; shown by the Mac app unless MAC_BANNER=osascript. */
 const macNotify = async (title: string, body: string): Promise<NotifyResult> => {
   if (process.platform !== "darwin") {
     return { ok: false, via: "none", detail: "no ntfy topic configured and not on macOS" };
   }
+  // The row `complete` writes (via "mac") is the hand-off: the Mac app reads it from the outbox
+  // (src/outbox.ts, `bannersAfter`). Nothing is run here, so no Script Editor icon.
+  if (MAC_BANNER === "app") return { ok: true, via: "mac", detail: "left for the Mac app to show" };
   try {
     await run(
       "osascript",

@@ -98,6 +98,23 @@ struct Action: Codable, Identifiable, Hashable {
     var status: BrokerStatus { BrokerStatus(rawValue: decision) ?? .error }
 }
 
+// MARK: - Mac banners
+
+/// A notification the server left for the Mac app to show (`GET /api/outbox/banners`).
+struct MacBanner: Codable, Identifiable, Hashable {
+    let id: Int
+    let title: String
+    let body: String
+}
+
+struct MacBannerPoll: Codable {
+    let banners: [MacBanner]
+    /// The newest outbox id, so a freshly opened app starts after it.
+    let latest: Int
+    /// "app" when the Mac app is the one to show them; "osascript" when the server already did.
+    let mode: String
+}
+
 // MARK: - Approvals
 
 struct Confirmation: Codable, Identifiable, Hashable {

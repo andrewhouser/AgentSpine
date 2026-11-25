@@ -13,6 +13,9 @@ final class MacApprovalWatcher {
     /// launch only seeds this: whatever was already waiting when the app opened is not news.
     private var seen: Set<Int> = []
     private var seeded = false
+    /// The newest outbox id this app has dealt with. Nil until the first poll, which only seeds it:
+    /// what was sent before the app opened is not news.
+    private var lastBanner: Int?
 
     func refresh() async {
         guard Settings.shared.isConfigured else {
@@ -30,6 +33,17 @@ final class MacApprovalWatcher {
             seeded = true
             await MacNotifier.shared.retire(keeping: Set(waiting.map(\.id)))
         }
+        await showServerBanners()
+    }
+
+    /// Banners the server left for the Mac app. With MAC_BANNER=osascript the server shows them
+    /// itself and `mode` says so, so this only keeps its place.
+    private func showServerBanners() async {
+        guard let poll = try? await APIClient.shared.macBanners(after: lastBanner) else { return }
+        if poll.mode == "app" {
+            for banner in poll.banners { await MacNotifier.shared.banner(banner) }
+        }
+        lastBanner = max(lastBanner ?? 0, poll.banners.last?.id ?? 0, lastBanner == nil ? poll.latest : 0)
     }
 
     /// Re-ask every 30 seconds while the app runs, so the count in the menu bar is not stale.

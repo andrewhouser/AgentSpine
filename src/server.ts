@@ -83,7 +83,7 @@ import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
-import { markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
+import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
 import { answerLesson, openLessons } from "./learn/lessons.ts";
@@ -95,7 +95,7 @@ import { previewCheckin, runCheckin, sweepCheckin } from "./checkin/run.ts";
 import * as checkinStore from "./checkin/store.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
-import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
+import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, MAC_BANNER, NTFY_ENABLED } from "./config.ts";
 import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL } from "./config.ts";
 import { INBOX_MAX_BYTES, INBOX_WATCH_DIR } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
@@ -876,6 +876,23 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const removed = store.deleteDevice(Number(seg[2]));
         return sendJson(res, removed ? 200 : 404, { id: Number(seg[2]), removed });
       }
+    }
+
+    /**
+     * GET /api/outbox/banners?after=N: what the server left for the Mac app to show (MAC_BANNER=app).
+     * Without `after` it returns no banners, just `latest`, so an app that has just opened starts
+     * from now. `mode` says whether the app should show anything: with MAC_BANNER=osascript the
+     * server already showed them, and the app must not repeat them.
+     */
+    if (m === "GET" && seg[1] === "outbox" && seg[2] === "banners" && seg.length === 3) {
+      const raw = url.searchParams.get("after");
+      const after = raw === null ? null : Number(raw);
+      if (after !== null && (!Number.isInteger(after) || after < 0)) return sendJson(res, 400, { error: "after must be a non-negative integer" });
+      return sendJson(res, 200, {
+        banners: after === null || MAC_BANNER !== "app" ? [] : bannersAfter(after),
+        latest: latestOutboxId(),
+        mode: MAC_BANNER,
+      });
     }
 
     /**

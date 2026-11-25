@@ -188,6 +188,46 @@ export const complete = (id: null | number, result: { ok: boolean; via: string }
   }
 };
 
+export interface MacBanner {
+  body: string;
+  id: number;
+  title: string;
+}
+
+/**
+ * The newest outbox id, so a Mac app that has just started can begin after it: what was already
+ * sent before it opened is not news. 0 for an empty table or any failure.
+ */
+export const latestOutboxId = (): number => {
+  try {
+    const r = rawDb.prepare("SELECT MAX(id) AS id FROM outbox").get() as { id: null | number } | undefined;
+    return r?.id ?? 0;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * Banners the server left for the Mac app (`via = 'mac'`, see notify.ts), oldest first, after
+ * `afterId`. Approvals are left out: the app polls the confirmation queue itself and posts a richer
+ * banner with a click-through to the thread, so showing both would double every approval.
+ * Never throws.
+ */
+export const bannersAfter = (afterId: number, limit = 20): MacBanner[] => {
+  try {
+    return rawDb
+      .prepare(
+        `SELECT id, title, body FROM outbox
+         WHERE id > ? AND via = 'mac' AND delivered = 1 AND source != 'confirmation'
+         ORDER BY id LIMIT ?`,
+      )
+      .all(afterId, limit)
+      .map((r) => ({ body: String(r.body), id: Number(r.id), title: String(r.title) }));
+  } catch {
+    return [];
+  }
+};
+
 export type OutboxReport = "dismissed" | "opened";
 
 /**

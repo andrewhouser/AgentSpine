@@ -396,6 +396,13 @@ final class APIClient {
 
     // MARK: - Approvals
 
+    /// What the server left for the Mac app to show. Without `after` it only reports `latest`.
+    func macBanners(after: Int? = nil) async throws -> MacBannerPoll {
+        var query: [String: String] = [:]
+        if let after { query["after"] = String(after) }
+        return try await send(request("/api/outbox/banners", query: query), as: MacBannerPoll.self)
+    }
+
     func confirmations(state: String? = nil) async throws -> [Confirmation] {
         var query: [String: String] = [:]
         if let state { query["state"] = state }

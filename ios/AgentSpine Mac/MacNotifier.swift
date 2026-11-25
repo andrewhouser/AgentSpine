@@ -42,6 +42,19 @@ final class MacNotifier: NSObject {
         try? await center.add(request)
     }
 
+    /// A notification the server left for this app (a brief, a check-in, a finished run). Shown
+    /// under this app's icon, which is the point: `osascript` banners get Script Editor's. Silent
+    /// when the app is in front, like an approval. A click just opens the app.
+    func banner(_ banner: MacBanner) async {
+        guard !NSApplication.shared.isActive, await isAllowed() else { return }
+        let content = UNMutableNotificationContent()
+        content.title = banner.title
+        content.body = banner.body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "banner-" + String(banner.id), content: content, trigger: nil)
+        try? await center.add(request)
+    }
+
     /// Take down banners for approvals that were answered somewhere else (the phone, the web).
     func retire(keeping pending: Set<Int>) async {
         let delivered = await center.deliveredNotifications()

@@ -516,6 +516,12 @@ export const NTFY_TOPIC = env.NTFY_TOPIC ?? "";
 export const NTFY_TOKEN = env.NTFY_TOKEN ?? "";
 export const NTFY_ENABLED = NTFY_TOPIC.length > 0;
 
+// Who shows the Mac banner when no push delivered. "app" (the default) leaves it to the AgentSpine
+// Mac app, which polls the outbox and posts a local notification under its own icon. "osascript"
+// is the old path: the server runs `display notification`, which macOS attributes to Script Editor
+// (a generic script icon, and a banner that cannot be clicked through to the app).
+export const MAC_BANNER: "app" | "osascript" = env.MAC_BANNER === "osascript" ? "osascript" : "app";
+
 // --- Push notifications (APNs — the iOS app in ios/) ---
 /**
  * Apple Push Notification service, for the AgentSpine app on your own phone.
