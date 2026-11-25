@@ -1184,6 +1184,19 @@ Decided with it, as proposed: the Morning brief stays its own schedule, and Head
 
 ### D2. A third tier: refused, whoever approves (Code)
 
+**Built 2026-11-25: the refused tier and `neverDomains`. Still open: the registry pass (the last bullet under
+"What F8's fix leaves open") and the two decisions at the end of this section.** Shape: not a third
+`Reversibility` value but an optional `Tool.refuse(args, run, policy)` that returns a reason or null. The broker
+calls it right after the allowlist, before budgets and before every way past the queue, records the result as
+a denial, and queues nothing. A refuser that throws refuses. Members so far: the browser's click or submit that
+reads as transfer, withdraw, wire, or buying or selling shares, stocks, bonds, options or crypto, and any
+navigation to a host in `policy.browser.neverDomains` (also checked by `web_read`, and at run time for a page that
+got to one by a redirect or link). A project overlay can add to `neverDomains` and cannot remove the base's.
+Money words that are not trades (buy, order, pay, checkout, subscribe) still queue, as H6 says. Suites:
+`test/refused-tier.test.mjs` (one row per skip path, and that nothing is queued) and the changed rows in
+`test/unattended-asks.test.mjs`. Not done: a screen that lists refusals apart from other denials, and the
+bank and broker hosts, which are yours to put in `policy.json`.
+
 Duet will not trade securities or move money between accounts even with your approval. Here every irreversible
 action can be approved, and `policy.autoApprove`, `policy.userDirected`, `policy.trust.chatAutoTools` and the
 scheduled-run pre-approval can each skip the queue.

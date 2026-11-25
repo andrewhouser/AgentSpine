@@ -83,7 +83,8 @@ One exception: a job can't change the standing work itself. `schedule_create`, `
 reads a hostile page can't schedule itself more jobs or write itself new instructions.
 A second exception, for the same reason: a browser click or form submit that reads as buying,
 paying or moving money (buy, order, checkout, pay, transfer, withdraw, subscribe) still asks
-from a scheduled run. A plain submit does not, so a job can still use a search box. The test
+from a scheduled run (transfers, withdrawals, wires and trades are refused in every run, see
+the browser section). A plain submit does not ask, so a job can still use a search box. The test
 reads the model's own description of the button, so one labelled "Continue" gets past it;
 `BROWSER_MODE=headless` keeps scheduled jobs out of a signed-in Chrome altogether.
 A third: a scheduled job sends mail or a message without asking only to someone its own task
@@ -1478,6 +1479,14 @@ Enable it in `policy.json` (`"browser": { "enabled": true }`) and optionally res
 domains with `navigateAllowlist` (`[]` = any). Navigation, reads, and typing auto-run;
 clicks that look like buy/submit/send/delete/pay — and all form submits — are queued for
 `npm run confirm`.
+
+Two things are refused outright, whoever approves. Nothing is queued, so there is nothing to
+approve, and no standing grant, chat trust setting or scheduled job's pre-approval changes it.
+A click or submit that reads as moving money or trading (transfer, withdraw, wire, buying or
+selling shares) is refused. And so is any page on a host in `browser.neverDomains`, which
+matches the host and its subdomains: put your bank and broker there. The first is a test over
+the model's own description of the button, so one labelled "Continue" gets past it, and the
+host list is the answer to that. Buying goods still queues for your approval as before.
 
 ### Web search vs. page reading — use the right tool
 

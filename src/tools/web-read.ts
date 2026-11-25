@@ -46,6 +46,9 @@ const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
     const ok = allow.some((d) => host === d || host.endsWith(`.${d}`));
     if (!ok) return { allowed: false, reason: `${host} is not on browser.navigateAllowlist` };
   }
+  const host = hostOf(args?.url ?? "");
+  if (host && (policy.browser.neverDomains ?? []).some((d) => host === d.toLowerCase() || host.endsWith(`.${d.toLowerCase()}`)))
+    return { allowed: false, reason: `${host} is on browser.neverDomains` };
   return { allowed: true, reason: "page read permitted" };
 };
 

@@ -56,9 +56,10 @@
     ]
   },
   "browser": {
-    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless.",
+    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless. neverDomains lists hosts the browser never touches, whoever approves: put your bank and broker here, since a button labelled Continue passes any word list and a host does not. It matches the host and its subdomains.",
     "enabled": false,
-    "navigateAllowlist": []
+    "navigateAllowlist": [],
+    "neverDomains": []
   },
   "google": {
     "//": "Reads (gmail_search, calendar_upcoming, calendar_find) use a read-only token, npm run auth, whose scopes are read-only by construction and are never widened. Writes use a SEPARATE token, npm run auth -- write (gmail.modify + calendar.events), used only by the inbox cleanup: archive, label, trash, mark spam, and all-day events on the calendars named below. Decision of 2026-11-21, SPEC section 5. There is no send, no permanent delete and no calendar delete anywhere. Without that second token, enabled:true here does nothing.",

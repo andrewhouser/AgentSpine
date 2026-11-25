@@ -27,7 +27,7 @@ import type { Policy } from "../types.ts";
 export type PolicyOverlay = {
   apps?: { allow?: string[] };
   autoExecute?: { dryRun?: boolean; irreversibleAlwaysConfirm?: boolean; reversible?: boolean };
-  browser?: { enabled?: boolean; navigateAllowlist?: string[] };
+  browser?: { enabled?: boolean; navigateAllowlist?: string[]; neverDomains?: string[] };
   budgets?: {
     perDay?: { default?: number; tools?: Record<string, number> };
     perRun?: { default?: number; tools?: Record<string, number> };
@@ -129,6 +129,10 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
         ...(nav.denyAll || base.browser?.denyAll ? { denyAll: true } : {}),
         enabled: and(base.browser?.enabled, overlay.browser?.enabled),
         navigateAllowlist: nav.list,
+        // A union: a project may add hosts it never touches, and cannot drop the base's.
+        ...(base.browser?.neverDomains?.length || overlay.browser?.neverDomains?.length
+          ? { neverDomains: [...new Set([...(base.browser?.neverDomains ?? []), ...(overlay.browser?.neverDomains ?? [])])] }
+          : {}),
       };
     })(),
     budgets: {

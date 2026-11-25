@@ -12,6 +12,9 @@
  *      when policy.autoExecute.irreversibleAlwaysConfirm is set — even if the
  *      target is allowlisted. That is the "tiered by reversibility" default.
  *
+ * A third tier sits beside those two: `Tool.refuse` names calls that never happen, whoever
+ * approves (PLAN-open-work section 12 D2). It is checked right after the allowlist.
+ *
  * Two further rails sit between those gates, both opt-in via policy.json:
  *
  *   - Budgets (checked after the allowlist, before anything happens). Per-run and per-day
@@ -137,6 +140,19 @@ export const executeCall = async (
   // recorded and rendered as an ordinary denial.
   const decision = tool.checkPolicy(policy, call.args, run);
   if (!decision.allowed) return record(classified, "denied", `DENIED: ${decision.reason}`);
+
+  // The refused tier (D2). Before budgets and before every way past the queue below, so no
+  // approval, standing grant, trust setting or scheduled pre-approval can reach it, and it is
+  // never queued: there is nothing to approve. A refuser that throws refuses the call.
+  if (tool.refuse) {
+    let reason: null | string;
+    try {
+      reason = tool.refuse(call.args, run, policy);
+    } catch {
+      reason = "the check on this call failed, so it is refused";
+    }
+    if (reason) return record(classified, "denied", `DENIED (refused, whoever approves): ${reason}`);
+  }
 
   // Budget rail. After the allowlist (a denied call shouldn't consume allowance) and
   // before anything happens, so an exhausted budget neither runs nor queues.

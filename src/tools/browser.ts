@@ -132,6 +132,33 @@ const whereOf = (args: Args): string => `${args?.selector ?? ""} ${args?.descrip
 const asksWhenUnattended = (args: Args): boolean =>
   (args?.action === "click" || args?.action === "submit") && MONEY.test(whereOf(args));
 
+// D2: the refused tier. Moving money and trading are never done through the browser, whoever
+// approves, so these are not in MONEY_WORDS (which only ask). Buying goods stays a queued ask.
+// It is a regex over the model's own description of the button, so a bank that labels the
+// button "Continue" gets through it: `policy.browser.neverDomains` is the answer to that, since
+// a host does not depend on a label. "wire" and "transfer" will also stop a harmless "transfer
+// files" button. That is the price of a list that reads words.
+const FORBIDDEN_WORDS = [
+  "transfer",
+  "withdraw",
+  "wire",
+  "(?:buy|sell)\\s+(?:\\d+\\s+)?(?:shares?|stocks?|securities|etfs?|bonds?|options|crypto(?:currency)?)",
+  "(?:place|submit)\\s+(?:a\\s+)?(?:trade|stock\\s+order)",
+];
+const FORBIDDEN = anyWord(FORBIDDEN_WORDS);
+
+const isNever = (policy: Policy | undefined, host: string): boolean =>
+  !!host && (policy?.browser?.neverDomains ?? []).some((d) => host === d.toLowerCase() || host.endsWith(`.${d.toLowerCase()}`));
+
+/** The refused tier for a click or submit: money moving or a trade, and any step on a never-domain URL. */
+const refuse = (args: Args, _run?: unknown, policy?: Policy): null | string => {
+  if ((args?.action === "click" || args?.action === "submit") && FORBIDDEN.test(whereOf(args)))
+    return "the browser does not move money or trade securities, even with your approval. Do it yourself in the bank's own site.";
+  if (args?.action === "navigate" && isNever(policy, hostOf(args.url ?? "")))
+    return `${hostOf(args.url ?? "")} is on browser.neverDomains.`;
+  return null;
+};
+
 const hostOf = (url: string): string => {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -185,10 +212,20 @@ const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
 
 const run = async (args: Args, ctx: ToolContext): Promise<string> => {
   const p = await getPage();
+  // A page can end up on a never-domain by a redirect or a link, which `refuse` could not see
+  // from the arguments. Nothing is done on one, and a navigation that lands on one is backed out.
+  if (args.action !== "navigate" && isNever(ctx?.policy, hostOf(p.url())))
+    return `ERROR: this page is on ${hostOf(p.url())}, which is on browser.neverDomains. Nothing was done on it.`;
   switch (args.action) {
-    case "navigate":
+    case "navigate": {
       await p.goto(String(args.url), { waitUntil: "domcontentloaded", timeout: 30_000 });
+      if (isNever(ctx?.policy, hostOf(p.url()))) {
+        const landed = hostOf(p.url());
+        await p.goto("about:blank");
+        return `ERROR: that address went to ${landed}, which is on browser.neverDomains. Backed out.`;
+      }
       return `navigated to ${p.url()}`;
+    }
     case "read": {
       const text = await p.evaluate(() => document.body?.innerText ?? "");
       return clip({ max: 4000, runId: ctx?.runId ?? null, source: `page ${p.url()}`, tool: "browser" }, text);
@@ -219,5 +256,6 @@ export const browserControl: Tool = {
   available,
   checkPolicy,
   confirmWhenUnattended: asksWhenUnattended,
+  refuse,
   run: (args: Args, ctx) => run(args, ctx),
 };

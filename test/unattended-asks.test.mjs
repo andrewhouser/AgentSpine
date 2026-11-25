@@ -50,17 +50,18 @@ const click = (description, selector = "#go") => ({ action: "click", description
 
 console.log("\nA SCHEDULED RUN — money and purchases ask");
 for (const [label, args] of [
-  ["transfer", click("Transfer $500 to external account")],
   ["place order", click("Place order")],
   ["buy now", click("Buy now")],
   ["checkout, named only by the selector", click(undefined, "button.checkout")],
   ["pay", click("Pay $42.00")],
-  ["withdraw", click("Withdraw funds")],
   ["subscribe", click("Subscribe for $9 a month")],
   ["submitting a payment form", { action: "submit", selector: "form#pay" }],
 ]) {
   check(label, await wouldBe(args, scheduled), "QUEUED");
 }
+
+// Transfer, withdraw, wire and trades are no longer in these lists: they are refused outright,
+// whoever approves (test/refused-tier.test.mjs), which is stricter than asking.
 
 console.log("\nA SCHEDULED RUN — its ordinary work still does not ask");
 for (const [label, args] of [
@@ -76,7 +77,6 @@ for (const [label, args] of [
 
 console.log("\nA CHAT TURN — unchanged, every risky click and submit asks");
 for (const [label, args] of [
-  ["transfer", click("Transfer $500 to external account")],
   ["a click that sends", click("Send message")],
   ["submitting a search form", { action: "submit", selector: "form#search" }],
 ]) {

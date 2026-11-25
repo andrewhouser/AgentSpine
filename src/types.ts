@@ -86,6 +86,14 @@ export interface Policy {
     denyAll?: boolean;
     enabled: boolean;
     navigateAllowlist: string[];
+    /**
+     * Hosts the browser never touches, whoever approves (PLAN-open-work section 12 D2). Your bank
+     * and broker go here: a button labelled "Continue" passes any word list, a host does not.
+     * Matches the host and its subdomains. Navigation to one is denied, and so is a read, type,
+     * click or submit on a page that has ended up on one (a redirect, a link). Absent or empty
+     * means none, and a project overlay can only add to it.
+     */
+    neverDomains?: string[];
   };
   google: { enabled: boolean; write?: GoogleWritePolicy };
   fs: { readableDirs: string[]; writableDirs?: string[] };
@@ -345,6 +353,15 @@ export interface Tool {
    * the planner only; the broker still decides every call.
    */
   available?(policy: Policy): PolicyDecision;
+  /**
+   * The third tier, "refused, whoever approves" (D2). Returns the reason when this call must
+   * not happen at all, or null. Checked in the broker right after the allowlist and before every
+   * way of skipping the queue: `policy.autoApprove`, `userDirected`, `trust.chatAutoTools` and a
+   * scheduled run's pre-approval cannot reach it, and nothing is queued, so there is nothing
+   * to approve. Recorded and shown as an ordinary denial. Plain code over the arguments; a
+   * function that throws refuses the call, because a bug there must not open a way through.
+   */
+  refuse?(args: any, run?: RunContext, policy?: Policy): null | string;
   /**
    * Whether the user's own message, in a live chat turn, asked for exactly this call — and
    * if so, which named action it is and why. Optional; a tool without it never skips
