@@ -133,10 +133,14 @@ check("the ledger gates reads", isDeliverable(path.join(allowed, "ledger.md")) &
 check("each path appears once, newest first", new Set(listed.map((d) => d.path)).size, listed.length);
 
 console.log("\nread_file understands rich formats\n");
-const html = path.join(allowed, "rich.html");
-fs.writeFileSync(html, "<html><body><h1>Quarterly Plan</h1><p>Ship the thing.</p></body></html>");
-const got = await readFile.run({ path: html }, {});
-check("html is read as plain text, not markup", /Quarterly Plan/.test(got) && !/<h1>/.test(got), true);
+// HTML goes through textutil, which only macOS has (src/projects/extract.ts), so off a Mac this is skipped like the PDF
+// row below rather than failing: the app runs on a Mac, and elsewhere read_file says plainly that it could not convert.
+if (process.platform === "darwin") {
+  const html = path.join(allowed, "rich.html");
+  fs.writeFileSync(html, "<html><body><h1>Quarterly Plan</h1><p>Ship the thing.</p></body></html>");
+  const got = await readFile.run({ path: html }, {});
+  check("html is read as plain text, not markup", /Quarterly Plan/.test(got) && !/<h1>/.test(got), true);
+} else console.log("  SKIP  html needs textutil, which is macOS-only");
 const pdf = "/System/Library/ProductDocuments/ProductGuides/ENERGY STAR.pdf";
 if (fs.existsSync(pdf)) {
   const copy = path.join(allowed, "guide.pdf");

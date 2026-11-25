@@ -15,6 +15,11 @@ process.env.GOOGLE_CLIENT_ID = "id";
 process.env.GOOGLE_CLIENT_SECRET = "secret";
 process.env.GOOGLE_WRITE_TOKEN_PATH = path.join(root, "write.json");
 fs.writeFileSync(process.env.GOOGLE_WRITE_TOKEN_PATH, JSON.stringify({ refresh_token: "r" }));
+// The read token too. Without this the gmail_search section read the real one from ~/.config/agentspine, so it passed
+// only on a machine where `npm run auth` had been run, and it loaded that machine's real refresh token (the fetch
+// stub answered it, so it never left the process). Found 2026-11-25 on a machine with no token.
+process.env.GOOGLE_TOKEN_PATH = path.join(root, "read.json");
+fs.writeFileSync(process.env.GOOGLE_TOKEN_PATH, JSON.stringify({ refresh_token: "r-read" }));
 process.env.EMBEDDINGS_URL = "";
 
 const config = await import("../src/config.ts");
