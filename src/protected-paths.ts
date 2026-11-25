@@ -44,7 +44,8 @@ const realish = (target: string): string => {
   }
 };
 
-const isCheckout = (dir: string): boolean => {
+/** Whether this folder is an AgentSpine checkout: its package.json is named "agentspine". */
+export const isCheckout = (dir: string): boolean => {
   try {
     return JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"))?.name === "agentspine";
   } catch {

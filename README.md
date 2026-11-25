@@ -1722,6 +1722,23 @@ untouched where it matters: `resolveTier` pins `sensitivity: "private"` away fro
 code**, so mail, calendar and `profile.md` stay local regardless, and a project overlay can
 only narrow — a project holding client code can pin itself local and accept a smaller builder.
 
+### Changes to AgentSpine itself start as a card
+
+When AgentSpine finds something in its own code worth fixing, it does not edit the files. It calls
+`propose_change`, and a card arrives in the confirmation queue: what would change, why, the files it
+expects to touch, how the change will be shown to work, and the runs that prompted it. Accepting a
+"Code change" card in the weekly review queues one of these too. The card always waits for you,
+whatever chat trust or auto-approval you have set.
+
+Approving it starts the builder as a run of its own, in an AgentSpine checkout declared in
+`policy.build.repos` with `gitWrite`. A separate clone is used over the one the service runs from,
+and the card warns you when the served checkout is the only choice, because a restart before you
+merge would load the branch. The builder branches to `agentspine/<slug>` before it edits, runs the
+declared checks, and commits on the branch. It cannot push without asking, and an edit to one of the
+files that enforce the safety gates (the broker, confirmations, the local-only pin and a few more,
+listed in `src/protected-paths.ts`) shows you its own card with the change. Merging, pushing,
+`update.sh` and the restart stay yours.
+
 ### Reviewing it — the Builds page
 
 `Builds` in the sidebar, and a Builds tab on the phone. One row per run that ran a command

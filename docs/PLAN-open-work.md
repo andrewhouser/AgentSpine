@@ -991,9 +991,18 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
   nothing builds Swift. Add `check` to this repo's entry in `policy.json` (yours to edit). Until an
   `xcodebuild` command is declared, a self-made UI change covers web only, which breaks the three-clients
   rule, so UI changes stay out of scope for self-change.
-- **SC5 Propose, then patch.** A change starts as a proposal card in the confirmation queue: what, why, the
-  files, the test plan, and the runs that prompted it. Approving starts the builder on an `agentspine/` branch.
-  Merge, push, `update.sh` and the restart stay yours, so the service never restarts onto code you have not read.
+- **SC5 Propose, then patch (built 2026-11-25; not yet run on the model host).** `propose_change`
+  (`src/tools/propose-change.ts`) queues a card: what, why, the files (repo-relative, at most 20), the test plan
+  (default: `npm run check` passes with a test that fails without the change), and the runs that prompted it. It
+  always shows the card (`alwaysConfirm`). Approving starts the builder unit as its own run of kind `build`, through
+  a new `unit` option on the runner (the unit's instructions lead the trusted context, its tools are the ceiling,
+  its `maxSteps` and tier apply). The repo is an AgentSpine checkout declared in `policy.build.repos` with
+  `gitWrite`, a separate clone before the served one; the card warns when the served checkout is the only choice
+  (SC7). The builder's task says to branch first, follow the test plan, commit and not push; pushes still queue,
+  and gate files still show their own card (SC6). Accepting a `code_change` card in the weekly review (SL2) queues
+  a proposal from that card's title, reason and runs. Suite: `test/propose-change.test.mjs`. Not done: a run of it
+  end to end on the Mini (it needs this repo declared with `gitWrite` and, per SC4, a `check` command), and SC7's
+  separate clone, which is yours to make and declare.
 - **SC6 Guard the gates in code, not only in policy (built 2026-11-25).** A builder that cannot write `policy.json`
   could still edit the code that reads it. `src/protected-paths.ts` lists eleven files (the five named here, the
   Google and Instagram write modules, and `src/outgoing.ts`, `src/tools/browser.ts` and the list itself). An edit,

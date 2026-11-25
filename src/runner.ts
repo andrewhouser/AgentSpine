@@ -51,6 +51,7 @@ import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
 import { watchPin } from "./sensitivity.ts";
 import { workspaceInstructions } from "./projects/workspace.ts";
+import { getAgent } from "./agents.ts";
 import { buildHarnessContext, isConversationalKind, isUnattendedKind } from "./harness.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
 import { route } from "./router.ts";
@@ -124,6 +125,12 @@ export interface RunOpts {
    * per-conversation override in the UI; left unset, `sizeTask` decides.
    */
   tier?: Tier;
+  /**
+   * Run as this unit from agents/ (SC5): its instructions join the trusted context, its tools are the ceiling, and its
+   * maxSteps and tier apply, as when a run delegates to it. How an approved change proposal starts the builder as a
+   * run of its own, which the Builds page then shows. An unknown name fails the run rather than running without it.
+   */
+  unit?: string;
 }
 
 /**
@@ -419,7 +426,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     // Size the task before doing it. Deliberately inside the queue rather than at submit
     // time: the classifier is itself a model call, and firing it while another cycle holds
     // the model would put two requests on a server that serves one at a time.
-    const sizing = await sizeTask(task, opts.tier);
+    const unit = opts.unit ? getAgent(opts.unit) : undefined;
+    if (opts.unit && !unit) throw new Error(`no unit called "${opts.unit}" in the agents folder`);
+    const sizing = await sizeTask(task, opts.tier ?? unit?.tier);
     store.setRunTier(runId, sizing.tier);
     publish(runId, { reason: sizing.reason, tier: sizing.tier, type: "tier", via: sizing.via });
 
@@ -428,6 +437,8 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     const instructionSources: string[] = [];
     const recalled: RecallSeen = { private: false };
     const context = opts.noMemory ? [] : await buildContext(task, used, recalled);
+    // A unit's standing instructions lead the trusted context, as they do for a subagent (src/tools/subagent.ts).
+    if (unit?.instructions) context.unshift(unit.instructions);
     // Project instructions join the TRUSTED system context (they are yours, like
     // profile.md); project documents do not — see the knowledge block below.
     if (project) {
@@ -571,6 +582,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         projectId: project?.id ?? null,
         startPrivate,
         tier: sizing.tier,
+        ...(unit ? { maxSteps: unit.maxSteps, tools: unit.tools } : {}),
       });
       store.saveTrace(runId, trace);
       /**
