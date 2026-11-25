@@ -18,6 +18,7 @@ export interface Route {
 const VIEW_PATHS: Record<Exclude<View, "chat" | "project">, string> = {
   activity: "/activity",
   builds: "/builds",
+  checkin: "/checkin",
   clients: "/clients",
   files: "/files",
   headsup: "/headsup",

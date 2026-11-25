@@ -90,9 +90,13 @@ import { answerLesson, openLessons } from "./learn/lessons.ts";
 import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
 import { answerAfterCheck, openAfterChecks, queueRestore, scheduleHistory } from "./learn/versions.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
+import { INTERVAL_HOURS as CHECKIN_INTERVAL_HOURS } from "./checkin/rules.ts";
+import { previewCheckin, runCheckin, sweepCheckin } from "./checkin/run.ts";
+import * as checkinStore from "./checkin/store.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, NTFY_ENABLED } from "./config.ts";
+import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL } from "./config.ts";
 import { INBOX_MAX_BYTES, INBOX_WATCH_DIR } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
@@ -1973,6 +1977,23 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
     }
 
+    // /api/checkin — the check-in (src/checkin, PLAN-open-work section 12 D1). `preview` reads and
+    // writes nothing, and works with the mode off. `run` is "Check now": it records and, in push
+    // mode, sends, so it is a POST and is not the dry run.
+    if (seg[1] === "checkin") {
+      if (m === "GET" && seg.length === 2)
+        return sendJson(res, 200, {
+          intervalHours: CHECKIN_INTERVAL_HOURS,
+          lastError: checkinStore.lastError(),
+          lastRun: checkinStore.lastRun(),
+          mode: CHECKIN_MODE,
+          pushDetail: CHECKIN_PUSH_DETAIL,
+          runs: checkinStore.listRuns(Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))),
+        });
+      if (m === "GET" && seg.length === 3 && seg[2] === "preview") return sendJson(res, 200, await previewCheckin());
+      if (m === "POST" && seg.length === 3 && seg[2] === "run") return sendJson(res, 200, await runCheckin(new Date(), { force: true }));
+    }
+
     // /api/headsups — proactive suggestions (src/headsup, docs/archive/PLAN-heads-up.md).
     if (seg[1] === "headsups") {
       if (m === "GET" && seg.length === 2)
@@ -2378,6 +2399,10 @@ setInterval(() => void sweepReview(), 5 * 60_000).unref();
 // The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
 void sweepHeadsup();
 setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
+// The check-in: code-only too, and a no-op unless CHECKIN_MODE is "log" or "push". The tick is
+// short so a check lands soon after quiet hours end; the four-hour interval is its own gate.
+void sweepCheckin();
+setInterval(() => void sweepCheckin(), 10 * 60_000).unref();
 // Watched flights and drives. The tick is short; each watch has its own 30-minute floor, and outside
 // its window a watch makes no call at all, so a quiet day costs nothing.
 void sweepWatches();

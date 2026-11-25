@@ -14,6 +14,7 @@ export type View =
   | "activity"
   | "builds"
   | "chat"
+  | "checkin"
   | "clients"
   | "files"
   | "headsup"

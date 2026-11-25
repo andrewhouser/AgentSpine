@@ -5,7 +5,7 @@ import Foundation
 /// Raw values are what gets saved in `UserDefaults`, so they are stable identifiers: renaming a
 /// case here would silently reset everyone's tab order.
 enum AppTab: String, CaseIterable, Codable, Hashable {
-    case threads, headsup, tasks, study, schedules, projects, files, inbox, knowledge, clients, search, meetings, builds, activity, settings
+    case threads, headsup, tasks, study, checkin, schedules, projects, files, inbox, knowledge, clients, search, meetings, builds, activity, settings
 
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
         case .headsup: return "Heads-up"
         case .tasks: return "Tasks"
         case .study: return "Study"
+        case .checkin: return "Check-in"
         case .schedules: return "Schedules"
         case .projects: return "Projects"
         case .files: return "Files"
@@ -33,6 +34,7 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
         case .headsup: return "sparkles"
         case .tasks: return "checklist"
         case .study: return "brain.head.profile"
+        case .checkin: return "envelope.badge"
         case .schedules: return "clock"
         case .projects: return "folder"
         case .files: return "doc.text"

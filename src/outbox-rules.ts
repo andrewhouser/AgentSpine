@@ -9,6 +9,7 @@
 /** Who sent it. `unknown` is a call site that has not been tagged yet; it shows up in the numbers. */
 export type OutboxSource =
   | "chat" // the notify tool, in a live conversation the user asked to be pushed from
+  | "checkin" // the check-in: new mail from a person, with what else is waiting (src/checkin)
   | "confirmation" // an approval request or its reminders: the agent is blocked on you
   | "digest"
   | "headsup"
@@ -32,8 +33,10 @@ export const GOVERNED_SOURCES: ReadonlySet<OutboxSource> = new Set(["study", "to
 /**
  * Sources that count toward the daily cap. Heads-up is counted but never held by the outbox:
  * it already honours quiet hours and has its own cap, and "six a day" should mean six a day.
+ * The check-in is the same: it keeps quiet hours itself and stops at this cap itself, because
+ * a message it holds back must stay new for its next check, which the outbox cannot arrange.
  */
-export const COUNTED_SOURCES: ReadonlySet<OutboxSource> = new Set([...GOVERNED_SOURCES, "headsup"]);
+export const COUNTED_SOURCES: ReadonlySet<OutboxSource> = new Set([...GOVERNED_SOURCES, "checkin", "headsup"]);
 
 /** Priority 5 is the sender saying "this overrides everything". Never held. */
 export const URGENT_PRIORITY = 5;
@@ -65,7 +68,7 @@ export const RELEASE_LIST_MAX = 5;
  * you), reminders (you set them), the held-message summary, a chat push you requested and the review's own
  * push are not up for a vote, so none of them is here.
  */
-export const REVIEWED_SOURCES: ReadonlySet<OutboxSource> = new Set(["digest", "headsup", "run", "study", "tool"]);
+export const REVIEWED_SOURCES: ReadonlySet<OutboxSource> = new Set(["checkin", "digest", "headsup", "run", "study", "tool"]);
 
 /** How far back the review looks. */
 export const REVIEW_DAYS = 7;

@@ -13,6 +13,7 @@ import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
 import { BuildsView } from "../BuildsView/BuildsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
+import { CheckinView } from "../CheckinView/CheckinView.tsx";
 import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
 import { HeadsupView } from "../HeadsupView/HeadsupView.tsx";
@@ -34,6 +35,7 @@ const NO_PROJECTS: Project[] = [];
 
 const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
+  checkin: "Check-in",
   clients: "Clients",
   files: "Files",
   headsup: "Heads-up",
@@ -241,6 +243,7 @@ export const AppShell = () => {
         {route.view === "meetings" && <MeetingsView projects={projects} />}
         {route.view === "settings" && <SettingsView onOpenRun={(id) => go({ runId: id, view: "activity" })} />}
         {route.view === "headsup" && <HeadsupView />}
+        {route.view === "checkin" && <CheckinView />}
         {route.view === "tasks" && <TasksView projects={projects} />}
         {route.view === "study" && <StudyView />}
         {route.view === "overview" && <OverviewView />}

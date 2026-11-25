@@ -719,6 +719,61 @@ export interface HeadsupPreview {
   offers: { daysUntil: number; kind: string; reason: "changed" | "new" | "reminder" | "snoozed"; subject: string }[];
 }
 
+/** One thing the check-in found. Only mail `triggers`: the rest rides along. */
+export interface CheckinItem {
+  detail: string;
+  /** Not seen at an earlier check. */
+  fresh: boolean;
+  key: string;
+  kind: "approval" | "calendar" | "headsup" | "mail" | "task";
+  title: string;
+  triggers: boolean;
+}
+
+/** What a check right now would find and say. Reads only: nothing is recorded or sent. */
+export interface CheckinPreview {
+  body: string;
+  errors: string[];
+  /** Why a check now would stay silent even with something to say. */
+  heldBy: "cap" | "off" | "quiet" | null;
+  items: CheckinItem[];
+  mode: "log" | "off" | "push";
+  title: string;
+  wouldSend: boolean;
+}
+
+export interface CheckinRun {
+  at: string;
+  body: string;
+  errors: string[];
+  /** New mail from a person at that check. */
+  fresh: number;
+  id: number;
+  mode: string;
+  status: string;
+  title: string;
+  total: number;
+}
+
+export interface CheckinStatus {
+  intervalHours: number;
+  lastError: null | string;
+  lastRun: null | string;
+  mode: "log" | "off" | "push";
+  pushDetail: "senders" | "subjects";
+  runs: CheckinRun[];
+}
+
+/** What "Check now" reports. */
+export interface CheckinResult {
+  body: string;
+  errors: string[];
+  fresh: number;
+  status: string;
+  title: string;
+  total: number;
+}
+
 export interface HeadsupRun {
   deferred: number;
   errors: string[];

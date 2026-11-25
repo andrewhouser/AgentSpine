@@ -72,6 +72,9 @@ struct RootView: View {
             case .headsup:
                 // The morning summary, or "gift ideas ready".
                 tab = .headsup
+            case .checkin:
+                // "New message from…": the list behind the push.
+                tab = .checkin
             case .weeklyReview:
                 // A sheet, because the review lives two levels into Settings and the Settings tab
                 // may be folded under More, where pushing onto its stack is not ours to do.
@@ -124,6 +127,7 @@ struct RootView: View {
                     .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
             }
         case .headsup: stacked(tab) { HeadsupView() }
+        case .checkin: stacked(tab) { CheckinView() }
         case .tasks: stacked(tab) { TasksView() }
         case .study: stacked(tab) { StudyView() }
         case .schedules: stacked(tab) { SchedulesView() }

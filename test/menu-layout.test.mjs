@@ -41,7 +41,7 @@ check("web: six pinned", pinnedItems(all).join(), "a,b,c,d,e,f");
 check("web: the rest folded", foldedItems(all).join(), "g");
 check("web: six slots", String(PINNED_SLOTS), "6");
 check("web: unreadable saved text falls back", parseNavOrder("{not json")[0], "headsup");
-check("web: every item survives a repair", String(parseNavOrder('["settings"]').length), "14");
+check("web: every item survives a repair", String(parseNavOrder('["settings"]').length), "15");
 check("web: a saved item comes first", parseNavOrder('["settings"]')[0], "settings");
 
 const swiftc = (() => {

@@ -4,14 +4,14 @@ import SwiftUI
 /// the phone's sections, grouped by what they are for. Search is not a section here: ⌘K does it
 /// from anywhere, and Settings is the ⌘, scene.
 enum MacSection: String, CaseIterable, Hashable {
-    case threads, headsup, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
+    case threads, headsup, checkin, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
     case builds, activity, memory, proposals, agents
 
     /// The menu order on a fresh install: the first six are pinned, the rest fold under More.
     /// Threads is not here: the threads are listed above the menu, so `.threads` is the state of
     /// having a thread (or the new-thread screen) open rather than a row.
     static let defaultOrder: [MacSection] = [
-        .headsup, .tasks, .meetings, .inbox, .knowledge, .schedules,
+        .headsup, .checkin, .tasks, .meetings, .inbox, .knowledge, .schedules,
         .projects, .files, .builds, .study, .clients, .activity, .memory, .proposals, .agents,
     ]
 
@@ -27,6 +27,7 @@ enum MacSection: String, CaseIterable, Hashable {
         switch self {
         case .threads: return "Threads"
         case .headsup: return "Heads-up"
+        case .checkin: return "Check-in"
         case .tasks: return "Tasks"
         case .study: return "Study"
         case .schedules: return "Schedules"
@@ -48,6 +49,7 @@ enum MacSection: String, CaseIterable, Hashable {
         switch self {
         case .threads: return "bubble.left.and.text.bubble.right"
         case .headsup: return "sparkles"
+        case .checkin: return "envelope.badge"
         case .tasks: return "checklist"
         case .study: return "brain.head.profile"
         case .schedules: return "clock"
@@ -75,6 +77,7 @@ struct MacSectionContent: View {
             switch section {
             case .threads: EmptyView() // drawn by MacRootView, which owns the selection
             case .headsup: MacHeadsupView()
+            case .checkin: MacCheckinView()
             case .tasks: TasksView()
             case .study: StudyView()
             case .schedules: SchedulesView()

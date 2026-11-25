@@ -14,6 +14,7 @@ export const PINNED_SLOTS = 6;
 /** In the order a fresh browser shows them. */
 export const NAV_ITEMS: { key: View; label: string }[] = [
   { key: "headsup", label: "Heads-up" },
+  { key: "checkin", label: "Check-in" },
   { key: "tasks", label: "Tasks" },
   { key: "meetings", label: "Meetings" },
   { key: "inbox", label: "Inbox" },

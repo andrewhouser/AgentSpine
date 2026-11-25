@@ -172,7 +172,8 @@ and confirm the Swift field compiles after the next build.
 
 **Deprioritized 2026-11-21 (until section 8 has a reliable foundation):** G, H4, H5, H6, H7 and H9 below, and
 any new proactive behaviour. Do not start them without a new decision. A, B, C, D and H1 and H2 are unaffected,
-because they finish or verify what is already built.
+because they finish or verify what is already built. One new decision since: on 2026-11-24 you lifted this
+for the check-in alone (section 12 D1).
 
 **G. Live Activity for a flight.** You, in Xcode: add a Widget Extension named `AgentSpineLiveActivity` with
 "Include Live Activity" ticked, share the `ActivityAttributes` file with both targets, set
@@ -1102,33 +1103,77 @@ the same as `submit` (`src/tools/browser.ts`). Traced the same day: a scheduled 
 pre-approved, made those clicks without queueing. That was F8 in section 0. Fixing it turned up F9, the same
 path for mail and messages. Both are fixed, and D2 has what they leave open.
 
-### D1. The check-in sweep (Code, then You; blocked on a decision)
+### D1. The check-in (built 2026-11-24 with its screens, off by default; the rollout is yours)
 
 What makes Duet feel proactive is one job that looks across everything and says what needs you. Here the
-pieces exist separately: watchers, Heads-up, the inbox cleanup, task reminders, the confirm watchdog. Nothing
-joins them. This is new proactive behaviour, which was deprioritized on 2026-11-21 until section 8 has a
-reliable foundation, so it does not start without a new decision.
+pieces existed separately: watchers, Heads-up, the inbox cleanup, task reminders, the confirm watchdog. Nothing
+joined them. New proactive behaviour was deprioritized on 2026-11-21; **you lifted that hold for D1 on
+2026-11-24** ("Lift the hold and build"). The hold stands for everything else in section 3's list.
 
-Proposed shape, with code owning the numbers:
-- **Code collects, the model only ranks.** One function per source returns items with a stable id: unread
-  mail since the last sweep (headers and snippet only, as now), calendar in the next 24 hours, tasks due or
-  overdue, approvals waiting, watcher results since the last sweep, open Heads-up offers. A `sweep_seen`
-  table means an item is mentioned once, and again only if it changes. The model gets the new items tagged
-  UNTRUSTED and returns an order and a line for each. It cannot add an item, and it calls no tools.
-- **Local only.** Mail and calendar are `privateOutput`, so the run is pinned to the local model. Expect the
-  ranking to be rougher than Duet's on Opus 5.5. Measure it before believing it (below).
-- **Interval in code:** every 4 hours by default, never inside quiet hours, and its pushes count toward the
-  daily cap of six (add it to `COUNTED_SOURCES`). Nothing new means no push, not a push saying so.
-- **It only reads.** Anything it suggests doing is a queued confirmation like any other.
-- **Settings** (web, Mac and iPhone together): each source on or off, and the interval.
-- **Rollout like Heads-up:** a Preview that reads and sends nothing, then log-only for a week, then pushes.
-  The number to watch is how many pushed items you acted on against how many you dismissed, a SQL count.
-- **Tests first:** the once-only rule, quiet hours, the cap, the empty sweep. A mail snippet that reaches a
-  ranking prompt is an injection surface, so add the sweep to N2's fixtures (section 4) before it pushes.
+**Built (`src/checkin/`, suite `test/checkin.test.mjs`).** It differs from what this item first proposed in
+one way that matters: **there is no model in it.** The proposal had a local model rank the items. Reading
+`src/headsup/morning.ts` changed that: Heads-up is deliberately not a schedule row, because a schedule means a
+model call every time whether or not there is anything to say, and private text through a prompt for no
+reason. The same holds here, more so, since the text would be unread mail. So:
+- **Code collects (`sources.ts`).** One reader per source, each returning items with a stable key: unread
+  inbox mail (headers only), calendar for the next 4 hours, tasks overdue or due within a day, approvals
+  waiting, open Heads-up offers. One source failing does not lose the others.
+- **Only mail from a person can start a push.** Everything else already has its own voice: an approval pushes
+  when it queues and again from the watchdog, a task nudges when due, Heads-up has its morning push. Those
+  ride along as one "Also:" line under a push that mail started, and never start one. Watcher results are
+  left out for the same reason: a watcher pushes for itself.
+- **"From a person" is Gmail's judgment, not ours.** Unread, in the inbox, not sent by you, no
+  List-Unsubscribe header, and none of Gmail's bulk labels (promotions, social, updates, forums, spam, trash).
+  Gmail has read the body to decide that, so the check-in gets a judgment about mail with nothing a sender
+  wrote ever reaching a prompt. There is no injection surface to add to N2.
+- **Once only (`store.ts`, `checkin_seen`).** An item is new the first time its key appears and again only if
+  its state changes (a task's due time). `checkin_runs` logs what each check found and said.
+- **The numbers (`rules.ts`):** every 4 hours, 60 minutes' back-off after a failed mail read, 25 messages a
+  check, four senders named in a push. It keeps quiet hours and the daily cap of six itself (`checkin` is in
+  `COUNTED_SOURCES` and `REVIEWED_SOURCES`, not `GOVERNED_SOURCES`), because mail held back by either must
+  stay new for the next check, which the outbox cannot arrange. Nothing new means no push.
+- **What leaves the machine.** A push goes through APNs and ntfy, so by default it names senders and counts
+  and nothing else: no subject, no event or task title. `CHECKIN_PUSH_DETAIL=subjects` adds them.
+- **The switch, `CHECKIN_MODE`:** `off` (the default; the timer does nothing), `log` (runs and records what it
+  would have sent, sends nothing), `push`. Anything else reads as off.
+- **Reading it:** `npm run checkin` (preview: reads only, works with the mode off), `npm run checkin run`
+  (Check now), `npm run checkin log`. The same three are `GET /api/checkin/preview`, `POST /api/checkin/run`
+  and `GET /api/checkin`.
 
-Decide with it: whether the Morning brief becomes the first sweep of the day or stays its own schedule
-(proposed: stays, so nothing built changes), and whether Heads-up keeps its own morning push once its offers
-are a sweep source (proposed: yes until the sweep has a week of numbers).
+**Not verified.** Everything above ran against seams: no real Gmail read, no real push, and the dashboard was
+not started with it. Whether Gmail returns the `CATEGORY_` labels on your account in a metadata read is the
+first thing the preview will show.
+
+**The rollout (You, on the Mini), one rung at a time:**
+1. Preview. `npm run checkin` a few times a day for a few days. Is "Mail" the mail you would want to hear
+   about? If newsletters appear, or real people are missing, the rule in `isPersonMail` is wrong: change it in
+   code with the example in the commit, do not tune around it.
+2. Log. Add `CHECKIN_MODE=log` to `.env` on the Mini and restart. After a week, `npm run checkin log 50`: how
+   many checks had something to say, and would you have wanted each of them?
+3. Push. `CHECKIN_MODE=push`. The weekly review then counts opened against dismissed for "Check-in".
+
+**Still to do:**
+- **The screens (built 2026-11-24 on web, iPhone and Mac).** A Check-in item in the web sidebar, the Mac
+  sidebar and the iPhone's tabs (under More on a fresh install, so the bar is unchanged): the preview as a
+  list grouped by kind, the notification a check now would send or the reason it would not, Check now, and
+  the past checks. A push opens it (`/checkin` on the web, `screen: "checkin"` on the phone). Every sentence
+  is a pure function, `web/src/lib/checkin.ts` and `CheckinWords` in `Models.swift`, and
+  `test/checkin-screen.test.mjs` runs one set of cases through both and has the Swift decode real payloads.
+  The iPhone's `CheckinView.swift` and the Mac's `MacCheckin.swift` are separate files because a new file is
+  in one target until its Target Membership is ticked; ticking `CheckinView.swift` for the Mac target and
+  deleting `MacCheckin.swift` would make it one. Checked: both targets build with `xcodebuild`
+  (unsigned, outside the sandbox), and the web screen was looked at in a browser against a throwaway server
+  with tasks, an approval and a log, including Check now. **Not seen:** the iPhone and Mac screens rendered,
+  the Mail section with real mail on any client, and a tap on a real push.
+- **Not built: Settings for each source on or off.** It needs stored preferences on the server first.
+- `.env.example` has no entry for `CHECKIN_MODE` or `CHECKIN_PUSH_DETAIL`: the sandbox Claude ran in could not
+  read or write that file. Add both, commented out, by hand.
+- The interval and the mode are code and env today. Whether they should be settings waits on the log.
+- A model's sense of urgency ("this one is from your landlord and has a deadline") is what this version
+  gives up. If the log shows Gmail's sorting is too coarse, the next step is a local model ordering the new
+  mail only, behind the same seams, with N2 fixtures first. Not before the log says it is needed.
+
+Decided with it, as proposed: the Morning brief stays its own schedule, and Heads-up keeps its morning push.
 
 ### D2. A third tier: refused, whoever approves (Code)
 
@@ -1212,15 +1257,15 @@ Proposed: nothing beyond CP1. If you name a service you want, add it as one item
 ### Sequence and decisions
 
 Order: the registry pass in D2 first (F8 and F9, which the trace found, are fixed). Then the rest of D2 and
-D3, which are small, sit in the broker and need no decision beyond a yes. D1 waits on the
-proactive-behaviour decision. D4 waits on CP1.
+D3, which are small, sit in the broker and need no decision beyond a yes. D1 is built with its screens: its rollout
+is yours. D4 waits on CP1.
 
 Open decisions for you:
 - Should delete and remove clicks in the browser also ask from a scheduled run? Proposed: yes, unless a
   schedule of yours relies on one.
 - `BROWSER_MODE=headless` on the Mini. Proposed: yes, unless a scheduled job needs the signed-in profile.
-- Lift the 2026-11-21 hold on new proactive behaviour for D1. Proposed: not until section 8's K items you are
-  relying on are in daily use, since the sweep ranks better with that knowledge behind it.
+- (Decided 2026-11-24: the hold on new proactive behaviour is lifted for D1 only.)
+- After a week of D1's log: is Gmail's sorting good enough, or does new mail need a local model to order it?
 - D2 and D3 now, alongside section 8. Proposed: yes; both tighten what already runs unattended.
 - `policy.browser.neverDomains` in D2. Proposed: yes, empty by default.
 - A named service for D4. Proposed: none until you want one.

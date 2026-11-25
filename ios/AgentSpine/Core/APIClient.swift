@@ -471,6 +471,23 @@ final class APIClient {
         )
     }
 
+    // MARK: Check-in
+
+    /// The switch, the interval and the recent checks.
+    func checkinStatus() async throws -> CheckinStatus {
+        try await send(request("/api/checkin"), as: CheckinStatus.self)
+    }
+
+    /// What a check right now would find and say. Reads mail and calendar; records and sends nothing.
+    func previewCheckin() async throws -> CheckinPreview {
+        try await send(request("/api/checkin/preview"), as: CheckinPreview.self, using: longSession)
+    }
+
+    /// "Check now": a real check. It records, and sends if the check-in is on.
+    func runCheckin() async throws -> CheckinResult {
+        try await send(jsonRequest("/api/checkin/run", method: "POST"), as: CheckinResult.self, using: longSession)
+    }
+
     /// "Preview": what Check now would offer. Reads the calendars; sends and records nothing.
     func previewHeadsups() async throws -> HeadsupPreview {
         try await send(request("/api/headsups/preview"), as: HeadsupPreview.self, using: longSession)

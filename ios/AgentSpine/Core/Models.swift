@@ -762,6 +762,7 @@ struct ReviewItem: Codable, Identifiable, Hashable {
 
     var sourceLabel: String {
         switch source {
+        case "checkin": return "Check-in"
         case "digest": return "Daily digest"
         case "headsup": return "Heads-up"
         case "run": return "Scheduled jobs"
@@ -1236,6 +1237,145 @@ struct HeadsupResearchResult: Codable {
     let cards: Int
     let query: String?
     let error: String?
+}
+
+// MARK: - Check-in
+
+/// One thing the check-in found. Only mail `triggers` a push: the rest rides along.
+struct CheckinItem: Codable, Hashable, Identifiable {
+    let key: String
+    /// "mail", "approval", "calendar", "task" or "headsup".
+    let kind: String
+    let title: String
+    let detail: String
+    /// Not seen at an earlier check.
+    let fresh: Bool
+    let triggers: Bool
+    var id: String { key }
+}
+
+/// What a check right now would find and say. Reads only: nothing is recorded or sent.
+struct CheckinPreview: Codable {
+    let title: String
+    let body: String
+    let errors: [String]
+    /// Why a check now would stay silent even with something to say: "off", "quiet", "cap" or nil.
+    let heldBy: String?
+    let items: [CheckinItem]
+    /// "off", "log" or "push".
+    let mode: String
+    let wouldSend: Bool
+}
+
+/// One past check.
+struct CheckinRun: Codable, Hashable, Identifiable {
+    let id: Int
+    let at: String
+    let mode: String
+    let status: String
+    /// New mail from a person at that check.
+    let fresh: Int
+    let total: Int
+    let title: String
+    let body: String
+    let errors: [String]
+}
+
+struct CheckinStatus: Codable {
+    let intervalHours: Int
+    let lastError: String?
+    let lastRun: String?
+    let mode: String
+    let pushDetail: String
+    let runs: [CheckinRun]
+}
+
+/// What "Check now" reports.
+struct CheckinResult: Codable {
+    let status: String
+    let title: String
+    let body: String
+    let fresh: Int
+    let total: Int
+    let errors: [String]
+}
+
+/// The Check-in screen's words, as plain functions of what the server returned.
+///
+/// Here, and Foundation-only, for two reasons: the iPhone and Mac screens are separate files and
+/// must say the same thing, and `test/checkin-screen.test.mjs` compiles this and compares every
+/// sentence with the web's (`web/src/lib/checkin.ts`).
+enum CheckinWords {
+    struct Group: Identifiable {
+        let kind: String
+        let label: String
+        let items: [CheckinItem]
+        var id: String { kind }
+    }
+
+    /// Sections in the order they are shown: what can start a push first, then what rides along.
+    static let sections: [(kind: String, label: String)] = [
+        ("mail", "Mail from people"),
+        ("approval", "Approvals waiting"),
+        ("calendar", "Coming up"),
+        ("task", "Tasks due"),
+        ("headsup", "Heads-up"),
+    ]
+
+    static func groups(_ items: [CheckinItem]) -> [Group] {
+        sections
+            .map { s in Group(kind: s.kind, label: s.label, items: items.filter { $0.kind == s.kind }) }
+            .filter { !$0.items.isEmpty }
+    }
+
+    /// What the switch is set to, and what that means.
+    static func modeLine(mode: String, intervalHours: Int) -> String {
+        switch mode {
+        case "push":
+            return "On. It checks every \(intervalHours) hours and sends one notification when there is new mail from a person."
+        case "log":
+            return "Log mode. It checks every \(intervalHours) hours and records what it would have sent, without sending."
+        default:
+            return "Switched off. This list still works, because it only reads. To start, set CHECKIN_MODE=log in .env on the server and restart."
+        }
+    }
+
+    /// The sentence above the notification a check right now would send, or the reason there is none.
+    static func sendLine(wouldSend: Bool, heldBy: String?, mode: String) -> String {
+        if !wouldSend { return "No new mail from a person, so a check now would send nothing." }
+        switch heldBy {
+        case "off": return "If it were switched on, a check now would send:"
+        case "quiet": return "It is quiet hours, so this would wait. The mail stays new until then:"
+        case "cap": return "Today's proactive messages are used up, so this would wait. The mail stays new:"
+        default: return mode == "log" ? "A check now would record this, and send nothing (log mode):" : "A check now would send:"
+        }
+    }
+
+    /// What "Check now" did.
+    static func runNote(status: String, title: String, errors: [String]) -> String {
+        switch status {
+        case "sent": return "Sent: \(title)"
+        case "logged": return "Recorded, not sent (log mode): \(title)"
+        case "nothing": return "Checked. Nothing new to mention."
+        case "capped": return "There is new mail, but today's proactive messages are used up. It stays new for the next check."
+        case "quiet": return "It is quiet hours, so nothing was checked or sent."
+        case "off": return "The check-in is switched off, so nothing was checked."
+        case "error": return "Couldn't read mail: \(errors.isEmpty ? "no reason given" : errors.joined(separator: "; "))"
+        default: return "Check-in: \(status)"
+        }
+    }
+
+    /// One past check, in a word or two.
+    static func runLabel(_ status: String) -> String {
+        switch status {
+        case "capped": return "held, daily limit"
+        case "error": return "couldn't read mail"
+        case "logged": return "would have sent"
+        case "nothing": return "nothing new"
+        case "sent": return "sent"
+        default: return status
+        }
+    }
 }
 
 // MARK: - Meetings

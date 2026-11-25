@@ -1,0 +1,139 @@
+import { useState } from "react";
+
+import type { CheckinPreview, CheckinStatus } from "../../lib/types.ts";
+
+import { useResource } from "../../hooks/useResource.ts";
+import { api } from "../../lib/api.ts";
+import { checkinGroups, checkinModeLine, checkinRunLabel, checkinRunNote, checkinSendLine } from "../../lib/checkin.ts";
+import styles from "../ListPage/ListPage.module.css";
+import { PageHeader } from "../PageHeader/PageHeader.tsx";
+import own from "./CheckinView.module.css";
+
+const NO_STATUS: CheckinStatus | null = null;
+const NO_PREVIEW: CheckinPreview | null = null;
+
+const when = (iso: string): string => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+
+/**
+ * What needs you right now, and what the check-in has said about it.
+ *
+ * The list is the preview: it reads mail, calendar, tasks, approvals and Heads-up and writes
+ * nothing, so opening this page never marks anything as seen and works with the check-in
+ * switched off. "Check now" is the real thing: it records, and in push mode it sends.
+ *
+ * Subjects are shown here whatever the push is set to say. That setting is about what leaves
+ * the machine in a notification; this page is yours.
+ */
+export const CheckinView = () => {
+  const [status, refreshStatus] = useResource(() => api.checkinStatus().catch(() => NO_STATUS), NO_STATUS);
+  const [error, setError] = useState("");
+  const [preview, refreshPreview] = useResource(
+    () =>
+      api.previewCheckin().catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : String(err));
+        return NO_PREVIEW;
+      }),
+    NO_PREVIEW,
+  );
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  const checkNow = async (): Promise<void> => {
+    setBusy(true);
+    setNote("");
+    setError("");
+    try {
+      setNote(checkinRunNote(await api.runCheckin()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+      refreshStatus();
+      refreshPreview();
+    }
+  };
+
+  const groups = checkinGroups(preview?.items ?? []);
+  const off = status?.mode === "off";
+
+  return (
+    <div className={styles.page}>
+      <PageHeader
+        subtitle="New mail from people, and what else is waiting: approvals, the next few hours, tasks due, open heads-ups. You get one notification when there is new mail; the rest rides along."
+        title="Check-in"
+      />
+
+      <div className={styles.toolbar}>
+        <button
+          className={`${styles.button} ${styles.primary}`}
+          disabled={busy || off}
+          onClick={() => void checkNow()}
+          title={off ? "Switched off: there is nothing to run. The list below still reads." : "Runs a real check now. It records, and sends if the check-in is on."}
+          type="button"
+        >
+          {busy ? "Checking…" : "Check now"}
+        </button>
+        <button
+          className={styles.button}
+          onClick={() => {
+            setError("");
+            refreshPreview();
+          }}
+          title="Reads again. Nothing is recorded or sent."
+          type="button"
+        >
+          Refresh
+        </button>
+        {status && <span>{status.lastRun ? `Last check ${when(status.lastRun)}` : "No check has run yet"}</span>}
+      </div>
+
+      {status && <div className={styles.snippet}>{checkinModeLine(status.mode, status.intervalHours)}</div>}
+      {note && <div className={styles.snippet}>{note}</div>}
+      {error && <div className={styles.error}>{error}</div>}
+      {preview && preview.errors.length > 0 && <div className={styles.error}>Couldn&apos;t read everything: {preview.errors.join("; ")}</div>}
+
+      {preview && (
+        <>
+          <div className={own.section}>If it checked now</div>
+          <div className={styles.snippet}>{checkinSendLine(preview)}</div>
+          {preview.wouldSend && (
+            <div className={own.push}>
+              <div className={own.pushTitle}>{preview.title}</div>
+              <div className={own.pushBody}>{preview.body}</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {preview && groups.length === 0 && <div className={styles.empty}>Nothing is waiting on you.</div>}
+
+      {groups.map((g) => (
+        <section key={g.kind}>
+          <div className={own.section}>
+            {g.label} ({g.items.length})
+          </div>
+          {g.items.map((i) => (
+            <div className={own.row} key={i.key}>
+              <span className={own.who}>{i.title}</span>
+              <span className={own.detail}>{i.detail}</span>
+              {i.fresh && i.triggers && <span className={own.fresh}>new</span>}
+            </div>
+          ))}
+        </section>
+      ))}
+
+      {status && status.runs.length > 0 && (
+        <section>
+          <div className={own.section}>Past checks</div>
+          {status.runs.map((r) => (
+            <div className={own.row} key={r.id}>
+              <span className={own.when}>{when(r.at)}</span>
+              <span className={own.who}>{checkinRunLabel(r)}</span>
+              <span className={own.detail}>{r.title || `${r.total} found`}</span>
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+};

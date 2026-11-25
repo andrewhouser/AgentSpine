@@ -14,6 +14,9 @@ import type {
   Build,
   BuildDiff,
   ChatMessage,
+  CheckinPreview,
+  CheckinResult,
+  CheckinStatus,
   Client,
   CloseoutPlan,
   CloseoutPreview,
@@ -196,15 +199,16 @@ export const api = {
    */
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
+  checkinStatus: () => request<CheckinStatus>("/api/checkin"),
   /** Cloud tokens against the caps (src/cloud-cap.ts). Read-only. */
   cloudUsage: () => request<CloudUsage>("/api/cloud-usage"),
+
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
 
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
 
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
-
   createSchedule: (name: string, schedule: string, task: string) =>
     post<Schedule>("/api/schedules", { name, schedule, task }),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
@@ -218,8 +222,8 @@ export const api = {
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
-  deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
 
+  deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
   /**
    * Upload a recording made in the browser and get the words back.
@@ -233,6 +237,7 @@ export const api = {
       headers: { "Content-Type": audio.type || "application/octet-stream" },
       method: "POST",
     }),
+
   dictationStatus: () => request<DictationStatus>("/api/dictate"),
 
   dismissMeetingQuestion: (id: number) => post<{ ok: boolean }>(`/api/study/questions/${id}/dismiss`),
@@ -354,15 +359,15 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
-
   listFiles: () => request<SavedFile[]>("/api/files"),
-  listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
 
+  listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
+
   listProjects: () => request<Project[]>("/api/projects"),
 
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
@@ -371,14 +376,14 @@ export const api = {
   listRecipes: () => request<Recipe[]>("/api/recipes"),
 
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
-
   listSchedules: () => request<Schedule[]>("/api/schedules"),
-  listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
 
+  listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
   /** One utterance said to an assistant that is already listening. */
   listStyles: () => request<StylesState>("/api/styles"),
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
+
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
 
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
@@ -397,10 +402,10 @@ export const api = {
 
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
-
   /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
+
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
 
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
@@ -429,6 +434,8 @@ export const api = {
   planSpeech: (text: string) => post<{ chunks: string[] }>("/api/voice/plan", { text }),
 
   policy: () => request<Record<string, unknown>>("/api/policy"),
+
+  previewCheckin: () => request<CheckinPreview>("/api/checkin/preview"),
 
   previewHeadsups: () => request<HeadsupPreview>("/api/headsups/preview"),
 
@@ -471,6 +478,8 @@ export const api = {
    */
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
+
+  runCheckin: () => post<CheckinResult>("/api/checkin/run"),
 
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 

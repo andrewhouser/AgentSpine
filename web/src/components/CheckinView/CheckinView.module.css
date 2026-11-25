@@ -1,0 +1,70 @@
+/* The Check-in screen: a few short sections of one-line rows, then the log of past checks. */
+.section {
+  color: var(--text-faint);
+  font-size: 0.7188rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin: 18px 0 6px;
+  text-transform: uppercase;
+}
+
+.row {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  padding: 7px 2px;
+}
+
+.who {
+  flex: 0 1 auto;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  color: var(--text-dim);
+  flex: 1;
+  font-size: 0.8438rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Marks what the next check would treat as new. Seen items carry no mark at all. */
+.fresh {
+  background: var(--accent);
+  border-radius: 100px;
+  color: var(--bg);
+  flex: none;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0 7px;
+}
+
+/* The notification as it would arrive: set apart so it reads as a quotation, not as the page. */
+.push {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  padding: 10px 14px;
+}
+
+.pushTitle {
+  font-weight: 600;
+}
+
+.pushBody {
+  color: var(--text-dim);
+  font-size: 0.8438rem;
+  margin-top: 2px;
+  white-space: pre-line;
+}
+
+.when {
+  color: var(--text-faint);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.7188rem;
+  width: 9.5rem;
+}

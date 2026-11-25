@@ -9,6 +9,7 @@ import styles from "./WeeklyReviewPanel.module.css";
 const NONE: null | OutboxReview = null;
 
 const SOURCE_LABELS: Record<string, string> = {
+  checkin: "Check-in",
   digest: "Daily digest",
   headsup: "Heads-up",
   run: "Scheduled jobs",

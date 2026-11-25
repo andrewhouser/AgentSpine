@@ -1201,6 +1201,61 @@ npm run watcher template              # the pattern, for writing your own
 An unchanged run costs one tool call and two model turns, and pushes nothing. See
 [WATCHERS.md](docs/WATCHERS.md) for the template and the three ways watchers go wrong.
 
+## The check-in — what needs you, every few hours
+
+A watcher tells you about one thing you asked it to watch. The check-in looks across everything
+every four hours: unread mail, the next four hours of calendar, tasks due, approvals waiting,
+open Heads-up offers. If there is **new mail from a person**, it sends one notification, with
+what else is waiting as a line underneath. If there is not, it says nothing.
+
+```
+New message from Sam Rivera
+Sam Rivera
+Also: 1 approval waiting · 2 tasks due · 1 event in the next 4 hours
+```
+
+**There is no model in it**, for the reason the morning Heads-up has none: a quiet check should
+cost one mail read and no inference, and unread mail should not go through a prompt to find out
+whether it is worth mentioning. "From a person" is Gmail's own verdict: unread, in the inbox, no
+unsubscribe header, and none of Gmail's bulk labels (promotions, social, updates, forums). Nothing
+a sender writes is read as anything but a name and a subject, so there is nothing to inject into.
+
+**Only mail starts a push**, because everything else already has a voice: an approval pushes when
+it queues, a task nudges when it is due, Heads-up has its morning. Repeating them would be a
+second voice saying the same thing.
+
+**It mentions a thing once.** The same unread message is new at one check and never again; a task
+comes back only if you move its due time. It keeps quiet hours and the daily cap of six itself,
+and mail held back by either is still new at the next check.
+
+**What the push contains.** A push leaves the machine, so by default it names senders and counts
+and nothing more: no subject lines, no event or task titles. `CHECKIN_PUSH_DETAIL=subjects` adds
+them. The list in your own terminal always shows subjects.
+
+It is **off by default**, and switched on in steps:
+
+```bash
+npm run checkin          # preview: what a check now would find and say. Reads only, works while off.
+npm run checkin run      # check now (refused while off or in quiet hours)
+npm run checkin log 50   # what the last 50 checks found and said, with the counts
+```
+
+```bash
+# .env — then restart the dashboard
+CHECKIN_MODE=log     # run and record what it would have sent, send nothing. Sit here for a week.
+CHECKIN_MODE=push    # send
+```
+
+Look at the preview for a few days first: if newsletters show up under Mail, or real people do
+not, the rule is wrong and should be fixed in `src/checkin/sources.ts`, not worked around.
+
+**Check-in** in the sidebar (web and Mac) and the tabs (iPhone, under More) is the same preview as
+a list: what is waiting by kind, the notification a check now would send or why it would not, a
+**Check now** button, and the past checks. Opening it reads and records nothing. A push opens it.
+It always shows subjects, since that page is yours and the push setting is about what leaves the
+machine. The numbers are in
+`src/checkin/rules.ts`, and what is left is in `docs/PLAN-open-work.md` section 12, D1.
+
 ## Reaching you, and approving from your phone
 
 A Mac banner only works if you're sitting at the Mac. Once AgentSpine lives on an

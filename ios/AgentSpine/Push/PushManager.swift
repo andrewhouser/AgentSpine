@@ -12,6 +12,8 @@ enum DeepLink: Equatable {
     case study
     /// The Heads-up screen, from the morning summary or a "gift ideas ready" push.
     case headsup
+    /// The Check-in screen, from a "new message from…" push.
+    case checkin
     /// The weekly review, from the Sunday push.
     case weeklyReview
 }
@@ -380,6 +382,8 @@ extension PushManager: UNUserNotificationCenterDelegate {
             pendingDeepLink = .study
         } else if userInfo["screen"] as? String == "headsup" {
             pendingDeepLink = .headsup
+        } else if userInfo["screen"] as? String == "checkin" {
+            pendingDeepLink = .checkin
         } else if userInfo["screen"] as? String == "review" {
             pendingDeepLink = .weeklyReview
         }

@@ -17,6 +17,7 @@ records live in `docs/`; finished plans are in `docs/archive/` (history, not a t
 | **What is left to do** (the only plan doc) | `docs/PLAN-open-work.md`. Update it in the same change as any work it lists. Do not start another PLAN doc |
 | Native Mac app, design system, the "spine" identity | `docs/archive/PLAN-native-apps-and-ui-refresh.md` (design record; built, leftovers are in `PLAN-open-work.md` section 5) |
 | Notifications: quiet hours, caps, weekly "what I sent you" review | `docs/archive/PLAN-outbox.md` (design record; phases 0-2 built, log-only until `OUTBOX_ENFORCE`; remaining phases in `PLAN-open-work.md` section 2. |
+| Check-in (every few hours: new mail from a person, plus what else is waiting) | README → "The check-in", and `PLAN-open-work.md` section 12 D1. Code only, no model, on purpose; off unless `CHECKIN_MODE` is `log` or `push`. The numbers are in `src/checkin/rules.ts` |
 | Heads-up (proactive suggestions: birthdays, bills, trips) | `docs/ROLLOUT-heads-up.md` for switching it on; `docs/archive/PLAN-heads-up.md` and `docs/archive/PLAN-heads-up-next.md` (design records; phases 0-5, E and F built; the iOS app builds and runs, but the flight and routing integrations are unverified against live keys; what is left is in `PLAN-open-work.md` section 3) |
 
 ## Machines

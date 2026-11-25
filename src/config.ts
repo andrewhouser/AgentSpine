@@ -406,6 +406,24 @@ export const HEADSUP_INCLUDE_CALENDARS = csv(env.HEADSUP_INCLUDE_CALENDARS);
 export const HEADSUP_ENABLED = (env.HEADSUP_ENABLED ?? "true") !== "false";
 
 /**
+ * The check-in (src/checkin, PLAN-open-work section 12 D1): every few hours, look across
+ * mail, calendar, tasks, approvals and Heads-up, and say what needs you. Off by default, and
+ * switched on in two steps on purpose:
+ *   "off"  — the timer does nothing. The preview still works, since it only reads.
+ *   "log"  — it runs and records what it would have sent, and sends nothing. Leave it here
+ *            for a week and read `npm run checkin log` before going further.
+ *   "push" — it sends.
+ * Anything else is read as "off", so a typo cannot switch it on.
+ */
+export const CHECKIN_MODE: "log" | "off" | "push" = env.CHECKIN_MODE === "log" || env.CHECKIN_MODE === "push" ? env.CHECKIN_MODE : "off";
+/**
+ * What a check-in push says about mail. A push leaves the machine (APNs, and ntfy if it is
+ * configured), so the default names senders and nothing else. "subjects" adds the subject
+ * lines. The list in the app and the CLI shows subjects either way: that stays local.
+ */
+export const CHECKIN_PUSH_DETAIL: "senders" | "subjects" = env.CHECKIN_PUSH_DETAIL === "subjects" ? "subjects" : "senders";
+
+/**
  * Heads-up watches: a flight's status, and how long a drive will take. Each needs a key AND a
  * policy.json switch (`headsup.flights`, `headsup.travel`), because each sends something about you
  * to a third party. Neither provider's free tier is something to rely on blindly, so every call is
