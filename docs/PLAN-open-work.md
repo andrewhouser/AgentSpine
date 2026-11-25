@@ -458,9 +458,11 @@ baseline, and the meeting recall number is still unmeasured.
   `test/knowledge-filters.test.mjs`. The web Drop zone's "Search everything" has
   them (2026-11-25): project, a person or team picker (people and teams from the knowledge store), what backs the
   source, and From and As of dates; a change re-runs the search on screen, and each hit now shows its project, date
-  and what backs it. Checked in a real browser against a seeded database, desktop and phone width. Not built: the
-  same filters on iPhone and Mac (`InboxView.swift`), and any measurement of whether they help, which is K1's
-  questions again. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
+  and what backs it. Checked in a real browser against a seeded database, desktop and phone width. iPhone and Mac have
+  the same filters in a collapsible "Filters" group in the shared `InboxView.swift` (2026-11-25; written in a
+  sandbox with no Swift toolchain, so **not compiled or run: build it in Xcode first**), and their hits show the same
+  project, date and evidence line. Not built: any measurement of whether the filters help, which is K1's questions
+  again. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
   2026-11-22, built but not seen running). The agent tool is built (2026-11-22): `knowledge_search`
   declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.

@@ -1886,9 +1886,51 @@ struct InboxExtractResult: Codable, Hashable {
 }
 
 /// One result of GET /api/knowledge/search. `via` says which paths found it (`fts`, `vector`).
+/// `projectId`, `mtime` and `evidence` are optional so an older server still decodes.
 struct KnowledgeHit: Codable, Identifiable, Hashable {
     let id: Int
     let path: String
     let text: String
     let via: [String]
+    let projectId: Int?
+    let mtime: String?
+    let evidence: KnowledgeHitEvidence?
+}
+
+/// What a search hit's source is backed by (src/knowledge/retrieval.ts on the server).
+struct KnowledgeHitEvidence: Codable, Hashable {
+    let level: String
+    let claims: Int
+    let reviewed: Int
+    let unreviewed: Int
+
+    /// The same words the web Drop zone uses.
+    var words: String {
+        switch level {
+        case "conflicting": return "reviewed claims that disagree"
+        case "inferred": return "reviewed, inferred claims"
+        case "machine-extracted": return "extracted claims nobody has reviewed"
+        case "reviewed": return "reviewed claims"
+        default: return "nothing analysed from it yet"
+        }
+    }
+}
+
+/// Narrowing for a knowledge search. Nil fields are left off the request.
+struct KnowledgeSearchFilters: Hashable {
+    var projectID: Int?
+    var personID: Int?
+    var teamID: Int?
+    /// `reviewed`, `extracted` or `none`: what backs the source.
+    var evidence: String?
+    var since: Date?
+    var until: Date?
+
+    var isEmpty: Bool { self == KnowledgeSearchFilters() }
+}
+
+/// A search's hits, plus the server's word on a filter it could only partly apply (a team with no members).
+struct KnowledgeSearchResult: Hashable {
+    let hits: [KnowledgeHit]
+    let note: String?
 }
