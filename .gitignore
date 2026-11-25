@@ -78,3 +78,7 @@ docs/*
 
 # Python venv for the speaker-diarization helper (services/diarize).
 services/diarize/.venv/
+
+# Python bytecode (the MFLUX and TTS services). Generated on each machine, never committed.
+__pycache__/
+*.pyc

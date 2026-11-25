@@ -1145,7 +1145,7 @@ SQLite file per user rather than a `user_id` on every table).
 - **iPhone and Mac apps.** Bundle IDs (`com.houserphotography.*`) are in `ios/Supporting/Local.xcconfig`,
   the Mac target in `project.pbxproj` and the Mac entitlements. Move them all into a gitignored
   `Local.xcconfig` with a committed example, and make APNs use the configured topic, not one global one.
-- Committed `services/*/__pycache__/*.pyc` files: delete and gitignore.
+- Committed `services/*/__pycache__/*.pyc` files: deleted and gitignored (2026-11-25).
 
 ---
 
