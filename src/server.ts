@@ -532,7 +532,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (seg.length === 4 && seg[3] === "stream") return streamRun(req, res, id, Number(url.searchParams.get("after") ?? -1));
       const run = store.getRun(id);
       if (!run) return sendJson(res, 404, { error: "no such run" });
-      return sendJson(res, 200, { run, trace: store.getTrace(id), actions: store.listActions(id) });
+      // `notes`: what happened along the way that is not a tool call (paused, compacted, budget; LP3 and LP5).
+      return sendJson(res, 200, { run, trace: store.getTrace(id), actions: store.listActions(id), notes: store.runNotes(id) });
     }
 
     // /api/builds , /api/builds/:runId/diff — a view over the actions log, not a table of

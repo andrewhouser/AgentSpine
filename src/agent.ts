@@ -19,7 +19,7 @@ import {
   RUN_TOKENS_PER_STEP,
 } from "./config.ts";
 import { compactMessages, estimateTokens } from "./compact.ts";
-import { usageForRuns } from "./memory/store.ts";
+import { addRunNote, usageForRuns } from "./memory/store.ts";
 import { holdText } from "./stash.ts";
 import { route } from "./router.ts";
 import type { RouteOpts } from "./router.ts";
@@ -694,8 +694,10 @@ const runAgentLoop = async (
     // once they are done. Nothing about this run changes while it waits. A stop asked for meanwhile lands on resume.
     const waitedFrom = Date.now();
     if (await yieldToPerson()) {
-      pausedMs += Date.now() - waitedFrom;
-      publish(runId, { type: "paused_for_person", waitedMs: Date.now() - waitedFrom });
+      const waitedMs = Date.now() - waitedFrom;
+      pausedMs += waitedMs;
+      publish(runId, { type: "paused_for_person", waitedMs });
+      addRunNote(runId, "paused_for_person", { waitedMs });
       throwIfStopped(rootId);
     }
 
@@ -704,7 +706,9 @@ const runAgentLoop = async (
     const used = spent();
     const elapsed = Date.now() - startedAt - pausedMs;
     if (used >= budget.tokens || elapsed >= budget.ms) {
-      publish(runId, { elapsedMs: elapsed, reason: used >= budget.tokens ? "tokens" : "time", tokens: used, type: "budget" });
+      const over = { elapsedMs: elapsed, reason: used >= budget.tokens ? "tokens" : "time", tokens: used };
+      publish(runId, { ...over, type: "budget" });
+      addRunNote(runId, "budget", over);
       return concludeStuck(step, used >= budget.tokens ? "Used its whole token budget without concluding." : "Ran out of time without concluding.");
     }
     if (!warned && step > 0 && (used >= budget.tokens * RUN_BUDGET_WARN_AT || elapsed >= budget.ms * RUN_BUDGET_WARN_AT)) {
@@ -726,7 +730,10 @@ const runAgentLoop = async (
         keepRecent: COMPACT_KEEP_RECENT,
         toFraction: COMPACT_TO,
       });
-      if (c.stubs) publish(runId, { after: c.after, before: c.before, stubs: c.stubs, type: "compacted" });
+      if (c.stubs) {
+        publish(runId, { after: c.after, before: c.before, stubs: c.stubs, type: "compacted" });
+        addRunNote(runId, "compacted", { after: c.after, before: c.before, stubs: c.stubs });
+      }
     }
 
     estimatedSpend += estimateTokens(messages);
@@ -986,6 +993,7 @@ const runAgentLoop = async (
   // failed to say it should still say it. `maxSteps`, not MAX_STEPS — a subagent has its own
   // tighter cap, and reporting the top-level one here was simply wrong.
   publish(runId, { reason: "steps", type: "budget" });
+  addRunNote(runId, "budget", { reason: "steps", steps: maxSteps });
   return concludeStuck(maxSteps, "Reached the step cap without concluding.");
 };
 

@@ -1002,6 +1002,13 @@ export interface PlanStep {
 }
 
 /** What a turn looks like while it is still running. */
+/** What happened to a run along the way that is not a tool call (GET /api/runs/:id `notes`; LP3, LP5). */
+export interface RunNote {
+  detail: Record<string, unknown>;
+  kind: "budget" | "compacted" | "paused_for_person";
+  ts: string;
+}
+
 export interface LiveTurn {
   /** The answer as it is being written. A preview: `summary` replaces it when the run finishes. */
   answer: string;
@@ -1011,6 +1018,8 @@ export interface LiveTurn {
   /** Units delegated to during this turn, as they start and finish. */
   delegations: { agent: string; childRunId: number; status: null | string; summary: null | string; tier: string }[];
   error: null | string;
+  /** Paused, compacted or stopped at a budget, as it happens (LP3, LP5). */
+  notes: { detail: Record<string, unknown>; kind: string }[];
   /** The plan card's newest snapshot; empty until the turn's first tool call. */
   plan: PlanStep[];
   runId: number;

@@ -78,8 +78,9 @@ registry.__lp3_tool = {
 const policy = loadPolicy();
 const run = async (goal, opts = {}) => {
   const runId = store.startRun({ kind: "chat", task: goal });
-  return runAgent(goal, policy, runId, { conversational: false, tier: "standard", ...opts });
+  return { ...(await runAgent(goal, policy, runId, { conversational: false, tier: "standard", ...opts })), runId };
 };
+const notesOf = (runId) => store.runNotes(runId).map((n) => n.kind);
 
 console.log("\nTHE COMPACTOR");
 {
@@ -125,6 +126,9 @@ console.log("\nTHE TOKEN BUDGET");
   check("it stops at the step where the budget ran out (five calls of 5,010)", r.steps, 5);
   const warnedAt = r.trace.findIndex((m) => typeof m.content === "string" && m.content.includes("used most of this run's budget"));
   check("and was warned once before that", [warnedAt > 0, r.trace.filter((m) => typeof m.content === "string" && m.content.includes("used most of this run's budget")).length], [true, 1]);
+  // This suite's low compaction threshold means it set results aside on the way too; the stop is the last note.
+  const last = store.runNotes(r.runId).at(-1);
+  check("the stop is kept with the run, last, with its reason", [last?.kind, last?.detail.reason], ["budget", "tokens"]);
   promptTokens = 100;
 }
 
@@ -149,6 +153,8 @@ console.log("\nTIME PAUSED FOR A PERSON DOES NOT COUNT");
   const r = await enqueue(() => run("A background job.", { maxSteps: 10, timeBudgetMs: 500 }), "background");
   await person;
   check("the job finished after the pause instead of running out of time", r.summary, "job finished");
+  const paused = store.runNotes(r.runId).find((n) => n.kind === "paused_for_person");
+  check("the pause is kept with the run, with how long it waited", paused != null && paused.detail.waitedMs >= 600, true);
 }
 
 console.log("\nCOMPACTION IN A REAL RUN");
@@ -161,6 +167,7 @@ console.log("\nCOMPACTION IN A REAL RUN");
   check("the newest two results are whole", lastTwo.every((m) => !m.content.includes("Compacted")), true);
   const ref = /ref ([0-9a-f]{12})/.exec(stubs[0]?.content ?? "")?.[1];
   check("a stub names a real held ref", typeof ref === "string", true);
+  check("the compaction is kept with the run", notesOf(r.runId).includes("compacted"), true);
   // Counted in what the model was actually sent on the run's last step (the request carrying the most tool results;
   // the closing call after it sends a summary, not the history): at most the newest two in full.
   const mine = prompts.filter((p) => p.includes("Read four long things"));

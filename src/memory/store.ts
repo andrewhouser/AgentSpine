@@ -1415,6 +1415,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
       db.exec(`DELETE FROM confirmations WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM stash WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM llm_calls WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM run_notes WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM runs WHERE id IN (${list})`);
     }
 
@@ -2074,3 +2075,49 @@ export const contextFacts = (ids: number[]): { inProject: boolean; tools: string
   const tools = (db.prepare(`SELECT DISTINCT tool FROM actions WHERE run_id IN (${q}) AND decision = 'executed'`).all(...ids) as { tool: string }[]).map((r) => r.tool);
   return { inProject, tools, workPrivate };
 };
+
+// --- run notes (LP3, LP5) ---
+// What happened to a run along the way that is not a tool call: it paused so a person could go first, it set aside
+// earlier results to make room, or it stopped at its budget. The live event stream keeps a finished run's events for
+// five minutes only, and a background job is usually looked at later, so these few are kept with the run.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS run_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    detail TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_run_notes_run ON run_notes (run_id, id);
+`);
+
+export type RunNoteKind = "budget" | "compacted" | "paused_for_person";
+
+export interface RunNote {
+  detail: Record<string, unknown>;
+  kind: RunNoteKind;
+  ts: string;
+}
+
+/** Keep one note with its run. Never throws: a note is an account of the run, not part of it. */
+export const addRunNote = (runId: null | number, kind: RunNoteKind, detail: Record<string, unknown>): void => {
+  if (runId == null) return;
+  try {
+    db.prepare("INSERT INTO run_notes (run_id, ts, kind, detail) VALUES (?,?,?,?)").run(runId, now(), kind, JSON.stringify(detail));
+  } catch (err) {
+    console.warn(`[run-notes] could not keep a note: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+export const runNotes = (runId: number): RunNote[] =>
+  (db.prepare("SELECT ts, kind, detail FROM run_notes WHERE run_id = ? ORDER BY id").all(runId) as { detail: string; kind: RunNoteKind; ts: string }[]).map((r) => ({
+    detail: (() => {
+      try {
+        return JSON.parse(r.detail) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    })(),
+    kind: r.kind,
+    ts: r.ts,
+  }));

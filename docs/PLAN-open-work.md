@@ -932,7 +932,12 @@ is built. Every measurement named below needs the model host, so every item is *
   be skipped, when one step jumps from under 80% to over the budget. Compaction (`src/compact.ts`): once the loop's
   own messages pass `COMPACT_AT_TOKENS` (30,000 estimated), older tool results become stubs down to 60% of that,
   keeping the newest two whole and never touching the prefix before the run's goal; each full result is held under
-  a ref `read_more` opens, and a run without `read_more` is never compacted. Events: `budget`, `compacted`. Suite:
+  a ref `read_more` opens, and a run without `read_more` is never compacted. Events: `budget`, `compacted`. These
+  and LP5's pause are also kept with the run (`run_notes`, pruned with it, `GET /api/runs/:id` `notes`), because the
+  live stream keeps a finished run's events for five minutes and a background job is looked at later. Web
+  (2026-11-25): the Activity page's run view has an "Along the way" section in words (`web/src/lib/runNotes.ts`,
+  suite `test/run-notes.test.mjs`), checked in a browser at desktop and phone width; a live chat turn shows the same
+  lines as they happen, which was typechecked but not seen running. iPhone and Mac do not show them yet. Suite:
   `test/run-budget.test.mjs`, whose compaction rows fail with compaction switched off. Not done: setting the three
   numbers from a week of real runs, and raising `MAX_STEPS` so the token budget, not the count, is what binds;
   chat history (8 turns in 6,000 characters) is unchanged.
@@ -947,7 +952,7 @@ is built. Every measurement named below needs the model host, so every item is *
   in `src/agent.ts`), then resumes ahead of other background work. It is paused, not stopped; a stop asked for while
   paused lands when it resumes. A model call in flight is not interrupted, so a chat can still wait for one step's
   call, which keeps each run's prompt prefix whole. The lane rides on AsyncLocalStorage, so a subagent pauses with
-  its parent. A paused run publishes `paused_for_person` with how long it waited; the clients ignore it for now.
+  its parent. A paused run publishes `paused_for_person` with how long it waited, and keeps it as a run note (see LP3).
   Suite: `test/queue-lanes.test.mjs`, whose real-run row fails with the yield removed. Not checked: how long a chat
   waits in practice on the Mini (one step of a job, which is one model call; measure it with a watcher running).
 - **LP6 Load tool descriptions on demand (built 2026-11-25, off by default until measured).** Measured: tool

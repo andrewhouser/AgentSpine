@@ -6,6 +6,13 @@
   margin: 10px 0;
 }
 
+/* Something that happened to the run that is not a tool call: set aside results, stopped at a budget (LP3). */
+.note {
+  color: var(--text-faint);
+  font-size: 0.7813rem;
+  margin: 6px 0;
+}
+
 .error {
   background: var(--danger-soft);
   border: 1px solid var(--danger-line);

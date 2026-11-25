@@ -1,6 +1,8 @@
+import type { RunNoteLike } from "../../lib/runNotes.ts";
 import type { Attachment, LiveToolCall, PlanStep, VisionPass } from "../../lib/types.ts";
 
 import { describeActivity } from "../../lib/activity.ts";
+import { describeRunNote } from "../../lib/runNotes.ts";
 import { weatherCardOf } from "../../lib/weatherCard.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AssistantMessage } from "../AssistantMessage/AssistantMessage.tsx";
@@ -27,6 +29,8 @@ interface TurnProps {
   /** "approval" draws the task as the user's decision rather than as a typed message. */
   kind?: null | string;
   live: boolean;
+  /** Paused, compacted or stopped at a budget while it ran (LP3, LP5). Only a live turn has them. */
+  notes?: RunNoteLike[];
   onConfirmationResolved: () => void;
   /** Put the message back in the composer to change it. Offered only on a finished turn. */
   onEdit?: () => void;
@@ -68,6 +72,7 @@ export const Turn = ({
   error,
   kind = null,
   live,
+  notes = [],
   onConfirmationResolved,
   onEdit,
   onRetry,
@@ -164,6 +169,11 @@ export const Turn = ({
         summary={c.summary}
         tool={c.tool}
       />
+    ))}
+    {notes.map((n) => describeRunNote(n)).filter((t): t is string => t !== null).map((text, i) => (
+      <p className={styles.note} key={`${i}-${text}`}>
+        {text}
+      </p>
     ))}
     {live && !summary && !error && <ThinkingIndicator activity={describeActivity(toolCalls)} step={step} waitingBehind={waitingBehind} />}
     </div>

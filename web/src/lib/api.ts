@@ -56,6 +56,7 @@ import type {
   Recipe,
   RetentionRule,
   Run,
+  RunNote,
   SavedFile,
   Schedule,
   ScheduleVersion,
@@ -478,7 +479,7 @@ export const api = {
    * untouched and retrying is safe.
    */
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
-  run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
+  run: (id: number) => request<{ actions: unknown[]; notes?: RunNote[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runCheckin: () => post<CheckinResult>("/api/checkin/run"),
 
