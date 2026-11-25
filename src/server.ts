@@ -41,14 +41,14 @@ import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { checkWorkspaceFile } from "./projects/workspace.ts";
-import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, pasteVia, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
 import * as briefs from "./knowledge/briefs.ts";
 import { closeMeeting, closeoutState, parsePlan, previewCloseout } from "./knowledge/closeout.ts";
 import * as knowledge from "./knowledge/store.ts";
 import { retentionRules } from "./knowledge/retention.ts";
-import { annotateHits } from "./knowledge/retrieval.ts";
+import { EVIDENCE_FILTERS, searchFiltered } from "./knowledge/retrieval.ts";
+import type { EvidenceFilter } from "./knowledge/retrieval.ts";
 import { extractClaims, inboxItemText, normalizeMeeting } from "./knowledge/extract.ts";
 import { ocrAvailable } from "./inbox/ocr.ts";
 import {
@@ -1192,22 +1192,36 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/retention: what is kept, and for how long, per kind of thing. Read-only; the numbers are config.
     if (m === "GET" && seg[1] === "retention" && seg.length === 2) return sendJson(res, 200, retentionRules());
 
-    // /api/knowledge/search?q=&project=&kind=&since=&until=&k= — hybrid full-text and vector search over every
-    // indexed document and filed meeting (src/projects/search.ts). Omit project to search the whole base.
+    // /api/knowledge/search?q=&project=&kind=&since=&until=&asOf=&person=&team=&evidence=&k= — hybrid full-text and
+    // vector search over every indexed document and filed meeting (src/projects/search.ts). Omit project to search the
+    // whole base. asOf is until by another name (a passage is as of the day it is dated). person or team keeps passages
+    // that name them; evidence (reviewed, extracted, none, comma-separated) keeps sources by what backs them. An
+    // unknown person or team, or a bad evidence value, is a 400 so a screen never shows "no results" for a typo.
     if (m === "GET" && seg[1] === "knowledge" && seg[2] === "search" && seg.length === 3) {
       const query = (url.searchParams.get("q") ?? "").trim();
       if (!query) return sendJson(res, 400, { error: "q is required" });
       const project = url.searchParams.get("project");
       const kinds = (url.searchParams.get("kind") ?? "").split(",").filter(Boolean);
-      const hits = await searchKnowledge(query, {
+      const evidence = (url.searchParams.get("evidence") ?? "").split(",").filter(Boolean);
+      if (evidence.some((e) => !(EVIDENCE_FILTERS as readonly string[]).includes(e))) return sendJson(res, 400, { error: `evidence must be any of ${EVIDENCE_FILTERS.join(", ")}` });
+      const person = url.searchParams.get("person") || undefined;
+      const team = url.searchParams.get("team") || undefined;
+      if (person && team) return sendJson(res, 400, { error: "give person or team, not both" });
+      const found = await searchFiltered(query, {
+        evidence: evidence.length ? (evidence as EvidenceFilter[]) : undefined,
         k: Math.min(50, Math.max(1, Number(url.searchParams.get("k") ?? 10) || 10)),
         kinds: kinds.length ? kinds : undefined,
+        person,
         projectId: project ? Number(project) : undefined,
         since: url.searchParams.get("since") ?? undefined,
-        until: url.searchParams.get("until") ?? undefined,
+        team,
+        until: url.searchParams.get("until") ?? url.searchParams.get("asOf") ?? undefined,
       });
-      // Each hit says what its source is backed by (src/knowledge/retrieval.ts); ranking is unchanged.
-      return sendJson(res, 200, annotateHits(hits));
+      if ((person || team) && !found.who) return sendJson(res, 400, { error: found.note });
+      // Each hit says what its source is backed by (src/knowledge/retrieval.ts); ranking is unchanged. Still a plain
+      // array, which every client reads; a note about a filter goes in a header so the shape does not change.
+      if (found.note) res.setHeader("X-Search-Note", found.note);
+      return sendJson(res, 200, found.hits);
     }
 
     // /api/data-events — the deletion and retention audit trail (ids, names and counts, never content).

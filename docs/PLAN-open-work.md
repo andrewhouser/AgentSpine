@@ -442,9 +442,21 @@ baseline, and the meeting recall number is still unmeasured.
   kind and a date range. Run-level project recall (`recallChunks`, `knowledgeFor`) uses it, so an exact name or
   ticket number is now found without an embedding; the live meeting cards keep their cosine path because they
   threshold on it. `GET /api/knowledge/search` exposes it. Suite: `test/knowledge-search.test.mjs`. The vector
-  floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. Not built: the structured path (people,
-  decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
-  and a person and team filter. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
+  floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. **Filters and the structured path (built
+  2026-11-25, backend and agent tools; no screen yet).** `searchFiltered` (`src/knowledge/retrieval.ts`) adds a person
+  or team filter (a passage must name the person, by recorded name or alias as a whole word, or for a team the team
+  or any recorded member; a bare first name is not a match until it is taught as an alias) and an evidence filter
+  (`reviewed`, `extracted`, `none`, by what backs the source). Both narrow before the per-source quota, so the list
+  still fills, and neither re-orders what it keeps. "As of" for passages is `until` (`asOf` on the API); for claims it
+  was already in `listClaims`. The structured path is in `knowledge_claims` (`gatherEvidence`): with a person, team
+  or kind, the store's owners, speakers and kinds decide which claims qualify and the question's words only narrow
+  them, after dropping names and words that restate the filter, so "what has Sam raised" answers from Sam's claims.
+  An unknown person or team is an error, never an answer for everyone. `knowledge_search` and `knowledge_claims` take
+  `person`, `team`, `evidence` and `kind`; `GET /api/knowledge/search` takes `person`, `team`, `evidence` and `asOf`
+  and keeps its array shape. Fixed with it: `knowledge_claims` did not keep a project run to its own project, as
+  `knowledge_search` did, so a project chat could read another project's claims; it is pinned now. Suite:
+  `test/knowledge-filters.test.mjs`. Not built: the filters on the Drop zone search screens (web, iPhone, Mac), and
+  any measurement of whether they help, which is K1's questions again. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
   2026-11-22, built but not seen running). The agent tool is built (2026-11-22): `knowledge_search`
   declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.

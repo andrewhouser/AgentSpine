@@ -7,8 +7,8 @@
  * scales that cannot be compared, and every hit records which path found it so a result is inspectable.
  * A per-source quota then stops several chunks of one meeting from crowding out a document.
  *
- * Filters narrow before ranking: project (or all of them), source kind, and a date range on the chunk's
- * own date. Nothing here is trusted text: callers tag results UNTRUSTED before they reach a prompt.
+ * Filters narrow before ranking: project (or all of them), source kind, a date range on the chunk's
+ * own date, and the names a passage must mention (a person or a team, resolved by src/knowledge/retrieval.ts). Nothing here is trusted text: callers tag results UNTRUSTED before they reach a prompt.
  * The live meeting cards keep their own cosine path (`scoreChunks`), because they threshold on it.
  */
 import { cosine, fromBlob, getEmbedder } from "../memory/rag.ts";
@@ -22,6 +22,12 @@ export interface SearchFilters {
   kinds?: string[];
   /** One project, or omit for the whole base. */
   projectId?: null | number;
+  /**
+   * Keep only passages that name one of these, as a whole word and in any case: a person's name and
+   * aliases, or a team's and its members'. Narrows both paths in SQL before ranking, so a narrow filter
+   * still fills the list, then checks word edges, which LIKE cannot ("Sam" is not in "Samsung").
+   */
+  mentions?: string[];
 }
 
 export interface SearchOptions extends SearchFilters {
@@ -31,6 +37,11 @@ export interface SearchOptions extends SearchFilters {
   perSource?: number;
   /** Embedding of the query, when the caller already has it. */
   vector?: Float32Array;
+  /**
+   * A test a fused hit must pass, applied before the per-source quota so the list still fills. How the
+   * knowledge layer filters by what a source is backed by without this file knowing about claims.
+   */
+  keep?: (h: Hit) => boolean;
 }
 
 export interface Hit {
@@ -105,6 +116,13 @@ const where = (f: SearchFilters): { clause: string; args: (null | number | strin
     c.push("c.mtime <= ?");
     args.push(f.until);
   }
+  const names = (f.mentions ?? []).map((n) => n.trim()).filter(Boolean);
+  if (f.mentions && !names.length) c.push("0"); // asked for a person with no names: nothing can match
+  if (names.length) {
+    // LIKE is case-blind only for ASCII, which is why the word-edge check after fusion is case-blind too.
+    c.push(`(${names.map(() => "c.text LIKE ? ESCAPE '\\'").join(" OR ")})`);
+    args.push(...names.map((n) => `%${n.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`));
+  }
   return { args, clause: c.length ? `AND ${c.join(" AND ")}` : "" };
 };
 
@@ -156,6 +174,17 @@ const vectorRank = async (query: string, f: SearchFilters, given?: Float32Array)
     .map((x) => x.r);
 };
 
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Whether a passage names one of these as a whole word. No filter passes everything. */
+const mentionTest = (names?: string[]): ((text: string) => boolean) => {
+  const clean = (names ?? []).map((n) => n.trim()).filter(Boolean);
+  if (!names) return () => true;
+  if (!clean.length) return () => false;
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${clean.map(escapeRe).join("|")})(?![\\p{L}\\p{N}])`, "iu");
+  return (text) => re.test(text);
+};
+
 export const searchKnowledge = async (query: string, opts: SearchOptions = {}): Promise<Hit[]> => {
   const k = opts.k ?? 6;
   const perSource = opts.perSource ?? 2;
@@ -175,7 +204,10 @@ export const searchKnowledge = async (query: string, opts: SearchOptions = {}): 
   add(fts, "fts");
   add(vec, "vector");
 
-  const ranked = [...fused.values()].sort((a, b) => b.score - a.score);
+  const edges = mentionTest(opts.mentions);
+  const ranked = [...fused.values()]
+    .filter((h) => edges(h.text) && (opts.keep ? opts.keep(h) : true))
+    .sort((a, b) => b.score - a.score);
   // The quota: walk the ranking and take a source's chunks only up to its share, so one long meeting
   // cannot fill the list. Chunks passed over are kept as overflow and used only if the list runs short.
   const taken = new Map<number, number>();

@@ -7,6 +7,9 @@
  * disagreeing reviewed claims are reported as a CONFLICT; and where nothing reviewed matches, the result says
  * INSUFFICIENT EVIDENCE in so many words. Unreviewed claims are shown only as leads, never as the answer.
  *
+ * A person, team or kind filter is the structured path (K2): the store's owners, speakers and kinds decide the set
+ * and the words only narrow it, so "what has Priya raised" does not depend on the claim containing "raised".
+ *
  * The match is deliberately plain (shared words), because a wrong "supported" is worse than a wrong "insufficient":
  * the first invents a fact and the second sends the person to look. The thresholds are here, not in a prompt.
  */
@@ -43,11 +46,49 @@ export const overlap = (q: string[], c: Claim): number => {
 /** A claim answers a question when it shares at least two of its words, or all of them when it has fewer. */
 export const matches = (q: string[], c: Claim): boolean => q.length > 0 && overlap(q, c) >= Math.min(2, q.length);
 
-export const gatherEvidence = (question: string, opts: { asOf?: string; projectId?: number } = {}): AnswerEvidence => {
-  const q = words(question);
-  const base = { asOf: opts.asOf, excludeSensitive: true, limit: 500, projectId: opts.projectId };
-  const reviewed = k.listClaims({ ...base, reviewState: "reviewed" }).filter((c) => c.status === "active" || c.status === "resolved").filter((c) => matches(q, c));
-  const leads = k.listClaims({ ...base, reviewState: "proposed" }).filter((c) => c.status === "active").filter((c) => matches(q, c));
+/**
+ * Words that only restate a structured filter. "What has Priya raised?" with a person filter is a question about
+ * Priya's claims, not about claims containing the word "raised", so these are dropped from the words that must match.
+ */
+const RESTATES = new Set(["said", "say", "says", "raised", "raise", "raises", "owns", "own", "owned", "owner", "owes", "owe", "owed", "promised", "promise",
+  "committed", "commitment", "commitments", "decided", "decision", "decisions", "risk", "risks", "question", "questions", "goal", "goals", "status",
+  "open", "anything", "everything", "lately", "recently", "team", "person"]);
+
+export interface EvidenceOptions {
+  asOf?: string;
+  /** Only claims of this kind (decisions, commitments, ...). */
+  kind?: k.ClaimKind;
+  /** A person (name, alias or id): claims they own or said. */
+  person?: number | string;
+  projectId?: number;
+  /** A team (name, alias or id): claims owned or said by anyone recorded as a member, or naming the team as speaker. */
+  team?: number | string;
+}
+
+/** Thrown when a person or team filter names nobody recorded, so the caller says so instead of answering for everyone. */
+export class UnknownEntityError extends Error {}
+
+export const gatherEvidence = (question: string, opts: EvidenceOptions = {}): AnswerEvidence => {
+  const wanted = opts.person ?? opts.team;
+  let who: null | ((c: Claim) => boolean) = null;
+  let nameWords = new Set<string>();
+  if (wanted !== undefined && wanted !== "") {
+    const kind = opts.person !== undefined ? "person" : "team";
+    const e = k.findEntity(wanted, [kind]);
+    if (!e) throw new UnknownEntityError(`no ${kind} called "${wanted}" is recorded`);
+    const ids = new Set(k.peopleOf(e).map((p) => p.id));
+    const names = new Set(k.namesOf(e).map((n) => n.toLowerCase()));
+    nameWords = new Set([...names].flatMap((n) => words(n)));
+    who = (c) => (c.owner_id != null && ids.has(c.owner_id)) || (!!c.speaker && names.has(c.speaker.toLowerCase()));
+  }
+  const structured = !!who || !!opts.kind;
+  // With a structured filter, the filter decides which claims qualify and the remaining words narrow them. With no
+  // words left ("what has Priya raised"), every claim the filter passes qualifies.
+  const q = words(question).filter((w) => !structured || (!nameWords.has(w) && !RESTATES.has(w)));
+  const fits = (c: Claim): boolean => (who ? who(c) : true) && (structured && q.length === 0 ? true : matches(q, c));
+  const base = { asOf: opts.asOf, excludeSensitive: true, kind: opts.kind, limit: 500, projectId: opts.projectId };
+  const reviewed = k.listClaims({ ...base, reviewState: "reviewed" }).filter((c) => c.status === "active" || c.status === "resolved").filter(fits);
+  const leads = k.listClaims({ ...base, reviewState: "proposed" }).filter((c) => c.status === "active").filter(fits);
   const ids = new Set(reviewed.map((c) => c.id));
   const conflicts = k
     .findConflicts()
