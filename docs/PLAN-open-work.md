@@ -17,10 +17,12 @@ proposed and not placed either; its own "Sequence and decisions" says what waits
 2026-11-26: what Hermes Agent does that AgentSpine could learn from) is proposed and not placed; it extends
 section 10's LP3 and CP3 and section 4a's Phase 6. Section 14 (added 2026-11-26: ten uses taken from a video
 about Hermes Agent, each one chosen by you) is decided, so it is work and not a proposal; its own "Sequence and
-decisions" gives the order.
+decisions" gives the order. Section 15 (added 2026-11-26: the spine, a redesign around one line through the day
+and the engineering manager's work) is decided as the direction and proposed in its order; each task is marked
+for the model it needs.
 
 Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11, 12,
-13 and 14 are new, and 1 to 7 and 4a are as before.
+13, 14 and 15 are new, and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -1827,6 +1829,168 @@ Open decisions for you, each with the default the build will take:
   they use, what each is for, who owns it, what it connects to and where it hurts, each line cited to the call
   it came from, assembled by code from reviewed claims like every other brief (section 8, K6). It would follow
   U5 and U6. Say if you want it.
+
+---
+
+## 15. The spine: one line through the day, built for an engineering manager (added 2026-11-26)
+
+Decided 2026-11-26 as the direction: you said the sketches were closer to what you want from this project than
+the screens as they are, with strong meeting and memory support kept, and with the day job (people, 1:1s,
+projects, decisions) ahead of clients. The items and the order below are proposed; nothing here is built. The
+sketches were drawn in the chat and are not in the repository, so R0 redraws them in the app's own design.
+
+**The idea in four lines.** The twelve screens become one line through the day: what it did, what needs you
+now, what it will do. A decision comes as one card that says what leaves, where it ran, whether it can be undone
+and why it is asking. A feature is Off, Watch or On from a screen, and Watch shows what it would have done. A
+person on your team and a project are pages built from what was said in meetings, each fact with its source.
+
+**Rules for all of it.**
+- Every UI item is built for web, Mac and iPhone together (your standing rule). A new Swift file needs your OK
+  for the `.pbxproj` edit; a new Xcode target (Watch, widget, Live Activity) is its own decision.
+- Work material stays on the local model, as meetings and projects already do. Nothing in R7 or R8 may reach
+  the cloud tier, and each new tool that returns it declares `privateOutput`.
+- Nothing is collected about a person automatically. A note becomes "evidence" only when you confirm it.
+- Code decides order, counts and thresholds. A model writes wording only, from items you already confirmed.
+- Approve stays inside the full card. No row, swipe or saved offline copy approves anything.
+
+**What is already there (checked 2026-11-26).** `kn_entities` has people, teams and topics. `kn_claims` has the
+kinds commitment, decision, risk and question, with an owner, a due date, a speaker and a review state.
+`meeting_work_items` keep the quote and its `start_ms`, and `meeting_segments` are timed. `src/today.ts`
+assembles what is waiting with no model call. Memories record where they came from (section 4, N1). Not there:
+which way a commitment runs (who owes whom), a use count on a memory, a place to change a feature's mode at
+run time (modes are `.env` today), and any page for a person. Not checked: whether audio is still kept when a
+quote is played back (`MEETING_KEEP_AUDIO_HOURS` prunes it), and whether a claim links to its segment.
+
+**Who does what.** Each task is marked for the model it needs, as HANDOFF.md did:
+**[Sonnet]** mechanical and fully specified; **[Opus]** needs the design understood; **[Fable]** a security or
+privacy judgement. A smaller model that finds itself changing a gate file, loosening a test or widening what
+leaves the machine stops and writes down what it found.
+
+### R0. Draw it properly first (Design; nothing ships from this)
+
+- [Opus] Redraw the spine, the decision card, the trust dial, the live meeting, the closeout, Ask, Memory, a
+  person and a project in the app's own design system, light and dark, at phone and desktop width. Say what
+  happens to each of today's menu items: which become moments on the line and which stay as places.
+- [Opus] Write the API shapes each screen reads, so the three clients are built against one contract.
+- You: agree the drawings and the menu change before R1 starts.
+
+### R1. The spine replaces Today (Code; web, Mac and iPhone together)
+
+- [Opus] `readSpine(now)` beside `readToday`: behind you (what ran since you last looked, from the same query
+  Today uses), now (Today's waiting items, unchanged rules), ahead (each schedule's next run, and today's
+  calendar events with whether prep exists). Code only, no model, and it must not wait on Gmail or Calendar:
+  the ahead part reads what the check-in and Heads-up already stored.
+- [Opus] The ask bar on every screen, scoped to what is open (a person, a project, a meeting). It starts an
+  ordinary chat turn with the scope as project or filter, never as text in the goal.
+- [Sonnet] The three clients, the menu change agreed in R0, and `test/spine.test.mjs` plus the screen test in
+  the pattern of `test/today-screen.test.mjs` (web words and Swift words from the same fixtures).
+- [Fable] Calendar titles and mail subjects on the line are other people's text: confirm none reaches a
+  prompt, and that the scoped ask bar cannot be used to put a title into a run's goal.
+
+### R2. The decision card says why (Code; all three clients)
+
+- [Fable] Define the four facts and where each comes from in code, never from the model: what leaves (the
+  tool's `outgoingText`), where it ran (the run's pin), whether it can be undone (the reversibility tier), and
+  why it is asking. "Why" is the new one: you typed it, a schedule you approved, a button, or a run that had
+  read outside content before it made this call. That last case needs a recorded fact on the run ("has read
+  untrusted content"), set by the loop when a tool result is tagged untrusted. Decide what the card shows for it.
+- [Fable] "Always allow this" on the card is the existing auto-approval proposal (`src/learn/promote.ts`), not
+  a new write to `policy.json`. Confirm it cannot be offered for a card that must always show (`alwaysConfirm`)
+  or for a call made after outside content was read.
+- [Opus] `GET /api/confirmations/:id` returns the four facts; hold-to-approve and one-at-a-time ordering.
+- [Sonnet] The card on three clients, replacing the three approval cards there are now; tests for each fact.
+
+### R3. Trust dials: Off, Watch, On, from a screen (Code; all three clients)
+
+- [Fable] A run-time mode store, read by the features that read `.env` today (`CHECKIN_MODE`,
+  `INBOX_SORT_MODE`, `OUTBOX_ENFORCE`, Heads-up's switches). Decide: `.env` is the ceiling or the default;
+  which switches may never be loosened from a screen (`OUTGOING_ENFORCE` and anything else that is a guard
+  should only tighten); and that no tool and no run can write a mode, as with `policy.json`. The store's file
+  joins the protected list.
+- [Opus] For each feature in Watch, the "what it would have done" list from the log it already keeps, a
+  thumbs-down per row, and the agreement count. The count is arithmetic in code.
+- [Sonnet] The dial screen on three clients, one row per feature, and the tests.
+- This is first after R0 because most of sections 12 to 14 is built and off, and a terminal is the only way to
+  see any of it working.
+
+### R4. Meetings on the line (Code; all three clients)
+
+- [Opus] A meeting opens from its moment on the spine: live transcript, the coach's line only when your own
+  history adds something (an open commitment to someone in the room), and "mark this moment", which stores a
+  timestamp and nothing else.
+- [Opus] The closeout as a short review: each proposed commitment with its quote and time, Add task or Not
+  mine, and "worth remembering?" one fact at a time. This is the existing confirmation rule (extracted items
+  are mostly false positives) with a better screen, not a new path into memory or RAG.
+- [Opus] Playback from a quote while the audio is still kept, and the transcript around it when it is not.
+- [Sonnet] The screens on three clients and the screen tests.
+
+### R5. Answers that point at the moment (Code)
+
+- [Opus] `src/knowledge/answer.ts` already decides in code whether the store supports an answer. Carry the
+  meeting, speaker and `start_ms` of each supporting item to the client, and add the "not found" line for the
+  part of a question nothing supports.
+- [Sonnet] Render sources with playback on three clients; tests that an unsupported part is said, not filled.
+
+### R6. Memory you can read (Code; all three clients)
+
+- [Opus] Count use: `uses` and `last_used` on a memory, written by recall. A "guess" state for a memory no
+  person has confirmed, shown as unconfirmed until you confirm it. A list of what has not been used in 90 days.
+- [Fable] "Never use for the cloud" on a memory: today only code sets `cloud_safe`, and only when it saw the
+  run stay off private material. A person may clear that flag from the screen and may never set it.
+- [Sonnet] The Memory screen on three clients: source, uses, Fix, Forget, Confirm.
+
+### R7. A person (Code; the core of the manager work)
+
+- [Opus] Which way a commitment runs. Add who it is owed to on `kn_claims`, filled at review from the speaker
+  and the people in the meeting, and corrected by you on the card. "You owe" and "they owe" are then queries.
+- [Opus] `readPerson(id)`: open between you (both directions, each with quote and time), what you have heard
+  lately (reviewed claims that name them), the last and next 1:1 from the calendar, and how long since the
+  last one. Code only.
+- [Fable] Evidence for review season. Decide and write down before any code: a note is evidence only when you
+  mark it; it is tagged strength or growth by you, not by a model; it never reaches the cloud, is never
+  recalled into a run about someone else, and has its own retention and a one-step delete for a person who
+  leaves. This is information about employees, so the rules come first and the screen second.
+- [Sonnet] The person page and the team list on three clients, and the tests.
+
+### R8. A project (Code)
+
+- [Opus] A decision log from reviewed claims: decided (who proposed, who agreed, the moment), and open, with
+  how many meetings have raised it without settling it. Risks by who named them and how often. Waiting, in
+  both directions, from R7's direction field.
+- [Sonnet] The project page on three clients, and the tests.
+
+### R9. "For today": the line before a 1:1 or a review (Code, then a decision)
+
+- [Opus] First version in code, no model: what you owe, oldest first, then what they are waiting to hear.
+- [Fable] Only if the code version is too blunt: a local model wording it from reviewed items. Quotes are other
+  people's words, so they go in tagged, the output is shown to you only and never becomes a goal.
+
+### R10. Smaller pieces, after the above
+
+- [Sonnet] One number (what needs you) in the Mac menu bar; it is already the badge on iPhone and the Dock.
+- [Opus] The privacy rail: a mark on each run and thread for where it ran, from `runs.private` and `served`.
+- [Opus] The weekly review as five cards, from what `src/outbox-review.ts` and the retro already produce.
+- [Opus] Undo inline on the spine for a few minutes after a reversible action, where the tool has an inverse.
+- You: a Watch app, a widget or a Live Activity each need a new Xcode target.
+- The client page from the sketches waits. Section 14's U4 and U6 are unchanged and the client's project still
+  cannot be set from a screen.
+
+### Sequence and decisions
+
+Order: R0, then R3 (so what is already built can be seen), R1, R2, R7, R4 with R5, R8, R6, R9, R10. R7 can
+start beside R1 because its server half shares nothing with the spine.
+
+- [Fable] A security read of each item before it ships, in the manner of HANDOFF.md step 7, and of the whole
+  section at the end. R2's "why", R3's mode store and R7's evidence rules are read before they are built.
+
+Yours to decide:
+- The menu after R0: which of today's twelve places stay.
+- R3: whether `.env` is the ceiling for a dial or only its starting value.
+- R7: whether evidence exists at all, and if so its retention. It can be left out and the rest still stands.
+- R7: whether people come from the calendar and meetings as they appear, or only when you add them.
+- Whether work material from the day job ever sits in the same database as personal mail and clients, or in
+  a second database on the work machine.
+- R10: any new Xcode target.
 
 ---
 
