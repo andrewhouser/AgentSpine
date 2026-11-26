@@ -113,7 +113,7 @@ console.log("\nA SAVE LANDS WHOLE OR NOT AT ALL");
   check("a skipped claim still waits", k.getClaim(later).review_state, "proposed");
   check("the brief now holds the new decision", lines(alpha, "Alpha").includes("Launch moves to August"), true);
   check("the same plan cannot be saved twice", refuses(() => c.closeMeeting(m1, plan1)), true);
-  check("the audit row holds counts and no content", rawDb.prepare("SELECT detail FROM data_events WHERE kind = 'meeting_closed_out'").get().detail, "1 accepted, 1 rejected, 2 replaced, 1 left for later");
+  check("the audit row holds counts and no content", rawDb.prepare("SELECT detail FROM data_events WHERE kind = 'meeting_closed_out'").get().detail, "1 accepted, 1 rejected, 2 replaced, 1 left for later, 0 made into tasks");
 }
 
 console.log("\nONE DECISION CAN REPLACE TWO");

@@ -12,7 +12,7 @@
 import { updatePrefs } from "../headsup/prefs.ts";
 import type { ClassifiedAction, PolicyDecision, Tool } from "../types.ts";
 
-const KINDS = ["anniversary", "appointment", "bill", "birthday", "flight", "recurring"];
+const KINDS = ["anniversary", "appointment", "bill", "birthday", "booking", "flight", "recurring"];
 
 const parse = (a: any): { enabled: boolean; kind: string } | { error: string } => {
   const kind = String(a?.kind ?? "");
@@ -25,10 +25,10 @@ export const headsupKindSet: Tool = {
   name: "headsup_kind_set",
   confirmWhenUnattended: true,
   description:
-    "Turn one kind of Heads-up (birthday, bill, appointment, anniversary, flight, recurring) on or off. Use when the " +
+    "Turn one kind of Heads-up (birthday, bill, appointment, booking, anniversary, flight, recurring) on or off. Use when the " +
     "user asks to stop or resume a kind. It is QUEUED for their approval, so say it is proposed, not done. It never " +
     "affects a flight or drive already being watched.",
-  argsSchema: '{ "kind": "anniversary" | "appointment" | "bill" | "birthday" | "flight" | "recurring", "enabled": boolean }',
+  argsSchema: '{ "kind": "anniversary" | "appointment" | "bill" | "birthday" | "booking" | "flight" | "recurring", "enabled": boolean }',
   classify: (a): ClassifiedAction => {
     const p = parse(a);
     return {

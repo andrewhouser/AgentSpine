@@ -114,12 +114,32 @@ const emit = (runId: number, b: RunBuffer, event: RunEventInput): void => {
 };
 
 /**
+ * Listeners for every run's events, whoever the run is. One user today: the stall watchdog
+ * (src/stall.ts), which reads the bus as the record of a run doing something, so that no
+ * second set of "I am alive" calls has to be threaded through the broker and the loop.
+ */
+const taps = new Set<(runId: number, event: RunEventInput) => void>();
+
+/** Hear every event as it is published. Returns the unsubscribe function. */
+export const tapEvents = (fn: (runId: number, event: RunEventInput) => void): (() => void) => {
+  taps.add(fn);
+  return () => taps.delete(fn);
+};
+
+/**
  * Publish an event for a run. Never throws — a listener that blows up must not be able to
  * take an agent cycle down with it, and a run whose events nobody is watching is normal
  * (every scheduled job, every CLI `do`).
  */
 export const publish = (runId: number | null, event: RunEventInput): void => {
   if (runId == null) return;
+  for (const tap of taps) {
+    try {
+      tap(runId, event);
+    } catch {
+      /* same rule as below: a watcher of the bus must not be able to fail a run */
+    }
+  }
   try {
     const b = bufferFor(runId);
     const plan = event.type === "plan" ? b.plan : foldPlan(b.plan, event);

@@ -16,6 +16,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { DB_PATH } from "../config.ts";
 import { canonicalSpec, isOneShot, nextRun, parseSpec } from "../schedule-spec.ts";
+import { STOPWORDS } from "../stopwords.ts";
 import type { BrokerStatus, ClassifiedAction, ToolCall } from "../types.ts";
 import type { Msg } from "../llm.ts";
 
@@ -195,6 +196,8 @@ const addColumn = (table: string, col: string, decl: string) => {
     /* column already exists */
   }
 };
+// The app that registered a device, so its pushes carry that app's APNs topic (section 11).
+addColumn("devices", "bundle_id", "TEXT");
 addColumn("runs", "kind", "TEXT");
 addColumn("runs", "task", "TEXT");
 addColumn("runs", "schedule_id", "INTEGER");
@@ -231,6 +234,15 @@ addColumn("confirmations", "resolved", "TEXT");
 addColumn("confirmations", "rung", "INTEGER");
 addColumn("confirmations", "nudged", "TEXT");
 addColumn("schedules", "spec", "TEXT");
+// The catch-up window (src/schedule-catchup.ts, PLAN-open-work section 13 H6). `catchup_minutes`
+// is one job's own limit on how late a slot may still run: null follows the rule in code, 0 is
+// no limit. The three `last_skip_*` columns are the most recent slot that was skipped for being
+// too late, kept on the row so Schedules can say "Tuesday's 7am run was skipped" instead of
+// showing a job that quietly did nothing.
+addColumn("schedules", "catchup_minutes", "INTEGER");
+addColumn("schedules", "last_skip_at", "TEXT");
+addColumn("schedules", "last_skip_slot", "TEXT");
+addColumn("schedules", "last_skip_reason", "TEXT");
 // Approvals live in a conversation, the way a chat assistant asks in the thread it is
 // working in. `conversation_id` is the thread whose buttons answer this question (the
 // raising run's thread, or the system inbox for a question no thread raised); `reported`
@@ -467,6 +479,120 @@ export const conversationsDueForSummary = (minRuns: number, idleBefore: string, 
       .all(idleBefore, minRuns, limit) as { id: number }[]
   ).map((r) => r.id);
 
+// --- the run index (full-text search over past runs, PLAN-open-work section 13 H4) ---
+/**
+ * One FTS5 row per run, keyed by the run's id, with three columns: what was asked (`goal`), what
+ * was answered (`answer`) and what its tools returned (`tools`). `searchRuns` used to AND `LIKE`
+ * over the question, the answer and the thread title, so it could not find a run by anything the
+ * run had read: "which thread looked up the Corolla recall?" found nothing unless the answer
+ * happened to repeat the word.
+ *
+ * The text is copied into the index (a plain FTS5 table, not an external-content one), because a
+ * run's tool text is assembled from many audit rows and FTS5 can only delete from an
+ * external-content table when handed the exact text it indexed. The copy is why every piece is
+ * capped, and it follows the ledger's retention through the triggers below: a pruned audit row
+ * leaves the run's `tools`, and a pruned run or a deleted thread leaves the index.
+ *
+ * The caps, in characters:
+ *   - a tool result: 2,000. The audit row itself keeps 4,000; the head of a page, a file or a
+ *     search result is where it says what it is about, and half the audit size keeps one long
+ *     page from outweighing a run's own question in the ranking and in the database's size.
+ *   - all of a run's tool results together: 24,000, twelve full results. A 40-step build run
+ *     would otherwise rewrite an ever longer row on every step.
+ *   - the answer: 16,000, about what one model step can write (AGENT_STEP_MAX_TOKENS is 4,096
+ *     tokens). The question: 2,000.
+ *
+ * No stemming (`unicode61`, not `porter`): the search box searches as you type and every word
+ * is matched as a prefix, which a stemmer breaks ("busines" must find "business", but its stem
+ * is not a prefix of the stem of "business"). `runSearchTerms` covers plurals instead.
+ */
+export const RUN_INDEX_CAPS = { answer: 16_000, goal: 2_000, tool: 2_000, tools: 24_000 } as const;
+
+/**
+ * Tools whose results are never indexed: they read the ledger back or describe the run itself, so
+ * indexing them would make every search for "business plan" also find the run that searched for it.
+ */
+const RUN_INDEX_SKIP_TOOLS = ["conversation_detail", "find_past_output", "harness_status", "recall_output"];
+const skipToolsSql = RUN_INDEX_SKIP_TOOLS.map((t) => `'${t}'`).join(",");
+/** A run's indexed tool text, rebuilt from the audit rows it still has. One expression, used by the delete trigger and the backfill. */
+const runToolsSql = (runIdExpr: string): string =>
+  `COALESCE((SELECT substr(group_concat(substr(a.output, 1, ${RUN_INDEX_CAPS.tool}), char(10)), 1, ${RUN_INDEX_CAPS.tools}) ` +
+  `FROM actions a WHERE a.run_id = ${runIdExpr} AND a.decision = 'executed' AND COALESCE(a.output, '') <> '' AND a.tool NOT IN (${skipToolsSql})), '')`;
+
+// 0 once code has seen the run start and nothing has pinned it local; 1 once it was pinned
+// (src/sensitivity.ts writes it at the moment of the pin, for the ROOT run of a tree). NULL on every
+// row older than the column, which nothing can show was clean, so it reads as private: the same
+// choice `cloud_safe` made for memories.
+addColumn("runs", "private", "INTEGER");
+// The delete trigger below rebuilds one run's tool text per audit row removed. Without this it
+// would scan the whole audit log each time, and a prune removes thousands of rows in one statement.
+db.exec("CREATE INDEX IF NOT EXISTS idx_actions_run ON actions (run_id)");
+db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS run_fts USING fts5(goal, answer, tools, tokenize='unicode61')");
+// Each write first makes sure the row exists: an audit row can arrive for a run from before the
+// index, or after its thread was deleted.
+const ensureRunRow = (idExpr: string): string =>
+  `INSERT INTO run_fts(rowid, goal, answer, tools) SELECT ${idExpr}, '', '', '' WHERE NOT EXISTS (SELECT 1 FROM run_fts WHERE rowid = ${idExpr});`;
+const RUN_INDEX_TRIGGERS = ["run_fts_run_ai", "run_fts_run_au", "run_fts_run_ad", "run_fts_action_ai", "run_fts_action_ad", "run_fts_conversation_ad"];
+const runIndexTriggerSql = `
+  CREATE TRIGGER run_fts_run_ai AFTER INSERT ON runs BEGIN
+    INSERT INTO run_fts(rowid, goal, answer, tools)
+      VALUES (new.id, substr(COALESCE(new.task, ''), 1, ${RUN_INDEX_CAPS.goal}), substr(COALESCE(new.note, ''), 1, ${RUN_INDEX_CAPS.answer}), '');
+  END;
+  CREATE TRIGGER run_fts_run_au AFTER UPDATE OF task, note ON runs BEGIN
+    ${ensureRunRow("new.id")}
+    UPDATE run_fts
+       SET goal = substr(COALESCE(new.task, ''), 1, ${RUN_INDEX_CAPS.goal}),
+           answer = substr(COALESCE(new.note, ''), 1, ${RUN_INDEX_CAPS.answer})
+     WHERE rowid = new.id;
+  END;
+  CREATE TRIGGER run_fts_run_ad AFTER DELETE ON runs BEGIN
+    DELETE FROM run_fts WHERE rowid = old.id;
+  END;
+  CREATE TRIGGER run_fts_action_ai AFTER INSERT ON actions
+    WHEN new.run_id IS NOT NULL AND new.decision = 'executed' AND COALESCE(new.output, '') <> '' AND new.tool NOT IN (${skipToolsSql})
+  BEGIN
+    ${ensureRunRow("new.run_id")}
+    UPDATE run_fts
+       SET tools = substr(tools || char(10) || substr(new.output, 1, ${RUN_INDEX_CAPS.tool}), 1, ${RUN_INDEX_CAPS.tools})
+     WHERE rowid = new.run_id;
+  END;
+  CREATE TRIGGER run_fts_action_ad AFTER DELETE ON actions
+    WHEN old.run_id IS NOT NULL AND old.decision = 'executed'
+  BEGIN
+    UPDATE run_fts SET tools = ${runToolsSql("old.run_id")} WHERE rowid = old.run_id;
+  END;
+  CREATE TRIGGER run_fts_conversation_ad AFTER DELETE ON conversations BEGIN
+    DELETE FROM run_fts WHERE rowid IN (SELECT id FROM runs WHERE conversation_id = old.id);
+  END;
+`;
+// The triggers are replaced whenever their text differs from what is installed, so the caps and the
+// skip list above are what is running and not whatever an earlier version left. Compared first, and
+// not simply dropped and re-created on every start: that would be a schema write each time anything
+// imports this file, and a command-line process starting while the server is mid-write would fail
+// on it (the database has no busy timeout).
+{
+  const want = createHash("sha256").update(runIndexTriggerSql).digest("hex").slice(0, 16);
+  const have = (db.prepare("SELECT value FROM kv WHERE key = 'run_fts:triggers'").get() as { value: string } | undefined)?.value;
+  const present = (
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'trigger' AND name IN (${RUN_INDEX_TRIGGERS.map((t) => `'${t}'`).join(",")})`)
+      .get() as { n: number }
+  ).n;
+  if (have !== want || present !== RUN_INDEX_TRIGGERS.length) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.exec(RUN_INDEX_TRIGGERS.map((t) => `DROP TRIGGER IF EXISTS ${t};`).join("\n") + runIndexTriggerSql);
+      db.prepare(
+        "INSERT INTO kv (key, value, updated) VALUES ('run_fts:triggers', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated",
+      ).run(want, now());
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+}
+
 // --- runs ---
 export interface StartRunOpts {
   /** Which agent definition ran this, when it was a subagent. */
@@ -493,8 +619,9 @@ export interface StartRunOpts {
 export const startRun = (opts: StartRunOpts = {}): number => {
   const r = db
     .prepare(
-      "INSERT INTO runs (started, status, kind, task, schedule_id, conversation_id, tier, parent_run_id, agent) " +
-        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?)",
+      // `private` starts at 0, "seen from the start, not pinned so far"; see the run index above.
+      "INSERT INTO runs (started, status, kind, task, schedule_id, conversation_id, tier, parent_run_id, agent, private) " +
+        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, 0)",
     )
     .run(
       now(),
@@ -598,23 +725,325 @@ export const starredRuns = (limit = 100): any[] =>
     )
     .all(limit);
 
+/** Where the words of a search were found in a run. `title` is the thread's name; `tool` is something the run (or a helper it started) read. */
+export type RunMatch = "answer" | "goal" | "title" | "tool";
+
+export interface RunHit {
+  conversationId: null | number;
+  conversationTitle: null | string;
+  finished: null | string;
+  id: number;
+  /** `runs.kind`: chat, approval, do, schedule, heartbeat. */
+  kind: string;
+  matched: RunMatch;
+  note: null | string;
+  /** The schedule's name, when a scheduled job wrote this. */
+  scheduleName: null | string;
+  /** The words around the match, one line. */
+  snippet: string;
+  task: null | string;
+}
+
+export interface RunSearchOpts {
+  /** Only runs that belong to a thread that still exists. The dashboard's search opens threads, and a scheduled job has none. */
+  conversationsOnly?: boolean;
+  /**
+   * Whether hits from private runs may be returned. True for the owner reading their own ledger
+   * (the dashboard). A tool passes whether the calling run is already pinned local, because a
+   * private run's text returned to an unpinned run would ride its next request to the cloud tier.
+   */
+  includePrivate?: boolean;
+  limit?: number;
+  /** Restrict to long answers, the deliverables. */
+  minNoteChars?: number;
+}
+
 /**
- * Search finished chat runs by words in what was asked or answered. Every word must appear
- * (LIKE, case-insensitive), so "business plan" finds the plan and not every mention of
- * business. `minNoteChars` restricts to long outputs — the deliverables.
+ * A scheduled job says the same thing every day, so twenty mornings of one brief would outrank the
+ * one conversation that asked. Its score is halved, which demotes it without excluding it: a
+ * scheduled run still wins when nothing else matches as well. 0.5 is Hermes Agent's idea with a
+ * number of ours, not yet checked against a real ledger.
  */
-export const searchRuns = (query: string, { limit = 20, minNoteChars = 0 }: { limit?: number; minNoteChars?: number } = {}): any[] => {
-  const words = (String(query).toLowerCase().match(/[a-z0-9]{2,}/g) ?? []).slice(0, 6);
-  if (!words.length) return [];
-  const like = words.map(() => "(LOWER(COALESCE(r.task,'')) LIKE ? OR LOWER(COALESCE(r.note,'')) LIKE ? OR LOWER(COALESCE(c.title,'')) LIKE ?)").join(" AND ");
-  const args: (number | string)[] = words.flatMap((w) => [`%${w}%`, `%${w}%`, `%${w}%`]);
-  return db
-    .prepare(
-      "SELECT r.id, r.task, r.note, r.finished, r.conversation_id AS conversationId, c.title AS conversationTitle " +
-        "FROM runs r LEFT JOIN conversations c ON c.id = r.conversation_id " +
-        `WHERE r.status = 'ok' AND r.kind = 'chat' AND LENGTH(COALESCE(r.note,'')) >= ? AND ${like} ORDER BY r.id DESC LIMIT ?`,
-    )
-    .all(minNoteChars, ...args, limit);
+export const RUN_SEARCH_SCHEDULED_FACTOR = 0.5;
+/** bm25 column weights: the question counts most, then the answer, then what the run only read. */
+const RUN_SEARCH_WEIGHTS = { answer: 2, goal: 4, tools: 1 } as const;
+/** How many index rows one search ranks. Private and unfinished runs are dropped after this, so it is well above any `limit`. */
+const RUN_SEARCH_CANDIDATES = 200;
+const UNATTENDED_KINDS = new Set(["heartbeat", "schedule"]);
+/** Never results in their own right: a helper's work is reported under the run that started it, and eval runs are not the user's. */
+const UNSEARCHABLE_ROOT_KINDS = new Set(["eval", "subagent"]);
+
+/**
+ * The words of a query that say what it is about, each already reduced to the prefix that is
+ * searched for. Filler words go unless the query is nothing else. A plural loses its ending, so
+ * "plans" finds "plan" as well as "plans": a prefix match only ever widens, so trimming is safe
+ * where a stemmer was not (see the run index above).
+ */
+export const runSearchTerms = (query: string): string[] => {
+  const words = [...new Set(String(query).toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])];
+  const kept = words.filter((w) => !STOPWORDS.has(w));
+  return (kept.length ? kept : words).slice(0, 8).map((w) => {
+    if (w.length >= 5 && w.endsWith("ies")) return w.slice(0, -3);
+    if (w.length >= 4 && w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
+    return w;
+  });
+};
+
+/** The top of a run's tree: the run itself, or the run that delegated it (and so on up). */
+export const rootRunId = (id: number): number => {
+  let at = id;
+  // Bounded, so a cycle in bad data cannot spin; delegation is only a few levels deep.
+  for (let hop = 0; hop < 8; hop++) {
+    const row = db.prepare("SELECT parent_run_id FROM runs WHERE id = ?").get(at) as { parent_run_id: null | number } | undefined;
+    if (row?.parent_run_id == null) return at;
+    at = row.parent_run_id;
+  }
+  return at;
+};
+
+/** Record that this run was pinned to the local model. Called from src/sensitivity.ts with the root run. */
+export const markRunPrivate = (id: number): void => {
+  db.prepare("UPDATE runs SET private = 1 WHERE id = ? AND private IS NOT 1").run(id);
+};
+
+/**
+ * Whether the tree this run belongs to has been pinned local, read from the record above. A tool
+ * asks this about its own run before returning private text. Only an explicit 1 counts: a run
+ * that cannot show it is pinned is treated as one that may still reach the cloud tier.
+ */
+export const runTreeIsPinned = (id: number): boolean =>
+  (db.prepare("SELECT private FROM runs WHERE id = ?").get(rootRunId(id)) as { private: null | number } | undefined)?.private === 1;
+
+const MARK_OPEN = "\u0002";
+const MARK_CLOSE = "\u0003";
+const unmark = (s: string): string => s.replaceAll(MARK_OPEN, "").replaceAll(MARK_CLOSE, "").replace(/\s+/g, " ").trim();
+
+/**
+ * Search past runs by what was asked, what was answered and what the tools returned, and say how
+ * many matches were held back as private.
+ *
+ * Every word must be found somewhere in the run (as a prefix, so typing "bud" already finds
+ * "budget"), or all of them in the thread's title. Ranked by bm25 with the question weighted
+ * above the answer and the answer above tool text, scheduled jobs demoted, a thread whose title
+ * matches first, newest first among equals. Only runs that finished `ok` are results, as before.
+ *
+ * A helper's run is not a result. Its text counts for the run at the top of its tree, reported as
+ * found in what that run read, and privacy is judged on that top run too, because that is the
+ * one the pin is recorded on.
+ */
+export const searchPastRuns = (query: string, opts: RunSearchOpts = {}): { hits: RunHit[]; withheld: number } => {
+  const { conversationsOnly = false, includePrivate = true, limit = 20, minNoteChars = 0 } = opts;
+  const terms = runSearchTerms(query);
+  if (!terms.length) return { hits: [], withheld: 0 };
+
+  /** One run that matched: its best score, and the index row the words were found in (its own, or a helper's). */
+  interface Found {
+    score: number;
+    source: null | number;
+    titled: boolean;
+  }
+  const found = new Map<number, Found>();
+  // The terms are letters and digits only (runSearchTerms), so quoting them is all the escaping FTS5 needs.
+  const match = terms.map((t) => `"${t}"*`).join(" ");
+
+  let candidates: { id: number; score: number }[] = [];
+  try {
+    candidates = db
+      .prepare(
+        `SELECT rowid AS id, bm25(run_fts, ${RUN_SEARCH_WEIGHTS.goal}, ${RUN_SEARCH_WEIGHTS.answer}, ${RUN_SEARCH_WEIGHTS.tools}) AS score
+           FROM run_fts WHERE run_fts MATCH ? ORDER BY score LIMIT ${RUN_SEARCH_CANDIDATES}`,
+      )
+      .all(match) as unknown as { id: number; score: number }[];
+  } catch {
+    // A query FTS5 cannot parse finds nothing in the index; a title can still match below.
+  }
+  for (const c of candidates) {
+    const root = rootRunId(c.id);
+    const prev = found.get(root);
+    // Lower is better (bm25 is negative), and the candidates arrive best first, so a tie keeps the earlier one.
+    if (!prev || c.score < prev.score) found.set(root, { score: c.score, source: c.id, titled: false });
+  }
+
+  const rowOf = db.prepare(
+    "SELECT r.id, r.task, r.note, r.finished, r.kind, r.status, r.private, r.conversation_id AS conversationId, " +
+      "c.id AS threadId, c.title AS conversationTitle, c.local_only AS localOnly, c.project_id AS projectId, s.name AS scheduleName " +
+      "FROM runs r LEFT JOIN conversations c ON c.id = r.conversation_id LEFT JOIN schedules s ON s.id = r.schedule_id WHERE r.id = ?",
+  );
+  const rows = new Map<number, any>();
+  const load = (id: number): any => {
+    if (!rows.has(id)) rows.set(id, rowOf.get(id));
+    return rows.get(id);
+  };
+
+  // Threads whose title holds every word. A hit already found in such a thread moves to the front;
+  // a thread with none is represented by its newest finished answer.
+  const titleLike = terms.map(() => "LOWER(COALESCE(c.title, '')) LIKE ?").join(" AND ");
+  const titled = new Set(
+    (
+      db.prepare(`SELECT c.id FROM conversations c WHERE ${titleLike} ORDER BY c.updated DESC LIMIT 50`).all(...terms.map((t) => `%${t}%`)) as {
+        id: number;
+      }[]
+    ).map((t) => t.id),
+  );
+  const represented = new Set<number>();
+  for (const [id, f] of found) {
+    const r = load(id);
+    if (r?.threadId == null || !titled.has(r.threadId)) continue;
+    f.titled = true;
+    // Only a hit that will be shown stands for its thread; one that is about to be dropped below does not.
+    if (r.status === "ok" && String(r.note ?? "").length >= minNoteChars) represented.add(r.threadId);
+  }
+  const newestIn = db.prepare(
+    "SELECT id FROM runs WHERE conversation_id = ? AND status = 'ok' AND kind IN ('chat','approval') AND LENGTH(COALESCE(note,'')) >= ? ORDER BY id DESC LIMIT 1",
+  );
+  for (const thread of titled) {
+    if (represented.has(thread)) continue;
+    const newest = newestIn.get(thread, minNoteChars) as { id: number } | undefined;
+    if (newest && !found.has(newest.id)) found.set(newest.id, { score: 0, source: null, titled: true });
+  }
+
+  // Where the words were, and the words around them. Worked out only for the hits that are
+  // returned: snippets over every candidate cost more than the search itself on a large ledger.
+  const snippets = db.prepare(
+    `SELECT snippet(run_fts, 0, char(2), char(3), '…', 24) AS goal,
+            snippet(run_fts, 1, char(2), char(3), '…', 24) AS answer,
+            snippet(run_fts, 2, char(2), char(3), '…', 24) AS tools
+       FROM run_fts WHERE run_fts MATCH ? AND rowid = ?`,
+  );
+  const describe = (id: number, f: Found, note: string): { matched: RunMatch; snippet: string } => {
+    if (f.source == null) return { matched: "title", snippet: unmark(note.slice(0, 200)) };
+    const s = snippets.get(match, f.source) as { answer: string; goal: string; tools: string } | undefined;
+    // The answer is the product, so its words are shown when it matched; then what was read; then the question.
+    const where: [RunMatch, string][] = [
+      ["answer", s?.answer ?? ""],
+      ["tool", s?.tools ?? ""],
+      ["goal", s?.goal ?? ""],
+    ];
+    const [matched, text] = where.find(([, t]) => t.includes(MARK_OPEN)) ?? where[0];
+    // A helper's question and report are the model's own working text, so from the top run's side all of it is "looked up".
+    return { matched: f.source === id ? matched : "tool", snippet: unmark(text) };
+  };
+
+  const ranked: { f: Found; r: any; rank: number }[] = [];
+  let withheld = 0;
+  for (const [id, f] of found) {
+    const r = load(id);
+    if (!r || r.status !== "ok" || UNSEARCHABLE_ROOT_KINDS.has(String(r.kind))) continue;
+    // A deleted thread keeps its runs in the ledger for the audit trail, but it is not found again.
+    if (r.conversationId != null && r.threadId == null) continue;
+    if (conversationsOnly && r.threadId == null) continue;
+    if (String(r.note ?? "").length < minNoteChars) continue;
+    // Private: pinned (or older than the record of pins), in a thread marked local-only, or in a project.
+    const isPrivate = r.private !== 0 || r.localOnly === 1 || r.projectId != null;
+    if (isPrivate && !includePrivate) {
+      withheld++;
+      continue;
+    }
+    ranked.push({ f, r, rank: f.score * (UNATTENDED_KINDS.has(String(r.kind)) ? RUN_SEARCH_SCHEDULED_FACTOR : 1) });
+  }
+  ranked.sort((a, b) => Number(b.f.titled) - Number(a.f.titled) || a.rank - b.rank || b.r.id - a.r.id);
+  const hits = ranked.slice(0, limit).map(
+    ({ f, r }): RunHit => ({
+      conversationId: r.conversationId ?? null,
+      conversationTitle: r.conversationTitle ?? null,
+      finished: r.finished ?? null,
+      id: r.id,
+      kind: String(r.kind ?? ""),
+      ...describe(r.id, f, String(r.note ?? "")),
+      note: r.note ?? null,
+      scheduleName: r.scheduleName ?? null,
+      task: r.task ?? null,
+    }),
+  );
+  return { hits, withheld };
+};
+
+/** The hits of `searchPastRuns`, for callers that are the owner reading their own ledger. */
+export const searchRuns = (query: string, opts: RunSearchOpts = {}): RunHit[] => searchPastRuns(query, opts).hits;
+
+/** How many runs one backfill pass indexes. Small, so a pass is a few milliseconds and start-up never waits on the ledger's size. */
+export const RUN_INDEX_BACKFILL_BATCH = 200;
+const RUN_INDEX_CURSOR = "migrate:run_fts";
+
+/** Where the backfill has got to: every run with an id below this is still to index. 0 means it is finished. */
+const runIndexCursor = (): number => {
+  const saved = kvGet(RUN_INDEX_CURSOR)?.value;
+  if (saved != null && Number.isFinite(Number(saved))) return Number(saved);
+  return Number((db.prepare("SELECT COALESCE(MAX(id), 0) + 1 AS n FROM runs").get() as { n: number }).n);
+};
+
+/** How many earlier runs the backfill still has to index. */
+export const runIndexBacklog = (): number => {
+  const cursor = runIndexCursor();
+  return cursor === 0 ? 0 : (db.prepare("SELECT COUNT(*) AS n FROM runs WHERE id < ?").get(cursor) as { n: number }).n;
+};
+
+/**
+ * Index the runs that were in the ledger before the index existed, newest first, one bounded
+ * batch per call. Returns how many runs are still to do. The cursor (the lowest run id done) is
+ * kept in `kv`, so a restart carries on where the last pass stopped and a finished backfill
+ * costs one read. Each run is rebuilt from the tables, so doing one twice changes nothing, and a
+ * run whose thread was deleted is left out, as the trigger on a deleted thread would have done.
+ */
+export const backfillRunIndex = (batch: number = RUN_INDEX_BACKFILL_BATCH): number => {
+  const cursor = runIndexCursor();
+  if (cursor === 0) return 0;
+  const ids = (db.prepare("SELECT id FROM runs WHERE id < ? ORDER BY id DESC LIMIT ?").all(cursor, Math.max(1, Math.floor(batch))) as { id: number }[]).map(
+    (r) => r.id,
+  );
+  if (!ids.length) {
+    kvSet(RUN_INDEX_CURSOR, "0");
+    return 0;
+  }
+  const drop = db.prepare("DELETE FROM run_fts WHERE rowid = ?");
+  const add = db.prepare(
+    `INSERT INTO run_fts(rowid, goal, answer, tools)
+       SELECT r.id, substr(COALESCE(r.task, ''), 1, ${RUN_INDEX_CAPS.goal}), substr(COALESCE(r.note, ''), 1, ${RUN_INDEX_CAPS.answer}), ${runToolsSql("r.id")}
+         FROM runs r WHERE r.id = ?
+          AND (r.conversation_id IS NULL OR EXISTS (SELECT 1 FROM conversations c WHERE c.id = r.conversation_id))`,
+  );
+  const lowest = ids[ids.length - 1];
+  db.exec("BEGIN");
+  try {
+    for (const id of ids) {
+      drop.run(id);
+      add.run(id);
+    }
+    kvSet(RUN_INDEX_CURSOR, String(lowest));
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  const left = runIndexBacklog();
+  if (left === 0) kvSet(RUN_INDEX_CURSOR, "0");
+  return left;
+};
+
+/**
+ * Work through the backfill in the background, a batch at a time with a pause between, so the
+ * server answers requests while an old ledger is indexed. The server calls this once at start;
+ * a command-line process does not, so it never spends its short life on the backfill. `onDone`
+ * hears how many runs there were to index, and is not called when there were none.
+ */
+export const startRunIndexBackfill = (onDone?: (indexed: number) => void): void => {
+  const total = runIndexBacklog();
+  if (total === 0) {
+    if (runIndexCursor() !== 0) kvSet(RUN_INDEX_CURSOR, "0");
+    return;
+  }
+  const step = (): void => {
+    let left = 0;
+    try {
+      left = backfillRunIndex();
+    } catch (err) {
+      console.warn(`[search] indexing earlier runs stopped: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    if (left > 0) setTimeout(step, 50).unref();
+    else onDone?.(total);
+  };
+  step();
 };
 
 export const getRun = (id: number): any =>
@@ -1407,6 +1836,10 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
     if (!opts.dryRun && ids.length) {
       const list = ids.join(",");
       // Anything hanging off a run goes first, so nothing is left pointing at a gap.
+      // The search index before the audit rows: the trigger on a deleted audit row rebuilds its
+      // run's indexed tool text, which is wasted work for a run that is going anyway. (The trigger
+      // on the run's own delete would also remove the row; this only puts it ahead.)
+      db.exec(`DELETE FROM run_fts WHERE rowid IN (${list})`);
       db.exec(`DELETE FROM messages WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM actions WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM confirmations WHERE run_id IN (${list})`);
@@ -1492,7 +1925,16 @@ export interface ScheduleRow {
   created: string;
   last_run: string | null;
   next_run: string | null;
+  /** This job's own catch-up limit in minutes: null = the default rule, 0 = always run. */
+  catchup_minutes: null | number;
+  /** When a slot was last skipped for being too late, which slot it was, and why. */
+  last_skip_at: null | string;
+  last_skip_slot: null | string;
+  last_skip_reason: null | string;
 }
+
+/** A week. Past that a limit is no limit, and 0 already says so. */
+const CATCHUP_MINUTES_MAX = 7 * 24 * 60;
 
 const plusMinutes = (mins: number): string => new Date(Date.now() + mins * 60_000).toISOString();
 
@@ -1548,6 +1990,8 @@ export interface ScheduleFields {
   task?: string;
   spec?: string;
   enabled?: number | boolean;
+  /** `null` puts the job back on the default catch-up rule. Absent leaves it as it is. */
+  catchupMinutes?: null | number;
 }
 
 /** Who changed a job's task: the agent's tool, you on a Schedules screen, or an app upgrade. */
@@ -1626,14 +2070,25 @@ export const updateSchedule = (id: number, fields: ScheduleFields, source: Sched
    */
   if (next == null) enabled = 0;
 
+  // Absent leaves the limit alone; null clears it. Anything that is not a whole number of
+  // minutes from 0 up is refused here, so no caller can store a limit the scheduler would ignore.
+  let catchup = cur.catchup_minutes ?? null;
+  if (fields.catchupMinutes !== undefined) {
+    const n = fields.catchupMinutes;
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > CATCHUP_MINUTES_MAX))
+      throw new Error(`the catch-up limit must be a whole number of minutes from 0 to ${CATCHUP_MINUTES_MAX}, or null for the default.`);
+    catchup = n;
+  }
+
   const write = (): void => {
-    db.prepare("UPDATE schedules SET name=?, task=?, spec=?, interval_minutes=?, enabled=?, next_run=? WHERE id=?").run(
+    db.prepare("UPDATE schedules SET name=?, task=?, spec=?, interval_minutes=?, enabled=?, next_run=?, catchup_minutes=? WHERE id=?").run(
       name,
       task,
       spec,
       interval,
       enabled,
       next,
+      catchup,
       id,
     );
   };
@@ -1669,11 +2124,11 @@ export const deleteSchedule = (id: number): void => {
   db.prepare("DELETE FROM schedule_versions WHERE schedule_id = ?").run(id);
 };
 
-/** Enabled schedules whose next_run is due (or unset). */
-export const dueSchedules = (): ScheduleRow[] =>
+/** Enabled schedules whose next_run is due (or unset). `at` is the scheduler's clock, so a tick decides against one instant. */
+export const dueSchedules = (at: Date = new Date()): ScheduleRow[] =>
   db
     .prepare("SELECT * FROM schedules WHERE enabled = 1 AND (next_run IS NULL OR next_run <= ?)")
-    .all(now()) as unknown as ScheduleRow[];
+    .all(at.toISOString()) as unknown as ScheduleRow[];
 
 /**
  * Record that a job just ran and arm it for next time.
@@ -1690,6 +2145,27 @@ export const markScheduleRan = (id: number): void => {
     now(),
     next,
     next == null ? 0 : s.enabled,
+    id,
+  );
+};
+
+/**
+ * Record that a slot was skipped for being too late, and arm the job for `next`.
+ *
+ * `last_run` is left alone on purpose: nothing ran. A null `next` is a one-shot that its own
+ * limit dropped, which retires the same way a fired one does (see `markScheduleRan`).
+ */
+export const markScheduleSkipped = (id: number, skipped: { next: Date | null; reason: string; slot: Date }): void => {
+  const s = getSchedule(id);
+  if (!s) return;
+  db.prepare(
+    "UPDATE schedules SET next_run = ?, enabled = ?, last_skip_at = ?, last_skip_slot = ?, last_skip_reason = ? WHERE id = ?",
+  ).run(
+    skipped.next ? skipped.next.toISOString() : null,
+    skipped.next ? s.enabled : 0,
+    now(),
+    skipped.slot.toISOString(),
+    skipped.reason,
     id,
   );
 };
@@ -1876,6 +2352,12 @@ export const rawDb = db;
  * stopped buzzing, which is the question you will actually be asking.
  */
 export interface DeviceRow {
+  /**
+   * The bundle id of the app that registered this token, which is the APNs topic its pushes
+   * must carry. Null for a row from before the app reported it; the push then uses the
+   * configured APNS_BUNDLE_ID (see `topicFor` in src/push/apns.ts).
+   */
+  bundle_id?: null | string;
   created: string;
   /** ISO when APNs rejected this token for good, or null while it still works. */
   disabled: string | null;
@@ -1901,18 +2383,20 @@ export const upsertDevice = (
   token: string,
   environment: string,
   name: string | null,
+  bundleId: null | string = null,
 ): DeviceRow => {
   db.prepare(
-    `INSERT INTO devices (token, environment, name, created, seen, failures, disabled, detail)
-     VALUES (?, ?, ?, ?, ?, 0, NULL, NULL)
+    `INSERT INTO devices (token, environment, name, bundle_id, created, seen, failures, disabled, detail)
+     VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL)
      ON CONFLICT(token) DO UPDATE SET
        environment = excluded.environment,
        name = COALESCE(excluded.name, devices.name),
+       bundle_id = COALESCE(excluded.bundle_id, devices.bundle_id),
        seen = excluded.seen,
        failures = 0,
        disabled = NULL,
        detail = NULL`,
-  ).run(token, environment, name, now(), now());
+  ).run(token, environment, name, bundleId, now(), now());
   return db.prepare("SELECT * FROM devices WHERE token = ?").get(token) as unknown as DeviceRow;
 };
 

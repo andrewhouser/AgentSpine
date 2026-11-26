@@ -38,6 +38,10 @@ import {
 } from "./config.ts";
 import { sendPush, type PushAlert } from "./push/apns.ts";
 import type { OutboxSource } from "./outbox-rules.ts";
+import { waitingNow } from "./today.ts";
+
+/** The icon badge for a push going out now. A seam so a failure to count never costs the push. */
+const badgeNow = (): null | number => waitingNow();
 
 const run = promisify(execFile);
 
@@ -174,6 +178,11 @@ const apnsPublish = async (
 ): Promise<NotifyResult> => {
   const r = await sendPush(title, body, {
     priority: opts.priority ?? 3,
+    // Who is sending names the stack and the subtitle, and the icon gets the same "waiting on
+    // you" number the Today screen shows (src/today.ts). Read at send time; no number rather
+    // than a wrong one if it cannot be read.
+    ...(opts.source ? { source: opts.source } : {}),
+    ...(badgeNow() !== null ? { badge: badgeNow() as number } : {}),
     ...opts.push,
     // After the spread: the outbox owns this field, a caller cannot set it.
     ...(rowId != null ? { outboxId: rowId } : {}),

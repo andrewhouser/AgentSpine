@@ -63,6 +63,8 @@ const LABELS: Record<string, string> = {
   draft: "Drafting",
   edit_file: "Editing files",
   find_past_output: "Looking back through past work",
+  propose_change: "Proposing a change to its own code",
+  tool_docs: "Checking how a tool works",
   generate_image: "Generating an image",
   git_status: "Checking git",
   git_write: "Committing",
@@ -96,6 +98,7 @@ const LABELS: Record<string, string> = {
   time_report: "Checking time logged",
   weather: "Checking the weather",
   weather_alerts: "Checking the weather",
+  site_audit: "Auditing a website",
   web_read: "Reading a page",
   web_search: "Searching the web",
   write_file: "Editing files",
@@ -114,6 +117,56 @@ const PREFIXES: [string, string][] = [
   ["time_", "Logging time"],
 ];
 
+/** A remote MCP tool's registered name is `mcp__<server>__<tool>` (src/mcp/register.ts). */
+const MCP_PREFIX = "mcp__";
+/** A label is one row of a narrow card, and a server's title is someone else's text. */
+const LABEL_MAX = 48;
+
+const tidy = (s: unknown, max: number): string => {
+  const flat = String(s ?? "")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+};
+
+/** "search_issues" -> "Search issues": a tool name as words, for a server that gave no title. */
+const asWords = (name: string): string => {
+  const words = name.replace(/[_-]+/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2").trim().toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : "";
+};
+
+/**
+ * The label for a remote MCP tool: "Linear: Search issues". The card used to show the registered
+ * name ("Using mcp__linear__search_issues"), which is an identifier, not a step. The server's own
+ * title is used when it sent one. It is third-party text, so it is flattened to one line and
+ * clipped, and it only ever reaches the plan card, never a prompt.
+ */
+export const mcpLabel = (server: string, tool: string, title?: unknown): string => {
+  const name = tidy(server.replace(/[_-]+/g, " "), 20);
+  const what = tidy(title, LABEL_MAX) || asWords(tool);
+  return tidy(`${name ? name[0].toUpperCase() + name.slice(1) : "MCP"}: ${what || "tool"}`, LABEL_MAX);
+};
+
+/**
+ * Labels the MCP registration supplied, by registered tool name. Kept here, not looked up in the
+ * tool registry, so this file stays free of imports and a plan folded from stored actions after
+ * a restart (when the server may be unreachable) still reads the same through `labelFor`'s
+ * fallback, which rebuilds the label from the name alone.
+ */
+const registered = new Map<string, string>();
+
+export const registerToolLabel = (tool: string, label: string): void => {
+  const clean = tidy(label, LABEL_MAX);
+  if (clean) registered.set(tool, clean);
+};
+
+/** Forget labels for tools that are no longer registered (an MCP refresh). */
+export const clearToolLabels = (prefix: string): void => {
+  for (const k of [...registered.keys()]) if (k.startsWith(prefix)) registered.delete(k);
+};
+
 /** The step label for a call. Short and present-tense, like Claude Code's own list. */
 export const labelFor = (tool: string, args: unknown): string => {
   if (tool === "subagent") {
@@ -123,7 +176,16 @@ export const labelFor = (tool: string, args: unknown): string => {
   const exact = LABELS[tool];
   if (exact) return exact;
   for (const [prefix, label] of PREFIXES) if (tool.startsWith(prefix)) return label;
-  // Remote MCP tools and anything added later: still a step, just a plainer name.
+  const known = registered.get(tool);
+  if (known) return known;
+  if (tool.startsWith(MCP_PREFIX)) {
+    // No registration to ask (the server is down, or this is an old turn): the name still holds
+    // both halves. A server name containing "__" would split early, which costs only a plainer label.
+    const rest = tool.slice(MCP_PREFIX.length);
+    const cut = rest.indexOf("__");
+    return cut > 0 ? mcpLabel(rest.slice(0, cut), rest.slice(cut + 2)) : mcpLabel("", rest);
+  }
+  // Anything added later: still a step, just a plainer name.
   return `Using ${tool}`;
 };
 

@@ -80,7 +80,8 @@ damaging gusts), `model-releases` (new MLX releases of the model family you run)
 `calendar-tomorrow` (tomorrow's schedule changed since the last check), `inbox-urgent` (a
 genuinely new urgent message appeared), `horizon` (weekdays at 8 am and noon: a quiet look-forward
 brief, "Phase 4.3" in `LEARNING.md`, which the heartbeat can run instead under `HEARTBEAT_HORIZON`),
-and `inbox-cleanup` (every 8 hours).
+`niche-watch` (weekly, the pages in your `watch-list.md`; its own section below), and
+`inbox-cleanup` (every 8 hours).
 
 `inbox-cleanup` is **not** this pattern. It acts on every run, not on a difference: it trashes
 subscriptions and junk, adds bills to the Bills calendar and writes a plain-language summary. It is
@@ -89,6 +90,45 @@ a watcher only in being a schedule, and it needs the separate Google write token
 `src/tools/calendar-write.ts`, not task text: inbox mail only, never mail from anyone you have
 emailed, never starred or sent mail, and a cap on changes per run (SPEC §5, amendment of 2026-11-21).
 Read its first summary by hand before trusting it. The cost note below does not apply to it.
+
+### The `niche-watch` starter: a weekly look at pages you name
+
+`niche-watch` (Mondays at 9am) is the pattern over several pages at once: competitors, venues,
+promoters, whoever's "what's on" or news page you want to hear about when it changes. The pages
+are yours, so they live in `watch-list.md`, which is gitignored. Start from
+`watch-list.example.md` (`npm run setup` copies it), list one page per line below the `---` as
+`- Name: https://address`, then:
+
+```bash
+npm run watcher add niche-watch       # checks the list and pastes it into the task
+npm run watcher remove niche-watch    # after editing the list, remove and add again
+```
+
+The list is checked by code before anything is installed (`src/watch-list.ts`), because it becomes
+the instructions an unattended run follows every week. An address must be `https`, must not point
+at this machine or a private network, and must not carry a name or password. A line that cannot be
+read refuses the install instead of being skipped, since a typo that dropped a page would look
+exactly like a quiet week. A missing or empty list refuses too, and says what to do.
+
+**At most 5 pages.** A scheduled run has 10 steps. This task spends one reading its stored state,
+one per page, one storing the new state, one on the report and one on the notification: pages plus
+four. Five pages is nine, with one spare for a retry.
+
+Each week it reads only the listed addresses (no searching, no following links), reduces each to a
+short fingerprint of what the page announces, and compares with last week's under the one key
+`watch:niche-watch`. The first run records and stays silent. No change means no state write, no
+report and no push. When something did change it writes `niche-watch-<date>.md` to your files
+with what changed on each page and a link, then pushes once. The report ends with three possible
+responses under the heading "Suggestions (the assistant's, not facts)": those are the model's
+ideas, kept apart from what the pages say.
+
+It needs the browser on (`"browser": { "enabled": true }` in `policy.json`), because `web_read`
+is how a page is read. If you use `browser.navigateAllowlist`, the listed sites must be on it; that
+list is also what stops a listed page from redirecting the read somewhere else, which the install
+check cannot see. A site on `browser.neverDomains` is refused as everywhere. Not run against a
+live model yet: read the first report by hand, and if it flags a change every week on a page that
+did not change, that page's fingerprint is catching something that rotates and the page is a poor
+fit for this.
 
 ### The `weather-alerts` starter is the pattern done properly
 

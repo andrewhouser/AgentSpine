@@ -34,31 +34,24 @@ if (!swiftc) {
   process.exit(0);
 }
 
-const all = ["threads", "headsup", "tasks", "study", "checkin", "schedules", "projects", "files", "inbox", "knowledge", "clients", "search", "meetings", "builds", "activity", "settings"];
+const all = ["today", "threads", "tasks", "study", "headsup", "checkin", "schedules", "projects", "files", "inbox", "knowledge", "clients", "search", "meetings", "builds", "activity", "settings"];
+
+// Each case: what was saved, and the order that must come out.
+const rest = (...first) => [...first, ...all.filter((t) => !first.includes(t))];
 
 // Each case: what was saved, and the order that must come out.
 const cases = [
   { name: "nothing saved gives the default order", saved: [], expect: all },
+  { name: "a fresh install has Today, Threads, Tasks and Study in the bar", saved: [], expect: rest("today", "threads", "tasks", "study") },
+  { name: "a saved order is kept, behind Today and Threads", saved: ["threads", "study", "tasks"], expect: rest("today", "threads", "study", "tasks") },
+  { name: "Today and Threads are forced first even if saved elsewhere", saved: ["tasks", "threads", "today"], expect: rest("today", "threads", "tasks") },
   {
-    name: "a saved order is kept, with Threads still first",
-    saved: ["threads", "study", "tasks"],
-    expect: ["threads", "study", "tasks", ...all.filter((t) => !["threads", "study", "tasks"].includes(t))],
+    name: "an order saved before Today existed keeps its sequence",
+    saved: ["threads", "headsup", "projects", "tasks"],
+    expect: rest("today", "threads", "headsup", "projects", "tasks"),
   },
-  {
-    name: "Threads is forced first even if saved elsewhere",
-    saved: ["tasks", "threads"],
-    expect: ["threads", "tasks", ...all.filter((t) => !["threads", "tasks"].includes(t))],
-  },
-  {
-    name: "a tab a later version removed is dropped",
-    saved: ["threads", "gone", "study"],
-    expect: ["threads", "study", ...all.filter((t) => !["threads", "study"].includes(t))],
-  },
-  {
-    name: "repeats are dropped",
-    saved: ["threads", "study", "study", "tasks", "study"],
-    expect: ["threads", "study", "tasks", ...all.filter((t) => !["threads", "study", "tasks"].includes(t))],
-  },
+  { name: "a tab a later version removed is dropped", saved: ["threads", "gone", "study"], expect: rest("today", "threads", "study") },
+  { name: "repeats are dropped", saved: ["threads", "study", "study", "tasks", "study"], expect: rest("today", "threads", "study", "tasks") },
   {
     name: "a tab the saved list lacks (a newer version's) lands under More",
     saved: all.filter((t) => t !== "clients"),
@@ -98,10 +91,10 @@ try {
     }
   });
   const split = lines[cases.length];
-  if (split === "4 12") console.log("  PASS  four tabs in the bar, the other twelve under More");
+  if (split === "4 13") console.log("  PASS  four tabs in the bar, the other thirteen under More");
   else {
     failed++;
-    console.log(`  FAIL  bar/more split: want "4 12", got "${split}"`);
+    console.log(`  FAIL  bar/more split: want "4 13", got "${split}"`);
   }
 } catch (error) {
   failed++;

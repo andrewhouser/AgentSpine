@@ -2,7 +2,14 @@
  * Shared types. Kept dependency-free so every module can import them.
  */
 
-export type Reversibility = "reversible" | "irreversible";
+/**
+ * The broker's tiers. `reversible` may run unasked, `irreversible` waits for a person unless
+ * one of the four recorded skips applies, and `forbidden` is refused whoever approves: no
+ * policy field, no trusted tool, no schedule and no click on a card can let it through
+ * (PLAN-open-work section 12, D2). The members are listed in code, in the tool that
+ * classifies them, because a refusal nobody can lift must not be something a file can grow.
+ */
+export type Reversibility = "reversible" | "irreversible" | "forbidden";
 
 /** A specific invocation of a tool, classified for the broker. */
 export interface ClassifiedAction {
@@ -11,6 +18,23 @@ export interface ClassifiedAction {
   target: string;
   /** Human-readable one-liner shown in the confirmation queue. */
   summary: string;
+  /** For `forbidden` only: why, in words the person will read in the denial. */
+  reason?: string;
+  /**
+   * For `irreversible` only: this call asks a person every time. None of the broker's four
+   * skips applies (autoApprove, user-directed, trusted in chat, a schedule's pre-approval),
+   * and neither does switching `irreversibleAlwaysConfirm` off. Set by the tools that edit
+   * AgentSpine's own gates (src/protected-paths.ts, section 10 SC6) and by `propose_change`.
+   */
+  alwaysConfirm?: boolean;
+}
+
+/** One piece of text a call would send off this machine, and the argument it came from. */
+export interface OutboundText {
+  arg: string;
+  /** A URL or an id, where a long opaque string is ordinary: only the number checks run on it. */
+  opaque?: boolean;
+  text: string;
 }
 
 export interface PolicyDecision {
@@ -86,6 +110,15 @@ export interface Policy {
     denyAll?: boolean;
     enabled: boolean;
     navigateAllowlist: string[];
+    /**
+     * Sites the browser and `web_read` never touch, whoever approves: your bank, your broker.
+     * A domain covers its subdomains. This is the answer to a button a word list cannot read
+     * (a bank that labels its transfer button "Continue"): the refusal is by where the page
+     * is, not by what the model says the button does. Tested at gate 1, which none of the
+     * confirmation skips reach, and again on the page a click or redirect landed on. A project
+     * overlay can add to it and never remove from it. Absent or empty means none.
+     */
+    neverDomains?: string[];
   };
   google: { enabled: boolean; write?: GoogleWritePolicy };
   fs: { readableDirs: string[]; writableDirs?: string[] };
@@ -377,6 +410,16 @@ export interface Tool {
    * sits in the message history that the next model request carries.
    */
   privateOutput?: boolean | ((args: any, ctx: { projectId: null | number }) => boolean);
+  /**
+   * The text arguments of this call that leave the machine: a mail body, a push, a search
+   * query, what is typed into a web page, a caption. Declared by the tool, as `privateOutput`
+   * is, so the broker's check on outgoing text (src/outbound.ts, PLAN-open-work section 12,
+   * D3) reads the same arguments the tool will send and nothing else. A call that sends
+   * nothing returns an empty list. A tool without it is not checked, so one whose arguments
+   * reach another party must declare it. Plain code; if it throws, the broker checks every
+   * string in the arguments instead, because a bug here must not become a way through.
+   */
+  outboundText?(args: any): OutboundText[];
   run(args: any, ctx: ToolContext): Promise<string>;
 }
 

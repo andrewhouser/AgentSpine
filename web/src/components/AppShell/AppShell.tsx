@@ -29,6 +29,7 @@ import { SettingsView } from "../SettingsView/SettingsView.tsx";
 import { Sidebar } from "../Sidebar/Sidebar.tsx";
 import { StudyView } from "../StudyView/StudyView.tsx";
 import { TasksView } from "../TasksView/TasksView.tsx";
+import { TodayView } from "../TodayView/TodayView.tsx";
 import styles from "./AppShell.module.css";
 
 const NO_PROJECTS: Project[] = [];
@@ -56,7 +57,7 @@ const VIEW_TITLES: Record<string, string> = {
  */
 const barTitle = (route: Route, conversations: Conversation[], projects: Project[]): string => {
   if (route.view === "chat") {
-    if (!route.conversationId) return "AgentSpine";
+    if (!route.conversationId) return "Today";
     return conversations.find((c) => c.id === route.conversationId)?.title ?? "New conversation";
   }
   if (route.view === "project") return projects.find((p) => p.id === route.projectId)?.name ?? "Project";
@@ -117,6 +118,11 @@ export const AppShell = () => {
 
   // And the tab title, so a waiting question or a new reply is visible from another tab. The
   // thread on screen counts only for a waiting question; its replies are being read.
+  // This is the "waiting on you" count (section 14, U1): `waitingCount` in src/today.ts applies
+  // the same rule on the server for the iPhone icon and the Mac Dock, one per thread that
+  // needs you. It stays computed here, from the list this page already holds, so the title
+  // moves the moment a reply lands instead of on Today's next read. The one difference is the
+  // open-thread rule above, which only a client that knows what is on screen can apply.
   const waitingThreads = conversations.filter((c) =>
     route.view === "chat" && c.id === route.conversationId ? isWaiting(c) : needsYou(c),
   ).length;
@@ -210,9 +216,11 @@ export const AppShell = () => {
         onSelectConversation={(id) => go({ conversationId: id, view: "chat" })}
         onSelectProject={(id) => go({ projectId: id, view: "project" })}
         onSelectView={(view) => go({ conversationId: route.conversationId, view })}
+        onToday={() => go({ view: "chat" })}
         projects={projects}
         status={status}
         view={route.view}
+        waiting={waitingThreads}
       />
 
       {/* Only visible while the drawer is open; tapping it dismisses, as an overlay should. */}
@@ -248,7 +256,7 @@ export const AppShell = () => {
         {route.view === "study" && <StudyView />}
         {route.view === "overview" && <OverviewView />}
         {route.view === "files" && <FilesView />}
-        {route.view === "clients" && <ClientsView />}
+        {route.view === "clients" && <ClientsView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
         {route.view === "inbox" && <InboxView projects={projects} />}
         {route.view === "knowledge" && <KnowledgeView projects={projects} />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
@@ -274,12 +282,13 @@ export const AppShell = () => {
               unread={(conversations.find((c) => c.id === route.conversationId)?.unread ?? 0) > 0}
             />
           ) : (
-            <div className={styles.blank}>
-              <p>Start a conversation, or pick one from the sidebar.</p>
-              <button className={styles.start} onClick={() => void newChat()} type="button">
-                New conversation
-              </button>
-            </div>
+            <TodayView
+              onChanged={onTurnComplete}
+              onNewChat={() => void newChat()}
+              onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}
+              onOpenRun={(id) => go({ runId: id, view: "activity" })}
+              onOpenView={(view) => go({ view })}
+            />
           ))}
       </main>
     </div>

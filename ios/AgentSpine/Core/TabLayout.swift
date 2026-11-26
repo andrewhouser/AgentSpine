@@ -5,10 +5,13 @@ import Foundation
 /// Raw values are what gets saved in `UserDefaults`, so they are stable identifiers: renaming a
 /// case here would silently reset everyone's tab order.
 enum AppTab: String, CaseIterable, Codable, Hashable {
-    case threads, headsup, tasks, study, checkin, schedules, projects, files, inbox, knowledge, clients, search, meetings, builds, activity, settings
+    // Today leads (PLAN-open-work section 14, U1). Heads-up sits after the first four, so on a
+    // fresh install it is under More: its open offers are answered on Today.
+    case today, threads, tasks, study, headsup, checkin, schedules, projects, files, inbox, knowledge, clients, search, meetings, builds, activity, settings
 
     var title: String {
         switch self {
+        case .today: return "Today"
         case .threads: return "Threads"
         case .headsup: return "Heads-up"
         case .tasks: return "Tasks"
@@ -30,6 +33,7 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
 
     var symbol: String {
         switch self {
+        case .today: return "sun.max"
         case .threads: return "bubble.left.and.text.bubble.right"
         case .headsup: return "sparkles"
         case .tasks: return "checklist"
@@ -53,8 +57,9 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
 /// The user's tab order, kept valid whatever was saved.
 ///
 /// iOS shows five slots: the first four tabs and "More", which holds the rest in order. So
-/// "which tabs are in the bar" is just "which come first". Threads is always first, because
-/// it is where approvals are asked and nothing else here is blocked on you.
+/// "which tabs are in the bar" is just "which come first". Today is always first, because it
+/// is the one screen that says what is blocked on you, and Threads is always second, because
+/// it is where the conversation happens. The other two slots are yours.
 ///
 /// Pure and Foundation-only so `test/ios-tab-layout.test.mjs` can compile and run it.
 enum TabLayout {
@@ -62,10 +67,12 @@ enum TabLayout {
     static let barSlots = 4
 
     /// Turn whatever was saved into a complete, valid order: unknown names dropped (a tab a
-    /// later version removed), repeats dropped, Threads forced first, and any tab the saved
-    /// list does not mention (one a later version added) appended under More in default order.
+    /// later version removed), repeats dropped, Today and Threads forced first, and any tab the
+    /// saved list does not mention (one a later version added) appended under More in default
+    /// order. An order saved before Today existed keeps its own sequence behind the two, so
+    /// what was its fourth tab is now the first row under More.
     static func reconcile(_ saved: [String]) -> [AppTab] {
-        var result: [AppTab] = [.threads]
+        var result: [AppTab] = [.today, .threads]
         for raw in saved {
             if let tab = AppTab(rawValue: raw), !result.contains(tab) { result.append(tab) }
         }

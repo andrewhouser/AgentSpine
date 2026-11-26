@@ -8,7 +8,7 @@
  * Output is tagged UNTRUSTED and injection-scanned, and clipped reversibly: a page longer
  * than the cap keeps its tail where read_more can reach it.
  */
-import { openScratchPage } from "./browser.ts";
+import { neverDomain, neverDomainReason, openScratchPage } from "./browser.ts";
 import { clip } from "../stash.ts";
 import { saveSource } from "../research/sources.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
@@ -40,6 +40,9 @@ const available = (policy: Policy): PolicyDecision => {
 const checkPolicy = (policy: Policy, args: Args): PolicyDecision => {
   const on = available(policy);
   if (!on.allowed) return on;
+  // Before the allowlist: a site on browser.neverDomains is not opened by either page tool.
+  const neverHost = hostOf(args?.url ?? "");
+  if (neverDomain(policy, neverHost)) return { allowed: false, reason: neverDomainReason(neverHost) };
   const allow = policy.browser.navigateAllowlist ?? [];
   if (allow.length) {
     const host = hostOf(args?.url ?? "");
@@ -55,6 +58,9 @@ const run = async (args: Args, ctx: ToolContext): Promise<string> => {
   const { page, close } = await openScratchPage();
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    // A redirect can land on a site the check above never saw: read nothing from it.
+    const landed = hostOf(page.url());
+    if (ctx?.policy && neverDomain(ctx.policy, landed)) return `REFUSED: ${url} led to ${neverDomainReason(landed)}`;
     const text = await page.evaluate(() => document.body?.innerText ?? "");
     // Kept, so a report can cite it and it can be re-read later (src/research/sources.ts).
     let tag = "";
@@ -74,6 +80,8 @@ const run = async (args: Args, ctx: ToolContext): Promise<string> => {
 
 export const webRead: Tool = {
   name: "web_read",
+  // The address reaches whoever runs the site. Opaque: a long id in a URL is not a credential.
+  outboundText: (a) => [{ arg: "url", opaque: true, text: String(a?.url ?? "") }],
   description: "Fetch a known URL with the headless browser and return its readable text.",
   argsSchema: '{ "url": string }',
   classify,

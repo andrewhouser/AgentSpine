@@ -1,0 +1,46 @@
+/* The Clients page's own pieces. Everything else comes from ListPage.module.css. */
+.heading {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin: 24px 0 8px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  margin: 0 0 10px;
+}
+
+.pasteForm {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.paste {
+  flex: 1 1 20rem;
+  resize: vertical;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.reasons {
+  color: var(--text);
+  font-size: 0.8125rem;
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+}
+
+.notes {
+  white-space: pre-wrap;
+}

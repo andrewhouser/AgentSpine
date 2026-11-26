@@ -329,6 +329,9 @@ struct MeetingDetailView: View {
     @State private var newTag = ""
     @State private var savingTags = false
     @State private var closingOut = false
+    /// "Make a runbook": busy while the local model reads the transcript, then what it wrote or why it wrote nothing.
+    @State private var makingRunbook = false
+    @State private var runbookNote: String?
 
     private var recording: Bool { detail?.meeting.isRecording == true }
     /// The tags on offer when adding: in use somewhere, but not already on this meeting.
@@ -348,7 +351,12 @@ struct MeetingDetailView: View {
                 header(detail.meeting)
                 tagsSection(detail.meeting)
                 if detail.meeting.status == "done" {
-                    Section { Button("Close out this meeting") { closingOut = true } }
+                    Section {
+                        Button("Close out this meeting") { closingOut = true }
+                        runbookButton
+                    } footer: {
+                        Text(runbookNote ?? "A runbook is a draft procedure from this recording, written on the local model. Each step quotes what was said.")
+                    }
                 }
                 #endif
                 if recording { coachSection }
@@ -480,6 +488,23 @@ struct MeetingDetailView: View {
         }
     }
 
+    /// "Make a runbook" (PLAN-open-work section 14, U5), the same button on the iPhone and the Mac.
+    private var runbookButton: some View {
+        Button(makingRunbook ? "Writing the runbook…" : "Make a runbook") { Task { await makeRunbook() } }
+            .disabled(makingRunbook)
+    }
+
+    /// The server drafts it on the local model and drops any step whose quote is not in the transcript. A refusal
+    /// (an expired transcript, no procedure found) comes back as the error text, which is the thing to show.
+    private func makeRunbook() async {
+        makingRunbook = true
+        runbookNote = nil
+        defer { makingRunbook = false }
+        do {
+            runbookNote = RunbookWords.savedLine(try await APIClient.shared.meetingRunbook(meetingID))
+        } catch { runbookNote = error.localizedDescription }
+    }
+
     #if os(macOS)
     /// The Mac's whole header in about three lines. As stacked rows it took most of a window
     /// before the summary, and rename and filing sat out of sight in the toolbar's overflow menu.
@@ -504,7 +529,15 @@ struct MeetingDetailView: View {
                     if meeting.status == "done" {
                         Button("Close out this meeting") { closingOut = true }
                             .help("Review speakers, project and extracted items")
+                        runbookButton
+                            .help("Write a draft procedure from this recording. Each step quotes what was said.")
                     }
+                }
+                if let runbookNote {
+                    Text(runbookNote)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                        .textSelection(.enabled)
                 }
                 Text(macMetadata(meeting))
                     .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
@@ -887,6 +920,8 @@ private struct CloseoutDraft {
     var answer = "skip"
     var owner: String
     var replaces: Set<Int> = []
+    /// Also make a task from an accepted commitment. Off until you turn it on.
+    var task = false
     var text: String
     var topic: String
 
@@ -1011,6 +1046,9 @@ struct MeetingCloseoutView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    if drafts[claim.id]?.answer == "accept", claim.canTask == true {
+                        Toggle(claim.due.map { "Add as a task (due \($0))" } ?? "Add as a task", isOn: taskBinding(claim))
+                    }
                     if drafts[claim.id]?.answer == "accept", !claim.canReplace.isEmpty {
                         Text("Does this replace an earlier one?")
                             .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
@@ -1030,6 +1068,11 @@ struct MeetingCloseoutView: View {
         Section("How the briefs will change") {
             Text("\(preview.accepted) accepted, \(preview.rejected) rejected, \(preview.replaced) replaced, \(preview.left) left for later.")
         }
+        if let tasks = preview.tasks, !tasks.isEmpty {
+            Section("Tasks that will be added") {
+                ForEach(tasks, id: \.claimId) { Text($0.line(day: Self.dueDay)) }
+            }
+        }
         ForEach(preview.briefs, id: \.subject) { brief in
             Section("\(brief.subject): \(brief.waitingBefore) waiting now, \(brief.waitingAfter) after") {
                 if brief.added.isEmpty && brief.removed.isEmpty { Text("No lines change.") }
@@ -1045,6 +1088,23 @@ struct MeetingCloseoutView: View {
             set: { value in
                 var draft = drafts[claim.id] ?? CloseoutDraft(claim)
                 draft[keyPath: field] = value
+                drafts[claim.id] = draft
+                preview = nil
+            }
+        )
+    }
+
+    /// An ISO due time as the day to show. Falls back to the text itself when it is not a time.
+    private static func dueDay(_ iso: String) -> String {
+        SpineDate.parse(iso).map { $0.formatted(date: .abbreviated, time: .omitted) } ?? iso
+    }
+
+    private func taskBinding(_ claim: CloseoutClaim) -> Binding<Bool> {
+        Binding(
+            get: { drafts[claim.id]?.task == true },
+            set: { on in
+                var draft = drafts[claim.id] ?? CloseoutDraft(claim)
+                draft.task = on
                 drafts[claim.id] = draft
                 preview = nil
             }
@@ -1088,6 +1148,7 @@ struct MeetingCloseoutView: View {
             if accepted, draft.owner != (claim.ownerName ?? "") { row["owner"] = draft.owner }
             if accepted, draft.text != claim.text { row["text"] = draft.text }
             if accepted, draft.topic != (claim.topic ?? "") { row["topic"] = draft.topic }
+            if accepted, draft.task, claim.canTask == true { row["task"] = true }
             return row
         }
         let speakers: [[String: Any]] = closeout.speakers.compactMap { speaker in
@@ -1119,6 +1180,7 @@ struct MeetingCloseoutView: View {
             drafts = [:]
             error = nil
             saved = "Saved: \(result.accepted) accepted, \(result.rejected) rejected, \(result.replaced) replaced, \(result.left) left for later."
+                + ((result.tasks?.isEmpty ?? true) ? "" : " \(result.tasks?.count ?? 0) added to Tasks.")
                 + (result.filingError.map { " The project index was not updated: \($0)" } ?? "")
             await load()
             onSaved()

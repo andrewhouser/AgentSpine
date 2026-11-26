@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { rawDb } from "../memory/store.ts";
 
 export type ProposalKind =
+  | "code_change"
   | "retro_auto_approval"
   | "retro_code_change"
   | "retro_memory_correction"

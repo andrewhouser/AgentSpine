@@ -44,18 +44,17 @@ const dry = { autoExecute: { dryRun: true, irreversibleAlwaysConfirm: true, reve
 const wouldBe = async (args, run) => {
   const runId = store.startRun({ kind: run.preApproved ? "schedule" : "chat", task: "probe" });
   const r = await executeCall({ args, tool: "browser" }, dry, runId, runId, run);
+  if (r.status === "denied" && /No approval or setting allows it/.test(r.output)) return "REFUSED";
   return /would have been (EXECUTED|QUEUED)/.exec(r.output)?.[1] ?? r.output;
 };
 const click = (description, selector = "#go") => ({ action: "click", description, selector });
 
 console.log("\nA SCHEDULED RUN — money and purchases ask");
 for (const [label, args] of [
-  ["transfer", click("Transfer $500 to external account")],
   ["place order", click("Place order")],
   ["buy now", click("Buy now")],
   ["checkout, named only by the selector", click(undefined, "button.checkout")],
   ["pay", click("Pay $42.00")],
-  ["withdraw", click("Withdraw funds")],
   ["subscribe", click("Subscribe for $9 a month")],
   ["submitting a payment form", { action: "submit", selector: "form#pay" }],
 ]) {
@@ -74,9 +73,18 @@ for (const [label, args] of [
   check(label, await wouldBe(args, scheduled), "EXECUTED");
 }
 
+// Moving money between accounts left the "asks" list on 2026-11-26 for the refusal tier
+// (PLAN-open-work section 12, D2): it queued until then, and a queued transfer is one tap from
+// done. The skip paths are in test/forbidden-tier.test.mjs; these two rows pin that the old
+// F8 cases did not fall through to "executed" when they stopped being "queued".
+console.log("\nMOVING MONEY — refused, not queued, from a schedule and from a chat");
+check("transfer, scheduled", await wouldBe(click("Transfer $500 to external account"), scheduled), "REFUSED");
+check("withdraw, scheduled", await wouldBe(click("Withdraw funds"), scheduled), "REFUSED");
+check("transfer, in a chat", await wouldBe(click("Transfer $500 to external account"), chat), "REFUSED");
+
 console.log("\nA CHAT TURN — unchanged, every risky click and submit asks");
 for (const [label, args] of [
-  ["transfer", click("Transfer $500 to external account")],
+  ["buying", click("Buy now")],
   ["a click that sends", click("Send message")],
   ["submitting a search form", { action: "submit", selector: "form#search" }],
 ]) {

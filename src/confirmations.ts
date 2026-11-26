@@ -11,12 +11,14 @@ import {
   NOTIFY_ON_CONFIRMATION,
   REJECT_PROMOTE_AFTER,
 } from "./config.ts";
+import { CHANGE_TOOL, noteChangeDecision } from "./change-proposals.ts";
 import { registry } from "./tools/index.ts";
 import { enqueue } from "./queue.ts";
 import { remember } from "./memory/rag.ts";
 import * as store from "./memory/store.ts";
 import { confirmationActions, confirmationPush, notify } from "./notify.ts";
 import type { NotifyResult } from "./notify.ts";
+import { runApproved } from "./protected-paths.ts";
 import type { Tier } from "./tiers.ts";
 
 export const PREFERENCE_KIND = "preference";
@@ -100,14 +102,34 @@ const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
     return { ok: false, message: `#${id} denied by current policy: ${decision.reason}` };
   }
 
+  // The refusal tier holds here too. Nothing forbidden is ever queued, but a row queued before
+  // a call became forbidden (an upgrade, a list that grew) must not run because someone taps
+  // its old card. A classifier that throws is treated the same way: refuse, do not run.
+  let forbidden: null | string = null;
+  try {
+    const c = tool.classify(args);
+    if (c.reversibility === "forbidden") forbidden = c.reason ?? "this tool never does it";
+  } catch (err) {
+    forbidden = `it could not be classified (${err instanceof Error ? err.message : String(err)})`;
+  }
+  if (forbidden) {
+    if (!store.closePendingConfirmation(id, "rejected", `refused whoever approves: ${forbidden}`)) return lost();
+    return { ok: false, message: `#${id} is refused, and an approval does not change that: ${forbidden}.` };
+  }
+
   // Claim it before anything runs. Only the caller whose UPDATE changed the row goes on; a
   // second approval, or a rejection that arrived in the same instant, gets "already ..." and
   // the irreversible action runs once. The queue serialises runs but never stopped the
   // second one, so the claim is what carries the guarantee.
   if (!store.claimConfirmation(id)) return lost();
+  if (row.tool === CHANGE_TOOL) noteChangeDecision(id, row.args, "accepted");
 
   try {
-    const output = await enqueue(() => tool.run(args, { policy }));
+    // Marked as the carrying out of this approval, so a tool that writes only on a person's
+    // yes (a protected file, a change proposal: src/protected-paths.ts) can tell this call
+    // from one the broker let through. The card text rides along because it names the
+    // version of the file its diff was made against.
+    const output = await enqueue(() => runApproved({ id, summary: row.summary }, () => tool.run(args, { policy })));
     store.setConfirmation(id, "done", output);
     return { ok: true, message: `#${id} executed: ${output}` };
   } catch (err) {
@@ -147,6 +169,9 @@ const rejectOnly = async (id: number, reason = ""): Promise<ConfirmOutcome> => {
   if (!store.closePendingConfirmation(id, "rejected", why ? `rejected by user: ${why}` : "rejected by user")) {
     return { ok: false, message: `#${id} is already '${store.getConfirmation(id)?.state ?? "gone"}'.` };
   }
+  // A proposed change to AgentSpine's own code that was turned down is not proposed again
+  // (src/change-proposals.ts). One queued from a chat reaches the proposal log only here.
+  if (row.tool === CHANGE_TOOL) noteChangeDecision(id, row.args, "rejected");
 
   if (why) {
     try {

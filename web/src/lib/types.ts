@@ -331,6 +331,10 @@ export interface Schedule {
   enabled: number;
   id: number;
   last_run: null | string;
+  /** The last run skipped for being too late (section 13, H6): when, which slot, and why. */
+  last_skip_at?: null | string;
+  last_skip_reason?: null | string;
+  last_skip_slot?: null | string;
   name: string;
   next_run: null | string;
   spec: null | string;
@@ -676,6 +680,17 @@ export interface HeadsupWatch {
   note: null | string;
 }
 
+/** One step of a booking's reminder sequence: when it is due and what became of it. */
+export interface HeadsupReminder {
+  dueAt: string;
+  /** "Two days before", "That morning", "An hour before". */
+  label: string;
+  /** Why it was skipped, held or withdrawn, in the server's words. */
+  reason: null | string;
+  state: "pending" | "sent" | "skipped" | "withdrawn";
+  step: string;
+}
+
 /** A proactive suggestion: something coming up that the assistant noticed. */
 export interface Headsup {
   amount: null | string;
@@ -687,14 +702,16 @@ export interface Headsup {
   kind: string;
   location: null | string;
   query: null | string;
+  /** The reminders a Yes on a booking set up. Empty for every other kind. */
+  reminders?: HeadsupReminder[];
   researchError: null | string;
   researchNote: null | string;
   snoozeUntil: null | string;
   state: "accepted" | "dismissed" | "done" | "expired" | "offered" | "researched" | "snoozed";
   subject: string;
   watch: HeadsupWatch | null;
-  /** What Yes does: find ideas, watch a flight or a drive, or just acknowledge. */
-  yesAction: "ack" | "research" | "watch";
+  /** What Yes does: find ideas, watch a flight or a drive, set up a booking's reminders, or just acknowledge. */
+  yesAction: "ack" | "remind" | "research" | "watch";
   yesLabel: string;
 }
 
@@ -708,7 +725,27 @@ export interface HeadsupDates {
     summary: string;
     who: string;
   }[];
-  remembered: { day: number; id: number; month: number; occasion: string; title: string; who: string }[];
+  remembered: HeadsupDate[];
+}
+
+/** One remembered date. `year` is null when you never said it. */
+export interface HeadsupDate {
+  day: number;
+  id: number;
+  month: number;
+  occasion: string;
+  title: string;
+  who: string;
+  year?: null | number;
+}
+
+/** What you send to change one. Read on the server exactly as the `date_remember` tool reads it. */
+export interface HeadsupDateEdit {
+  day: number;
+  month: number;
+  occasion: string;
+  who: string;
+  year: null | number;
 }
 
 /** What a run would offer right now. Reads the calendars, writes and sends nothing. */
@@ -733,14 +770,37 @@ export interface CheckinItem {
 /** What a check right now would find and say. Reads only: nothing is recorded or sent. */
 export interface CheckinPreview {
   body: string;
+  /**
+   * Inbox buckets (section 14, U7): a label per mail item, by the item's key. Empty unless the
+   * server's INBOX_SORT_MODE is "on", and absent from a server that predates them.
+   */
+  buckets?: Record<string, CheckinBucket>;
   errors: string[];
   /** Why a check now would stay silent even with something to say. */
   heldBy: "cap" | "off" | "quiet" | null;
   items: CheckinItem[];
   mode: "log" | "off" | "push";
+  /** Sources switched off in Settings, which were not read. Absent from a server that predates the setting. */
+  off?: CheckinItem["kind"][];
   title: string;
   wouldSend: boolean;
 }
+
+/** One mail's label. Both are null when the model's answer was not a label: the mail is unsorted. */
+export interface CheckinBucket {
+  bucket: "fyi" | "reply-today" | "urgent" | null;
+  reason: null | string;
+}
+
+/** What "Draft a reply" did. A draft waits for approval like any other; nothing is sent. */
+export interface CheckinReply {
+  confirmationId?: number;
+  message: string;
+  ok: boolean;
+}
+
+/** Which sources the check-in reads. Only mail can start a notification. */
+export type CheckinSources = Record<CheckinItem["kind"], boolean>;
 
 export interface CheckinRun {
   at: string;
@@ -762,6 +822,10 @@ export interface CheckinStatus {
   mode: "log" | "off" | "push";
   pushDetail: "senders" | "subjects";
   runs: CheckinRun[];
+  /** Whether mail is sorted into buckets. Absent from a server that predates them, which reads as off. */
+  sortMode?: "log" | "off" | "on";
+  /** Absent from a server that predates the setting, which reads as everything on. */
+  sources?: CheckinSources;
 }
 
 /** What "Check now" reports. */
@@ -781,15 +845,39 @@ export interface HeadsupRun {
   status: string;
 }
 
+/**
+ * A client or a prospect. The fields marked optional are the prospect ones (PLAN-open-work
+ * section 14, U4): every sentence among them is made by the server (src/clients/prospects.ts),
+ * so the three clients show the same words, and a server that predates prospects sends none.
+ */
 export interface Client {
+  /** When the site was last audited, or null. */
+  audit_at?: null | string;
   email: null | string;
+  /** One sentence on where the audit stands, ready to show. */
+  fit_line?: string;
+  /** The audit's most important findings, one sentence each. */
+  fit_reasons?: string[];
+  fit_score?: null | number;
   id: number;
   name: string;
   next_action: null | string;
   next_action_due: null | string;
   notes: null | string;
+  /** True when the status is one of the prospect ones. */
+  prospect?: boolean;
+  site?: null | string;
+  /** Where the name came from, in your words. */
+  source?: null | string;
   status: string;
+  status_label?: string;
   updated: string;
+}
+
+/** What pasting a list of prospects did: the rows it saved, and each line it could not read with the reason. */
+export interface ProspectPaste {
+  added: Client[];
+  skipped: { line: string; reason: string }[];
 }
 
 export interface TimeSummary {
@@ -1090,6 +1178,10 @@ export interface KnowledgeHit {
 export interface CloseoutClaim {
   atMs: null | number;
   canReplace: { id: number; saidOn: null | string; text: string }[];
+  /** A commitment that has no task yet, so "Add as a task" can be offered. */
+  canTask?: boolean;
+  /** The day the commitment is due, when one was recorded. */
+  due?: null | string;
   id: number;
   kind: string;
   ownerName: null | string;
@@ -1106,7 +1198,7 @@ export interface CloseoutState {
 }
 
 export interface CloseoutPlan {
-  claims: { answer: "accept" | "reject" | "skip"; id: number; owner?: string; replaces: number[]; text?: string; topic?: string }[];
+  claims: { answer: "accept" | "reject" | "skip"; id: number; owner?: string; replaces: number[]; task?: boolean; text?: string; topic?: string }[];
   projectId: null | number;
   speakers: { index: number; name: string }[];
 }
@@ -1116,6 +1208,44 @@ interface CloseoutCounts {
   left: number;
   rejected: number;
   replaced: number;
+  /** The tasks made from accepted commitments (in a preview, the ones that would be made). */
+  tasks?: CommitmentTask[];
+}
+
+/** A task made from a reviewed commitment (PLAN-open-work section 14, U6). */
+export interface CommitmentTask {
+  claimId: number;
+  clientName: null | string;
+  due: null | string;
+  id: number;
+  kind: "followup" | "task";
+  status: string;
+  title: string;
+  waitingOn: null | string;
+}
+
+/** GET /api/clients/:id/commitments: the reviewed commitments in a client's project, with the task made from each. */
+export interface ClientCommitments {
+  client: { id: number; name: string; projectId: null | number };
+  commitments: {
+    claimId: number;
+    due: null | string;
+    overdue: boolean;
+    ownerName: null | string;
+    saidOn: null | string;
+    task: CommitmentTask | null;
+    text: string;
+  }[];
+  waitingForReview: number;
+}
+
+/** POST /api/meetings/:id/runbook: the draft that was written (PLAN-open-work section 14, U5). */
+export interface RunbookSaved {
+  dropped: number;
+  path: string;
+  steps: number;
+  title: string;
+  truncated: boolean;
 }
 
 interface CloseoutLine {
@@ -1180,4 +1310,71 @@ export interface KnowledgeConflict {
   claims: KnowledgeClaim[];
   kind: string;
   topic: string;
+}
+
+// --- Today (PLAN-open-work section 14, U1 and U2): the shapes GET /api/today returns ---
+
+export interface TodayApproval {
+  args: string;
+  conversationId: null | number;
+  expiresAt: null | string;
+  expiringSoon: boolean;
+  id: number;
+  summary: string;
+  /** The whole proposed action. Approve is live only once this is on screen. */
+  text: string;
+  tool: string;
+  ts: string;
+}
+
+export interface TodayTask {
+  due: string;
+  id: number;
+  overdue: boolean;
+  title: string;
+  waitingOn: null | string;
+}
+
+export interface TodaySince {
+  at: string;
+  detail: string;
+  key: string;
+  kind: "failed" | "ok" | "skipped" | "stalled" | "stopped";
+  runId: null | number;
+  scheduleId: null | number;
+  title: string;
+}
+
+export interface TodayThread {
+  id: number;
+  title: string;
+  updated: string;
+}
+
+/** Mail from people with its inbox bucket (section 14, U7). Empty until that is built. */
+export interface TodayMail {
+  bucket: "fyi" | "reply-today" | "urgent";
+  key: string;
+  sender: string;
+  subject: string;
+}
+
+export interface TodayBrief {
+  done: { failed: number; ok: number; skipped: number; stalled: number };
+  first: { id: null | number; kind: "approval" | "headsup" | "none" | "task"; reason: "due-today" | "expiring" | "none" | "overdue" | "waiting"; title: string };
+  waiting: { approvals: number; headsups: number; tasks: number; threads: number };
+}
+
+export interface Today {
+  approvals: TodayApproval[];
+  brief: TodayBrief;
+  count: number;
+  headsups: Headsup[];
+  later: number;
+  mail: TodayMail[];
+  now: string;
+  since: TodaySince[];
+  sinceFrom: string;
+  tasks: TodayTask[];
+  threads: TodayThread[];
 }

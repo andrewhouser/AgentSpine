@@ -25,6 +25,8 @@ struct HeadsupView: View {
     @State private var note: String?
     @State private var previewing = false
     @State private var preview: HeadsupPreview?
+    /// The remembered date being corrected, when the editor is up.
+    @State private var editing: RememberedDate?
 
     /// Research is running in the background for something you said Yes to. Drives the polling.
     private var looking: Bool {
@@ -141,14 +143,24 @@ struct HeadsupView: View {
             if showsDates, !dates.remembered.isEmpty {
                 Section("Dates it remembers") {
                     ForEach(dates.remembered) { date in
-                        Text(date.title)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    Task { await forget(date) }
-                                } label: {
-                                    Label("Forget", systemImage: "trash")
-                                }
+                        // The whole row opens the editor: a date is corrected far more often than forgotten.
+                        Button {
+                            editing = date
+                        } label: {
+                            HStack {
+                                Text(date.title).foregroundStyle(Spine.Palette.text)
+                                Spacer(minLength: 0)
+                                Image(systemName: "pencil").foregroundStyle(Spine.Palette.textFaint)
                             }
+                        }
+                        .accessibilityHint("Edits this date")
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                Task { await forget(date) }
+                            } label: {
+                                Label("Forget", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -166,6 +178,12 @@ struct HeadsupView: View {
                 try? await Task.sleep(for: .seconds(4))
                 if Task.isCancelled { return }
                 await load()
+            }
+        }
+        .sheet(item: $editing) { date in
+            RememberedDateEditor(date: date) { withdrawn in
+                note = RememberedDateRules.savedNote(withdrawn: withdrawn)
+                Task { await load() }
             }
         }
         .alert(
@@ -357,11 +375,38 @@ private struct HeadsupRow: View {
                 watchStatus(watch)
             }
 
+            if item.yesAction == "remind", let reminders = item.reminders, !reminders.isEmpty {
+                reminderStatus(reminders)
+            }
+
             if item.researchesOnYes && (item.state == "accepted" || item.state == "researched") {
                 results
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// The reminders a Yes on a booking set up: each step, when it is due and what became of it,
+    /// under the server's one-line account of what was set and where the drafted messages are.
+    @ViewBuilder
+    private func reminderStatus(_ reminders: [HeadsupReminder]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label("Reminders", systemImage: "bell")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+            if let note = item.researchNote, !note.isEmpty {
+                Text(note).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim)
+            }
+            ForEach(reminders) { reminder in
+                Text(Self.reminderLine(reminder))
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.textDim)
+            }
+        }
+    }
+
+    private static func reminderLine(_ reminder: HeadsupReminder) -> String {
+        guard let due = SpineDate.parse(reminder.dueAt) else { return "\(reminder.label): \(reminder.outcome)" }
+        return "\(reminder.label), \(due.formatted(date: .abbreviated, time: .shortened)): \(reminder.outcome)"
     }
 
     /// Where a tracked flight or watched drive stands, in the server's own words, and what is
@@ -565,6 +610,7 @@ extension Headsup {
         case "appointment": return "Appointment"
         case "bill": return "Bill"
         case "birthday": return "Birthday"
+        case "booking": return "Booking"
         case "flight": return "Flight"
         case "recurring": return "Recurring"
         default: return kind.capitalized
@@ -617,5 +663,111 @@ extension Headsup {
             parts.append("snoozed until " + until.formatted(date: .abbreviated, time: .shortened))
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - Correcting a remembered date
+
+/// The editor for one remembered date: who, the kind, the day, and the year when you know it.
+///
+/// Shared by the phone's Heads-up list and the Mac's dates column. Saving does not ask for an
+/// approval. The confirmation queue is for what the assistant proposes, and this is you fixing
+/// your own list. The server reads the fields with the same rules as the `date_remember` tool,
+/// so its refusal is shown as it is written.
+struct RememberedDateEditor: View {
+    let date: RememberedDate
+    /// Called after a save, with how many heads-ups made from the old date were withdrawn.
+    let onSaved: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var who = ""
+    @State private var occasion = "birthday"
+    @State private var month = 1
+    @State private var day = 1
+    @State private var yearText = ""
+    @State private var error: String?
+    @State private var saving = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Who") {
+                    TextField("Name, or a relation like my wife", text: $who)
+                }
+                Section("When") {
+                    Picker("Kind", selection: $occasion) {
+                        ForEach(RememberedDateRules.occasions, id: \.value) { Text($0.label).tag($0.value) }
+                    }
+                    Picker("Month", selection: $month) {
+                        ForEach(1...12, id: \.self) { Text(monthName($0)).tag($0) }
+                    }
+                    Picker("Day", selection: $day) {
+                        ForEach(1...RememberedDateRules.daysIn(month: month), id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    TextField("Year, if you know it", text: $yearText)
+                        .spineNumberPad()
+                }
+                if let error {
+                    Section { Text(error).foregroundStyle(Spine.Palette.danger) }
+                }
+                Section {
+                    Text("A heads-up already made from the old date is withdrawn. The corrected date is offered again when it is close.")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+            }
+            .navigationTitle("Edit date")
+            .spineInlineTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { Task { await save() } }.disabled(!canSave)
+                }
+            }
+            // A day that the new month does not have is pulled back, so the picker never shows a blank.
+            .onChange(of: month) { _, newMonth in
+                day = min(day, RememberedDateRules.daysIn(month: newMonth))
+            }
+            .onAppear(perform: fill)
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 420)
+        #endif
+    }
+
+    private var canSave: Bool {
+        !saving && !who.trimmingCharacters(in: .whitespaces).isEmpty && RememberedDateRules.yearIsValid(yearText)
+    }
+
+    private func monthName(_ month: Int) -> String {
+        let names = Calendar.current.monthSymbols
+        return names.indices.contains(month - 1) ? names[month - 1] : "\(month)"
+    }
+
+    private func fill() {
+        who = date.who
+        occasion = date.occasion
+        month = date.month
+        day = date.day
+        yearText = date.year.map(String.init) ?? ""
+    }
+
+    private func save() async {
+        saving = true
+        defer { saving = false }
+        do {
+            let reply = try await APIClient.shared.updateHeadsupDate(
+                date.id,
+                who: who.trimmingCharacters(in: .whitespaces),
+                occasion: occasion,
+                month: month,
+                day: day,
+                year: RememberedDateRules.year(from: yearText)
+            )
+            onSaved(reply.withdrawn)
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }

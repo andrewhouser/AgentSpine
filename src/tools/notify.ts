@@ -59,6 +59,11 @@ const clampPriority = (p: unknown): 1 | 2 | 3 | 4 | 5 => {
 
 export const notifyTool: Tool = {
   name: "notify",
+  // A push travels through APNs or ntfy, so both fields are outgoing text (src/outbound.ts).
+  outboundText: (a) => [
+    { arg: "title", text: String(a?.title ?? "") },
+    { arg: "body", text: String(a?.body ?? "") },
+  ],
   description:
     "Send the user a notification (their phone if push is set up, otherwise a Mac banner). " +
     "This is for reaching someone who is NOT here — an unattended job that found something: " +

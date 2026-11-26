@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { Headsup, HeadsupCard, HeadsupDates, HeadsupPreview } from "../../lib/types.ts";
+import type { Headsup, HeadsupCard, HeadsupDate, HeadsupDateEdit, HeadsupDates, HeadsupPreview } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api, authedPath } from "../../lib/api.ts";
@@ -16,8 +16,17 @@ const KIND_LABEL: Record<string, string> = {
   appointment: "Appointment",
   bill: "Bill",
   birthday: "Birthday",
+  booking: "Booking",
   flight: "Flight",
   recurring: "Recurring",
+};
+
+/** What became of one reminder, in a word. The reason, when there is one, follows it. */
+const REMINDER_STATE: Record<string, string> = {
+  pending: "to come",
+  sent: "sent",
+  skipped: "skipped",
+  withdrawn: "withdrawn",
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -59,6 +68,23 @@ const Card = ({ c }: { c: HeadsupCard }) => (
     {c.priceText && <div className={results.small}>seen {seenOn(c.fetchedAt)}</div>}
   </a>
 );
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** The form's fields as typed. Kept as strings so a half-typed day is not turned into a number early. */
+interface DateDraft {
+  day: string;
+  id: number;
+  month: number;
+  occasion: string;
+  who: string;
+  year: string;
+}
+
+const draftOf = (d: HeadsupDate): DateDraft => ({ day: String(d.day), id: d.id, month: d.month, occasion: d.occasion, who: d.who, year: d.year ? String(d.year) : "" });
+
+/** What is sent. The server reads it with the rules the `date_remember` tool uses, and says what is wrong. */
+const editOf = (d: DateDraft): HeadsupDateEdit => ({ day: Number(d.day), month: d.month, occasion: d.occasion, who: d.who.trim(), year: d.year.trim() ? Number(d.year) : null });
 
 const stateNote = (h: Headsup): string => {
   if (h.state === "snoozed" && h.snoozeUntil) return `snoozed until ${new Date(h.snoozeUntil).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`;
@@ -113,6 +139,29 @@ export const HeadsupView = () => {
     refreshDates();
   };
 
+  const [draft, setDraft] = useState<DateDraft | null>(null);
+  const [draftError, setDraftError] = useState("");
+  const [dateNote, setDateNote] = useState("");
+
+  /**
+   * Save a corrected date. Yours to change without a question, unlike a date the assistant
+   * proposes. A card made from the old date is withdrawn on the server, so the list of
+   * heads-ups is read again too.
+   */
+  const saveDate = async (): Promise<void> => {
+    if (!draft) return;
+    setDraftError("");
+    try {
+      const r = await api.updateHeadsupDate(draft.id, editOf(draft));
+      setDraft(null);
+      setDateNote(r.withdrawn > 0 ? "Saved. The heads-up made from the old date was withdrawn; the new date will be offered when it is close." : "Saved.");
+      refreshDates();
+      refresh();
+    } catch (err) {
+      setDraftError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   /** What Check now would send, without sending or recording anything. */
   const previewNow = async (): Promise<void> => {
     setPreviewing(true);
@@ -156,7 +205,7 @@ export const HeadsupView = () => {
   return (
     <div className={styles.page}>
       <PageHeader
-        subtitle="Birthdays, anniversaries, bills, appointments and trips it noticed on your calendar. You get one summary each morning; answer here."
+        subtitle="Birthdays, anniversaries, bills, appointments, bookings and trips it noticed on your calendar. You get one summary each morning; answer here."
         title="Heads-up"
       />
 
@@ -239,6 +288,18 @@ export const HeadsupView = () => {
                 {h.watch.lastPolled && <div className={results.status}>Last checked {new Date(h.watch.lastPolled).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</div>}
               </div>
             )}
+            {h.yesAction === "remind" && (h.reminders?.length ?? 0) > 0 && (
+              <div className={results.results}>
+                {h.researchNote && <div className={results.status}>{h.researchNote}</div>}
+                {h.reminders?.map((m) => (
+                  <div className={results.status} key={m.step}>
+                    {m.label}, {new Date(m.dueAt).toLocaleString([], { day: "numeric", hour: "numeric", minute: "2-digit", month: "short", weekday: "short" })}:{" "}
+                    {REMINDER_STATE[m.state] ?? m.state}
+                    {m.reason ? ` (${m.reason})` : ""}
+                  </div>
+                ))}
+              </div>
+            )}
             {h.yesAction === "research" && (h.state === "accepted" || h.state === "researched") && (
               <div className={results.results}>
                 {h.cards.length > 0 ? (
@@ -290,16 +351,78 @@ export const HeadsupView = () => {
       {dates.remembered.length > 0 && (
         <>
           <PageHeader subtitle="Dates you told it. Anything already on your calendar isn't repeated." title="Dates it remembers" />
-          {dates.remembered.map((d) => (
-            <div className={styles.card} key={d.id}>
-              <div className={styles.body}>
-                <div className={styles.title}>{d.title}</div>
+          {dateNote && <div className={styles.snippet}>{dateNote}</div>}
+          {dates.remembered.map((d) =>
+            draft?.id === d.id ? (
+              <form
+                className={styles.card}
+                key={d.id}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void saveDate();
+                }}
+              >
+                <div className={`${styles.body} ${results.edit}`}>
+                  <input aria-label="Who" autoFocus className={results.field} onChange={(e) => setDraft({ ...draft, who: e.target.value })} placeholder="Name, or a relation like my wife" value={draft.who} />
+                  <select aria-label="Kind" className={results.field} onChange={(e) => setDraft({ ...draft, occasion: e.target.value })} value={draft.occasion}>
+                    <option value="birthday">Birthday</option>
+                    <option value="anniversary">Anniversary</option>
+                  </select>
+                  <select aria-label="Month" className={results.field} onChange={(e) => setDraft({ ...draft, month: Number(e.target.value) })} value={draft.month}>
+                    {MONTHS.map((name, i) => (
+                      <option key={name} value={i + 1}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  <input aria-label="Day" className={`${results.field} ${results.narrow}`} inputMode="numeric" onChange={(e) => setDraft({ ...draft, day: e.target.value })} placeholder="Day" value={draft.day} />
+                  <input
+                    aria-label="Year, if you know it"
+                    className={`${results.field} ${results.narrow}`}
+                    inputMode="numeric"
+                    onChange={(e) => setDraft({ ...draft, year: e.target.value })}
+                    placeholder="Year (optional)"
+                    value={draft.year}
+                  />
+                  {draftError && <div className={styles.error}>{draftError}</div>}
+                </div>
+                <button className={`${styles.button} ${styles.primary}`} type="submit">
+                  Save
+                </button>
+                <button
+                  className={styles.button}
+                  onClick={() => {
+                    setDraft(null);
+                    setDraftError("");
+                  }}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <div className={styles.card} key={d.id}>
+                <div className={styles.body}>
+                  <div className={styles.title}>{d.title}</div>
+                  {d.year ? <div className={styles.meta}>Since {d.year}</div> : null}
+                </div>
+                <button
+                  className={styles.button}
+                  onClick={() => {
+                    setDraft(draftOf(d));
+                    setDraftError("");
+                    setDateNote("");
+                  }}
+                  type="button"
+                >
+                  Edit
+                </button>
+                <button className={styles.button} onClick={() => void forget(d.id)} type="button">
+                  Forget
+                </button>
               </div>
-              <button className={styles.button} onClick={() => void forget(d.id)} type="button">
-                Forget
-              </button>
-            </div>
-          ))}
+            ),
+          )}
         </>
       )}
     </div>

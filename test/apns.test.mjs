@@ -26,7 +26,7 @@ import path from "node:path";
 
 process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-apns-${process.pid}.db`);
 
-const { buildPayload, levelFor } = await import("../src/push/apns.ts");
+const { asBundleId, buildPayload, levelFor, topicFor } = await import("../src/push/apns.ts");
 
 let passed = 0;
 let failed = 0;
@@ -125,6 +125,42 @@ check("it is NOT the dashboard or approval token", [hu.approvalToken, hu.confirm
 check("no headsup fields when not a headsup", [parse("t", "b").headsupId, parse("t", "b").headsupToken], [undefined, undefined]);
 check("a headsup payload is still within the byte cap", Buffer.byteLength(buildPayload("t", "x".repeat(6000), { category: "HEADSUP", headsupId: 7, headsupToken: "tok".repeat(10) })) <= 4000, true);
 check("... and the token survives the trim", JSON.parse(buildPayload("t", "x".repeat(6000), { category: "HEADSUP", headsupId: 7, headsupToken: "tok" })).headsupToken, "tok");
+
+console.log("\nTHE TOPIC — each device's own app, not one for everybody (PLAN-open-work section 11)");
+check("a device that named its app is pushed under that app", topicFor({ bundle_id: "com.example.AgentSpine" }, "com.example.Configured"), "com.example.AgentSpine");
+check("two apps on one server keep their own topics", [topicFor({ bundle_id: "com.example.AgentSpine" }, "x.y"), topicFor({ bundle_id: "com.example.AgentSpine.beta" }, "x.y")], ["com.example.AgentSpine", "com.example.AgentSpine.beta"]);
+check("a device from before the app reported it uses the configured one", topicFor({ bundle_id: null }, "com.example.Configured"), "com.example.Configured");
+check("... as does a row with no such column value", topicFor({}, "com.example.Configured"), "com.example.Configured");
+check("a stored value that is not a bundle id falls back too", topicFor({ bundle_id: "evil\r\nx-header: 1" }, "com.example.Configured"), "com.example.Configured");
+check("a bundle id is trimmed and kept", asBundleId("  com.example.AgentSpine "), "com.example.AgentSpine");
+check("a header injection is not a bundle id", asBundleId("com.example\r\napns-priority: 10"), null);
+check("a single word is not a bundle id", asBundleId("AgentSpine"), null);
+check("nothing, a number and an over-long value are not either", [asBundleId(undefined), asBundleId(7), asBundleId(`com.${"a".repeat(200)}`)], [null, null, null]);
+
+console.log("\nSTACK, SUBTITLE AND BADGE — what the lock screen and the Watch group and count by");
+{
+  const { SOURCE_SUBTITLES, threadFor } = await import("../src/push/apns.ts");
+  check("a conversation is the thread, whatever the source", parse("t", "b", { conversationId: 4, source: "confirmation" }).aps["thread-id"], "conversation-4");
+  check("with no conversation the source is the thread", parse("t", "b", { source: "headsup" }).aps["thread-id"], "source-headsup");
+  check("approvals, check-ins and finished runs each get their own", ["confirmation", "checkin", "run"].map((source) => threadFor({ source })), ["source-confirmation", "source-checkin", "source-run"]);
+  check("no source and no conversation means no thread", "thread-id" in parse("t", "b").aps, false);
+  check("an untagged sender is not a stack of its own", threadFor({ source: "unknown" }), null);
+  check("the subtitle names the source", parse("Approval needed (#12)", "Send the draft", { source: "confirmation" }).aps.alert, {
+    body: "Send the draft",
+    subtitle: "Needs your approval",
+    title: "Approval needed (#12)",
+  });
+  check("a source with no label gets no subtitle", "subtitle" in parse("t", "b", { source: "chat" }).aps.alert, false);
+  check("every labelled source is a short phrase", Object.values(SOURCE_SUBTITLES).every((v) => v.length > 0 && v.length <= 24), true);
+  check("the badge is the count it was given", parse("t", "b", { badge: 3 }).aps.badge, 3);
+  check("zero clears the icon", parse("t", "b", { badge: 0 }).aps.badge, 0);
+  check("no count means the icon is left alone", "badge" in parse("t", "b").aps, false);
+  check("a negative or fractional count is not sent", ["badge" in parse("t", "b", { badge: -1 }).aps, "badge" in parse("t", "b", { badge: 1.5 }).aps], [false, false]);
+  check("source and badge are not copied into the app's fields", ["source" in parse("t", "b", { badge: 2, source: "run" }), "badge" in parse("t", "b", { badge: 2, source: "run" })], [false, false]);
+  const fat = buildPayload("t", "x".repeat(6000), { badge: 12, category: "CONFIRMATION", confirmationId: 1, source: "confirmation" });
+  check("with all three the payload still fits the cap", Buffer.byteLength(fat) <= 4000, true);
+  check("... and keeps them while the body is trimmed", [JSON.parse(fat).aps.badge, JSON.parse(fat).aps.alert.subtitle, JSON.parse(fat).aps["thread-id"]], [12, "Needs your approval", "source-confirmation"]);
+}
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

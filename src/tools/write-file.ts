@@ -14,6 +14,9 @@
  *     refused: those are the files that turn "write a note" into "run something later".
  *     Hidden path segments (`.git`, `.ssh`, `.zshrc`) are refused.
  *   - HOW MUCH: 1 MB.
+ *   - THE GATES THEMSELVES: the broker, the pin, the approval code and the few files beside
+ *     them (src/protected-paths.ts) always wait for the user with the diff on the card, under
+ *     every skip the broker has, and are written only while that approval is carried out.
  *   - UNDO: before a file is replaced or edited, the old version is copied to
  *     `<AgentSpine>/backups/`. Because the change can be taken back, it is classified
  *     REVERSIBLE and runs without a prompt — an approval nobody reads protects less than a
@@ -36,9 +39,11 @@ import path from "node:path";
 
 import { BASE } from "../config.ts";
 import { recordDeliverable } from "../deliverables.ts";
+import { AREA_MAP_PATH } from "../area-map.ts";
 import { expand, insideWritable, real, realForWrite } from "../fs-scope.ts";
 import { listSources } from "../projects/store.ts";
 import * as store from "../memory/store.ts";
+import { asksEveryTime, protectedRel, protectedSummary, protectedWriteProblem, readCurrent, versionOf } from "../protected-paths.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 
 interface Args {
@@ -218,6 +223,9 @@ export const isManifest = (target: string): boolean => {
  *                      so a line written here outranks everything the model is told elsewhere.
  *   - `goals.md`     — the standing instruction every heartbeat reads, unattended.
  *   - `agents/*.md`  — a unit's instructions AND its `tools:` ceiling.
+ *   - `src/area-map.md` — the map of this codebase that a run working here is given as
+ *                      trusted context (PLAN-open-work section 10, SC3). Same reason as
+ *                      profile.md: a line a tool could write there would arrive as ours.
  *
  * `.env` needs no entry: it is hidden, and hidden paths are refused below.
  *
@@ -229,6 +237,7 @@ const controlFiles = (): string[] => [
   path.join(real(BASE), "policy.json"),
   path.join(real(BASE), "profile.md"),
   path.join(real(BASE), "goals.md"),
+  real(AREA_MAP_PATH),
 ];
 
 export const isControlFile = (target: string): boolean => {
@@ -304,7 +313,7 @@ export const textTargetGate = (policy: Policy, target: string, { ext = true } = 
     return {
       allowed: false,
       reason:
-        `${target} is one of AgentSpine's own control files (policy.json, profile.md, goals.md, agents/*.md). ` +
+        `${target} is one of AgentSpine's own control files (policy.json, profile.md, goals.md, agents/*.md, src/area-map.md). ` +
         `No tool may write them — permissions and trusted context are changed in the dashboard, by a person. ` +
         `Say what you would change and why, and let the user make the edit.`,
     };
@@ -344,8 +353,38 @@ const bodyOf = (a: Args): { error?: string; text?: string } => {
   return { error: 'write_file needs "content", or "from_run" with the #id of an earlier output.' };
 };
 
+/** What `mode: "append"` leaves in the file. One function, so the diff on a card is the text that gets written. */
+const appended = (cur: string, text: string): string => `${cur}${cur && !cur.endsWith("\n") ? "\n" : ""}${text}`;
+
+/** What edit_file would leave in the file, or why it would change nothing. */
+const edited = (cur: string, a: EditArgs): { count: number; next?: string; problem?: string } => {
+  const find = String(a?.find ?? "");
+  const count = find ? cur.split(find).length - 1 : 0;
+  if (count === 0) return { count, problem: "the text to replace was not found" };
+  if (count > 1 && !a?.all) return { count, problem: `that text appears ${count} times` };
+  return { count, next: a?.all ? cur.split(find).join(String(a.replace)) : cur.replace(find, () => String(a.replace)) };
+};
+
+/**
+ * The second check on a protected file, made by the tool itself at the moment of writing: it
+ * goes ahead only while an approval is being carried out, and only against the text the card's
+ * diff was made from. Thrown, not returned, so the approval ends as an error and not as "done".
+ */
+const notApproved = (...targets: string[]): void => {
+  for (const t of targets) {
+    const problem = protectedWriteProblem(t);
+    if (problem) throw new Error(`NOT WRITTEN: ${problem}`);
+  }
+};
+
 export const writeFile: Tool = {
   name: "write_file",
+  // Registry pass, 2026-11-26 (PLAN-open-work section 12, D2). The only irreversible write is a
+  // build manifest, "the one write a person should see before it happens", and a schedule's
+  // pre-approval skipped the queue for it: a job steered by a page it read could add a
+  // dependency with an install script, which the next `npm install` runs. So it asks even
+  // when nobody is watching. Ordinary files are reversible and never reach this flag.
+  confirmWhenUnattended: true,
   description:
     "Save text to a file. Give a bare filename like \"BUSINESSPLAN.md\" to save in the default " +
     "folder (this project's folder if it has one, otherwise AgentSpine's docs folder), or a full " +
@@ -359,14 +398,27 @@ export const writeFile: Tool = {
     "Shell scripts (.sh .command), server-executed source (.php .pl), macOS automation (.plist .scpt) " +
     "and hidden files are refused. Build manifests (package.json, Cargo.toml, build.rs, Package.swift, " +
     "lockfiles) can be written but WAIT for the user's approval, because they decide what code the " +
-    "build fetches and runs. AgentSpine's own policy.json, profile.md, goals.md and agents/*.md " +
-    "cannot be written at all. The previous version of a replaced file is backed up automatically, " +
+    "build fetches and runs. So do AgentSpine's own gate files (its broker, approval and privacy code), " +
+    "which always wait with the diff shown. AgentSpine's own policy.json, profile.md, goals.md, agents/*.md " +
+    "and src/area-map.md cannot be written at all. The previous version of a replaced file is backed up automatically, " +
     "so an ordinary file write never needs to ask first.",
   argsSchema: '{ "path": string, "content"?: string, "from_run"?: number, "mode"?: "write" | "append" }',
   classify: (a: Args): ClassifiedAction => {
     const target = resolveTarget(a);
     const exists = !!target && fs.existsSync(target);
     const verb = a?.mode === "append" ? "Append to" : exists ? "Replace (old version backed up)" : "Create";
+    // One of the gates themselves. Asks under every skip, with the diff — see protected-paths.ts.
+    const gate = protectedRel(target);
+    if (gate) {
+      const before = readCurrent(target);
+      const body = bodyOf(a).text ?? null;
+      const after = body == null ? null : a?.mode === "append" && before != null ? appended(before, body) : body;
+      return asksEveryTime({
+        reversibility: "irreversible",
+        summary: protectedSummary(gate, a?.mode === "append" ? "APPEND TO" : exists ? "REPLACE" : "CREATE", before, after),
+        target,
+      });
+    }
     // A manifest is the one write that can make the build fetch and run new code, so it is
     // the one write a person should see before it happens. See MANIFEST_BASENAMES.
     if (isManifest(target)) {
@@ -400,12 +452,13 @@ export const writeFile: Tool = {
     const target = resolveTarget(a);
     const body = bodyOf(a);
     if (!target || body.text == null) return `ERROR: ${body.error ?? "no path"}`;
+    notApproved(target);
     try {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       const backup = backupFile(target);
       if (a?.mode === "append" && fs.existsSync(target)) {
         const cur = fs.readFileSync(target, "utf8");
-        fs.appendFileSync(target, `${cur && !cur.endsWith("\n") ? "\n" : ""}${body.text}`, "utf8");
+        fs.writeFileSync(target, appended(cur, body.text), "utf8");
         recordDeliverable(target, "append", ctx?.runId);
         return `Appended ${body.text.length} characters to ${target}${backup ? ` (previous version kept at ${backup})` : ""}`;
       }
@@ -428,6 +481,8 @@ interface EditArgs {
 /** Replace text inside an existing document. The old version is backed up first. */
 export const editFile: Tool = {
   name: "edit_file",
+  // As write_file: its one irreversible call is a build manifest, and that asks unattended too.
+  confirmWhenUnattended: true,
   description:
     "Change part of an existing text document: replace the exact text in \"find\" with \"replace\". " +
     "\"find\" must match exactly once (pass \"all\": true to replace every occurrence), so quote enough " +
@@ -435,6 +490,15 @@ export const editFile: Tool = {
   argsSchema: '{ "path": string, "find": string, "replace": string, "all"?: boolean }',
   classify: (a: EditArgs): ClassifiedAction => {
     const target = resolveArg(a?.path);
+    const gate = protectedRel(target);
+    if (gate) {
+      const before = readCurrent(target);
+      return asksEveryTime({
+        reversibility: "irreversible",
+        summary: protectedSummary(gate, "EDIT", before, before == null ? null : (edited(before, a).next ?? null)),
+        target,
+      });
+    }
     if (isManifest(target)) {
       return {
         reversibility: "irreversible",
@@ -457,15 +521,14 @@ export const editFile: Tool = {
   },
   run: async (a: EditArgs, ctx) => {
     const target = resolveArg(a?.path);
+    notApproved(target);
     try {
       const cur = fs.readFileSync(target, "utf8");
-      const find = String(a?.find ?? "");
-      const count = cur.split(find).length - 1;
+      const { count, next } = edited(cur, a);
       if (count === 0) return `NOT CHANGED: the text to replace was not found in ${target}. Read the file and quote it exactly.`;
-      if (count > 1 && !a?.all) {
+      if (next == null) {
         return `NOT CHANGED: that text appears ${count} times in ${target}. Quote more surrounding text, or pass "all": true.`;
       }
-      const next = a?.all ? cur.split(find).join(String(a.replace)) : cur.replace(find, () => String(a.replace));
       if (Buffer.byteLength(next, "utf8") > MAX_WRITE_BYTES) return `NOT CHANGED: the result would be over ${MAX_WRITE_BYTES} bytes.`;
       const backup = backupFile(target);
       fs.writeFileSync(target, next, "utf8");
@@ -485,6 +548,8 @@ interface MoveArgs {
 /** Move or rename a document. Refuses to clobber: the destination must be free. */
 export const moveFile: Tool = {
   name: "move_file",
+  // As write_file: moving a file onto or off a build manifest's name asks unattended too.
+  confirmWhenUnattended: true,
   description:
     "Move or rename a text document (both ends must be in a writable folder). The destination must not already exist.",
   argsSchema: '{ "from": string, "to": string }',
@@ -494,6 +559,18 @@ export const moveFile: Tool = {
     const from = resolveArg(a?.from);
     const to = resolveArg(a?.to);
     const manifest = isManifest(from) || isManifest(to);
+    // Moving a gate away removes it, and moving a file into its place supplies a new one.
+    const gate = protectedRel(from) ?? protectedRel(to);
+    if (gate) {
+      return asksEveryTime({
+        reversibility: "irreversible",
+        summary:
+          `MOVE that changes PROTECTED FILE ${gate}: ${from || "?"} to ${to || "?"}. This file is one of AgentSpine's own gates, ` +
+          `so the move waits for you whatever else is trusted.\n\n` +
+          `(file version when proposed: ${versionOf(readCurrent(protectedRel(from) ? from : to))})`,
+        target: to,
+      });
+    }
     return {
       reversibility: manifest ? "irreversible" : "reversible",
       summary: `Move ${from || "?"} to ${to || "?"}${manifest ? " — this changes a BUILD MANIFEST" : ""}`,
@@ -514,6 +591,7 @@ export const moveFile: Tool = {
   run: async (a: MoveArgs, ctx) => {
     const from = resolveArg(a?.from);
     const to = resolveArg(a?.to);
+    notApproved(from, to);
     try {
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.renameSync(from, to);

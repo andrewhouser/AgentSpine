@@ -38,7 +38,7 @@ const dateStr = (n) => { const d = at(18 + n, 12); return `${d.getFullYear()}-${
 
 console.log("\ndefaults\n");
 const d = prefs.getPrefs();
-check("every kind is on", Object.values(d.kinds).every((v) => v === true) && Object.keys(d.kinds).length === 6, true);
+check("every kind is on", Object.values(d.kinds).every((v) => v === true) && Object.keys(d.kinds).length === 7, true);
 check("the cap and quiet hours are the shipped defaults", [d.dailyCap, d.quietStartHour, d.quietEndHour], [DAILY_CAP, 21, 6]);
 check("the client view adds the floor, and says what cannot run", [prefsForClient().floorMinutes, typeof prefsForClient().unavailable.drive], [30, "string"]);
 check("flights are not blocked here (key and policy set)", prefsForClient().unavailable.flights, null);

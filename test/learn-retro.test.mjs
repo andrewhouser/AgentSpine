@@ -16,6 +16,23 @@ process.env.LOCAL_LLM_URL = "http://127.0.0.1:9/v1";
 process.env.FAST_LLM_URL = "";
 process.env.OPENAI_API_KEY = "";
 process.env.LLM_RETRIES = "0";
+// An explicit policy, so accepting a code change does not depend on this machine's policy.json.
+// It declares this checkout as a build repo, which is what lets a proposal be queued (SC5).
+// Nothing is built here: the suite never approves that proposal.
+process.env.POLICY_PATH = path.join(root, "policy.json");
+fs.writeFileSync(
+  process.env.POLICY_PATH,
+  JSON.stringify({
+    apps: { allow: [] },
+    autoExecute: { dryRun: false, irreversibleAlwaysConfirm: true, reversible: true },
+    browser: { enabled: false, navigateAllowlist: [] },
+    build: { enabled: true, repos: { [path.join(import.meta.dirname, "..")]: { gitWrite: true } } },
+    fs: { readableDirs: [] },
+    google: { enabled: false },
+    version: 1,
+    web: { fetchAllowlist: [], searchEnabled: false },
+  }),
+);
 
 const store = await import("../src/memory/store.ts");
 const { rawDb } = store;
@@ -154,7 +171,14 @@ check("no schedule was created", store.listSchedules().length, 0);
 check("the stored request is cleared", rawDb.prepare("SELECT task FROM retro_proposals WHERE id = ?").get(routineCard.id).task, null);
 check("a second answer does nothing", retro.answerRetro(routineCard.id, "reject", NOW), null);
 const code = cardOf("code_change");
-check("accepting a code change starts nothing", [retro.answerRetro(code.id, "accept", NOW).queued, store.listConfirmations("pending").length], [null, queueBefore + 1]);
+// SC5: yes to the idea queues a proposal card and nothing else. Only approving that card starts the builder.
+const runsBefore = rawDb.prepare("SELECT COUNT(*) AS n FROM runs").get().n;
+const codeAnswer = retro.answerRetro(code.id, "accept", NOW);
+const proposal = store.getConfirmation(codeAnswer.queued);
+check("accepting a code change queues one proposal", [proposal?.tool, proposal?.state, store.listConfirmations("pending").length], ["propose_change", "pending", queueBefore + 2]);
+check("the proposal shows the builder's task and names the runs", [/The builder will be given exactly this:/.test(proposal.summary), JSON.parse(proposal.args).run_ids.length > 0], [true, true]);
+check("and starts no run", rawDb.prepare("SELECT COUNT(*) AS n FROM runs").get().n, runsBefore);
+check("it says what approving would do", /Approving that card starts the builder/.test(codeAnswer.message), true);
 const recipe = cardOf("recipe");
 const recipeCandidate = found.find((c) => c.kind === "recipe");
 retro.answerRetro(recipe.id, "reject", NOW);

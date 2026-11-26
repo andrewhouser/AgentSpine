@@ -76,6 +76,11 @@ stored as a remembered date, not a calendar event.
 - [ ] **False positives:** over a week of ordinary chat, count dates it remembered that you did not
       mean as a standing date ("my flight is on the 4th"). Delete those from the tab.
 - [ ] A remembered date can be forgotten, and the forgotten one does not come back.
+- [ ] A remembered date can be corrected (Edit on web, tap the row on iPhone, double-click or the
+      context menu on Mac): the name, the kind, the day and the year. It saves without an approval,
+      because it is your own list. A heads-up already made from the old date disappears, and the
+      corrected one is offered when it comes within its lead time. A date you forget takes its open
+      heads-up with it too.
 
 Metric: remembered dates that were wrong, over total remembered. Predicted: rare. The plan sets no number, so
 decide one before you start (one in ten is a reasonable bar) and write it here. Past it, stop: the date
@@ -173,9 +178,44 @@ Off-switch: none needed, since the push is still delivered without acting on it.
 
 ---
 
+## Rung 8: Reminders for a booking
+
+Added 2026-11-26 (PLAN-open-work section 14, U9). Needs rung 1. A calendar event whose title reads
+as a booking (a discovery or intro call, a consultation, a client call or meeting, a kickoff, a gig
+or DJ set, "booking" or "booked"; not a repeating series) is offered five days out with the button
+"Yes, set up reminders". A yes gives you three reminders (two days before, 7:30 that morning, an
+hour before) and one draft file of messages for the other person. Nothing is sent to anyone.
+
+- [ ] A real booking on your calendar is offered, and nothing that is not a booking is. If a plain
+      call or meeting shows up as one, the rule is `BOOKING` in `src/headsup/rules.ts`: change it
+      there with the example, do not tune around it.
+- [ ] After Yes, the card lists the three reminders with their times, and the drafts folder has one
+      `booking-<id>-<name>.md` whose first line says nothing was sent. (Drafts need
+      `"drafts": { "enabled": true }` in `policy.json`; without it the reminders are still set and
+      the card says no messages were drafted.)
+- [ ] Each reminder arrives within ten minutes of its time, once, and names the message to send.
+- [ ] Saying Yes the day before skips the two-days reminder, and the card says why.
+- [ ] Move the event by an hour. The next morning the remaining reminders show as withdrawn and
+      the new time is offered as a new item. **Known gap:** the calendar is read once a day, so a
+      booking moved at noon can still get a reminder for its old time that afternoon.
+- [ ] A reminder that falls in quiet hours, or after six proactive messages that day, is held, and
+      is skipped with that reason if it would be too late to be useful (30 minutes for the
+      hour-before one, 3 hours for the morning one, 12 hours for the two-days one).
+
+Predicted: one offer per booking, and three pushes per booking you say yes to. The lock-screen
+button for it needs the app build that registers the `HEADSUP_REMIND` category; an older build
+shows the push without buttons.
+
+Off-switch: turn the kind off in Settings, Heads-up ("Bookings"), which stops new offers. Reminders
+already set still go out. To stop those, move or delete the calendar event (withdrawn at the next
+morning read), or `HEADSUP_ENABLED=false`. There is no "cancel these reminders" button on the card
+yet.
+
+---
+
 ## Where it stops
 
-Rungs 0 to 3 are the core. Done when rungs 1 to 3 pass, and 4 to 7 either pass or are consciously
+Rungs 0 to 3 are the core. Done when rungs 1 to 3 pass, and 4 to 8 either pass or are consciously
 skipped (which workstream A of the plan also says). Live Activities for a flight (workstream G) are
 a separate decision and need rung 4 to have run first.
 

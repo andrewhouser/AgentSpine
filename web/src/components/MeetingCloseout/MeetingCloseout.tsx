@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
 
-import type { CloseoutClaim, CloseoutPreview, CloseoutState, Meeting, Project } from "../../lib/types.ts";
+import type { CloseoutClaim, CloseoutPreview, CloseoutState, CommitmentTask, Meeting, Project, RunbookSaved } from "../../lib/types.ts";
 
 import { api } from "../../lib/api.ts";
+import { runbookSavedLine } from "../../lib/runbook.ts";
 import styles from "./MeetingCloseout.module.css";
 
 interface MeetingCloseoutProps {
@@ -17,11 +18,23 @@ interface Draft {
   answer: Answer;
   owner: string;
   replaces: number[];
+  /** Also make a task from an accepted commitment. Never set for you: the tick is yours. */
+  task: boolean;
   text: string;
   topic: string;
 }
 
-const draftOf = (c: CloseoutClaim): Draft => ({ answer: "skip", owner: c.ownerName ?? "", replaces: [], text: c.text, topic: c.topic ?? "" });
+const draftOf = (c: CloseoutClaim): Draft => ({ answer: "skip", owner: c.ownerName ?? "", replaces: [], task: false, text: c.text, topic: c.topic ?? "" });
+
+/** One line for a task that would be, or was, made: what, for whom, by when. */
+const taskLine = (t: CommitmentTask): string =>
+  [
+    t.kind === "followup" && t.waitingOn ? `Waiting on ${t.waitingOn}: ${t.title}` : t.title,
+    t.due ? `due ${new Date(t.due).toLocaleDateString()}` : "",
+    t.clientName ? `for ${t.clientName}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
 
 const ANSWERS: { key: Answer; label: string }[] = [
   { key: "accept", label: "Accept" },
@@ -82,6 +95,7 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
         id: c.id,
         ...(d.answer === "accept" && d.owner !== (c.ownerName ?? "") ? { owner: d.owner } : {}),
         replaces: d.answer === "accept" ? d.replaces : [],
+        ...(d.answer === "accept" && d.task && c.canTask ? { task: true } : {}),
         ...(d.answer === "accept" && d.text !== c.text ? { text: d.text } : {}),
         ...(d.answer === "accept" && d.topic !== (c.topic ?? "") ? { topic: d.topic } : {}),
       };
@@ -109,6 +123,7 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
       setDrafts({});
       setSaved(
         `Saved: ${r.accepted} accepted, ${r.rejected} rejected, ${r.replaced} replaced, ${r.left} left for later.` +
+          (r.tasks?.length ? ` ${r.tasks.length} added to Tasks.` : "") +
           (r.filingError ? ` The project index was not updated: ${r.filingError}` : ""),
       );
       await load(projectId);
@@ -213,6 +228,12 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
                 </button>
               ))}
             </div>
+            {d.answer === "accept" && c.canTask && (
+              <label className={styles.check}>
+                <input checked={d.task} onChange={(e) => edit(c.id, { task: e.target.checked })} type="checkbox" />
+                Add as a task{c.due ? ` (due ${c.due})` : ""}
+              </label>
+            )}
             {d.answer === "accept" && c.canReplace.length > 0 && (
               <>
                 <div className={styles.label}>Does this replace an earlier one?</div>
@@ -239,6 +260,16 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
           <p className={styles.note}>
             {preview.accepted} accepted, {preview.rejected} rejected, {preview.replaced} replaced, {preview.left} left for later.
           </p>
+          {(preview.tasks?.length ?? 0) > 0 && (
+            <>
+              <div className={styles.label}>Tasks that will be added</div>
+              <ul className={styles.changes}>
+                {preview.tasks?.map((t) => (
+                  <li key={t.claimId}>{taskLine(t)}</li>
+                ))}
+              </ul>
+            </>
+          )}
           {preview.briefs.map((b) => (
             <div key={b.subject}>
               <div className={styles.label}>
@@ -278,6 +309,43 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
           Close
         </button>
       </div>
+    </div>
+  );
+};
+
+/**
+ * "Make a runbook": a local model writes the procedure a recording describes, as a draft file. Every step it
+ * keeps quotes the recording, and the server drops any step whose quote is not there, so the count of dropped
+ * steps is shown: it is the honest measure of how far to trust the draft.
+ */
+export const MeetingRunbook = ({ meeting }: { meeting: Meeting }) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState<null | RunbookSaved>(null);
+
+  if (meeting.status !== "done") return null;
+  const make = async (): Promise<void> => {
+    setBusy(true);
+    setError("");
+    setSaved(null);
+    try {
+      setSaved(await api.meetingRunbook(meeting.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={styles.panel}>
+      <div className={styles.row}>
+        <button className={styles.button} disabled={busy} onClick={() => void make()} type="button">
+          {busy ? "Writing the runbook…" : "Make a runbook"}
+        </button>
+        <span className={styles.note}>A draft procedure from this recording, written on the local model. Each step quotes what was said.</span>
+      </div>
+      {error && <p className={styles.problem}>{error}</p>}
+      {saved && <p className={styles.note}>{runbookSavedLine(saved)}</p>}
     </div>
   );
 };

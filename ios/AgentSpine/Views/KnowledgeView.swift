@@ -376,3 +376,68 @@ struct KnowledgeView: View {
         } catch { actionError = error.localizedDescription }
     }
 }
+
+// MARK: - A client's commitments
+
+/// What a client is owed and owes: the reviewed commitments in the client's project, each with the task made from
+/// it or a button to make one (PLAN-open-work section 14, U6). Shared by the iPhone and Mac client lists. It draws
+/// nothing for a client with no project or no commitments, so the list stays a list. Only reviewed commitments
+/// are shown; unreviewed ones are counted, as in every brief.
+struct ClientCommitmentsView: View {
+    let clientID: Int
+    @State private var data: ClientCommitments?
+    @State private var error: String?
+
+    var body: some View {
+        Group {
+            if let data, !(data.commitments.isEmpty && data.waitingForReview == 0) {
+                VStack(alignment: .leading, spacing: Spine.Space.xs) {
+                    Text("Commitments (\(data.commitments.count))")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
+                        .foregroundStyle(Spine.Palette.textDim)
+                    if let error {
+                        Text(error).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(.red)
+                    }
+                    ForEach(data.commitments) { commitment in
+                        row(commitment)
+                    }
+                    if data.waitingForReview > 0 {
+                        Text("\(data.waitingForReview) more waiting for review in Knowledge.")
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                }
+            }
+        }
+        .task(id: clientID) { await load() }
+    }
+
+    private func row(_ commitment: ClientCommitment) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+            Text(commitment.line)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+            Spacer(minLength: Spine.Space.sm)
+            if let task = commitment.task {
+                Text("task \(task.status)")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textDim)
+            } else {
+                Button("Add as a task") { Task { await addTask(commitment.claimId) } }
+                    .buttonStyle(.borderless)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+            }
+        }
+    }
+
+    private func load() async {
+        data = try? await APIClient.shared.clientCommitments(clientID)
+    }
+
+    private func addTask(_ claimID: Int) async {
+        do {
+            _ = try await APIClient.shared.taskFromCommitment(clientID: clientID, claimID: claimID)
+            error = nil
+            await load()
+        } catch { self.error = error.localizedDescription }
+    }
+}

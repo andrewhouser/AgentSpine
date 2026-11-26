@@ -1,0 +1,17 @@
+{
+  "title": "Low Lights",
+  "tagline": "House and disco, all night",
+  "date": "2026-12-12",
+  "doors": "21:00",
+  "venue": "The Lantern Room",
+  "city": "Springfield",
+  "price": "$15 on the door",
+  "lineup": [
+    { "name": "Alex Chen", "time": "21:00" },
+    { "name": "Sam Rivera", "time": "23:00" },
+    { "name": "Jordan Lee", "time": "01:00" }
+  ],
+  "link": "https://example.com/low-lights",
+  "handle": "exampleshow",
+  "tags": ["house", "disco", "springfield"]
+}

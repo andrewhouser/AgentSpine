@@ -322,11 +322,19 @@ struct Schedule: Codable, Identifiable, Hashable {
     /// carries `interval_minutes` instead.
     let spec: String?
     let task: String
+    /// The last run skipped for being too late (PLAN-open-work section 13, H6): when it was
+    /// skipped, which slot it was, and the server's sentence for why. Absent on an older server.
+    var lastSkipAt: String? = nil
+    var lastSkipSlot: String? = nil
+    var lastSkipReason: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case enabled, id, name, spec, task
         case lastRun = "last_run"
         case nextRun = "next_run"
+        case lastSkipAt = "last_skip_at"
+        case lastSkipSlot = "last_skip_slot"
+        case lastSkipReason = "last_skip_reason"
     }
 
     var isEnabled: Bool { enabled != 0 }
@@ -583,12 +591,66 @@ struct Client: Codable, Identifiable, Hashable {
     let nextAction: String?
     let nextActionDue: String?
     let notes: String?
+    // Prospects (PLAN-open-work section 14, U4). Every sentence here is made by the server
+    // (src/clients/prospects.ts), so this app, the Mac and the web show the same words. All
+    // optional: a server that predates prospects sends none of them.
+    /// The website, as an address.
+    var site: String? = nil
+    /// Where the name came from, in your words.
+    var source: String? = nil
+    /// True when the status is one of the prospect ones.
+    var prospect: Bool? = nil
+    var statusLabel: String? = nil
+    /// One sentence on where the site audit stands.
+    var fitLine: String? = nil
+    /// The audit's most important findings, one sentence each.
+    var fitReasons: [String]? = nil
+    var fitScore: Int? = nil
+    var auditAt: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, name, email, status, notes
+        case id, name, email, status, notes, site, source, prospect
         case nextAction = "next_action"
         case nextActionDue = "next_action_due"
+        case statusLabel = "status_label"
+        case fitLine = "fit_line"
+        case fitReasons = "fit_reasons"
+        case fitScore = "fit_score"
+        case auditAt = "audit_at"
     }
+
+    var isProspect: Bool { prospect ?? false }
+}
+
+/// What pasting a list of prospects did: the rows saved, and each line that could not be read, with the reason.
+struct ProspectPaste: Codable, Hashable {
+    struct Skipped: Codable, Hashable {
+        let line: String
+        let reason: String
+    }
+
+    let added: [Client]
+    let skipped: [Skipped]
+}
+
+/// One prospect after its site was audited.
+struct ProspectAudit: Codable, Hashable {
+    let client: Client
+}
+
+/// The thread a drafted outreach will arrive in.
+struct OutreachStart: Codable, Hashable {
+    let conversationId: Int
+    let runId: Int
+}
+
+/// The statuses a client or prospect can have, as the server knows them (src/clients/prospects.ts).
+/// The first five are where a prospect stands, in the order the work goes.
+enum ClientStatus {
+    static let all: [(value: String, label: String)] = [
+        ("new", "New"), ("contacted", "Contacted"), ("replied", "Replied"), ("pilot", "Pilot"), ("not-a-fit", "Not a fit"),
+        ("active", "Active"), ("lead", "Lead"), ("paused", "Paused"), ("done", "Done"),
+    ]
 }
 
 struct TimeTotal: Codable, Hashable {
@@ -689,7 +751,8 @@ struct FileGroup: Identifiable {
             let x = buckets[a]!, y = buckets[b]!
             if x.isGeneral != y.isGeneral { return y.isGeneral }
             let c = x.name.localizedCaseInsensitiveCompare(y.name)
-            return c == .orderedSame ? a < b : c == .orderedAscending
+            // Two projects with one name: by id, as numbers, like the web. As text "p10" sorts before "p2".
+            return c == .orderedSame ? (x.files.first?.project_id ?? 0) < (y.files.first?.project_id ?? 0) : c == .orderedAscending
         }.map { FileGroup(id: $0, name: buckets[$0]!.name, files: buckets[$0]!.files) }
     }
 
@@ -1164,6 +1227,36 @@ struct HeadsupWatch: Codable, Hashable {
     let note: String?
 }
 
+/// One step of the reminder sequence a Yes on a booking sets up: when it is due and what became
+/// of it. The label and the reason are the server's words, so every client says the same thing.
+struct HeadsupReminder: Codable, Hashable, Identifiable {
+    /// "two-days", "morning" or "hour".
+    let step: String
+    /// "Two days before", "That morning", "An hour before".
+    let label: String
+    let dueAt: String
+    /// "pending", "sent", "skipped" or "withdrawn".
+    let state: String
+    /// Why it was skipped, held or withdrawn. Nil when there is nothing to say.
+    let reason: String?
+
+    var id: String { step }
+
+    /// What became of it, in a word, with the reason after it when there is one.
+    var outcome: String {
+        let word: String
+        switch state {
+        case "pending": word = "to come"
+        case "sent": word = "sent"
+        case "skipped": word = "skipped"
+        case "withdrawn": word = "withdrawn"
+        default: word = state
+        }
+        if let reason, !reason.isEmpty { return "\(word) (\(reason))" }
+        return word
+    }
+}
+
 /// Something the assistant noticed coming up: a birthday, a bill, an appointment.
 ///
 /// `dueAt` is either a bare "2026-11-28" (an all-day event: a calendar day, not an instant) or a
@@ -1171,7 +1264,7 @@ struct HeadsupWatch: Codable, Hashable {
 /// `Date` the naive way puts it a day early west of Greenwich; the view does that carefully.
 struct Headsup: Codable, Identifiable, Hashable {
     let id: Int
-    /// "birthday", "anniversary", "bill", "appointment", "flight" or "recurring".
+    /// "birthday", "anniversary", "bill", "appointment", "booking", "flight" or "recurring".
     let kind: String
     let subject: String
     let dueAt: String
@@ -1188,11 +1281,15 @@ struct Headsup: Codable, Identifiable, Hashable {
     let researchNote: String?
     let cards: [HeadsupCard]
     /// What Yes does, decided by the server so every client agrees: "research" (find ideas),
-    /// "watch" (track a flight or a drive) or "ack" (just note it).
+    /// "watch" (track a flight or a drive), "remind" (set up a booking's reminders) or "ack"
+    /// (just note it).
     let yesAction: String
     /// The button's words for that action ("Yes, track this flight", "Got it").
     let yesLabel: String
     let watch: HeadsupWatch?
+    /// The reminders a Yes on a booking set up, soonest first. Nil from a server that predates
+    /// them, empty for every other kind.
+    let reminders: [HeadsupReminder]?
 }
 
 /// A date it noticed in something you said, waiting for you to confirm. Nothing is remembered
@@ -1221,11 +1318,53 @@ struct RememberedDate: Codable, Identifiable, Hashable {
     let month: Int
     let day: Int
     let title: String
+    /// The year, when you said it. Nil when you did not, and from a server that does not send it.
+    let year: Int?
 }
 
 struct HeadsupDates: Codable {
     let proposals: [HeadsupProposal]
     let remembered: [RememberedDate]
+}
+
+/// What the server answers when you correct a remembered date: the lists as they now stand, and
+/// how many heads-ups made from the old date it withdrew.
+struct HeadsupDateUpdate: Codable {
+    let proposals: [HeadsupProposal]
+    let remembered: [RememberedDate]
+    let withdrawn: Int
+}
+
+/// The rules for the date editor, kept here so both screens agree and a test can run them.
+/// The server is still the judge of what may be saved: it reads the fields exactly as the
+/// `date_remember` tool does and says what is wrong.
+enum RememberedDateRules {
+    static let occasions: [(value: String, label: String)] = [("birthday", "Birthday"), ("anniversary", "Anniversary")]
+
+    /// The most days a month can have. February is 29, because leap-day birthdays exist.
+    static func daysIn(month: Int) -> Int {
+        let days = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        return (1...12).contains(month) ? days[month - 1] : 31
+    }
+
+    /// The year field as typed: empty means "not known", anything else must be a plausible year.
+    /// Returns nil for "not known" and for text that is not a year; `yearIsValid` tells them apart.
+    static func year(from text: String) -> Int? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard let y = Int(t), y > 1900, y < 2200 else { return nil }
+        return y
+    }
+
+    static func yearIsValid(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespaces).isEmpty || year(from: text) != nil
+    }
+
+    /// What to say after a save.
+    static func savedNote(withdrawn: Int) -> String {
+        withdrawn > 0
+            ? "Saved. The heads-up made from the old date was withdrawn; the new date will be offered when it is close."
+            : "Saved."
+    }
 }
 
 /// Why a kind of watch cannot run yet, in words: a missing key, a policy switch that is off.
@@ -1319,7 +1458,26 @@ struct CheckinPreview: Codable {
     let items: [CheckinItem]
     /// "off", "log" or "push".
     let mode: String
+    /// Sources switched off in Settings, which were not read. Nil from a server that predates the setting.
+    let off: [String]?
     let wouldSend: Bool
+    /// Inbox buckets (section 14, U7): a label per mail item, by the item's key. Empty unless the
+    /// server's INBOX_SORT_MODE is "on"; nil from a server that predates them.
+    let buckets: [String: CheckinBucket]?
+}
+
+/// One mail's label. Both are nil when the model's answer was not a label: the mail is unsorted.
+struct CheckinBucket: Codable, Hashable {
+    /// "urgent", "reply-today", "fyi" or nil.
+    let bucket: String?
+    let reason: String?
+}
+
+/// What "Draft a reply" did. A draft waits for approval like any other; nothing is sent.
+struct CheckinReply: Codable {
+    let confirmationId: Int?
+    let message: String
+    let ok: Bool
 }
 
 /// One past check.
@@ -1343,6 +1501,10 @@ struct CheckinStatus: Codable {
     let mode: String
     let pushDetail: String
     let runs: [CheckinRun]
+    /// Which sources it reads, by kind. Nil from a server that predates the setting: everything on.
+    let sources: [String: Bool]?
+    /// Whether mail is sorted into buckets: "off", "log" or "on". Nil from an older server: off.
+    let sortMode: String?
 }
 
 /// What "Check now" reports.
@@ -1383,6 +1545,35 @@ enum CheckinWords {
             .filter { !$0.items.isEmpty }
     }
 
+    /// The switches under "What it looks at", in list order, each with what it reads. Mail first:
+    /// it is the only one that can start a notification, and its hint says so.
+    static let sources: [(kind: String, label: String, hint: String)] = [
+        ("mail", "Mail from people", "Unread inbox mail that Gmail does not sort as bulk. The only thing that can start a notification."),
+        ("approval", "Approvals waiting", "Actions waiting for your answer."),
+        ("calendar", "Calendar", "Events before the next check."),
+        ("task", "Tasks due", "Tasks overdue or due within a day."),
+        ("headsup", "Heads-up", "Offers you have not answered."),
+    ]
+
+    private static let sourceName: [String: String] = [
+        "approval": "Approvals", "calendar": "Calendar", "headsup": "Heads-up", "mail": "Mail", "task": "Tasks",
+    ]
+
+    /// The kinds switched off, in list order. A missing or partial answer reads as on.
+    static func offKinds(_ switches: [String: Bool]?) -> [String] {
+        sources.map(\.kind).filter { switches?[$0] == false }
+    }
+
+    /// What switching sources off means, or "" when everything is on. Mail is named apart from the
+    /// rest, because without it nothing can start a notification and the screen must say so.
+    static func offLine(_ off: [String]) -> String {
+        let names = off.filter { $0 != "mail" }.map { sourceName[$0] ?? $0 }
+        let rest = names.isEmpty ? "" : "Switched off, so not read: \(names.joined(separator: ", "))."
+        if !off.contains("mail") { return rest }
+        let mail = "Mail is switched off. Only mail can start a notification, so the check-in sends none until it is back on."
+        return rest.isEmpty ? mail : "\(mail) \(rest)"
+    }
+
     /// What the switch is set to, and what that means.
     static func modeLine(mode: String, intervalHours: Int) -> String {
         switch mode {
@@ -1396,7 +1587,8 @@ enum CheckinWords {
     }
 
     /// The sentence above the notification a check right now would send, or the reason there is none.
-    static func sendLine(wouldSend: Bool, heldBy: String?, mode: String) -> String {
+    static func sendLine(wouldSend: Bool, heldBy: String?, mode: String, off: [String]? = nil) -> String {
+        if off?.contains("mail") == true { return "Mail is switched off, so a check now would send nothing." }
         if !wouldSend { return "No new mail from a person, so a check now would send nothing." }
         switch heldBy {
         case "off": return "If it were switched on, a check now would send:"
@@ -1415,6 +1607,7 @@ enum CheckinWords {
         case "capped": return "There is new mail, but today's proactive messages are used up. It stays new for the next check."
         case "quiet": return "It is quiet hours, so nothing was checked or sent."
         case "off": return "The check-in is switched off, so nothing was checked."
+        case "nomail": return "Mail is switched off, and only mail can start a notification, so nothing was checked."
         case "error": return "Couldn't read mail: \(errors.isEmpty ? "no reason given" : errors.joined(separator: "; "))"
         default: return "Check-in: \(status)"
         }
@@ -1426,10 +1619,76 @@ enum CheckinWords {
         case "capped": return "held, daily limit"
         case "error": return "couldn't read mail"
         case "logged": return "would have sent"
+        case "nomail": return "mail switched off"
         case "nothing": return "nothing new"
         case "sent": return "sent"
         default: return status
         }
+    }
+
+    // Inbox buckets (section 14, U7). A label is two words from two fixed lists on the server. The
+    // sentences for them are here, so what is on screen beside a mail is this app's wording and
+    // never a sender's.
+
+    private static let bucketName: [String: String] = ["fyi": "For your information", "reply-today": "Reply today", "urgent": "Urgent"]
+
+    private static let reasonWords: [String: String] = [
+        "about-money": "it is about money",
+        "asks-you-a-question": "it asks you a question",
+        "deadline": "it has a deadline",
+        "information-only": "nothing is asked of you",
+        "personal": "it is personal",
+        "time-or-place-changed": "a time or place changed",
+        "waiting-on-you": "someone is waiting on you",
+    ]
+
+    /// Sort order within the mail section: urgent first, mail nobody has labelled yet last.
+    static func bucketRank(_ b: CheckinBucket?) -> Int {
+        guard let b else { return 4 }
+        switch b.bucket {
+        case "urgent": return 0
+        case "reply-today": return 1
+        case "fyi": return 2
+        default: return 3
+        }
+    }
+
+    /// The words beside one mail: "Urgent: it has a deadline". "" when the mail has no label yet. A
+    /// mail the model answered about with something that was not a label reads "Unsorted". A reason
+    /// this build does not know is left off: the label still stands.
+    static func bucketLine(_ b: CheckinBucket?) -> String {
+        guard let b else { return "" }
+        guard let bucket = b.bucket, let name = bucketName[bucket] else { return "Unsorted" }
+        guard let reason = b.reason, let why = reasonWords[reason] else { return name }
+        return "\(name): \(why)"
+    }
+
+    /// The mail rows in bucket order, keeping the server's order inside each bucket.
+    static func mailOrder(_ items: [CheckinItem], buckets: [String: CheckinBucket]?) -> [CheckinItem] {
+        // One pass per rank instead of a sort: five ranks, and the order inside each is the
+        // server's by construction. (A tuple sort here was too much for the type checker.)
+        var ordered: [CheckinItem] = []
+        for rank in 0...4 {
+            for item in items where bucketRank(buckets?[item.key]) == rank { ordered.append(item) }
+        }
+        return ordered
+    }
+
+    /// What the sorting switch is set to, or "" when it is off and there is nothing to explain.
+    static func sortLine(_ sortMode: String?) -> String {
+        switch sortMode {
+        case "on":
+            return "Mail is sorted on this machine into urgent, reply today and for your information. A label never decides whether you are notified."
+        case "log":
+            return "Mail sorting is in log mode: labels are recorded for you to read with npm run checkin sort log, and not shown here."
+        default:
+            return ""
+        }
+    }
+
+    /// The Gmail message id inside a mail item's key, or "" for any other item.
+    static func messageId(_ key: String) -> String {
+        key.hasPrefix("mail:") ? String(key.dropFirst(5)) : ""
     }
 }
 
@@ -1803,6 +2062,10 @@ struct CloseoutOption: Codable, Identifiable, Hashable {
 /// One extracted item waiting for review in a meeting close-out.
 struct CloseoutClaim: Codable, Identifiable, Hashable {
     let canReplace: [CloseoutOption]
+    /// A commitment that has no task yet, so "Add as a task" can be offered. Absent from an older server.
+    let canTask: Bool?
+    /// The day the commitment is due, when one was recorded.
+    let due: String?
     let id: Int
     let kind: String
     let ownerName: String?
@@ -1847,6 +2110,8 @@ struct CloseoutPreview: Codable, Hashable {
     let left: Int
     let rejected: Int
     let replaced: Int
+    /// The tasks that would be made from accepted commitments. Absent from an older server.
+    let tasks: [CommitmentTask]?
 }
 
 /// `filingError` means the close-out saved but the project index was not updated.
@@ -1856,6 +2121,86 @@ struct CloseoutSaved: Codable, Hashable {
     let left: Int
     let rejected: Int
     let replaced: Int
+    /// The tasks made from accepted commitments. Absent from an older server.
+    let tasks: [CommitmentTask]?
+}
+
+/// A task made from a reviewed commitment (PLAN-open-work section 14, U6).
+struct CommitmentTask: Codable, Hashable {
+    let claimId: Int
+    let clientName: String?
+    let due: String?
+    let id: Int
+    let kind: String
+    let status: String
+    let title: String
+    let waitingOn: String?
+
+    /// What, for whom, by when. `day` turns the ISO due time into the day to show, so this file stays Foundation-only
+    /// and the caller decides the format.
+    func line(day: (String) -> String) -> String {
+        var parts: [String] = []
+        if kind == "followup", let waitingOn, !waitingOn.isEmpty { parts.append("Waiting on \(waitingOn): \(title)") } else { parts.append(title) }
+        if let due { parts.append("due \(day(due))") }
+        if let clientName { parts.append("for \(clientName)") }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// One reviewed commitment in a client's project, with the task made from it.
+struct ClientCommitment: Codable, Identifiable, Hashable {
+    let claimId: Int
+    let due: String?
+    let overdue: Bool
+    let ownerName: String?
+    let saidOn: String?
+    let task: CommitmentTask?
+    let text: String
+
+    var id: Int { claimId }
+
+    /// "Sam Rivera: Send the export (due 2026-12-01, overdue)".
+    var line: String {
+        var out = (ownerName.map { "\($0): " } ?? "") + text
+        if let due { out += " (due \(due)\(overdue ? ", overdue" : ""))" }
+        return out
+    }
+}
+
+/// GET /api/clients/:id/commitments.
+struct ClientCommitments: Codable, Hashable {
+    struct Owner: Codable, Hashable {
+        let id: Int
+        let name: String
+        let projectId: Int?
+    }
+
+    let client: Owner
+    let commitments: [ClientCommitment]
+    let waitingForReview: Int
+}
+
+/// POST /api/meetings/:id/runbook: the draft that was written (PLAN-open-work section 14, U5).
+struct RunbookSaved: Codable, Hashable {
+    let dropped: Int
+    let path: String
+    let steps: Int
+    let title: String
+    let truncated: Bool
+}
+
+/// The sentence shown after a runbook is written. The same words as `runbookSavedLine` in web/src/lib/runbook.ts,
+/// and test/runbook-words.test.mjs runs one set of cases through both.
+enum RunbookWords {
+    static func savedLine(_ r: RunbookSaved) -> String {
+        let name = r.path.split(separator: "/").last.map(String.init) ?? r.path
+        let steps = "\(r.steps) \(r.steps == 1 ? "step" : "steps")"
+        let dropped = r.dropped > 0
+            ? " \(r.dropped) proposed \(r.dropped == 1 ? "step was" : "steps were") left out because the quote was not in the transcript."
+            : ""
+        let short = r.truncated ? " The recording is longer than what was read, so the steps stop before its end." : ""
+        return "Draft saved to Files as \(name): \(steps), each quoting the recording.\(dropped)\(short) Check it before relying on it."
+    }
 }
 
 /// A person, team or topic in the knowledge store, with the other names it is known by.
@@ -1891,4 +2236,219 @@ struct KnowledgeHit: Codable, Identifiable, Hashable {
     let path: String
     let text: String
     let via: [String]
+}
+
+// MARK: - Today
+
+/// One approval on the Today screen (`GET /api/today`, PLAN-open-work section 14, U1). `text` is
+/// the whole proposed action: Approve is live only once it is on screen.
+struct TodayApproval: Codable, Hashable, Identifiable {
+    /// The call's arguments as stored, for the card's Details.
+    let args: String
+    let conversationId: Int?
+    let expiresAt: String?
+    let expiringSoon: Bool
+    let id: Int
+    let summary: String
+    let text: String
+    let tool: String
+    let ts: String
+}
+
+struct TodayTask: Codable, Hashable, Identifiable {
+    let due: String
+    let id: Int
+    let overdue: Bool
+    let title: String
+    let waitingOn: String?
+}
+
+/// A scheduled run that finished, failed, stalled, was stopped or was skipped since you last looked.
+struct TodaySince: Codable, Hashable, Identifiable {
+    let at: String
+    let detail: String
+    let key: String
+    /// "ok", "failed", "stalled", "stopped" or "skipped".
+    let kind: String
+    let runId: Int?
+    let scheduleId: Int?
+    let title: String
+    var id: String { key }
+}
+
+struct TodayThread: Codable, Hashable, Identifiable {
+    let id: Int
+    let title: String
+    let updated: String
+}
+
+/// Mail from people with its inbox bucket (section 14, U7). Empty until that is built.
+struct TodayMail: Codable, Hashable, Identifiable {
+    /// "urgent", "reply-today" or "fyi".
+    let bucket: String
+    let key: String
+    let sender: String
+    let subject: String
+    var id: String { key }
+}
+
+/// The three-line brief as counts and a choice (section 14, U2). The server decides; `TodayWords` says it.
+struct TodayBrief: Codable, Hashable {
+    struct Done: Codable, Hashable {
+        let failed: Int
+        let ok: Int
+        let skipped: Int
+        let stalled: Int
+    }
+    struct First: Codable, Hashable {
+        let id: Int?
+        /// "approval", "task", "headsup" or "none".
+        let kind: String
+        /// "expiring", "overdue", "due-today", "waiting" or "none".
+        let reason: String
+        let title: String
+    }
+    struct Waiting: Codable, Hashable {
+        let approvals: Int
+        let headsups: Int
+        let tasks: Int
+        let threads: Int
+    }
+    let done: Done
+    let first: First
+    let waiting: Waiting
+}
+
+/// The Today screen's sentences, as pure functions.
+///
+/// Here, and Foundation-only, for the reason `CheckinWords` is: the iPhone and Mac screens are
+/// separate files and must say the same thing, and `test/today-screen.test.mjs` compiles this
+/// and compares every sentence with the web's (`web/src/lib/today.ts`). No sentence formats a
+/// date or a time, because a browser and Foundation word those differently.
+enum TodayWords {
+    private static func count(_ n: Int, _ one: String, _ many: String? = nil) -> String {
+        "\(n) \(n == 1 ? one : (many ?? one + "s"))"
+    }
+
+    /// Line one of the brief: what happened while you were away.
+    static func doneLine(_ done: TodayBrief.Done) -> String {
+        let parts = [
+            done.ok > 0 ? "\(done.ok) finished" : "",
+            done.failed > 0 ? "\(done.failed) failed" : "",
+            done.stalled > 0 ? "\(done.stalled) stalled" : "",
+            done.skipped > 0 ? "\(done.skipped) skipped" : "",
+        ].filter { !$0.isEmpty }
+        return parts.isEmpty
+            ? "No scheduled job has run since you last looked."
+            : "Scheduled jobs since you last looked: \(parts.joined(separator: ", "))."
+    }
+
+    /// Line two: what is waiting.
+    static func waitingLine(_ waiting: TodayBrief.Waiting) -> String {
+        let parts = [
+            waiting.approvals > 0 ? count(waiting.approvals, "approval") : "",
+            waiting.tasks > 0 ? "\(count(waiting.tasks, "task")) due" : "",
+            waiting.headsups > 0 ? count(waiting.headsups, "heads-up") : "",
+            waiting.threads > 0 ? count(waiting.threads, "unread reply", "unread replies") : "",
+        ].filter { !$0.isEmpty }
+        return parts.isEmpty ? "Nothing is waiting on you." : "Waiting on you: \(parts.joined(separator: ", "))."
+    }
+
+    /// Line three: what to do first. The server chose it; this only words the reason.
+    static func firstLine(_ first: TodayBrief.First) -> String {
+        if first.kind == "none" { return "Nothing needs doing first." }
+        if first.kind == "headsup" { return "Do first: answer the heads-up about \(first.title)." }
+        switch first.reason {
+        case "expiring": return "Do first: answer \"\(first.title)\" before it expires."
+        case "overdue": return "Do first: \"\(first.title)\", which is overdue."
+        case "due-today": return "Do first: \"\(first.title)\", due today."
+        default: return "Do first: answer \"\(first.title)\"."
+        }
+    }
+
+    /// The three lines together, for reading aloud.
+    static func briefText(_ brief: TodayBrief) -> String {
+        [doneLine(brief.done), waitingLine(brief.waiting), firstLine(brief.first)].joined(separator: " ")
+    }
+
+    /// How long an approval has left. `hoursLeft` is whole hours; nil when it does not expire.
+    static func expiryLine(_ hoursLeft: Int?) -> String {
+        guard let hoursLeft else { return "" }
+        if hoursLeft <= 0 { return "expires within the hour" }
+        if hoursLeft < 48 { return "expires in \(count(hoursLeft, "hour"))" }
+        return "expires in \(count(hoursLeft / 24, "day"))"
+    }
+
+    /// Whole hours from `now` until `expiresAt`, or nil when it does not expire or does not parse.
+    static func hoursUntil(_ expiresAt: String?, now: Date) -> Int? {
+        guard let expiresAt, let date = parse(expiresAt) else { return nil }
+        return max(0, Int((date.timeIntervalSince(now) / 3600).rounded(.down)))
+    }
+
+    /// The server's timestamps carry milliseconds; older rows may not.
+    static func parse(_ iso: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: iso) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: iso)
+    }
+
+    /// The line under a task.
+    static func taskLine(overdue: Bool, waitingOn: String?) -> String {
+        [overdue ? "overdue" : "due today", (waitingOn ?? "").isEmpty ? "" : "waiting on \(waitingOn ?? "")"]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    /// One word for what a scheduled run did.
+    static func sinceLabel(_ kind: String) -> String {
+        switch kind {
+        case "failed": return "failed"
+        case "skipped": return "skipped"
+        case "stalled": return "stalled"
+        case "stopped": return "stopped"
+        default: return "finished"
+        }
+    }
+
+    /// Under the list, when something has been put off.
+    static func laterLine(_ later: Int) -> String {
+        later > 0 ? "\(count(later, "item")) put off until the morning." : ""
+    }
+
+    /// A schedule's last skipped run (section 13, H6). `slot` is the time the run was due, already
+    /// formatted by the client, or empty. The reason is the server's sentence.
+    static func scheduleSkipLine(slot: String, reason: String?) -> String {
+        let head = slot.isEmpty ? "Skipped a run." : "Skipped the \(slot) run."
+        let why = (reason ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return why.isEmpty ? head : "\(head) \(why)"
+    }
+}
+
+// MARK: - Today screen
+
+/// Everything `GET /api/today` returns. Apart from `TodayWords` above because it holds
+/// heads-ups, whose model lives with the rest of Heads-up.
+struct TodayScreen: Codable {
+    let approvals: [TodayApproval]
+    let brief: TodayBrief
+    /// "Waiting on you": the number behind the icon badge and the Dock badge.
+    let count: Int
+    let headsups: [Headsup]
+    let later: Int
+    let mail: [TodayMail]
+    let now: String
+    let since: [TodaySince]
+    let sinceFrom: String
+    let tasks: [TodayTask]
+    let threads: [TodayThread]
+}
+
+extension TodayApproval {
+    /// The same question in the shape the approval cards take, so Today answers through the card
+    /// a thread uses and there is one place the Approve button lives per client.
+    var confirmation: Confirmation {
+        Confirmation(args: args, conversationID: conversationId, id: id, result: nil, runID: nil, state: "pending", summary: text, tool: tool, ts: ts)
+    }
 }

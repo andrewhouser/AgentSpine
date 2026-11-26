@@ -13,6 +13,7 @@
  */
 import { cosine, fromBlob, getEmbedder } from "../memory/rag.ts";
 import { rawDb } from "../memory/store.ts";
+import { STOPWORDS } from "../stopwords.ts";
 
 export interface SearchFilters {
   /** Chunk date, ISO, inclusive. */
@@ -60,17 +61,14 @@ export const VECTOR_MIN_SIMILARITY = ((): number => {
   return process.env.KNOWLEDGE_VECTOR_MIN !== undefined && Number.isFinite(v) && v >= 0 && v < 1 ? v : 0.25;
 })();
 
+// The list lives in src/stopwords.ts so the ledger's run search can share it; re-exported for the callers here.
+export { STOPWORDS };
+
 /**
  * A user's words as an FTS5 query. Filler words are dropped and the rest are OR-ed, so a long question still
  * matches on its few distinctive words and bm25 ranks the passages that hold most of them. A quoted phrase stays a phrase, and any token
  * with a digit or a hyphen (ABC-123, Q3, 2026-04) is quoted, because FTS5 would otherwise split it.
  */
-export const STOPWORDS = new Set(
-  ("a an and are as at be been but by can could did do does for from had has have how i if in into is it its me my of on or our so " +
-    "than that the their them then there these they this to us was we were what when where which who whom why will with would you your about " +
-    "any all some much many more most not no yes out up down over just also tell show give find get got let make").split(" "),
-);
-
 export const ftsQuery = (text: string): string => {
   const parts: string[] = [];
   const rest = text.replace(/"([^"]{2,})"/g, (_m, phrase: string) => {

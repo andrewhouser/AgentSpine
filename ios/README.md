@@ -21,7 +21,8 @@ Thread         turns live: every tool call with its verdict, your photos, markdo
 Schedules      jobs that run on a clock: pause, edit, run now, how the last few went, and task history
 Tasks          to-dos and follow-ups, with due times; the Mac pushes when one falls due
 Files          everything the assistant has saved for you, with a preview
-Clients        light client list, next actions, and where the last 30 days of time went
+Clients        light client list, next actions, and where the last 30 days of time went;
+               prospects ranked by the server, with Audit and Draft outreach in each row's menu
 Search         every thread — your questions and its answers
 Builds         runs that built or tested something: verdict, branch, every command, and the
                diff — committed, staged, and the files git is not tracking at all
@@ -100,6 +101,10 @@ APNS_TEAM_ID=YOURTEAMID
 APNS_BUNDLE_ID=com.yourdomain.AgentSpine     # exactly what you registered in step 1
 ```
 
+The app reports its own bundle id when it registers, and the server pushes each device under the
+app that registered it. `APNS_BUNDLE_ID` is the fallback for a device that has not said (an older
+build of the app), so it still has to be set. `GET /api/devices` shows each device's `bundleId`.
+
 Restart the dashboard. It will say `push: APNs + ntfy` on startup once both are configured.
 
 You can leave `NTFY_TOPIC` set while you learn to trust the app — the two transports run
@@ -148,6 +153,13 @@ It is for the Mac you work at: a sidebar of sections and threads with an inspect
 meetings, approvals from the menu bar (with a notification when one arrives), and read-aloud. Like
 the phone, it keeps the server address and token in the Keychain, set in Settings (⌘,). The window has two panes. **Server**: **Test connection** only checks what you typed; **Connect** saves it and closes the window. **Assistant**: recipes, auto-approval proposals, agents, Heads-up, memory and policy, the same screens as the phone's Settings, plus **Sidebar menu**, which sets the order of the menu at the foot of the sidebar: the first six are pinned and the rest fold under More. The web client has the same control in Settings → Menu. There is no
 App Store step: a development-signed build on each Mac, as with the iPhone.
+
+**Runbooks and tasks from a meeting.** A finished meeting has "Make a runbook" beside "Close out this
+meeting" on both apps: the server drafts a procedure from the recording and the app shows where the
+draft was saved and how many proposed steps were dropped for a quote that is not in the transcript.
+In the close-out, an accepted commitment has an "Add as a task" switch, and the preview lists the
+tasks before Save. The Clients list shows each client's reviewed commitments with their tasks. All of
+it lives in the shared `MeetingsView.swift` and `KnowledgeView.swift`.
 
 **Recording a meeting from the iPhone** (Meetings, the microphone button, "This iPhone", which is the
 default): the same path as the Mac below, with the phone's built-in microphone. `policy.json` needs
@@ -269,7 +281,7 @@ diagnostics. Work down this list.
 | **Test push: "no registered devices"** | The app never reached step 6. Open it, Test connection, then the push button again. |
 | **Test push: `BadDeviceToken`** | Normally self-healing — the server flips the device's environment and retries once, then remembers. Twice in a row means the token really is dead; delete the row and relaunch the app. |
 | **Test push: `InvalidProviderToken`** | `APNS_KEY_ID` or `APNS_TEAM_ID` is wrong, or `APNS_KEY_PATH` points at a different key than `APNS_KEY_ID` names. |
-| **Test push: `TopicDisallowed`** | `APNS_BUNDLE_ID` ≠ the app's actual bundle id. Check it against `Local.xcconfig`. |
+| **Test push: `TopicDisallowed`** | The topic is not an app of the team that owns the key. The topic is the bundle id the app reported when it registered (`bundleId` in `GET /api/devices`), or `APNS_BUNDLE_ID` for a device that reported none. Check both against `Local.xcconfig`. |
 | **Test push: `Unregistered`** | The app was deleted from the phone. The server retires the row; reinstall and relaunch. |
 | **Pushes arrive but never interrupt** | Time Sensitive Notifications, in iOS Settings. See step 6. |
 | **App dies after a week** | You built with a free Apple ID. See the top of this file. |
@@ -301,3 +313,18 @@ on purpose, not by accident, in an app you maintain by hand.
 **Annual re-signing.** The provisioning profile expires after a year and the app stops
 launching. Open the project, press ⌘R, done — it takes a minute, but put a reminder in
 AgentSpine's own scheduler so it is the thing that tells you.
+
+## Today
+
+The app opens on **Today** (`Views/TodayView.swift`; the Mac's is `MacToday.swift`). Both draw
+`TodaySections` from `Design/Components/Notices.swift` and read `TodayStore` in
+`Core/AppState.swift`, so they differ only in how a row opens. Every sentence is `TodayWords`
+in `Models.swift`, held equal to the web's by `test/today-screen.test.mjs`.
+
+- A tap on an approval opens the same `ApprovalCard` a thread shows. A swipe offers Review and
+  Later and never approves. From the saved offline copy the card has no buttons.
+- Today and Threads are fixed as the first two tabs. An order saved before Today existed keeps
+  its sequence behind them, so its old fourth tab is now the first row under More.
+- The icon badge is the server's "waiting on you" count. It is set from each push's `badge`, and
+  again whenever Today is read: on launch, on coming forward, and after an answer.
+

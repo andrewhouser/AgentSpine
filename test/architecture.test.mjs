@@ -12,6 +12,9 @@
  *   2. The Google write token (docs/SPEC.md section 5, amendment of 2026-11-21) is held by src/google/write.ts
  *      alone, that module is reached only by the two tools built for it, and it has no way to send mail
  *      or delete anything permanently.
+ *   3. The gate files (src/protected-paths.ts) are a pinned list, every route by which a tool could change
+ *      one checks it, only the approval code can mark a call as approved, the code map is read by one
+ *      module and written by none, and one door leads to the builder (PLAN-open-work section 10, SC3, SC5, SC6).
  *
  * These are tripwires, not proofs. A static scan cannot see a shell command that redirects into a file,
  * so the set of tools that can run commands is pinned too: adding one fails this test until a person
@@ -102,13 +105,16 @@ check("no tool names applyProposal or promote.ts", filesMatching(/\bapplyProposa
 console.log("\nCONTROL FILES: THE TOOLS THAT TOUCH THE DISK, AND THE ONES THAT RUN COMMANDS");
 // Every tool that writes a file. write_file and scaffold_ios take a path from the model, so both must go
 // through textTargetGate (which refuses control files: see test/write-file.test.mjs). draft and
-// generate_image build their own file names inside a fixed directory.
-check("the tools with a file-writing call are exactly these four", filesMatching(FS_WRITE_STRICT).filter((f) => f.startsWith("src/tools/")), [
+// generate_image build their own file names inside a fixed directory. So does site_audit (2026-11-26):
+// its one write is the report, named in code from the audited host and the day, under data/site-audits.
+check("the tools with a file-writing call are exactly these five", filesMatching(FS_WRITE_STRICT).filter((f) => f.startsWith("src/tools/")), [
   "src/tools/draft.ts",
   "src/tools/generate-image.ts",
   "src/tools/scaffold-ios.ts",
+  "src/tools/site-audit.ts",
   "src/tools/write-file.ts",
 ]);
+check("site-audit.ts writes in exactly one place, and never takes a path from the model", [(sources["src/tools/site-audit.ts"].match(new RegExp(FS_WRITE_STRICT.source, "g")) ?? []).length, /args\??\.(path|file|dir)\b/.test(sources["src/tools/site-audit.ts"])], [1, false]);
 for (const file of ["src/tools/write-file.ts", "src/tools/scaffold-ios.ts"]) {
   check(`${path.basename(file)} takes a model-supplied path through textTargetGate`, /\btextTargetGate\s*\(/.test(sources[file]), true);
 }
@@ -184,6 +190,58 @@ check("a container is created from exactly one line too", [filesMatching(/\.crea
 const claimAt = igRunner.search(/transition\(r\.id,\s*"container",\s*"publishing"/);
 check("the row is claimed as 'publishing' before the publish request is sent", claimAt > 0 && claimAt < igRunner.search(/\.publishContainer\s*\(/), true);
 check("the tools reach publishing only through the runner's publishNow", /\bpublishNow\b/.test(sources["src/tools/instagram.ts"]) && !/publishContainer|createImageContainer/.test(sources["src/tools/instagram.ts"]), true);
+
+// ---- 4. The gate files, the code map and self-change ----------------------------------------
+// PLAN-open-work section 10, SC3, SC5 and SC6. test/protected-paths.test.mjs and test/self-change.test.mjs
+// prove the behaviour; this pins the list and the few places that are allowed to hold each key.
+
+console.log("\nPROTECTED FILES: THE LIST IS PINNED HERE");
+// To take a file off this list, change it here as well, on purpose, and say why in the commit. This test
+// file is itself on the list, so an agent's edit to it waits for a person with the diff shown.
+const PINNED = [
+  "src/broker.ts",
+  "src/confirmations.ts",
+  "src/google/write.ts",
+  "src/instagram/api.ts",
+  "src/instagram/token.ts",
+  "src/learn/promote.ts",
+  "src/protected-paths.ts",
+  "src/sensitivity.ts",
+  "test/architecture.test.mjs",
+];
+const gateSource = sources["src/protected-paths.ts"] ?? "";
+const listLiteral = /PROTECTED_PATHS[^=]*=\s*\[([^\]]*)\]/.exec(gateSource)?.[1] ?? "";
+check("the scanner can read the list out of the source", /PROTECTED_PATHS[^=]*=\s*\[([^\]]*)\]/.exec('const PROTECTED_PATHS = ["a", "b"];')?.[1], '"a", "b"');
+check("src/protected-paths.ts lists exactly the pinned files", [...listLiteral.matchAll(/"([^"]+)"/g)].map((m) => m[1]), PINNED);
+check("every pinned file exists", PINNED.filter((rel) => !fs.existsSync(path.join(ROOT, rel))), []);
+check("the list is a constant in code, not read from policy or the environment", /PROTECTED_PATHS[^;]*(policy|process\.env|loadPolicy)/.test(gateSource), false);
+
+console.log("\nPROTECTED FILES: EVERY WRITE PATH CHECKS");
+// write_file, edit_file and move_file each call it before touching the disk.
+check("the write tools refuse a protected file without an approval", (sources["src/tools/write-file.ts"].match(/\bnotApproved\s*\(/g) ?? []).length, 3);
+check("and classify it to ask every time", /\basksEveryTime\s*\(/.test(sources["src/tools/write-file.ts"]) && /\bprotectedRel\s*\(/.test(sources["src/tools/write-file.ts"]), true);
+check("git_write asks before a verb swaps one in", /\bgitTouchesProtected\s*\(/.test(sources["src/tools/git-write.ts"]) && /\bcurrentApproval\s*\(/.test(sources["src/tools/git-write.ts"]), true);
+// Every tool that starts a process which may write where it likes puts protected files back afterwards.
+// apple.ts, mac-control.ts and git-status.ts run fixed system tools that take no path into this checkout.
+for (const file of ["src/tools/run-command.ts", "src/tools/scaffold-ios.ts"]) {
+  check(`${path.basename(file)} runs its process inside keepingProtected`, /\bkeepingProtected\s*\(/.test(sources[file]), true);
+}
+check("only the approval code can mark a call as approved", filesMatching(/\brunApproved\s*\(/).filter((f) => f !== "src/protected-paths.ts"), ["src/confirmations.ts"]);
+check("and it does so on exactly one line", (sources["src/confirmations.ts"].match(/\brunApproved\s*\(/g) ?? []).length, 1);
+
+console.log("\nTHE CODE MAP: READ BY ONE MODULE, WRITTEN BY NONE");
+check("AREA_MAP_PATH is named only by area-map.ts and the control-file list", filesMatching(/\bAREA_MAP_PATH\b/), ["src/area-map.ts", "src/tools/write-file.ts"]);
+check("area-map.ts makes no file-writing call", FS_WRITE.test(sources["src/area-map.ts"]), false);
+check("the map is a control file", /real\(AREA_MAP_PATH\)/.test(sources["src/tools/write-file.ts"]), true);
+check("only the runner asks for it", filesMatching(/\bareaMapFor\s*\(/).filter((f) => f !== "src/area-map.ts"), ["src/runner.ts"]);
+check("the committed map exists", fs.existsSync(path.join(SRC, "area-map.md")), true);
+
+console.log("\nSELF-CHANGE: ONE DOOR TO THE BUILDER");
+check("startChange is called only by the propose_change tool", filesMatching(/\bstartChange\s*\(/).filter((f) => f !== "src/change-proposals.ts"), ["src/tools/propose-change.ts"]);
+check("which starts nothing unless an approval is being carried out", /\bcurrentApproval\s*\(/.test(sources["src/tools/propose-change.ts"]), true);
+check("and refuses a run that is not a live chat", /!run\.conversational/.test(sources["src/tools/propose-change.ts"]), true);
+check("a run is started as a unit from one place", filesMatching(/\bunit:\s*CHANGE_UNIT\b/), ["src/change-proposals.ts"]);
+check("no tool or route passes a unit name of its own", filesMatching(/\bunit:\s*["'`a-z]/).filter((f) => f !== "src/change-proposals.ts"), []);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

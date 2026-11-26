@@ -103,6 +103,10 @@ const topicStatus = (t: TopicRow): string => {
 };
 export const studyTopic: Tool = {
   name: "study_topic",
+  // Registry pass, 2026-11-26 (PLAN-open-work section 12, D2). Deleting a topic destroys its
+  // cards and history and is the one irreversible call here. No scheduled job has a reason to
+  // do it, so a pre-approved run asks like a chat does.
+  confirmWhenUnattended: true,
   description:
     "The user's study topics. action \"list\" shows them with cards due; \"get\" shows one topic's goal, level, " +
     "map, cards and how much they have READ versus PRODUCED lately; \"set\" changes goal, level (0-5) or links " +

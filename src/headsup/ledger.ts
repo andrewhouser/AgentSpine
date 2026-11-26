@@ -16,14 +16,16 @@ import { rawDb } from "../memory/store.ts";
 import { HEADSUP_HOME, HEADSUP_TOMTOM_KEY } from "../config.ts";
 import { yesAction, yesLabel } from "./actions.ts";
 import type { YesAction } from "./actions.ts";
-import { cardsFor, toCardView } from "./research/cards.ts";
+import { cardsFor, deleteCardsFor, toCardView } from "./research/cards.ts";
 import type { CardView } from "./research/cards.ts";
+import { remindersFor } from "./reminders-store.ts";
+import type { ReminderView } from "./reminders-store.ts";
 import { getWatch, toWatchView } from "./watch/store.ts";
 import type { WatchView } from "./watch/store.ts";
 import type { Candidate } from "./scan.ts";
 import { subjectKey } from "./scan.ts";
 import { backfillOutcomes, recordAnswer, recordIgnoredBefore, recordOffer } from "./outcomes.ts";
-import { LEAD_DAYS, SNOOZE_HOURS } from "./rules.ts";
+import { BOOKING_REMINDERS, LEAD_DAYS, SNOOZE_HOURS } from "./rules.ts";
 
 rawDb.exec(`
   CREATE TABLE IF NOT EXISTS headsups (
@@ -242,6 +244,31 @@ export const expirePast = (now: Date): number => {
   return Number(r.changes);
 };
 
+/**
+ * Take back the open heads-ups made from one source (a remembered date that was edited or
+ * forgotten). Returns their ids. The rows are deleted, not expired: `decide` never re-offers a key
+ * it has a finished row for, and an edit that keeps the same day keeps the same key. Their cards,
+ * watch and unanswered outcome row go too, so a withdrawal counts as neither an answer nor an
+ * ignore in what Heads-up learns from. An answered outcome stays: you did answer it. Finished
+ * rows (dismissed, done, expired) are history and are left alone.
+ */
+export const withdrawOpenForSource = (sourceId: string): number[] => {
+  // Every non-recurring key is `kind:sourceId:date` (scan.ts), so the id sits between two colons.
+  const needle = `:${sourceId}:`;
+  const ids = (
+    rawDb
+      .prepare("SELECT id, dedupe_key FROM headsups WHERE state IN ('offered','snoozed','accepted','researched') AND instr(dedupe_key, ?) > 0")
+      .all(needle) as unknown as { dedupe_key: string; id: number }[]
+  ).map((r) => r.id);
+  for (const id of ids) {
+    deleteCardsFor(id);
+    rawDb.prepare("DELETE FROM headsup_watches WHERE headsup_id = ?").run(id);
+    rawDb.prepare("DELETE FROM headsup_outcomes WHERE headsup_id = ? AND outcome IS NULL").run(id);
+    rawDb.prepare("DELETE FROM headsups WHERE id = ?").run(id);
+  }
+  return ids;
+};
+
 /** Add fields to a row's payload without disturbing the rest. */
 export const mergePayload = (id: number, patch: Record<string, unknown>, now: Date = new Date()): void => {
   const row = getById(id);
@@ -274,6 +301,8 @@ export interface HeadsupView {
   location: null | string;
   /** The exact search that left the machine, so you can see what was asked. */
   query: null | string;
+  /** The reminder sequence behind a Yes on a booking, soonest first. Empty for everything else. */
+  reminders: ReminderView[];
   researchError: null | string;
   researchNote: null | string;
   snoozeUntil: null | string;
@@ -310,6 +339,13 @@ export const toView = (r: HeadsupRow): HeadsupView => {
     kind: r.kind,
     location: payload.location || null,
     query: payload.query ?? null,
+    reminders: remindersFor(r.id).map((m) => ({
+      dueAt: m.due_at,
+      label: BOOKING_REMINDERS.find((s) => s.id === m.step)?.label ?? m.step,
+      reason: m.reason,
+      state: m.state,
+      step: m.step,
+    })),
     researchError: payload.researchError ?? null,
     researchNote: payload.note || null,
     snoozeUntil: r.snooze_until,
@@ -325,7 +361,8 @@ export const toView = (r: HeadsupRow): HeadsupView => {
  * Open items soonest first, or the most recent of everything. "Open" is what still needs you or
  * has something to show: offered and snoozed items, plus accepted or researched birthdays and
  * anniversaries, whose research results are the whole point of having said yes, and anything with
- * a watch, whose live status is. Answering "got it" to a bill finishes it, so those leave the list.
+ * a watch, whose live status is, and a booking with a reminder still to come. Answering "got it" to a
+ * bill finishes it, so those leave the list.
  */
 export const listForClient = (which: "all" | "open", limit = 100): HeadsupView[] => {
   const rows =
@@ -334,7 +371,8 @@ export const listForClient = (which: "all" | "open", limit = 100): HeadsupView[]
           .prepare(
             "SELECT * FROM headsups WHERE state IN ('offered','snoozed') " +
               "OR (state IN ('accepted','researched') AND (kind IN ('birthday','anniversary') " +
-              "OR id IN (SELECT headsup_id FROM headsup_watches))) ORDER BY due_at LIMIT ?",
+              "OR id IN (SELECT headsup_id FROM headsup_watches) " +
+              "OR id IN (SELECT headsup_id FROM headsup_reminders WHERE state = 'pending'))) ORDER BY due_at LIMIT ?",
           )
           .all(limit) as unknown as HeadsupRow[])
       : (rawDb.prepare("SELECT * FROM headsups ORDER BY updated DESC LIMIT ?").all(limit) as unknown as HeadsupRow[]);

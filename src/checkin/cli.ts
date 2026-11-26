@@ -32,6 +32,7 @@ if (cmd === "preview") {
   const p = await previewCheckin();
   console.log(`Check-in preview. Mode: ${p.mode}. Every ${INTERVAL_HOURS} hours. Push shows: ${CHECKIN_PUSH_DETAIL}. Last check: ${when(lastRun())}.`);
   for (const e of p.errors) console.log(`  could not read ${e}`);
+  if (p.off.length) console.log(`  Switched off in Settings, so not read: ${p.off.map((k) => KIND_LABEL[k]).join(", ")}.`);
   if (!p.items.length) console.log("\nNothing found.");
   for (const kind of ["mail", "approval", "calendar", "task", "headsup"]) {
     const rows = p.items.filter((i) => i.kind === kind);
@@ -44,6 +45,8 @@ if (cmd === "preview") {
     if (p.heldBy === "off") console.log('\n  ...but the mode is off, so nothing runs. Set CHECKIN_MODE=log in .env and restart to start recording.');
     if (p.heldBy === "quiet") console.log("\n  ...but it is quiet hours, so it would wait. The mail stays new until then.");
     if (p.heldBy === "cap") console.log("\n  ...but today's proactive messages are used up, so it would wait. The mail stays new.");
+  } else if (p.off.includes("mail")) {
+    console.log("\nMail is switched off, and only mail can start a notification, so the check-in sends nothing.");
   } else {
     console.log("\nA check now would send nothing: no new mail from a person.");
   }
@@ -52,6 +55,7 @@ if (cmd === "preview") {
   console.log(`Check-in: ${r.status}. Found ${r.total}, new mail ${r.fresh}.`);
   if (r.title) console.log(`  ${r.title}\n${indent(r.body)}`);
   for (const e of r.errors) console.log(`  could not read ${e}`);
+  if (r.status === "nomail") console.log("  Mail is switched off in Settings, and only mail can start a notification, so nothing was checked.");
   if (r.status === "off") console.log("  The mode is off. Set CHECKIN_MODE=log (or push) in .env. `npm run checkin preview` reads without it.");
 } else if (cmd === "log") {
   const runs = listRuns(Math.min(400, Math.max(1, Number(arg) || 20)));
@@ -65,7 +69,34 @@ if (cmd === "preview") {
   const said = runs.filter((r) => r.status === "logged" || r.status === "sent").length;
   const failed = runs.filter((r) => r.status === "error").length;
   console.log(`\nOf these ${runs.length}: ${said} had something to say, ${runs.filter((r) => r.status === "nothing").length} had nothing, ${failed} could not read mail.`);
+} else if (cmd === "sort") {
+  // Inbox buckets (buckets.ts). `sort` alone previews: it reads mail and asks the local model,
+  // and stores nothing, with the mode off too. `sort run` is a real pass. `sort log` lists what
+  // has been stored, which in log mode is the thing to read before switching to "on".
+  const { listLabels, previewSort, sortInbox } = await import("./buckets.ts");
+  const { realSortDeps } = await import("./buckets-deps.ts");
+  const { INBOX_SORT_MODE } = await import("../config.ts");
+  const show = (bucket: null | string, reason: null | string): string => (bucket ? `${bucket.padEnd(11)} ${reason}` : "unsorted");
+  if (!arg) {
+    const rows = await previewSort(realSortDeps);
+    console.log(`Inbox buckets preview. Mode: ${INBOX_SORT_MODE}. Nothing is stored.`);
+    if (!rows.length) console.log("\nNo unread mail from a person (or mail is switched off).");
+    for (const r of rows) console.log(`  ${show(r.bucket, r.reason).padEnd(36)} ${r.sender}: ${r.subject}`);
+  } else if (arg === "run") {
+    const r = await sortInbox(new Date(), realSortDeps);
+    console.log(`Inbox buckets: ${r.status}. Labelled ${r.labelled}, unsorted ${r.unsorted}, left for later ${r.waiting}.`);
+    if (r.status === "off") console.log("  The mode is off. Set INBOX_SORT_MODE=log in .env. `npm run checkin sort` previews without it.");
+  } else if (arg === "log") {
+    const rows = listLabels(Math.min(500, Math.max(1, Number(process.argv[4]) || 50)));
+    console.log(`Inbox buckets log. Mode now: ${INBOX_SORT_MODE}. ${rows.length} shown, newest first.`);
+    for (const r of rows) console.log(`  ${when(r.at)}  ${show(r.bucket, r.reason).padEnd(36)} ${r.sender}  (${r.mode})`);
+    const n = (b: null | string): number => rows.filter((r) => r.bucket === b).length;
+    console.log(`\nOf these ${rows.length}: ${n("urgent")} urgent, ${n("reply-today")} reply today, ${n("fyi")} for your information, ${n(null)} unsorted.`);
+  } else {
+    console.error("usage: npm run checkin sort [run | log [n]]");
+    process.exit(1);
+  }
 } else {
-  console.error("usage: npm run checkin [preview | run | log [n]]");
+  console.error("usage: npm run checkin [preview | run | log [n] | sort [run | log [n]]]");
   process.exit(1);
 }

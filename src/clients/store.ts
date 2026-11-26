@@ -33,6 +33,20 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_time_day ON time_entries (day);
 `);
 
+// Prospects (PLAN-open-work section 14, U4) are rows in this same table: a status says where
+// one stands, and these three columns hold what a prospect has that a client need not. Added
+// after the table shipped, so the ALTERs are best-effort like the others in this codebase.
+//   site    the website, as an address
+//   source  where the name came from, in your words ("pasted list", "the trade fair")
+//   audit   the last site audit's summary as JSON: finding ids and numbers, never page text
+for (const col of ["site TEXT", "source TEXT", "audit TEXT"]) {
+  try {
+    rawDb.exec(`ALTER TABLE clients ADD COLUMN ${col}`);
+  } catch {
+    /* already there */
+  }
+}
+
 const now = () => new Date().toISOString();
 
 export interface ClientRow {
@@ -44,7 +58,11 @@ export interface ClientRow {
   next_action_due: null | string;
   notes: null | string;
   project_id: null | number;
+  site: null | string;
+  source: null | string;
   status: string;
+  /** JSON, see src/siteaudit/score.ts `AuditSummary`. Read it through src/clients/prospects.ts. */
+  audit: null | string;
   updated: string;
 }
 
@@ -56,6 +74,8 @@ export interface ClientFields {
   /** Appended to the notes with a date, never replacing them. */
   note?: string;
   projectId?: null | number;
+  site?: null | string;
+  source?: null | string;
   status?: string;
 }
 
@@ -77,16 +97,16 @@ export const upsertClient = (name: string, f: ClientFields): ClientRow => {
     const id = Number(
       rawDb
         .prepare(
-          "INSERT INTO clients (name, email, status, next_action, next_action_due, notes, project_id, created, updated) VALUES (?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO clients (name, email, status, next_action, next_action_due, notes, project_id, site, source, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         )
-        .run(name.trim(), f.email ?? null, f.status ?? "active", f.nextAction ?? null, f.nextActionDue ?? null, noteLine || null, f.projectId ?? null, ts, ts)
+        .run(name.trim(), f.email ?? null, f.status ?? "active", f.nextAction ?? null, f.nextActionDue ?? null, noteLine || null, f.projectId ?? null, f.site ?? null, f.source ?? null, ts, ts)
         .lastInsertRowid,
     );
     return findClient(id)!;
   }
   rawDb
     .prepare(
-      "UPDATE clients SET name=?, email=?, status=?, next_action=?, next_action_due=?, notes=?, project_id=?, updated=? WHERE id=?",
+      "UPDATE clients SET name=?, email=?, status=?, next_action=?, next_action_due=?, notes=?, project_id=?, site=?, source=?, updated=? WHERE id=?",
     )
     .run(
       f.name?.trim() || cur.name,
@@ -96,10 +116,18 @@ export const upsertClient = (name: string, f: ClientFields): ClientRow => {
       f.nextActionDue !== undefined ? f.nextActionDue : cur.next_action_due,
       noteLine ? [cur.notes, noteLine].filter(Boolean).join("\n") : cur.notes,
       f.projectId !== undefined ? f.projectId : cur.project_id,
+      f.site !== undefined ? f.site : cur.site,
+      f.source !== undefined ? f.source : cur.source,
       ts,
       cur.id,
     );
   return findClient(cur.id)!;
+};
+
+/** Store the summary of a site audit on a client. `json` is an `AuditSummary`, already serialised. */
+export const setClientAudit = (id: number, json: string): ClientRow | undefined => {
+  rawDb.prepare("UPDATE clients SET audit = ?, updated = ? WHERE id = ?").run(json, now(), id);
+  return findClient(id);
 };
 
 export const listClients = (status?: string): ClientRow[] =>

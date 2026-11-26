@@ -45,7 +45,8 @@ import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, pasteVia, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
 import * as briefs from "./knowledge/briefs.ts";
-import { closeMeeting, closeoutState, parsePlan, previewCloseout } from "./knowledge/closeout.ts";
+import { clientCommitments, closeMeeting, closeoutState, parsePlan, previewCloseout, taskForReviewedCommitment } from "./knowledge/closeout.ts";
+import { saveRunbook } from "./knowledge/runbook.ts";
 import * as knowledge from "./knowledge/store.ts";
 import { retentionRules } from "./knowledge/retention.ts";
 import { annotateHits } from "./knowledge/retrieval.ts";
@@ -60,6 +61,7 @@ import {
   UnsupportedImageError,
 } from "./attachments.ts";
 import { runTask, startTask } from "./runner.ts";
+import { tickSchedules } from "./scheduler.ts";
 import { requestStop } from "./stop.ts";
 import {
   AUDIT_RETENTION_DAYS,
@@ -83,6 +85,8 @@ import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
+import { pruneOutbound } from "./outbound.ts";
+import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
@@ -91,12 +95,15 @@ import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
 import { answerAfterCheck, openAfterChecks, queueRestore, scheduleHistory } from "./learn/versions.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
 import { INTERVAL_HOURS as CHECKIN_INTERVAL_HOURS } from "./checkin/rules.ts";
+import { setSourceSwitches, sourceSwitches } from "./checkin/prefs.ts";
+import { shownLabels, sortInbox, sweepInboxSort } from "./checkin/buckets.ts";
+import { queueReply, realSortDeps } from "./checkin/buckets-deps.ts";
 import { previewCheckin, runCheckin, sweepCheckin } from "./checkin/run.ts";
 import * as checkinStore from "./checkin/store.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
-import { defaultApnsEnv, sendPush } from "./push/apns.ts";
+import { asBundleId, defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, MAC_BANNER, NTFY_ENABLED } from "./config.ts";
-import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL } from "./config.ts";
+import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL, INBOX_SORT_MODE } from "./config.ts";
 import { INBOX_MAX_BYTES, INBOX_WATCH_DIR } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
@@ -115,8 +122,12 @@ import { sweepWatches } from "./headsup/watch/loop.ts";
 import { updatePrefs } from "./headsup/prefs.ts";
 import { prefsForClient } from "./headsup/prefs-view.ts";
 import { enableWatch } from "./headsup/watch/enable.ts";
+import { withdrawReminders } from "./headsup/reminders-store.ts";
+import { startSequence } from "./headsup/sequence.ts";
 import { sweepDueCards } from "./study/sweep.ts";
-import { deleteClient, fmtMinutes, listClients, listTime, timeReport, upsertClient } from "./clients/store.ts";
+import { clientView, outreachTask, parsePastedList, rankProspects } from "./clients/prospects.ts";
+import { deleteClient, findClient, fmtMinutes, listClients, listTime, setClientAudit, timeReport, upsertClient } from "./clients/store.ts";
+import { runSiteAudit } from "./tools/site-audit.ts";
 import { ensureMorningBrief } from "./briefing.ts";
 import { pruneSources } from "./research/sources.ts";
 import { parseWhen } from "./tasks/when.ts";
@@ -844,6 +855,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           res,
           200,
           store.listDevices().map((d) => ({
+            bundleId: d.bundle_id ?? null,
             created: d.created,
             detail: d.detail,
             disabled: d.disabled,
@@ -867,9 +879,11 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           return sendJson(res, 400, { error: "token must be a hex APNs device token" });
         const environment = b.environment === "production" ? "production" : defaultApnsEnv();
         const name = typeof b.name === "string" && b.name.trim() ? b.name.trim().slice(0, 80) : null;
-        const row = store.upsertDevice(token, environment, name);
+        // Which app this is, so its pushes carry that app's topic. An app that does not say (an
+        // older build) keeps whatever was stored, else the configured APNS_BUNDLE_ID is used.
+        const row = store.upsertDevice(token, environment, name, asBundleId(b.bundleId));
         console.log(`[devices] registered ${row.name ?? "device"} ${row.id} (${environment})`);
-        return sendJson(res, 200, { environment: row.environment, id: row.id, name: row.name });
+        return sendJson(res, 200, { bundleId: row.bundle_id ?? null, environment: row.environment, id: row.id, name: row.name });
       }
 
       if (m === "DELETE" && seg.length === 3) {
@@ -1751,6 +1765,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         }
       }
 
+      // POST /api/meetings/:id/runbook: write a draft runbook from the recording (PLAN-open-work section 14, U5).
+      // A local model, pinned private, and every step must quote the transcript or it is dropped. Synchronous,
+      // like questions: it returns the saved file's path, or 409 with the reason nothing was written.
+      if (m === "POST" && seg.length === 4 && seg[3] === "runbook") {
+        const saved = await saveRunbook(id);
+        return sendJson(res, saved.ok ? 200 : saved.reason === "missing" ? 404 : 409, saved.ok ? saved : { dropped: saved.dropped, error: saved.message, reason: saved.reason });
+      }
+
       // PATCH /api/meetings/:id/speakers — name a speaker ("Speaker 2" → "Priya"). An empty
       // name puts it back. Applies to the transcript view and to any later extraction.
       if (m === "PATCH" && seg.length === 4 && seg[3] === "speakers") {
@@ -1899,7 +1921,44 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
     // /api/clients , /api/time — the light client list and time tracker (src/clients).
     if (seg[1] === "clients") {
-      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listClients(url.searchParams.get("status") ?? "all"));
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listClients(url.searchParams.get("status") ?? "all").map(clientView));
+      // Prospects (PLAN-open-work section 14, U4): the same rows, ranked by code over each
+      // one's site audit. Every sentence the screens show arrives made (src/clients/prospects.ts).
+      if (m === "GET" && seg.length === 3 && seg[2] === "prospects") return sendJson(res, 200, rankProspects(listClients("all").map(clientView)));
+      // A pasted list, one "name, site" a line. A name already on file keeps its status and
+      // notes and gains the site; a new one starts as "new". Nothing is audited or drafted here.
+      if (m === "POST" && seg.length === 3 && seg[2] === "prospects") {
+        const b = await readBody(req);
+        const parsed = parsePastedList(String(b.text ?? ""));
+        const source = String(b.source ?? "").trim().slice(0, 120) || "pasted list";
+        const added = parsed.rows.map((r) => {
+          const known = findClient(r.name);
+          return clientView(upsertClient(r.name, known ? { ...(r.site ? { site: r.site } : {}) } : { site: r.site, source, status: "new" }));
+        });
+        return sendJson(res, 200, { added, skipped: parsed.skipped });
+      }
+      // Audit one prospect's site (U3) and keep the summary: finding ids and numbers, never the
+      // page's own words. The browser is launched here, so this answers when the audit is done.
+      if (m === "POST" && seg.length === 4 && seg[3] === "audit") {
+        const c = findClient(Number(seg[2]));
+        if (!c) return sendJson(res, 404, { error: "no such client" });
+        if (!c.site) return sendJson(res, 400, { error: "There is no website on file for this one." });
+        const out = await runSiteAudit(c.site, loadPolicy());
+        if (!out.ok) return sendJson(res, 422, { error: `The audit did not run: ${out.reason}` });
+        return sendJson(res, 200, { client: clientView(setClientAudit(c.id, JSON.stringify(out.summary))!), file: out.file });
+      }
+      // Draft outreach to ONE prospect, when asked. It is an ordinary chat turn in a new
+      // thread, so the text comes through the draft tool, the learned style and an approval
+      // card. Nothing is sent, here or anywhere.
+      if (m === "POST" && seg.length === 4 && seg[3] === "outreach") {
+        const c = findClient(Number(seg[2]));
+        if (!c) return sendJson(res, 404, { error: "no such client" });
+        if (!loadPolicy().drafts?.enabled) return sendJson(res, 400, { error: "Drafts are switched off in policy.json, so there is nowhere to put one." });
+        const conversationId = store.createConversation(`Outreach: ${c.name}`.slice(0, 80), c.project_id ?? null);
+        const { done, runId } = startTask(outreachTask(c), { conversationId, kind: "chat" });
+        done.catch((e) => console.error(`[outreach] run ${runId} failed: ${e instanceof Error ? e.message : e}`));
+        return sendJson(res, 202, { conversationId, runId });
+      }
       if (m === "POST" && seg.length === 2) {
         const b = await readBody(req);
         if (!String(b.name ?? "").trim()) return sendJson(res, 400, { error: "name required" });
@@ -1908,9 +1967,28 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           due = b.nextActionDue ? parseWhen(b.nextActionDue) : null;
           if (b.nextActionDue && !due) return sendJson(res, 400, { error: "could not read that due time" });
         }
-        return sendJson(res, 200, upsertClient(String(b.name), { email: b.email, nextAction: b.nextAction, nextActionDue: due, note: b.note, status: b.status }));
+        return sendJson(
+          res,
+          200,
+          clientView(upsertClient(String(b.name), { email: b.email, nextAction: b.nextAction, nextActionDue: due, note: b.note, site: b.site, source: b.source, status: b.status })),
+        );
       }
       if (m === "DELETE" && seg.length === 3) return sendJson(res, 200, { ok: deleteClient(Number(seg[2])) });
+      // GET /api/clients/:id/commitments: the reviewed commitments in the client's project, each with the task
+      // made from it (PLAN-open-work section 14, U6). POST .../commitments/:claimId/task makes that task.
+      if (seg[3] === "commitments") {
+        if (m === "GET" && seg.length === 4) {
+          const out = clientCommitments(Number(seg[2]));
+          return out ? sendJson(res, 200, out) : sendJson(res, 404, { error: "no such client" });
+        }
+        if (m === "POST" && seg.length === 6 && seg[5] === "task") {
+          try {
+            return sendJson(res, 200, taskForReviewedCommitment(Number(seg[4])));
+          } catch (err) {
+            return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      }
     }
     if (m === "GET" && seg[1] === "time" && seg.length === 2) {
       const days = Number(url.searchParams.get("days") ?? 30) || 30;
@@ -1920,24 +1998,27 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       });
     }
 
-    // /api/search?q= — across every conversation: titles, questions, and answers.
+    // /api/search?q= — across every conversation: titles, questions, answers and what each turn
+    // looked up (the run index, PLAN-open-work section 13 H4). This is the owner reading their own
+    // ledger, so private runs are included; the agent's `find_past_output` is the one that withholds.
+    // Threads only by default, because every client opens a hit as a thread; `scope=all` adds
+    // scheduled jobs, which have none (`conversationId` is null and `scheduleName` says which job).
     if (m === "GET" && seg[1] === "search" && seg.length === 2) {
       const q = String(url.searchParams.get("q") ?? "").trim();
       if (q.length < 2) return sendJson(res, 200, []);
       const clip = (t: string, n: number) => t.replace(/\s+/g, " ").trim().slice(0, n);
-      const hits = store.searchRuns(q, { limit: 40 }).map((r: any) => {
-        const note = String(r.note ?? "");
-        const word = (q.toLowerCase().match(/[a-z0-9]{2,}/g) ?? [])[0] ?? "";
-        const at = Math.max(0, note.toLowerCase().indexOf(word) - 60);
-        return {
-          conversationId: r.conversationId,
-          conversationTitle: r.conversationTitle,
-          finished: r.finished,
-          runId: r.id,
-          snippet: clip(note.slice(at, at + 220), 220),
-          task: clip(String(r.task ?? ""), 140),
-        };
-      });
+      const all = url.searchParams.get("scope") === "all";
+      const hits = store.searchRuns(q, { conversationsOnly: !all, limit: 40 }).map((r) => ({
+        conversationId: r.conversationId,
+        conversationTitle: r.conversationTitle,
+        finished: r.finished,
+        kind: r.kind,
+        matched: r.matched,
+        runId: r.id,
+        scheduleName: r.scheduleName,
+        snippet: clip(r.snippet, 220),
+        task: clip(String(r.task ?? ""), 140),
+      }));
       return sendJson(res, 200, hits);
     }
 
@@ -1997,6 +2078,24 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/checkin — the check-in (src/checkin, PLAN-open-work section 12 D1). `preview` reads and
     // writes nothing, and works with the mode off. `run` is "Check now": it records and, in push
     // mode, sends, so it is a POST and is not the dry run.
+    // /api/today: everything waiting, on one screen (PLAN-open-work section 14, U1 and U2).
+    // Read-only apart from two things only the owner's own screen does: putting an item off
+    // until the morning, and saying "I have seen these". No tool reaches either.
+    if (seg[1] === "today") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, readToday());
+      if (m === "POST" && seg.length === 3 && seg[2] === "seen") {
+        markLooked();
+        return sendJson(res, 200, readToday());
+      }
+      if (m === "POST" && seg.length === 3 && seg[2] === "later") {
+        const b = await readBody(req);
+        if (b?.all === true && b?.undo === true) clearLater();
+        else if (!setLater(String(b?.key ?? ""), new Date(), b?.undo === true))
+          return sendJson(res, 400, { error: "key must be approval:<id>, task:<id>, headsup:<id> or thread:<id>" });
+        return sendJson(res, 200, readToday());
+      }
+    }
+
     if (seg[1] === "checkin") {
       if (m === "GET" && seg.length === 2)
         return sendJson(res, 200, {
@@ -2006,9 +2105,30 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           mode: CHECKIN_MODE,
           pushDetail: CHECKIN_PUSH_DETAIL,
           runs: checkinStore.listRuns(Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))),
+          sortMode: INBOX_SORT_MODE,
+          sources: sourceSwitches(),
         });
-      if (m === "GET" && seg.length === 3 && seg[2] === "preview") return sendJson(res, 200, await previewCheckin());
-      if (m === "POST" && seg.length === 3 && seg[2] === "run") return sendJson(res, 200, await runCheckin(new Date(), { force: true }));
+      // Which sources it reads. The owner's own setting, written only from their screens.
+      if (m === "POST" && seg.length === 3 && seg[2] === "sources") {
+        const r = setSourceSwitches(await readBody(req));
+        return r.ok ? sendJson(res, 200, { sources: r.sources }) : sendJson(res, 400, { error: r.error });
+      }
+      // The preview itself stays model-free: `buckets` are labels a sorting pass already stored
+      // (section 14, U7), joined by item key, and empty unless INBOX_SORT_MODE is "on".
+      if (m === "GET" && seg.length === 3 && seg[2] === "preview")
+        return sendJson(res, 200, { ...(await previewCheckin()), buckets: shownLabels(INBOX_SORT_MODE) });
+      if (m === "POST" && seg.length === 3 && seg[2] === "run") {
+        const ran = await runCheckin(new Date(), { force: true });
+        // "Check now" also sorts what is unsorted, afterwards and apart: the check's result is
+        // already decided, so no label can have changed whether it sent anything.
+        void sortInbox(new Date(), realSortDeps).catch(() => {});
+        return sendJson(res, 200, ran);
+      }
+      // "Draft a reply" on one mail. Queues a draft for you to read; sends nothing.
+      if (m === "POST" && seg.length === 5 && seg[2] === "mail" && seg[4] === "reply") {
+        // Always 200: "no reply was drafted, and why" is an answer the screen shows, not a failed request.
+        return sendJson(res, 200, await queueReply(seg[3]));
+      }
     }
 
     // /api/headsups — proactive suggestions (src/headsup, docs/archive/PLAN-heads-up.md).
@@ -2028,6 +2148,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           const r = updatePrefs(await readBody(req));
           return r.ok ? sendJson(res, 200, prefsForClient()) : sendJson(res, 400, { error: r.error });
         }
+      }
+      // Correct a remembered date from your own screen. Not queued: the queue guards what the
+      // assistant proposes, and this is the owner editing their own list (section 3, H8).
+      if (m === "PATCH" && seg.length === 4 && seg[2] === "dates") {
+        const r = await headsupDates.updateDate(Number(seg[3]), await readBody(req));
+        return r.ok
+          ? sendJson(res, 200, { ...headsupDates.datesForClient(), withdrawn: r.withdrawn })
+          : sendJson(res, r.status, { error: r.error });
       }
       if (m === "DELETE" && seg.length === 4 && seg[2] === "dates")
         return headsupDates.deleteDate(Number(seg[3]))
@@ -2068,8 +2196,14 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           // Yes on a flight, or on an appointment with a place, starts a watch. That press is the
           // consent: it is a person in the app, not a scan deciding to create standing work.
           else if (action === "watch") enableWatch(row);
+          // Yes on a booking sets up its reminders and drafts the messages (section 14, U9). The
+          // same press-is-the-consent rule; nothing is sent to anyone.
+          else if (action === "remind") startSequence(row);
         }
-        return row ? sendJson(res, 200, headsupLedger.toView(row)) : sendJson(res, 404, { error: "no such heads-up" });
+        // Changing your mind about a booking takes back the reminders that have not gone out.
+        if (row && a !== "yes") withdrawReminders(row.id, a === "never" ? "you said not to suggest this" : "you said not now", new Date());
+        // Read again: starting a sequence writes its note onto the row.
+        return row ? sendJson(res, 200, headsupLedger.toView(headsupLedger.getById(row.id) ?? row)) : sendJson(res, 404, { error: "no such heads-up" });
       }
       // Run the research again (it failed, or the prices are stale). Waits for it, so the page can show the result.
       if (m === "POST" && seg.length === 4 && seg[3] === "research") {
@@ -2172,6 +2306,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         const patch: any = {};
         for (const k of ["name", "task", "enabled"]) if (k in b) patch[k] = b[k];
         if (b.schedule != null) patch.spec = String(b.schedule);
+        // This job's own catch-up limit (section 13 H6): minutes, 0 for "always run", null for the default rule.
+        if ("catchup_minutes" in b) patch.catchupMinutes = b.catchup_minutes === null ? null : Number(b.catchup_minutes);
         try {
           store.updateSchedule(Number(seg[2]), patch, "edit");
           return sendJson(res, 200, store.getSchedule(Number(seg[2])));
@@ -2235,6 +2371,8 @@ const prune = async (): Promise<void> => {
       console.log(`pruned: heads-up ${hu.cardSets} card sets, ${hu.watches} watches, ${hu.ledger} ledger rows, ${hu.orphanFiles + hu.orphanImageRows} orphan images`);
     const outbox = pruneOutbox();
     if (outbox) console.log(`pruned: ${outbox} outbox rows`);
+    const outbound = pruneOutbound();
+    if (outbound) console.log(`pruned: ${outbound} outgoing-text matches`);
     // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.
     const dropped = pruneSources(60);
     if (dropped) console.log(`pruned: ${dropped} fetched sources older than 60 days`);
@@ -2280,12 +2418,13 @@ const prune = async (): Promise<void> => {
 const SCHEDULER_TICK_MS = 60_000;
 const runScheduler = async (): Promise<void> => {
   try {
-    for (const s of store.dueSchedules()) {
-      store.markScheduleRan(s.id); // re-arm first, so a slow run doesn't double-fire next tick
+    // Which due jobs run and which missed their moment is decided in src/scheduler.ts: each is
+    // re-armed before it starts, and a slot the server slept through is skipped, not run late.
+    tickSchedules((s) => {
       runTask(s.task, { kind: "schedule", scheduleId: s.id }).catch((e) =>
         console.error(`[schedule ${s.name}] failed: ${e instanceof Error ? e.message : e}`),
       );
-    }
+    });
   } catch (err) {
     console.error("scheduler error:", err instanceof Error ? err.message : err);
   }
@@ -2337,6 +2476,9 @@ if (capProblem) {
 }
 const interrupted = store.markInterruptedRuns();
 if (interrupted) console.log(`marked ${interrupted} interrupted run(s) as failed`);
+// Runs from before the full-text index existed are indexed in the background, a small batch at a
+// time, so a large ledger never holds up start-up (store.startRunIndexBackfill).
+store.startRunIndexBackfill((n) => console.log(`[search] indexed ${n} earlier run(s) for full-text search`));
 // An approval that was mid-run when the process died is ended as an error and never re-run:
 // whether the irreversible tool finished is unknowable, and running it again could double it.
 const stuckApprovals = store.recoverInterruptedConfirmations();
@@ -2420,6 +2562,8 @@ setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
 // short so a check lands soon after quiet hours end; the four-hour interval is its own gate.
 void sweepCheckin();
 setInterval(() => void sweepCheckin(), 10 * 60_000).unref();
+// Inbox buckets (section 14, U7): its own timer, so the check-in's push never waits on a model.
+setInterval(() => void sweepInboxSort(realSortDeps), 10 * 60_000).unref();
 // Watched flights and drives. The tick is short; each watch has its own 30-minute floor, and outside
 // its window a watch makes no call at all, so a quiet day costs nothing.
 void sweepWatches();

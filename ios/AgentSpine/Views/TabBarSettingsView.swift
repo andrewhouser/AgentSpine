@@ -13,8 +13,8 @@ struct TabBarSettingsView: View {
     @Environment(Settings.self) private var settings
 
     private var order: [AppTab] { settings.tabs }
-    /// Everything but Threads: the part the user can rearrange.
-    private var movable: [AppTab] { Array(order.dropFirst()) }
+    /// Everything but Today and Threads: the part the user can rearrange.
+    private var movable: [AppTab] { Array(order.dropFirst(2)) }
 
     var body: some View {
         List {
@@ -25,9 +25,10 @@ struct TabBarSettingsView: View {
             }
 
             Section {
-                row(.threads, slot: 0, fixed: true)
+                row(.today, slot: 0, fixed: true)
+                row(.threads, slot: 1, fixed: true)
                 ForEach(Array(movable.enumerated()), id: \.element) { index, tab in
-                    row(tab, slot: index + 1, fixed: false)
+                    row(tab, slot: index + 2, fixed: false)
                         .accessibilityAction(named: "Move up") { move(index, by: -1) }
                         .accessibilityAction(named: "Move down") { move(index, by: 1) }
                 }
@@ -84,7 +85,7 @@ struct TabBarSettingsView: View {
     }
 
     private func save(_ rest: [AppTab]) {
-        settings.tabOrder = TabLayout.raw([.threads] + rest)
+        settings.tabOrder = TabLayout.raw([.today, .threads] + rest)
     }
 }
 

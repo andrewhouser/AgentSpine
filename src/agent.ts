@@ -7,11 +7,12 @@
  * step, which is where small-model tool-calling unreliability gets absorbed.
  */
 import { answerPublisher, PROMISE_MAX_CHARS, PROMISE_ONLY } from "./answer-stream.ts";
-import { AGENT_STEP_MAX_TOKENS, MAX_PARSE_FAILURES, MAX_STEPS } from "./config.ts";
+import { AGENT_STEP_MAX_TOKENS, LOCAL_DEEP_MAX_TOKENS, LOCAL_DEEP_THINKING, LOOP_BUDGET, MAX_PARSE_FAILURES, MAX_STEPS, TOOL_DOCS_ON_DEMAND } from "./config.ts";
 import { route } from "./router.ts";
-import type { RouteOpts } from "./router.ts";
+import type { RouteOpts, RouteResult } from "./router.ts";
+import { resolveTier } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
-import { extractJson } from "./llm.ts";
+import { extractJson, LLMError } from "./llm.ts";
 import type { Msg } from "./llm.ts";
 import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
@@ -20,8 +21,12 @@ import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts"
 import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
-import { frictionDocs } from "./learn/friction.ts";
+import { activeMsOf, budgetFor, contextTokens, estimateTokens, exhausted, exhaustedNote, shouldCompact, stubbable, stubText, STUB_WINDOW_CHARS } from "./loop-budget.ts";
+import type { ResultNote } from "./loop-budget.ts";
+import { hold } from "./stash.ts";
 import { linkRun, throwIfStopped } from "./stop.ts";
+import { entryAfterError, fullEntry, loadedAtStart, lookUp, renderOnDemand, TOOL_DOCS, toolDocsTool } from "./tool-docs.ts";
+import { pausedMs, yieldToChat } from "./turn-gate.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
 /** The tools this loop may see. A subagent's registry is a subset of its parent's. */
@@ -64,20 +69,12 @@ const settingTools = (
   return rest;
 };
 
-const toolDocs = (tools: Record<string, Tool>): string =>
-  Object.values(tools)
-    .map((t) => {
-      // Recent failures with this tool, appended to its own description (LEARNING Phase 1.2).
-      // Synchronous SQL, inference-free; never throws, so a lookup failure just omits the line.
-      let friction = "";
-      try {
-        friction = frictionDocs(t.name);
-      } catch {
-        /* a learner must not break prompt assembly */
-      }
-      return `- ${t.name}: ${t.description}${friction ? `\n    ${friction}` : ""}\n    args: ${t.argsSchema}`;
-    })
-    .join("\n");
+/**
+ * The tool list. Every visible tool in full, unless this run loads descriptions on demand
+ * (`loaded` is then the set that starts in full; see src/tool-docs.ts, LP6).
+ */
+const toolDocs = (tools: Record<string, Tool>, loaded?: ReadonlySet<string>): string =>
+  loaded ? renderOnDemand(tools, loaded) : Object.values(tools).map(fullEntry).join("\n");
 
 /**
  * What the model knows about the application it is running inside.
@@ -222,7 +219,7 @@ const recencyDocs = (tools: Record<string, Tool>): string =>
   the window, say so plainly rather than filling the answer with older material.`
     : "";
 
-const system = (tools: Record<string, Tool>, conversational: boolean): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
+const system = (tools: Record<string, Tool>, conversational: boolean, loaded?: ReadonlySet<string>): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
 ${clock()}
 
@@ -235,7 +232,7 @@ To finish:
 ${finalDocs(conversational)}
 
 Available tools:
-${toolDocs(tools)}
+${toolDocs(tools, loaded)}
 ${appDocs(tools)}${conversational ? chatDocs(tools) : jobDocs(tools)}
 ${harnessContract(Object.keys(tools), conversational)}
 
@@ -344,15 +341,48 @@ export interface AgentOpts {
 /** One tier up, for the retry after a malformed reply. `deep` has nowhere further to go. */
 const escalate = (tier: Tier): Tier => (tier === "fast" ? "standard" : "deep");
 
-const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, truncated: boolean, looped: boolean) => any) => {
+/**
+ * Which steps of a run get the model's thinking turned on (LP2, "local deep").
+ *
+ * Only a run sized `deep` that is being served by a local model: privacy pinned it, or no cloud
+ * tier is configured. Such a task used to get exactly the effort of an easy one. Within it, only
+ * the three points where more thought changes what happens next: the first step, where the plan
+ * is made; the re-ask after an unreadable reply, where sending the same prompt the same way
+ * mostly buys the same reply; and the step after a tool error, where the model has to work out
+ * what went wrong. Every other step is a tool call it has already decided on.
+ */
+const thinkNow = (s: { afterError: boolean; localDeep: boolean; reask: boolean; step: number }): boolean =>
+  LOCAL_DEEP_THINKING && s.localDeep && (s.step === 0 || s.reask || s.afterError);
+
+/**
+ * One model call for a step. With `thinking` it is asked with the larger cap and its own timing
+ * purpose ("step-think"), so the timing table shows what thinking adds per step. A thinking
+ * call that fails, or spends its whole cap on the thought and answers nothing, is asked again
+ * the ordinary way: thinking may make a step better, and must never be why a run failed.
+ */
+const routeStep = async (messages: Msg[], opts: RouteOpts): Promise<RouteResult> => {
   // The cap is explicit because the server's default is not "none" — see AGENT_STEP_MAX_TOKENS.
-  const result = await route(messages, { maxTokens: AGENT_STEP_MAX_TOKENS, ...opts });
+  const plain = (): Promise<RouteResult> => route(messages, { maxTokens: AGENT_STEP_MAX_TOKENS, ...opts, thinking: false });
+  if (!opts.thinking) return plain();
+  try {
+    const thought = await route(messages, { ...opts, maxTokens: LOCAL_DEEP_MAX_TOKENS, purpose: `${opts.purpose ?? "step"}-think` });
+    if (thought.text.trim()) return thought;
+  } catch (err) {
+    // A stop or a cloud cap is a decision, not a failed thought, and is not retried around.
+    if (!(err instanceof LLMError)) throw err;
+  }
+  return plain();
+};
+
+const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, truncated: boolean, looped: boolean) => any) => {
+  const result = await routeStep(messages, opts);
   return {
     actualTier: result.tier,
     looped: result.looped,
     parsed: read(result.text, result.truncated, result.looped),
     text: result.text,
     truncated: result.truncated,
+    usage: result.usage,
     via: result.via,
   };
 };
@@ -557,6 +587,19 @@ const readReply = (
   return { action: "final", reply: truncated ? `${body}${CUT_OFF_NOTE}` : body };
 };
 
+/** A tool result in the history, with what compaction needs to replace it and keep its meaning (LP3). */
+interface StubNote extends ResultNote {
+  /** `tool result [status]:` and the newline, kept in front of the stub. */
+  head: string;
+  /** The tool's output as shown. Emptied once it has been set aside. */
+  output: string;
+  /** The result line and any pin notice that followed the output. The stub keeps both. */
+  tail: string;
+}
+
+/** Roughly what a stub costs, so the saving from a compaction is counted net of it. */
+const STUB_OVERHEAD_CHARS = 350;
+
 /**
  * Run the loop, then drop this run's private pin if it is the root of its tree. A subagent
  * shares its parent's `budgetRunId`, so it neither owns the pin nor releases it.
@@ -584,7 +627,12 @@ const runAgentLoop = async (
   // The harness context, when there is one, is the single owner of these two facts (S1); the plain
   // options remain for callers that build no context (tests, the eval harnesses).
   const conversational = opts.harness?.conversational ?? opts.conversational ?? false;
-  const tools = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
+  const settled = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
+  // LP6: with the switch on, and enough tools for it to be worth a lookup step, most tools are
+  // listed by name and `tool_docs` loads the rest. `loaded` is null whenever every tool is in full,
+  // which is always with the switch off, and the prompt is then exactly what it was.
+  const loaded = TOOL_DOCS_ON_DEMAND ? loadedAtStart(settled) : null;
+  const tools = loaded ? { ...settled, [TOOL_DOCS]: toolDocsTool } : settled;
   const tier = opts.tier ?? "standard";
   // The loop alone knows which tools this setting lets the run see, so the context is completed here
   // and registered for a subagent to derive its own from.
@@ -602,7 +650,7 @@ const runAgentLoop = async (
   if (harness) registerHarness(harness);
 
   const messages: Msg[] = [
-    { role: "system", content: system(tools, conversational) },
+    { role: "system", content: system(tools, conversational, loaded ?? undefined) },
     // The envelope leads the extra context: it is the one place the run states what it is, so it
     // comes straight after the stable prompt and shows up in the trace like any other message.
     ...(harness ? [{ role: "system", content: renderEnvelope(harness, opts.startPrivate ?? false) } as Msg] : []),
@@ -615,6 +663,54 @@ const runAgentLoop = async (
   ];
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
+  // LP3: under LOOP_BUDGET=tokens the cap is spent as generated tokens and working time, with a
+  // step ceiling behind them (src/loop-budget.ts). Null is the plain step cap, as always.
+  const budget = LOOP_BUDGET === "tokens" ? budgetFor(maxSteps) : null;
+  const stepLimit = budget ? budget.stepCeiling : maxSteps;
+  const startedAt = Date.now();
+  const pausedAtStart = pausedMs(runId);
+  /** Time this loop has spent working. Parked time is someone else's turn, not this run's. */
+  const activeMs = (): number => activeMsOf({ now: Date.now(), pausedAtStart, pausedNow: pausedMs(runId), startedAt });
+  let tokensSpent = 0;
+  // What compaction needs to know: how big the context was when the server last counted it, and
+  // which messages are tool results that could be set aside.
+  let measuredTokens: null | number = null;
+  let charsAtMeasure = 0;
+  let lastCompactStep: null | number = null;
+  const results: StubNote[] = [];
+  const totalChars = (): number => messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
+  /** Count one reply against the budget, and keep the server's reading of the context it was sent. */
+  const spend = (reply: { text: string; usage?: RouteResult["usage"] }, sentChars: number): void => {
+    if (!budget) return;
+    tokensSpent += reply.usage?.completionTokens ?? estimateTokens(reply.text.length);
+    if (reply.usage?.promptTokens != null) {
+      measuredTokens = reply.usage.promptTokens;
+      charsAtMeasure = sentChars;
+    }
+  };
+  /**
+   * Set old tool results aside once the context is past its threshold (the rules, and why this
+   * must be rare, are in src/loop-budget.ts). Only where the run can get the text back: it needs
+   * a run id for the stash and `read_more` among its tools, and without both nothing is touched.
+   * The pin for private output lives on the run, not in the message, so it cannot be dropped
+   * here; the sentence that announced it rides in `tail`, which the stub keeps.
+   */
+  const compact = (step: number): void => {
+    if (!budget || runId == null || !tools.read_more) return;
+    const candidates = stubbable(results) as StubNote[];
+    const freeableChars = candidates.reduce((n, c) => n + c.chars - STUB_OVERHEAD_CHARS, 0);
+    const context = contextTokens({ charsAtMeasure, measuredTokens, totalChars: totalChars() });
+    if (!shouldCompact({ contextTokens: context, freeableChars, lastCompactStep, step })) return;
+    for (const note of candidates) {
+      const ref = hold({ runId, source: `the ${note.tool} result from earlier in this run`, tool: note.tool, window: STUB_WINDOW_CHARS }, note.output);
+      if (!ref) continue;
+      messages[note.index] = { role: "user", content: `${note.head}${stubText({ chars: note.chars, ref, tool: note.tool })}${note.tail}` };
+      note.stubbed = true;
+      note.output = "";
+    }
+    lastCompactStep = step;
+    console.log(`[loop] run ${runId}: context at ~${context} tokens, set ${candidates.length} old tool result(s) aside (read_more brings them back)`);
+  };
 
   // The pin is per root run: a subagent reading a transcript pins its parent, and one started
   // after the parent read a transcript starts pinned. See src/sensitivity.ts.
@@ -628,6 +724,10 @@ const runAgentLoop = async (
   linkRun(runId, rootId);
 
   let tierCorrected = false;
+  /** A `deep` task that a local model is serving: pinned private, or no cloud tier to send it to (LP2). */
+  const localDeep = (): boolean => tier === "deep" && resolveTier("deep", isPinned(rootId) ? "private" : "normal").tier !== "deep";
+  /** The last tool call came back as an error, so the next step has something to work out. */
+  let afterError = false;
 
   /**
    * An answer the model wrote into a notification that was refused. Held so that however
@@ -659,20 +759,33 @@ const runAgentLoop = async (
   const answer = conversational ? answerPublisher((text) => publish(runId, { text, type: "answer" })) : null;
   const streaming = answer ? { onDelta: answer.update } : {};
 
-  for (let step = 0; step < maxSteps; step++) {
+  for (let step = 0; step < stepLimit; step++) {
     // The user pressed stop. Checked here, between steps, so a tool that was already running
     // finished cleanly rather than being cut off halfway (see src/stop.ts).
     throwIfStopped(rootId);
+    // The one point where this run holds nothing, so a background run steps aside here when a
+    // chat turn is waiting for the model (LP5, src/turn-gate.ts). Resolves at once otherwise.
+    await yieldToChat(runId);
+    if (budget) {
+      const why = exhausted(budget, { activeMs: activeMs(), steps: step, tokens: tokensSpent });
+      if (why) return concludeStuck(step, exhaustedNote(why));
+      compact(step);
+    }
     publish(runId, { step: step + 1, type: "step_start" });
 
-    let { text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
+    const thinkFirst = thinkNow({ afterError, localDeep: localDeep(), reask: false, step });
+    afterError = false;
+    const sentChars = budget ? totalChars() : 0;
+    let { text, parsed, actualTier, via, truncated, looped, usage } = await parseOr(messages, {
       purpose: "step",
       runId,
       step: step + 1,
       tier,
+      ...(thinkFirst ? { thinking: true } : {}),
       ...streaming,
       ...sens(),
     }, read);
+    spend({ text, usage }, sentChars);
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
     // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
@@ -689,14 +802,18 @@ const runAgentLoop = async (
       // Attributed as its own purpose, not folded into the step: a model that fumbles the
       // JSON protocol costs a whole extra round-trip, and the point of timing is to find
       // out how often that is actually happening rather than to assume.
-      ({ text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
+      ({ text, parsed, actualTier, via, truncated, looped, usage } = await parseOr(messages, {
         purpose: "step-reask",
         runId,
         step: step + 1,
         ...(tier === "deep" ? { prefer: "cloud" as const } : { tier: escalate(tier) }),
+        // On a local deep run the re-ask lands on the very endpoint that just fumbled, so
+        // thinking is the one thing that makes it a different attempt (LP2).
+        ...(thinkNow({ afterError: false, localDeep: localDeep(), reask: true, step }) ? { thinking: true } : {}),
         ...streaming,
         ...sens(),
       }, read));
+      spend({ text, usage }, sentChars);
     }
 
     // Whatever this step showed was not the answer after all, so it comes back off the screen.
@@ -810,15 +927,22 @@ const runAgentLoop = async (
       // The goal passed here is the user's own message, not anything the model has since
       // written about it — a tool gating on "did they ask for this?" must read the request,
       // not the requester's account of it.
-      const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
-        conversational,
-        goal,
-        preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
-        // Not `goal`: in a subagent that is the caller's brief, which the model wrote.
-        approvedTask: opts.approvedTask,
-        projectId: opts.projectId ?? null,
-      });
-      if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
+      // A description lookup is answered here, from this run's own tool set (src/tool-docs.ts).
+      // Every other call, loaded or not, goes to the broker as it always has.
+      const lookup = loaded != null && call.tool === TOOL_DOCS;
+      const result = lookup
+        ? lookUp(runId, call, tools, loaded)
+        : await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
+            conversational,
+            goal,
+            preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
+            // Not `goal`: in a subagent that is the caller's brief, which the model wrote.
+            approvedTask: opts.approvedTask,
+            projectId: opts.projectId ?? null,
+          });
+      // A description is not something the run found out about the world, so it is not answer material.
+      if (result.status === "executed" && !lookup) gathered.push(`${call.tool} -> ${result.output}`);
+      afterError = result.status === "error";
       const seen = nextRepeat(callCounts.get(key), result.output);
       callCounts.set(key, seen);
       const repeats = seen.repeats;
@@ -877,12 +1001,20 @@ const runAgentLoop = async (
         return concludeStuck(step + 1, "Kept repeating the same tool call without concluding.");
       }
 
+      const head = `tool result [${result.status}]:\n`;
+      const tail =
+        (lookup && result.status === "executed"
+          ? renderResultEnvelope({ effect: "observed", nextStep: "now call the tool you need", retryable: false, status: result.status, tool: call.tool })
+          : renderResultEnvelope(describeResult(call.tool, result.status, result.output, result.confirmationId))) +
+        pinMessage +
+        // It guessed at a tool it had not loaded and the tool refused the guess: hand it the entry.
+        (loaded && result.status === "error" ? entryAfterError(call.tool, tools, loaded) : "");
       messages.push({
         role: "user",
         content:
-          `tool result [${result.status}]:\n${result.output}` +
-          renderResultEnvelope(describeResult(call.tool, result.status, result.output, result.confirmationId)) +
-          pinMessage +
+          head +
+          result.output +
+          tail +
           // One warning first, on the second identical call, so a model that can take the
           // hint gets to finish properly rather than being cut off.
           (repeats > 1
@@ -891,6 +1023,11 @@ const runAgentLoop = async (
               (conversational ? "in plain prose." : `with {"action":"final","summary":"..."}.`)
             : ""),
       });
+      // Remembered so compaction can set it aside later. Not a description lookup: stubbing that
+      // would take back the very entry the model asked for.
+      if (budget && !lookup) {
+        results.push({ chars: result.output.length, head, index: messages.length - 1, output: result.output, status: result.status, stubbed: false, tail, tool: call.tool });
+      }
       continue;
     }
 
@@ -905,7 +1042,7 @@ const runAgentLoop = async (
   // Out of steps, and the same reasoning applies: a run that gathered the answer and then
   // failed to say it should still say it. `maxSteps`, not MAX_STEPS — a subagent has its own
   // tighter cap, and reporting the top-level one here was simply wrong.
-  return concludeStuck(maxSteps, "Reached the step cap without concluding.");
+  return concludeStuck(stepLimit, "Reached the step cap without concluding.");
 };
 
 /**
@@ -924,5 +1061,8 @@ export const __test = {
   refusedNotifyText,
   REPEAT_LIMIT,
   settingTools,
+  thinkNow,
+  /** The prompt for a given tool set: what test/prompt-snapshot.test.mjs pins (PLAN section 13, H1). */
+  systemFor: (tools: Record<string, Tool>, conversational: boolean) => system(tools, conversational),
   systemPrompt: (conversational: boolean) => system(registry, conversational),
 };

@@ -16,6 +16,8 @@ struct CheckinView: View {
     @State private var error: String?
     @State private var loaded = false
     @State private var busy = false
+    /// The source switches after a change here, until the next status read catches up.
+    @State private var switches: [String: Bool]?
 
     var body: some View {
         List {
@@ -31,6 +33,16 @@ struct CheckinView: View {
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
                 }
+                if !offLine.isEmpty {
+                    Text(offLine)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+                if !sortLine.isEmpty {
+                    Text(sortLine)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
                 if let note {
                     Text(note).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline))
                 }
@@ -43,7 +55,7 @@ struct CheckinView: View {
 
             if let preview {
                 Section("If it checked now") {
-                    Text(CheckinWords.sendLine(wouldSend: preview.wouldSend, heldBy: preview.heldBy, mode: preview.mode))
+                    Text(CheckinWords.sendLine(wouldSend: preview.wouldSend, heldBy: preview.heldBy, mode: preview.mode, off: preview.off))
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
                     if preview.wouldSend {
@@ -63,7 +75,7 @@ struct CheckinView: View {
                 }
                 ForEach(groups) { group in
                     Section("\(group.label) (\(group.items.count))") {
-                        ForEach(group.items) { item in CheckinItemRow(item: item) }
+                        ForEach(rows(for: group, in: preview)) { item in mailAwareRow(item, in: preview) }
                     }
                 }
             } else if !loaded {
@@ -74,6 +86,25 @@ struct CheckinView: View {
             if let runs = status?.runs, !runs.isEmpty {
                 Section("Past checks") {
                     ForEach(runs) { run in CheckinRunRow(run: run) }
+                }
+            }
+
+            if status != nil {
+                Section {
+                    ForEach(CheckinWords.sources, id: \.kind) { source in
+                        Toggle(isOn: sourceBinding(source.kind)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(source.label).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline))
+                                Text(source.hint)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                    .foregroundStyle(Spine.Palette.textDim)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("What it looks at")
+                } footer: {
+                    Text("Saved on the server. A source that is off is not read at all.")
                 }
             }
         }
@@ -89,10 +120,39 @@ struct CheckinView: View {
         .refreshable { await load() }
     }
 
+    /// The switches as last read, with anything the server did not say read as on.
+    private var offLine: String { CheckinWords.offLine(CheckinWords.offKinds(switches ?? status?.sources)) }
+
+    /// One source's switch. The change is sent at once, and the list is read again because a
+    /// source that is off is not read at all. A failure puts the switch back and says why.
+    private func sourceBinding(_ kind: String) -> Binding<Bool> {
+        Binding(
+            get: { (switches ?? status?.sources)?[kind] != false },
+            set: { on in Task { await setSource(kind, on: on) } }
+        )
+    }
+
+    private func setSource(_ kind: String, on: Bool) async {
+        var optimistic = switches ?? status?.sources ?? [:]
+        optimistic[kind] = on
+        switches = optimistic
+        do {
+            switches = try await APIClient.shared.setCheckinSource(kind, on: on)
+            note = nil
+        } catch {
+            switches = nil
+            note = error.localizedDescription
+        }
+        await load()
+    }
+
     private func load() async {
         // Each is tried on its own: an older server has neither route, and a Gmail outage fails
         // only the preview, which should not blank the log of past checks.
-        status = (try? await APIClient.shared.checkinStatus()) ?? status
+        if let fresh = try? await APIClient.shared.checkinStatus() {
+            status = fresh
+            switches = nil
+        }
         do {
             preview = try await APIClient.shared.previewCheckin()
             error = nil
@@ -100,6 +160,42 @@ struct CheckinView: View {
             if preview == nil { self.error = error.localizedDescription }
         }
         loaded = true
+    }
+
+    private var sortLine: String { CheckinWords.sortLine(status?.sortMode) }
+
+    /// Mail is shown in bucket order when it has been sorted; every other section as it came.
+    private func rows(for group: CheckinWords.Group, in preview: CheckinPreview) -> [CheckinItem] {
+        group.kind == "mail" ? CheckinWords.mailOrder(group.items, buckets: preview.buckets) : group.items
+    }
+
+    /// A mail row carries its label, and with sorting on a swipe that drafts a reply. The swipe
+    /// only asks the server to write one: it is read and approved like any draft, and never sent.
+    @ViewBuilder
+    private func mailAwareRow(_ item: CheckinItem, in preview: CheckinPreview) -> some View {
+        if item.kind == "mail" {
+            CheckinItemRow(item: item, bucket: preview.buckets?[item.key])
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    if status?.sortMode == "on" {
+                        Button("Draft a reply") { Task { await draftReply(item) } }
+                            .tint(Spine.Palette.accent)
+                            .disabled(busy)
+                    }
+                }
+        } else {
+            CheckinItemRow(item: item)
+        }
+    }
+
+    private func draftReply(_ item: CheckinItem) async {
+        busy = true
+        defer { busy = false }
+        note = "Drafting a reply to \(item.title)…"
+        do {
+            note = try await APIClient.shared.draftCheckinReply(messageId: CheckinWords.messageId(item.key)).message
+        } catch {
+            note = error.localizedDescription
+        }
     }
 
     private func checkNow() async {
@@ -118,6 +214,10 @@ struct CheckinView: View {
 /// One thing found: who or what, a line of context, and a mark if the next check would call it new.
 struct CheckinItemRow: View {
     let item: CheckinItem
+    /// The inbox bucket for a mail row, when sorting is on. Our words for it, never the sender's.
+    var bucket: CheckinBucket? = nil
+
+    private var bucketLine: String { CheckinWords.bucketLine(bucket) }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -128,6 +228,11 @@ struct CheckinItemRow: View {
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
                         .lineLimit(2)
+                }
+                if !bucketLine.isEmpty {
+                    Text(bucketLine)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(bucket?.bucket == "urgent" ? .semibold : .regular))
+                        .foregroundStyle(bucket?.bucket == "urgent" ? Spine.Palette.warn : Spine.Palette.textDim)
                 }
             }
             Spacer(minLength: 0)

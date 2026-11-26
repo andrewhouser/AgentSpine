@@ -725,7 +725,7 @@ words.** Code finds each candidate from the last 7 days and fixes its kind, the 
 | Auto-approval | a shape that already earned a Phase 2 proposal | records it; you apply it in Settings |
 | Memory correction | 2+ reasoned rejections of a tool, or 3+ SL3 bad-answer runs | records your answer |
 | Missing capability | 2+ calls to a tool that does not exist, or 3+ policy denials | records your answer |
-| Code change | 2+ runs that hit a step or token limit | records it; nothing starts until SC5 |
+| Code change | 2+ runs that hit a step or token limit | queues a proposed change for approval (SC5, `src/change-proposals.ts`); only approving that second card starts the builder, and it queues nothing unless `policy.build` declares this checkout |
 
 The local model sees those facts plus your own words (requests and rejection reasons, tagged UNTRUSTED), and
 returns a candidate id, a title and one sentence. Code drops an unknown id, a repeat, an empty field or anything

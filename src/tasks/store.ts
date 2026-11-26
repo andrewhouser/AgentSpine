@@ -33,12 +33,24 @@ rawDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_tasks_status_due ON tasks (status, due);
 `);
 
+// The commitment a task was made from (PLAN-open-work section 14, U6): a claim in the knowledge store that a
+// person accepted in a meeting's close-out and chose to turn into a task. Added after the table shipped, so
+// the ALTER is best-effort like the others in this codebase. One task per claim, held by the index.
+try {
+  rawDb.exec("ALTER TABLE tasks ADD COLUMN claim_id INTEGER");
+} catch {
+  /* the column is already there */
+}
+rawDb.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_claim ON tasks (claim_id) WHERE claim_id IS NOT NULL");
+
 const now = () => new Date().toISOString();
 
 export type TaskKind = "followup" | "task";
 export type TaskStatus = "done" | "dropped" | "open";
 
 export interface TaskRow {
+  /** The reviewed commitment this task was made from, or null. Cleared when that claim is deleted. */
+  claim_id: null | number;
   client_id: null | number;
   completed: null | string;
   created: string;
@@ -100,6 +112,7 @@ export interface ListOpts {
 
 /** Open work first: overdue and soonest-due, then undated, newest last. */
 export const listTasks = ({ dueWithinDays, limit = 100, projectId, status = "open" }: ListOpts = {}): TaskRow[] => {
+  dropDeadClaimLinks();
   const where: string[] = [];
   const args: (number | string)[] = [];
   if (status !== "all") {
@@ -181,4 +194,45 @@ export const describeTask = (t: TaskRow): string => {
   const wait = t.kind === "followup" && t.waiting_on ? ` (waiting on ${t.waiting_on})` : "";
   const project = t.project_id != null ? getProject(t.project_id)?.name : undefined;
   return `#${t.id} [${t.kind}${t.status !== "open" ? `, ${t.status}` : ""}] ${t.title}${wait}${due}${project ? ` {project: ${project}}` : ""}`;
+};
+
+// --- tasks made from commitments (PLAN-open-work section 14, U6) ---
+
+/** What is appended to a task's notes when the commitment it came from is gone. */
+export const CLAIM_GONE_NOTE = "The commitment this task was made from was deleted with its meeting.";
+
+/** The task made from this claim, if there is one. */
+export const taskForClaim = (claimId: number): TaskRow | undefined =>
+  rawDb.prepare("SELECT * FROM tasks WHERE claim_id = ?").get(claimId) as TaskRow | undefined;
+
+/**
+ * Make a task from a reviewed commitment. Refuses a second task for the same claim: the close-out can be
+ * opened on two screens, and two tasks for one promise is worse than an error.
+ */
+export const addTaskForClaim = (claimId: number, t: NewTask): number => {
+  if (taskForClaim(claimId)) throw new Error(`claim #${claimId} already has a task`);
+  const id = addTask(t);
+  rawDb.prepare("UPDATE tasks SET claim_id = ? WHERE id = ?").run(claimId, id);
+  return id;
+};
+
+/**
+ * Drop links to claims that no longer exist, and say so on the task. Deleting a meeting deletes its claims;
+ * the task is your own to-do by then and stays, but it must not go on pointing at evidence that is gone.
+ * Done here on read and not in the knowledge store's delete, so every way a claim can go (a meeting, an
+ * inbox item, the retention sweep) is covered by one statement. Returns how many links were dropped.
+ */
+export const dropDeadClaimLinks = (): number => {
+  try {
+    const r = rawDb
+      .prepare(
+        "UPDATE tasks SET claim_id = NULL, updated = ?, notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END " +
+          "WHERE claim_id IS NOT NULL AND claim_id NOT IN (SELECT id FROM kn_claims)",
+      )
+      .run(now(), CLAIM_GONE_NOTE, CLAIM_GONE_NOTE);
+    return Number(r.changes ?? 0);
+  } catch {
+    // No knowledge store in this database yet, so no task can hold a link.
+    return 0;
+  }
 };

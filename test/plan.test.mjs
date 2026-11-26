@@ -9,7 +9,7 @@
  *
  * Run with: node test/plan.test.mjs
  */
-const { ANSWER_LABEL, emptyPlan, foldPlan, labelFor, planFromActions, planSnapshot } = await import("../src/plan.ts");
+const { ANSWER_LABEL, emptyPlan, foldPlan, clearToolLabels, labelFor, mcpLabel, registerToolLabel, planFromActions, planSnapshot } = await import("../src/plan.ts");
 const events = await import("../src/events.ts");
 
 let passed = 0;
@@ -31,6 +31,24 @@ check("a tool family shares a label", labelFor("study_quiz", {}) === labelFor("s
 check("subagent names the agent", labelFor("subagent", { agent: "researcher" }) === "Handing off to researcher");
 check("subagent without an agent still labels", labelFor("subagent", null) === "Handing off");
 check("an unknown tool still gets a step", labelFor("linear.search", {}) === "Using linear.search");
+// Remote MCP tools (section 5): the card used to show the registered identifier.
+check("an MCP tool reads as its server and what it does", labelFor("mcp__linear__search_issues", {}) === "Linear: Search issues");
+check("a camel-case tool name becomes words", labelFor("mcp__notes__listAllPages", {}) === "Notes: List all pages");
+check("a server name with a dash is spaced", labelFor("mcp__home-lab__status", {}) === "Home lab: Status");
+check("an MCP name with no tool half still labels", labelFor("mcp__solo", {}) === "MCP: Solo");
+check("the server's own title wins when it sent one", mcpLabel("linear", "search_issues", "Find issues") === "Linear: Find issues");
+check("a blank title falls back to the name", mcpLabel("linear", "search_issues", "   ") === "Linear: Search issues");
+check("a title is one line and clipped: it is the server's text", (() => {
+  const l = mcpLabel("linear", "x", `Search\nissues ${"very ".repeat(30)}long`);
+  return !l.includes("\n") && l.length <= 48 && l.endsWith("…");
+})());
+registerToolLabel("mcp__linear__search_issues", mcpLabel("linear", "search_issues", "Find issues"));
+check("a registered label is what the card shows", labelFor("mcp__linear__search_issues", {}) === "Linear: Find issues");
+check("two calls to one MCP tool merge into one step", rows(run(call(1, "mcp__linear__search_issues"), result(1), call(2, "mcp__linear__search_issues"), result(2)))[0] === "Linear: Find issues:done:2");
+check("a registered label cannot rename a built-in tool", (registerToolLabel("web_search", "Wiring money"), labelFor("web_search", {})) === "Searching the web");
+clearToolLabels("mcp__");
+check("after a refresh drops the tool, the name alone still labels it", labelFor("mcp__linear__search_issues", {}) === "Linear: Search issues");
+clearToolLabels("web_");
 
 console.log("no plan without a tool call");
 check("empty plan has no rows", planSnapshot(emptyPlan()).length === 0);

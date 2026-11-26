@@ -35,7 +35,8 @@ import type { ShapedHistory } from "./history.ts";
 import { sizeTask } from "./dispatch.ts";
 import { publish } from "./events.ts";
 import type { Tier } from "./tiers.ts";
-import { enqueue, queueStatus } from "./queue.ts";
+import { abandon, enqueue, queueAhead } from "./queue.ts";
+import type { Lane } from "./queue.ts";
 import { profileMessage } from "./memory/profile.ts";
 import { recall, recallOfKind } from "./memory/rag.ts";
 import type { RecallSeen } from "./memory/rag.ts";
@@ -53,13 +54,17 @@ import { watchPin } from "./sensitivity.ts";
 import { workspaceInstructions } from "./projects/workspace.ts";
 import { buildHarnessContext, isConversationalKind, isUnattendedKind } from "./harness.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
+import { getAgent } from "./agents.ts";
+import { areaMapFor } from "./area-map.ts";
 import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
 import { setFrame } from "./tools/subagent.ts";
 import { projectWriteDir, setWriteDefault, writeDefaultDir } from "./tools/write-file.ts";
 import { CloudCapError } from "./cloud-cap.ts";
 import { notify } from "./notify.ts";
+import { stallNote, unwatchRun, watchRun } from "./stall.ts";
 import { clearStop, isStopRequested, StoppedError, throwIfStopped } from "./stop.ts";
+import { forgetTurn } from "./turn-gate.ts";
 import * as store from "./memory/store.ts";
 import type { Policy } from "./types.ts";
 
@@ -124,6 +129,16 @@ export interface RunOpts {
    * per-conversation override in the UI; left unset, `sizeTask` decides.
    */
   tier?: Tier;
+  /**
+   * Run as one unit from `agents/*.md`: its instructions, its tool ceiling and its step limit,
+   * as the `subagent` tool would give it, but as a top-level run with its own row, queue slot
+   * and notifications. Set by code alone: an approved change proposal starts the `builder`
+   * this way (src/change-proposals.ts, PLAN-open-work section 10, SC5). An unknown name fails
+   * the run before any model call.
+   */
+  unit?: string;
+  /** The folder a `unit` run works in: where a bare filename lands, and what decides whether it gets the code map. */
+  workDir?: string;
 }
 
 /**
@@ -319,11 +334,24 @@ export const STOPPED_NOTE = "Stopped before it finished.";
  * already finished keeps its result: a stop that lands during the reflection that follows a
  * finished turn must not relabel an answer the user has already seen.
  */
-const stoppable = async (runId: number, body: () => Promise<RunResult>): Promise<RunResult> => {
+const stoppable = async (
+  runId: number,
+  body: () => Promise<RunResult>,
+  onStalled?: (note: string) => void,
+): Promise<RunResult> => {
   try {
     throwIfStopped(runId);
     return await body();
   } catch (err) {
+    // The stall watchdog interrupted it (src/stall.ts). It uses the same stop machinery, but
+    // nobody chose this: it is a failure, recorded with a note that says the run stalled, and
+    // the caller hears about it as one. A run that had already finished keeps its result, for
+    // the same reason a stop does (the interruption landed in the learners that follow it).
+    const stalled = stallNote(runId);
+    if (stalled) {
+      if (closeStalled(runId, stalled, onStalled)) throw new Error(stalled, { cause: err });
+      return { runId, steps: 0, summary: String(store.getRun(runId)?.note ?? "") };
+    }
     if (!(err instanceof StoppedError) && !isStopRequested(runId)) throw err;
     const row = store.getRun(runId);
     if (!row?.finished) {
@@ -333,7 +361,24 @@ const stoppable = async (runId: number, body: () => Promise<RunResult>): Promise
     return { runId, steps: 0, summary: row?.finished ? String(row.note ?? "") : STOPPED_NOTE };
   } finally {
     clearStop(runId);
+    unwatchRun(runId);
+    forgetTurn(runId);
   }
+};
+
+/**
+ * End a run the stall watchdog interrupted: failed, with the note that says it stalled.
+ * Called from two places that can race, the run unwinding after its stop and the watchdog
+ * giving up on a run that never unwound, so it does nothing to a run already finished and
+ * says whether it was the one that closed it.
+ */
+const closeStalled = (runId: number, note: string, onStalled?: (note: string) => void): boolean => {
+  if (store.getRun(runId)?.finished) return false;
+  store.finishRun(runId, "failed", note);
+  publish(runId, { message: note, type: "error" });
+  publish(runId, { status: "failed", type: "run_end" });
+  onStalled?.(note);
+  return true;
 };
 
 export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
@@ -362,15 +407,52 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
 
   publish(runId, { attachments: attachmentIds.length, conversationId, kind, task, type: "run_start" });
 
+  // Work a person is waiting for, or work nobody is watching. With CHAT_FIRST on the first
+  // goes ahead of the second (src/queue.ts); with it off this is only a label.
+  const lane: Lane = isUnattended(kind) ? "background" : "foreground";
+
   // Agent cycles are serialized, so this run may genuinely be waiting on a scheduled job.
-  // Saying so beats a spinner that looks identical to a hang.
-  const { depth } = queueStatus();
-  if (depth > 0) publish(runId, { depth, type: "queue_wait" });
+  // Saying so beats a spinner that looks identical to a hang. `depth` is the number of jobs
+  // that will run before this one, which with CHAT_FIRST on leaves out the background jobs a
+  // chat turn goes ahead of. `yielding` is set when the only thing in the way is a background
+  // run that will step aside at its next step boundary: the wait is then one model call or
+  // tool call long, not a whole job, and a client may word it that way. The clients read
+  // `depth` alone today ("waiting for another job to finish").
+  const { ahead, yielding } = queueAhead(lane);
+  if (ahead > 0) publish(runId, { depth: ahead, type: "queue_wait", ...(yielding ? { yielding: true } : {}) });
+
+  // A stall is a failure nobody was there to see, so it is pushed like one.
+  const pushStalled = (note: string): void => {
+    if (!NOTIFY_ON_FAILURE) return;
+    void notify(`Run stalled: ${task.slice(0, 60)}`, note.slice(0, 500), {
+      kind: scheduleKind(opts.scheduleId),
+      priority: 4,
+      source: "run",
+      tags: ["rotating_light"],
+      push: {
+        category: "RUN",
+        collapseId: `run-${runId}`,
+        ...(conversationId != null ? { conversationId } : {}),
+        runId,
+      },
+    });
+  };
 
   const done = enqueue(() => stoppable(runId, async () => {
     // Whatever we were waiting behind is done; the first step_start from the loop is what
     // tells a watching client to drop its "waiting" state.
     store.beginRun(runId);
+
+    // Nobody is watching this run, so something has to notice if it stops doing anything.
+    // Watched from here and not from enqueue: time in the queue is waiting, not stalling.
+    // If it is interrupted and still does not end (a tool that never returns), the watchdog
+    // closes it out and lets the queue go on without it.
+    if (isUnattended(kind)) {
+      watchRun(runId, (note) => {
+        closeStalled(runId, note, pushStalled);
+        abandon(runId, new Error(note));
+      });
+    }
 
     // A conversation inside a project inherits that project's instructions, its indexed
     // documents, and — if it has one — its narrowed policy.
@@ -454,6 +536,22 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
           'To file a task created earlier under it, call task_update with project "this".',
       );
     }
+    // A run started as a unit carries that unit's instructions as trusted context, exactly as
+    // a delegated one does (tools/subagent.ts). The file is one no tool may write.
+    const unit = opts.unit ? getAgent(opts.unit) : undefined;
+    if (opts.unit && !unit) throw new Error(`there is no "${opts.unit}" unit in agents/.`);
+    if (unit) {
+      context.push(unit.instructions);
+      instructionSources.push(`the ${unit.name} unit's instructions`);
+    }
+    // A run working inside AgentSpine's own checkout gets the code map (src/area-map.ts, SC3).
+    // Every other run gets nothing here, so its prompt is byte for byte what it was.
+    const codeMap = areaMapFor(opts.workDir ?? projectWriteDir(project?.id));
+    if (codeMap) {
+      context.unshift(codeMap.text);
+      used.push(codeMap.source);
+      instructionSources.push(codeMap.source);
+    }
     const projectKnowledge = project ? await knowledgeFor(project.id, task) : "";
     // Both are UNTRUSTED-tagged blocks bound for the same slot — project excerpts are file
     // content, the description is what a model saw in a picture — so they are simply
@@ -506,7 +604,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     // first directory among its path sources), else AgentSpine's docs folder. Set on EVERY
     // run, null included, so one project's folder cannot leak into the next run.
     const writeDir = projectWriteDir(project?.id);
-    setWriteDefault(writeDir);
+    setWriteDefault(opts.workDir ?? writeDir);
     if (!opts.noMemory) {
       context.push(
         `You CAN save files: use write_file. A bare filename (e.g. "BUSINESSPLAN.md") is saved in ${writeDefaultDir()}` +
@@ -561,6 +659,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         approvedTask: harness.preApproved ? task : undefined,
         context,
         history,
+        // A unit's own ceiling and step limit (RunOpts.unit); undefined leaves the defaults.
+        maxSteps: unit?.maxSteps,
+        tools: unit?.tools,
         // Only a thread that actually holds an image is shown look_at_image — see
         // settingTools in agent.ts for why an always-listed tool with nothing to act on is
         // worse than no tool.
@@ -589,6 +690,11 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         store.finishRun(runId, "ok", summary);
         publish(runId, { status: "ok", type: "run_end" });
       }
+      // The run's own work is recorded, so the stall watchdog lets go here. What follows
+      // (reflection) asks the model without this run's id, so the watchdog could not tell it
+      // working from it hanging, and a learner wrongly given up on would leave two requests
+      // on a host that serves one. Those calls are bounded by the model layer's own timeout.
+      unwatchRun(runId);
 
       // After the run is fully closed out, so a reflection failure cannot touch the result.
       // A recipe is learned only from a run that finished cleanly — no errored or rejected
@@ -689,7 +795,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       }
       throw err;
     }
-  }));
+  }, pushStalled), { lane, runId });
 
   return { done, runId };
 };

@@ -288,7 +288,47 @@ export interface PushAlert {
    * should be one badge on the lock screen, not three.
    */
   collapseId?: string;
+  /**
+   * Who is sending, as notify() knows it: "confirmation", "headsup", "checkin", "run". It
+   * becomes the notification's thread when there is no conversation to thread by, and its
+   * subtitle (PLAN-open-work section 14, U1). Absent means neither.
+   */
+  source?: string;
+  /**
+   * "Waiting on you", the number for the app icon (src/today.ts). The same count the web tab
+   * title and the Mac Dock show. Absent leaves the icon as it is.
+   */
+  badge?: number;
 }
+
+/**
+ * What a source is called on the lock screen and on the Watch, where the subtitle is the line
+ * under the title that says what kind of message this is before you read it. A source that
+ * is not here gets no subtitle: a guess at a label is worse than none.
+ */
+export const SOURCE_SUBTITLES: Record<string, string> = {
+  checkin: "Check-in",
+  confirmation: "Needs your approval",
+  digest: "Digest",
+  headsup: "Heads-up",
+  outbox: "Held messages",
+  reminder: "Reminder",
+  review: "Weekly review",
+  run: "Finished run",
+  study: "Study",
+  tool: "From a scheduled job",
+};
+
+/**
+ * The thread a notification stacks under. A conversation wins, so a reply and the approval
+ * it asked for sit together. Otherwise the source, so approvals, heads-ups and check-ins
+ * each make their own stack on the lock screen and the Watch instead of one pile.
+ */
+export const threadFor = (alert: Pick<PushAlert, "conversationId" | "source">): null | string => {
+  if (alert.conversationId !== undefined) return `conversation-${alert.conversationId}`;
+  const source = String(alert.source ?? "").trim();
+  return source && source !== "unknown" ? `source-${source}` : null;
+};
 
 /** "…" in UTF-8. Three bytes, not one — which is the kind of thing this file has to count. */
 const ELLIPSIS_BYTES = 3;
@@ -323,18 +363,21 @@ export const buildPayload = (title: string, body: string, alert: PushAlert): str
   if (alert.outboxId !== undefined) custom.outboxId = alert.outboxId;
   if (alert.headsupToken) custom.headsupToken = alert.headsupToken;
 
+  const subtitle = SOURCE_SUBTITLES[String(alert.source ?? "")];
+  const thread = threadFor(alert);
+  const badge = Number.isInteger(alert.badge) && (alert.badge as number) >= 0 ? (alert.badge as number) : null;
+
   const build = (text: string): string =>
     JSON.stringify({
       aps: {
-        alert: { body: text, title },
+        alert: { body: text, ...(subtitle ? { subtitle } : {}), title },
+        ...(badge !== null ? { badge } : {}),
         ...(alert.category ? { category: alert.category } : {}),
         "interruption-level": level,
         "relevance-score": (alert.priority ?? 3) / 5,
         sound: "default",
-        // Groups the notification into a thread on the lock screen, per conversation.
-        ...(alert.conversationId !== undefined
-          ? { "thread-id": `conversation-${alert.conversationId}` }
-          : {}),
+        // Groups the notification into a stack: per conversation, else per source.
+        ...(thread ? { "thread-id": thread } : {}),
       },
       ...custom,
     });
@@ -364,6 +407,28 @@ export const buildPayload = (title: string, body: string, alert: PushAlert): str
   return payload;
 };
 
+// --- which app a push is for ---
+
+/**
+ * A bundle id as a device may report it, or null. Reverse-DNS characters only and a sane
+ * length: the value becomes an HTTP/2 header sent to Apple, so nothing else may get in.
+ */
+export const asBundleId = (raw: unknown): null | string => {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return /^[A-Za-z0-9][A-Za-z0-9.-]{2,154}$/.test(s) && s.includes(".") ? s : null;
+};
+
+/**
+ * The APNs topic for one device: the bundle id of the app that registered it, else the
+ * configured APNS_BUNDLE_ID. One global topic was wrong as soon as two apps could register
+ * (an iPhone build and a differently named one, or someone else's install with their own
+ * bundle id, PLAN-open-work section 11): APNs refuses a token sent under another app's topic
+ * with DeviceTokenNotForTopic, which reads as a dead phone. The key still signs for one team,
+ * so a topic outside that team is refused by Apple, not by anything here.
+ */
+export const topicFor = (device: Pick<store.DeviceRow, "bundle_id">, fallback: string = APNS_BUNDLE_ID): string =>
+  asBundleId(device.bundle_id) ?? fallback;
+
 // --- one device, with the environment self-correcting ---
 
 const sendToDevice = async (
@@ -378,7 +443,7 @@ const sendToDevice = async (
     "apns-expiration": "0",
     "apns-priority": urgent ? "10" : "5",
     "apns-push-type": "alert",
-    "apns-topic": APNS_BUNDLE_ID,
+    "apns-topic": topicFor(device),
     ...(alert.collapseId ? { "apns-collapse-id": alert.collapseId.slice(0, 64) } : {}),
   };
 

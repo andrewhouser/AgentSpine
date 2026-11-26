@@ -26,7 +26,12 @@ export class StoppedError extends Error {
   }
 }
 
-const rootOf = (runId: number): number => roots.get(runId) ?? runId;
+/**
+ * The turn a run belongs to: itself, or the top-level run a subagent was started under. The
+ * queue and the stall watchdog key on it for the same reason a stop does: a turn is one
+ * thing to park or interrupt, however many runs it is made of.
+ */
+export const rootOf = (runId: number): number => roots.get(runId) ?? runId;
 
 const controllerFor = (root: number): AbortController => {
   let c = controllers.get(root);

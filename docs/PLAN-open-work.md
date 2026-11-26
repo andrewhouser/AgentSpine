@@ -15,10 +15,12 @@ parity on local models, self-change and self-learning) is proposed and not yet p
 its first open decision. Section 12 (added 2026-11-24: what Claude Duet does that AgentSpine does not) is
 proposed and not placed either; its own "Sequence and decisions" says what waits on what. Section 13 (added
 2026-11-26: what Hermes Agent does that AgentSpine could learn from) is proposed and not placed; it extends
-section 10's LP3 and CP3 and section 4a's Phase 6.
+section 10's LP3 and CP3 and section 4a's Phase 6. Section 14 (added 2026-11-26: ten uses taken from a video
+about Hermes Agent, each one chosen by you) is decided, so it is work and not a proposal; its own "Sequence and
+decisions" gives the order.
 
-Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11, 12
-and 13 are new, and 1 to 7 and 4a are as before.
+Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11, 12,
+13 and 14 are new, and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -194,7 +196,7 @@ or push-to-start (iOS 17.2 and later)? Activities end after about 8 hours withou
 - H4 a second flight provider, one file behind `FlightSource`, if A4 shows AeroDataBox is unsuitable.
 - H5 restaurant booking and H6 buying a gift: irreversible-tier, queued, never automatic. Only if asked.
 - H7 arrival-side flight alerts (baggage claim, landing gate).
-- H8 remembered dates: edit, not just forget.
+- H8 remembered dates: edit, not just forget. **Built 2026-11-26 on web, iPhone and Mac.** A remembered date's name, kind, day and year can be corrected from the Heads-up screen (`PATCH /api/headsups/dates/:id`), read with the same rules as `date_remember` and saved without an approval. A change to who, kind or day withdraws the open cards made from the old date and replaces the recall sentence; a year-only change touches nothing. Forgetting a date now withdraws its open card too, which nobody asked for: say if you want that back as it was. Suite: `test/headsup-dates.test.mjs`. Not seen rendered on any client.
 - H9 model-worded notifications: only if the code wording reads badly; prefer fixing it in code.
 
 **Open decisions:** whether B's thresholds are right once real answers exist; if TomTom's route API is not free,
@@ -286,7 +288,7 @@ Decided while building:
 Left to do:
 1. Watch it on a real multi-step turn on all three clients (You). Not yet seen running: the Swift targets build
    and the web typechecks, but no screen has been looked at.
-2. Labels for remote MCP tools read "Using <tool name>". Give them better ones if that looks raw.
+2. DONE 2026-11-26: a remote MCP tool reads "Linear: Search issues" on the plan card, from the server name and the title the server sent (`test/plan.test.mjs`).
 3. The Activity view doesn't stream runs, so scheduled runs don't show the card yet. Add it there if that
    view starts following a live run.
 4. Only if the tool-call steps feel thin: a 3 to 7 step plan written by the model, on the `deep` tier only, as one more
@@ -338,15 +340,14 @@ Left to do:
   `ProjectsView.swift`, on Mac and iPhone. Settings on all three has the transcript-retention override with the
   rules list, and a delete-project button. Both Xcode targets build. The three AVAudioSession deactivations Xcode
   flagged as hang risks now go through `AudioSessionGate` (a serial queue; activations wait for a pending one).
-  **Not done:** looking at any of it on a running app; on Mac, deleting the project shown in the detail pane
-  leaves the pane to be changed by hand.
+  **Not done:** looking at any of it on a running app. Fixed 2026-11-26, compiles, not seen running: on Mac the Projects list owns which project is open, so deleting it closes the pane.
 
 - **Files page folders (built 2026-11-25).** Files are grouped by the project they were written in, with a General
   folder last for the rest; **All** keeps the flat list and a search box covers both. `GET /api/files` now returns
   `project_id` and `project_name` (joined run, conversation, project in `src/deliverables.ts`, no new column) and
   returns up to 500 files, up from 200. Web (`FilesView.tsx`, `web/src/lib/fileGroups.ts`) and iPhone and Mac
   (`FilesView.swift`, `FileGroup` in `Models.swift`) share the rules. Suite: `test/file-groups.test.mjs` (server join
-  and web grouping). **Not done:** the Swift half has no test of its own, and I have not seen it on a running app.
+  and web grouping). The Swift half has its own test since 2026-11-26 (`test/ios-file-groups.test.mjs` compiles the real `FileGroup` and runs the web's cases; it found same-named projects sorting differently, fixed). **Not done:** I have not seen it on a running app.
 
 **Open decisions:** how many tabs the iPhone bar should allow now that Heads-up sits second (the mock shows four
 plus More); whether to cut a Swift package once there is a compiler to check the `public` changes.
@@ -898,11 +899,13 @@ is built. Every measurement named below needs the model host, so every item is *
   sized `deep`, the plan step and a re-ask after a failed step run on the same endpoint with thinking on and a
   larger token cap. Code decides when; no model switch, so no reload cost. Measure the added seconds per step
   and whether the builder and multi-part chat tasks finish more often.
+  **Built 2026-11-26, off until `LOCAL_DEEP_THINKING=true`.** A `deep` run served locally thinks on its first step, on the re-ask after an unreadable reply and on the step after a tool error, with `LOCAL_DEEP_MAX_TOKENS` (8192); a thinking call that fails or answers nothing is retried once without it, and a thought is stripped before parsing and streaming. It also applies when `deep` lands locally because no cloud tier is configured. Suite: `test/local-deep.test.mjs`. You: whether `mlx_lm.server` honours `enable_thinking`, the seconds a thinking step adds, and the finish rate.
 - **LP3 Budgets by tokens, with compaction at a threshold.** `MAX_STEPS` is 10, a subagent gets 6, and chat
   history is 8 turns in 6,000 characters. Replace the step cap with a token and wall-clock budget, and when a
   run's context passes a threshold, replace old tool results with short stubs (the full text stays reachable
   through `read_more`). Compact rarely, since each compaction rewrites the prefix and pays prefill again.
   Section 13 H5 has Hermes Agent's threshold and order as a starting point.
+  **Built 2026-11-26, off until `LOOP_BUDGET=tokens`.** `src/loop-budget.ts`: a run's step cap becomes generated tokens (`RUN_TOKENS_PER_STEP` 1200 a step) plus working time (`RUN_MS_PER_STEP` 90 s a step, parked time from LP5 subtracted), with a hard ceiling of three times the old cap. Past half of `LOCAL_CONTEXT_TOKENS` (65,536, a guess) old executed tool results become stubs that `read_more` restores, at most once every 4 steps and only when it frees 1,500 tokens; nothing is summarised by a model. Suite: `test/loop-budget.test.mjs`. Every number is a guess to set on the model host; the budget counts generated tokens only.
 - **LP4 More than one tool call per step (measure first).** The protocol is one JSON action per turn and every
   step pays prefill. Bench native tool calling on the standard model through `mlx_lm.server` against the current
   protocol: parse failures, steps per task, seconds per task. Switch only if it wins. Not checked: how well
@@ -910,9 +913,11 @@ is built. Every measurement named below needs the model host, so every item is *
 - **LP5 Chat goes ahead of scheduled work.** Runs are serialized (`queue_wait` in `src/runner.ts`), so a chat
   turn waits behind a scheduled job. Let a chat turn take the model at the next step boundary of a background
   run, the same boundary the stop button uses, and resume the job afterwards.
+  **Built 2026-11-26, off until `CHAT_FIRST=true`.** `src/queue.ts` has two lanes; a chat turn, an approved action or `do` goes ahead of unstarted scheduled jobs, and a running one parks at its next step boundary (`yieldToChat` in `src/turn-gate.ts`) and resumes after. Stop while parked ends the run as stopped. Suite: `test/chat-first.test.mjs`. You: time the resumed job's prefill on the model host before switching it on, since the chat turn replaces the warm prefix.
 - **LP6 Load tool descriptions on demand.** Every visible tool's description and schema is in the prompt
   prefix (`toolDocs` in `src/agent.ts`). Keep a small core set there and let the model ask for the rest by
   name. This is a precondition for CP1, which would otherwise grow the prefix with every server.
+  **Built 2026-11-26, off until `TOOL_DOCS_ON_DEMAND=true`.** A run with more than 16 visible tools gets 13 core tools in full (`src/tool-docs.ts`) and the rest as one line each; `tool_docs` loads a full entry and is answered inside the loop. Every call still crosses the broker, loaded or not. The test prompt went from 44,000 to about 21,600 characters. Suite: `test/tool-docs.test.mjs`. You: whether the standard model actually asks, and what it costs in steps and parse failures.
 
 ### CP. Capabilities (each waits on a decision below)
 
@@ -947,6 +952,7 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
   `CLAUDE.md`. AgentSpine has no equivalent: S6's `AGENTSPINE.md` cannot be used here, because `policy.json`
   makes `~/Developer` writable and the file must sit outside every writable folder. Either narrow
   `fs.writableDirs` (You) or have the server supply a fixed, read-only area map for runs in this repo (Code).
+  **Built 2026-11-26 (the Code route).** `src/area-map.md` is a committed map (areas, code, the doc to read first, the rules that are easy to break) that the runner gives as trusted context only to a run whose folder is inside this checkout, or to the builder SC5 starts. It is a control file no tool may write, never indexed, and put back if a declared command changes it. Suite: `test/self-change.test.mjs`. Not seen on a live model.
 - **SC4 A real check command (You, then Code).** The declared commands do not include `npm run check`, and
   nothing builds Swift. Add `check` to this repo's entry in `policy.json` (yours to edit). Until an
   `xcodebuild` command is declared, a self-made UI change covers web only, which breaks the three-clients
@@ -954,10 +960,12 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
 - **SC5 Propose, then patch.** A change starts as a proposal card in the confirmation queue: what, why, the
   files, the test plan, and the runs that prompted it. Approving starts the builder on an `agentspine/` branch.
   Merge, push, `update.sh` and the restart stay yours, so the service never restarts onto code you have not read.
+  **Built 2026-11-26.** `propose_change` queues one card from a live chat with what, why, the files, the test plan, the runs and the builder's task word for word; approving starts the `builder` unit on an `agentspine/` branch. Refused: non-chat runs, files under `web/` or `ios/` (SC4), control files, a repeat of a rejected or still-pending proposal, and any proposal unless `policy.build` declares this checkout with `gitWrite`. Accepting a retrospective's code-change card (SL2) now queues such a proposal. `npm run confirm approve` refuses one, so the build runs in the service's queue. Suite: `test/self-change.test.mjs`. Not run with a real builder. Would help: `agents/builder.md` has no `search_files` (your edit), and the cards show a diff in proportional text.
 - **SC6 Guard the gates in code, not only in policy.** A builder that cannot write `policy.json` can still
   edit `src/broker.ts`, `src/sensitivity.ts`, `src/confirmations.ts`, `src/learn/promote.ts` or
   `test/architecture.test.mjs`. Add a protected-paths list in code: an edit to one queues with the diff shown,
   as a build manifest does today, and the architecture test pins the list.
+  **Built 2026-11-26, with the proposed list plus the list file itself (nine files, `src/protected-paths.ts`).** An edit, a move, a change made by a declared command, or a git switch, stash or restore that would change one always queues with its diff. The broker reads a new `alwaysConfirm` on the classification and applies none of its four skips, and the tools also refuse on their own unless an approval is being carried out. A card whose file changed after it was queued writes nothing. Suites: `test/protected-paths.test.mjs`, `test/architecture.test.mjs`. It is a tripwire for the named files: `src/types.ts` and `src/runner.ts` are not on it.
 - **SC7 Which checkout it works in (You).** Not checked: whether the builder on the Mini would branch inside
   the checkout the LaunchAgent serves from. If so, give it a separate clone, so a half-made branch is never
   what the next restart loads.
@@ -1077,8 +1085,11 @@ SQLite file per user rather than a `user_id` on every table).
   the Mini's `.env` sets `LOCAL_LLM_URL` (checked by you that day).
 - **iPhone and Mac apps.** Bundle IDs (`com.houserphotography.*`) are in `ios/Supporting/Local.xcconfig`,
   the Mac target in `project.pbxproj` and the Mac entitlements. Move them all into a gitignored
-  `Local.xcconfig` with a committed example, and make APNs use the configured topic, not one global one.
-- Committed `services/*/__pycache__/*.pyc` files: delete and gitignore.
+  `Local.xcconfig` with a committed example. That edits the `.pbxproj`, so it waits for your OK.
+  Done 2026-11-26: APNs pushes each device under the bundle id its app reported at registration
+  (`devices.bundle_id`, `topicFor` in `src/push/apns.ts`), with `APNS_BUNDLE_ID` as the fallback and still
+  required for APNs to be on. Not verified against Apple.
+- Done 2026-11-26: the committed `services/*/__pycache__/*.pyc` files are deleted and ignored.
 
 ---
 
@@ -1176,7 +1187,7 @@ first thing the preview will show.
   (unsigned, outside the sandbox), and the web screen was looked at in a browser against a throwaway server
   with tasks, an approval and a log, including Check now. **Not seen:** the iPhone and Mac screens rendered,
   the Mail section with real mail on any client, and a tap on a real push.
-- **Not built: Settings for each source on or off.** It needs stored preferences on the server first.
+- **Built 2026-11-26 on web, iPhone and Mac: a switch for each source.** Stored in `kv` (`checkin:sources`, `src/checkin/prefs.ts`), set by `POST /api/checkin/sources`. A source that is off is not read. With mail off a check returns `nomail`, reads nothing and logs nothing, and every screen says no notification will be sent. Suites: `test/checkin.test.mjs`, `test/checkin-screen.test.mjs`. Seen on web against a throwaway server; not on iPhone or Mac.
 - `.env.example` has no entry for `CHECKIN_MODE` or `CHECKIN_PUSH_DETAIL`: the sandbox Claude ran in could not
   read or write that file. Add both, commented out, by hand.
 - The interval and the mode are code and env today. Whether they should be settings waits on the log.
@@ -1236,6 +1247,35 @@ scheduled-run pre-approval can each skip the queue.
   the comment, and consider a `policy.browser.neverDomains` list that you fill with your bank and broker.
 - Tests: one per skip path, each proving the call is still refused.
 
+**Built 2026-11-26 (all of D2 except the two decisions below).**
+- **The registry pass.** Every tool was read with the one question. Three gaps, all the scheduled pre-approval
+  skipping a queue the tool's own comment said was always asked: `git_write` (push, restore, a commit off its
+  own branch), a build-manifest write through `write_file`, `edit_file` or `move_file`, and deleting a study
+  topic. Each now sets `confirmWhenUnattended`. Left as they are, with the reason in the test: `draft` (text in
+  the drafts folder), `gmail_triage` and `gmail_unsubscribe` (the inbox cleanup's job, bounded in code).
+  `profile` and `recipe_save` already refuse a run nobody is watching. A tripwire in
+  `test/forbidden-tier.test.mjs` reads the tool sources, so a new irreversible tool fails until it asks when
+  unattended or is listed with its reason.
+- **Found by the pass and not changed, for you to decide:** `memory_save` is reversible, so it runs unasked in
+  any run, and what it stores is recalled into later runs as "your own past notes". A scheduled job steered by
+  a page it read can therefore leave text that later runs read, which is LEARNING invariant 2. Proposed: a
+  `memory_save` from an unattended run goes to the weekly review's queue (`proposeLesson`) and is recalled only
+  once you keep it. It changes what your schedules can do, so it is not built.
+- **`forbidden`** is the third value of `Reversibility`. The broker denies it before either gate and before a
+  dry run, never queues it, and records an ordinary denial with the reason. An approval card queued before a
+  call became forbidden is refused when approved (`src/confirmations.ts`).
+- **First members**, in `src/tools/browser.ts`: a click or submit that reads as moving money (transfer,
+  withdraw, withdrawal, wire, send money, cash out) or as trading (buy, sell, trade or short within a few
+  words of shares, stock, securities, ETFs, bonds or crypto; "place a trade"). "Buy stock photos" is a
+  purchase and still queues. The comment says it is a heuristic that fails both ways.
+- **`policy.browser.neverDomains`**, empty by default, in `policy.example.json`. `browser` and `web_read`
+  refuse a listed domain and its subdomains at gate 1, before the allowlist, for every action by where the tab
+  is, and leave for a blank page if a click or redirect lands on one. A project overlay can add to it and
+  never remove. Not driven against a real Chrome: the landing check is tested with a stand-in page.
+- Suites: `test/forbidden-tier.test.mjs` (one test per skip path, the old card, the word lists, never-domains,
+  the registry pass) and the changed rows in `test/unattended-asks.test.mjs`. README: "A few things are
+  refused, whoever approves".
+
 ### D3. A check on text leaving the machine (Code, log-only first)
 
 Duet checks each outgoing message for card numbers and government IDs and refuses them. Here the only filter
@@ -1252,6 +1292,18 @@ of that kind drops credential-shaped strings before they are stored as memories.
 - Duet's second tier (health and personal finance go out only when you say so) needs a model to judge, which
   "Not doing" rules out. Proposed: do not build it. The local pin already keeps that material off the cloud
   tier, which is the leak that matters here.
+
+**Built 2026-11-26, log-only (`src/outbound.ts`).** `Tool.outboundText` declares the outgoing arguments: a
+draft's subject, body and location; `mac_control` mail and messages; `notify`; a `web_search` query; what the
+browser types; the address `browser` and `web_read` open (number checks only, since a long id in a URL is
+ordinary); an Instagram caption, read from the row a call names; and every string handed to an MCP server.
+The credential test is `looksLikeSecretValue` from `src/recipes/store.ts`, the narrower of the existing
+filters: the memory one rejects any text containing "token", which is right for a fact and wrong for a mail.
+The broker checks after the allowlist and before the budget, the queue and the run. A match is recorded in
+`outbound_checks` (tool, argument name, kind; never the text) and `npm run digest 336` lists a fortnight by
+tool and kind. With `OUTBOUND_ENFORCE=true` a match denies the call and the denial names the argument and
+the kind. Suites: `test/outbound-check.test.mjs`, `test/outbound-enforce.test.mjs`. You: read the digest after
+a fortnight on the Mini, then decide on the switch.
 
 ### D4. Connectors (You decide; adds to CP1, starts no work)
 
@@ -1277,8 +1329,9 @@ Open decisions for you:
 - `BROWSER_MODE=headless` on the Mini. Proposed: yes, unless a scheduled job needs the signed-in profile.
 - (Decided 2026-11-24: the hold on new proactive behaviour is lifted for D1 only.)
 - After a week of D1's log: is Gmail's sorting good enough, or does new mail need a local model to order it?
-- D2 and D3 now, alongside section 8. Proposed: yes; both tighten what already runs unattended.
-- `policy.browser.neverDomains` in D2. Proposed: yes, empty by default.
+- (Taken 2026-11-26 when you asked for everything buildable: D2 and D3 are built, D3 log-only, and
+  `policy.browser.neverDomains` exists and is empty.)
+- New from the registry pass: should a `memory_save` from an unattended run wait for your review? Proposed: yes.
 - A named service for D4. Proposed: none until you want one.
 
 ---
@@ -1314,6 +1367,15 @@ Proposed: first measure prefill seconds on a second turn with and without a fric
 friction notes into one block after the envelope (the note then sits further from its tool, so check SL5's
 signals do not get worse), and make the two tool toggles thread-level or gate-only. Then add a snapshot test
 of `system(tools, conversational)` for a fixed tool set, so a change to the contract is a reviewed change.
+
+**Built 2026-11-26: the snapshot test and the bench; nothing measured.** `test/prompt-snapshot.test.mjs` pins
+`system()` for nine stand-in tools in both modes and fails with the first differing line until rerun with
+`UPDATE_SNAPSHOT=1`. `node bench/h1-prefix.mjs --runs 3 --out h1.json` times the first token of a second turn
+for seven variants and has only been dry-run against a fake server. **A third mover was found while writing
+it:** the clock on line 3 of the system prompt carries seconds, so the prefix differs on every run from about
+character 100. If the bench confirms it, every turn already pays the whole prefill, and the friction line and
+the two toggles are secondary. Nothing was restructured. You: run the bench on a machine whose `.env` points
+at the model host, then decide on the clock, the friction notes and the toggles.
 
 ### H2. Recipes are revised from use, not only created (Code; extends SL4b)
 
@@ -1352,11 +1414,28 @@ Here `find_past_output` ANDs `LIKE` over `runs.task`, `note` and the conversatio
 and the text of its tool results (capped per result), ranked with scheduled runs demoted, behind the existing
 tool. Private runs stay searchable only by runs that are already pinned local, as recall is today.
 
+**Built 2026-11-26.** `run_fts` is an FTS5 table with one row per run (question, answer, executed tool results
+capped at 2,000 characters each and 24,000 a run), kept in step by triggers and following retention: a pruned
+audit row, a pruned run and a deleted thread each leave it. `searchPastRuns` (`src/memory/store.ts`) requires
+every word, as a prefix, ranks the question above the answer above tool text, puts a title-matched thread
+first and halves a scheduled run's score. A helper's text counts for the run that started it. Privacy: a pin
+is now recorded on the root run (`runs.private`, written by `pinRun`); `find_past_output` shows private runs
+only to a run already pinned local, tells any other run how many matches were held back, and tags its listing
+untrusted. It withholds and does not declare `privateOutput`, because that would pin every thread that asks
+"what was that plan?" for good. Runs older than the record count as private, so after deploy an unpinned run
+sees no earlier history until newer runs accumulate. The Search page is the owner's view and shows everything
+(`?scope=all` adds scheduled jobs). Older runs are indexed in the background at start, 200 a pass. Suites:
+`test/run-search.test.mjs`, `test/search.test.mjs`, the H4 section of `test/private-output.test.mjs`.
+**Not verified:** the Mini's real ledger (backfill time, index size), and the weights and the 0.5 demotion
+against real queries. **Open:** `recall_output` and `conversation_detail` still return any run by id with no
+privacy check (`store.runTreeIsPinned` is there to close it); the clients do not show where a match was found.
+
 ### H5. Compaction order for LP3 (Code; part of LP3)
 
 Hermes compacts at 50% of the context window: first it stubs old tool results (no model call), and only if that
 is not enough does it summarise with a side model. That is the order LP3 already proposes; take the threshold as
 a starting point to measure, and keep the summarising step out until stubbing alone is shown to fall short.
+Built with LP3 on 2026-11-26 (section 10): stubbing only, no summarising.
 
 ### H6. Scheduler: a catch-up window and a stall watchdog (Code)
 
@@ -1368,6 +1447,23 @@ which is Hermes's at-most-once rule. Two of its rules are missing:
 - **Stall watchdog on idle time, not wall clock.** Runs are serialized, so one stalled scheduled run holds up
   everything behind it, chat included (LP5). Hermes interrupts a cron session after 600 s with no model or tool
   activity, never one that is slow but active. Proposed: the same for unattended runs.
+
+**Both built 2026-11-26, on by default.**
+- **Catch-up.** A slot missed by more than half the job's period (2 minutes to 2 hours) is skipped, re-armed and
+  logged; exactly at the limit still runs; an interval job keeps its own grid; a one-shot, a job with no
+  period and a never-armed job are never skipped by the rule. The last skip is on the row and in
+  `GET /api/schedules`. Per job: `PATCH /api/schedules/:id {"catchup_minutes": N}` (null is the rule, 0 always
+  runs). Not on `schedule_update`, whose schema sits in the prompt prefix. Code: `src/schedule-catchup.ts`,
+  `src/scheduler.ts`. Suites: `test/schedule-catchup.test.mjs`, `test/scheduler-tick.test.mjs`. Known: a PATCH
+  on an overdue job re-arms it (as before), so setting the override on an overdue job drops that slot.
+- **Stall watchdog.** An unattended run with no model or tool activity for 600 s (`STALL_IDLE_MS`, 0 is off),
+  and nothing in flight still inside its own limit, is stopped and ends `failed` with "Stalled: …" and the
+  failure push; 60 s later a run that will not end is closed out and the queue released. Parked and queued
+  time do not count, and chat is never touched. Code: `src/stall.ts`. Suite: `test/stall-watchdog.test.mjs`.
+  Not covered: post-run learners and pre-loop sizing, which call the model without a run id; an abandoned
+  run's hung tool keeps running beside the next job. Neither has run on the Mini.
+- Not built: the pre-run script and passing one job's answer to another. Both add a way for text to reach a
+  prompt and neither was asked for.
 
 Two Hermes job fields also fit here and are smaller: a pre-run script whose output is placed in the prompt (or
 is the whole job, with no model, as the check-in already is), and passing one job's last answer into
@@ -1392,6 +1488,215 @@ Open decisions for you:
   Proposed: yes, if prefill shows a real cost.
 - H6: catch-up window default as Hermes's (half the period, 2 minutes to 2 hours)? Proposed: yes.
 - H4: index tool-result text, or only goals and answers? Proposed: both, capped per result.
+
+---
+
+## 14. Ten uses taken from "31 things Hermes Agent can do" (added 2026-11-26)
+
+Source: the transcript of a YouTube video with that title, read 2026-11-26. It is an advert for a paid
+community, so it was read as a list of jobs and not as evidence that any of them works. Most of the 31 are
+content marketing for someone who publishes video. You are a software engineer and engineering manager, a DJ,
+and starting an AI automation agency (Crew Front Desk), so the list was cut to what serves those. I proposed
+ten and **you chose all ten on 2026-11-26.** All ten were built on 2026-11-26; each
+says below what was and was not verified. Labels are local to this section: U1 to
+U10.
+
+**What the agency is for, in your words (2026-11-26):** to understand the systems a client has today and find
+solutions that work with those systems. Building and deploying software for clients is an option that may come
+out of research with pilot clients, and it is not the plan. So nothing below assumes AgentSpine is installed
+for a client, section 11 (a version other people can install) is not made more urgent by this section, and U3
+to U6 are shaped as tools for understanding a client and for your own follow-through, not as products.
+
+**Already here, so not work:** scheduling, memory and recipes, the approval queue, a morning brief, voice in
+and out, the inbox cleanup, watchers. The video's "skills written after a hard task" is section 13 H2.
+
+**Not taking, so not work:**
+- Replying by itself to comments, reviews, direct messages, community posts or LinkedIn posts (the video's 3,
+  10, 15, 20 and 28). These are public writes that nobody approved, and the project rules already refuse an
+  Instagram comment or message.
+- Telegram, WhatsApp, Discord and Slack as places to reach you. Already in "Not doing".
+- Video, thumbnails, SEO pages, search indexing, X posts and stories (2, 5, 11, 16, 19, 23, 25, 27, 29).
+  Revisit one only if the agency ends up selling it.
+
+### U1. One screen of everything waiting: "Today" (Code; web, iPhone and Mac together)
+
+The video's approvals desk and its "one screen". Here the pieces are spread out: an approval is answered in
+its thread or on the lock screen, the Check-in screen lists what is waiting but nothing on it can be answered,
+Overview is about setup, and the start screen is an empty "pick a conversation".
+
+- One screen that all three clients open on. Sections, in this order: **Waiting on you** (approvals, each with
+  its full text one tap away and Approve, Reject and Later), **Due** (tasks overdue or due today, with Done),
+  **Heads-up** (open offers with their own answers), **Since you last looked** (scheduled runs that finished,
+  failed, stalled or were skipped, section 13 H6), and threads with a reply you have not read.
+- Code assembles it from the stores that already exist, behind one `GET /api/today`. No model call, so
+  opening it costs nothing on the model host and no mail text reaches a prompt.
+- **Later** hides one item from Today until the next morning. It does not change the confirmation's expiry.
+- Approve is never a swipe by itself. The README's rule stands: a one-line preview makes approving a rubber
+  stamp. On the iPhone a swipe shows the buttons, and Approve is live only once the full action is on screen.
+  An approval shown from a saved offline copy has no Approve, as in the thread (section 5).
+- One count, "waiting on you", drives the web tab title, the iPhone icon badge and the Mac Dock badge, so the
+  three agree. Every push carries it, and the apps set it again when they come forward.
+- With it, the push tidy-up from the UI review: a thread id per source so the lock screen and the Watch group
+  approvals, heads-ups and check-ins separately, and a subtitle that names the source. A Watch app, a Lock
+  Screen widget or a Live Activity would each need a new Xcode target, which needs your OK, so none is here.
+
+**Built 2026-11-26 on web, iPhone and Mac.** `src/today.ts` assembles approvals, tasks overdue or due today, open Heads-up offers, unread threads and what scheduled jobs did since Seen, behind `GET /api/today`, with no model. Later hides an item until 06:00 and leaves a confirmation's expiry alone. Approve exists only in the full card, never on a row or a swipe, and not from the offline copy. One count drives the tab title, icon badge and Dock badge; pushes carry it, stack by source and name the source in a subtitle. Schedules show a skipped run. Suites: `test/today.test.mjs`, `test/today-screen.test.mjs`, `test/apns.test.mjs`. Seen on web and the iPhone simulator; not seen on the Mac, on a device, or on a Watch. No Watch app or widget. The integration pass on 2026-11-26 also saw it on web and the iPhone 17 Pro simulator against a seeded throwaway server: the brief, Review opening the full card with Approve (the row has none), Later hiding a task. Mail on Today joined the same day (see U7): labelled mail still unread at the last inbox pass, read from the database, so opening Today never waits on Gmail; seen on web and the iPhone simulator with seeded labels.
+
+### U2. The three-line brief (Code)
+
+The video's morning brief: what got done overnight, what is waiting, what to do first.
+
+- The same assembly as U1, said in three lines at the top of Today, and read aloud on request where the
+  client can speak.
+- "Do first" is chosen by a fixed order in code (an approval close to expiring, then an overdue task, then
+  the earliest thing due today), not by a model.
+- No new push. The Morning brief schedule and the Heads-up morning push both stay as they are (decided in
+  section 12 D1), and a third morning message would spend the daily cap of six.
+
+**Built 2026-11-26.** The three lines sit at the top of Today on all three clients, worded by `web/src/lib/today.ts` and `TodayWords` from counts the server sends. "Do first" is a fixed order in `firstOf`. Read aloud is on web and iPhone and was not heard; the Mac has no speech. No new push.
+
+### U3. A website audit (Code)
+
+The video's website health check and the first half of its lead finder. For the agency this is a way to
+look at what a client or a prospect has today.
+
+- A read-only `site_audit` tool and `npm run audit -- <url>`. It loads the page in headless Chrome through
+  `playwright-core`, which is already a dependency. It is not Lighthouse, which would be a third runtime
+  dependency, and the report must never call its numbers a Lighthouse score.
+- What it measures, with the thresholds in code: load timings and largest paint, page weight and request
+  count, images that are heavier or larger than they are shown, how the page behaves at phone width, HTTPS,
+  the title and description, and whether a visitor can book or get in touch (a booking link, a phone or mail
+  link, a form).
+- It writes a short report file: the findings in order of how much they matter, each with its number and a
+  recommendation. It reports. It does not change anyone's site.
+- A page is untrusted content: tagged, never followed. It runs in the logged-out headless profile only, never
+  a signed-in Chrome, keeps `neverDomains` and the allowlist, and refuses an address on a private network
+  (section 3 H1 notes that the SSRF guard does not cover the browser today; this adds the check for the
+  address it is given).
+
+**Built 2026-11-26.** `site_audit` and `npm run audit -- <url>` load a page in a fresh logged-out headless Chrome at desktop and phone width and write a report to `data/site-audits/`: findings most important first, each with its number and a recommendation, and a line saying it is not a Lighthouse score. Thresholds are in `src/siteaudit/score.ts`; the collector is `src/siteaudit/measure.ts`. It needs `browser.enabled`, keeps the allowlist and `neverDomains` for the address given and where it lands, and refuses private addresses on every redirect hop and every request the page makes. Suite: `test/site-audit.test.mjs`. Not closed: DNS that changes between the check and Chrome's lookup. Not run against a real site.
+
+### U4. A prospect list with drafted outreach (Both)
+
+The second half of the lead finder, and the partner prospector.
+
+- Clients exist with a status. Add prospects to the same list: the site, where the name came from, the U3
+  findings, the reasons it fits in plain words, and where it stands (new, contacted, replied, pilot, not a fit).
+- The ranking is code over the audit's findings, and each reason is one of them. The model does not score.
+- Outreach is a draft in your learned style (section 4, N4), one prospect at a time, on request. Nothing is
+  sent, as everywhere.
+- You: where the first names come from (a list you paste, or a search by trade and town), and what the
+  outreach may claim. The search path reads untrusted pages, so it stays behind U3's rules.
+
+**Built 2026-11-26 on web, iPhone and Mac; not seen running.** Prospects are client rows with the statuses new, contacted, replied, pilot and not-a-fit, a site, a source and the last audit's summary (finding ids and numbers, never page text). Names come from a pasted list (`POST /api/clients/prospects`); there is no search path. Ranking and reasons are code over the audit's findings (`src/clients/prospects.ts`), and every sentence is made by the server. Audit runs U3 for one prospect. Draft outreach starts one chat turn in a new thread that drafts through `draft` in the learned style; nothing is sent. Suite: `test/prospects.test.mjs`. You: where the first names come from, and what outreach may claim.
+
+### U5. A recording becomes a runbook (Both)
+
+The video's guide page builder. For the agency: a client walks you through how they do something today, and
+you leave with a written procedure you can check with them.
+
+- "Make a runbook" on a finished meeting, on all three clients. A local model, pinned private as all meeting
+  work is, writes a title, what the procedure is for, what is needed first, numbered steps and the questions
+  left open.
+- Every step must cite the passage and the time in the recording it came from, and a step whose quote is not
+  in the transcript is dropped. That is the K4 rule (section 8), for the same reason: a small model must not
+  invent a step and present it as what the client said.
+- It is a draft file for you to correct, never a trusted record. Writing it is an export, so it logs
+  `logDataEvent("export", ...)` (section 8, K0).
+- You: the first runs against the real model, on a recording where you know the right answer.
+
+**Built 2026-11-26 on web, iPhone and Mac; not run on the real model.** "Make a runbook" on a finished meeting drafts a procedure with the local model, pinned private (`src/knowledge/runbook.ts`). Every step must quote the transcript or it is dropped and counted; times and speakers are read from the transcript. The result is a labelled draft file through `write_file`'s gates, never overwritten, with an `export` audit row of counts only. Nothing is written when no step survives or the transcript has expired. Suites: `test/runbook.test.mjs`, `test/runbook-words.test.mjs`. You: run it on a recording where you know the right answer.
+
+### U6. Client calls feed Tasks (Code)
+
+The video's call notes to task list. Here a meeting's commitments already land in the knowledge store with an
+owner and a due date, and they stop there.
+
+- In the meeting close-out (section 8, K5), an accepted commitment offers "Add as a task". The task takes the
+  commitment's words, its due date, the project, the client that project belongs to, and a link back to the
+  claim. A commitment someone else owns becomes a waiting-on task naming them.
+- Nothing is created without that tap. Extracted work items are mostly false positives (the meetings rule).
+- A client's page lists its open commitments and the tasks made from them.
+
+**Built 2026-11-26 on web, iPhone and Mac.** An accepted commitment in the close-out can be ticked "Add as a task". The task carries its words, due day, project and client, links back through `tasks.claim_id`, and becomes a waiting-on task when someone else owns it (`MEETING_SELF_NAMES` says who you are). It is part of the preview and of the all-or-nothing save; one claim makes one task; deleting the meeting leaves the task and notes that the commitment is gone. A client's card lists the reviewed commitments in its project with their tasks (`GET /api/clients/:id/commitments`). Suite: `test/commitment-tasks.test.mjs`. Not seen running. No screen sets a client's project yet.
+
+### U7. Inbox buckets, and replies drafted on request (Both)
+
+The video's inbox triage. **This reverses an order section 12 D1 set**, which said a local model on new mail
+comes only after the check-in's log shows Gmail's sorting is too coarse. You chose to build it now.
+
+- It stays separate from the check-in's decision to send a push. The check-in remains code only, so nothing a
+  sender wrote decides whether you are interrupted.
+- A local model, pinned private, reads only the mail the check-in already calls "from a person" and gives each
+  one of three labels: urgent, reply today, for your information. The label and a reason from a fixed list
+  are the whole output, so a hostile mail has nowhere to write free text. The mail is wrapped as untrusted.
+- The labels show on Check-in and on Today. "Draft a reply" on one mail writes a draft in your style through
+  `draft`. Drafting everything urgent unasked is left for later: it spends the model host and adds injection
+  surface on every check.
+- Off by default behind a switch, with the check-in's rollout: preview, then log, then on.
+- Fixtures for this surface go into `test/injection.test.mjs` first. N2's live half (section 4) is yours, and
+  this should not be switched on before it has run.
+
+**Built 2026-11-26, off until `INBOX_SORT_MODE`.** `src/checkin/buckets.ts`: a local model, pinned private, labels each unread mail from a person urgent, reply today or for your information, one mail per call, from the sender, subject and Gmail's preview only. Its whole output is two words from two fixed lists; anything else leaves the mail "Unsorted". The check-in's own code is unchanged and a label never affects a push. Labels show on Check-in on web, iPhone and Mac, urgent first, and on Today (`todayMail`: mode `on`, the mail source on, one of the three buckets, still unread at the last pass, at most `TODAY_MAIL_MAX` rows; the pass stores each mail's subject and whether Gmail still had it unread, so a mail you read drops off Today at the next pass, up to one check-in interval late, and a Gmail error leaves the last list standing), with "Draft a reply" per mail: code sets the recipient, subject and style, the model writes the body, and it queues through `draft`. Rollout: `npm run checkin sort`, then `log`, then `on`. Suites: `test/inbox-buckets.test.mjs`, three fixtures in `test/injection.test.mjs`, `test/checkin-screen.test.mjs`. Not run on real mail or the real model; N2's live half first. Replies are written from a 300-character preview, which may be too thin.
+
+### U8. A competitor and niche watch (Code)
+
+The video's competitor watch, as a watcher template beside `inbox-cleanup`.
+
+- `npm run watcher add niche-watch` reads a gitignored `watch-list.md` (a committed example with invented
+  names): the pages of competitors, venues or promoters you name. Weekly.
+- It reads only the listed pages, compares each with last week through the watcher's own state, and writes a
+  report of what changed, with links. The "three possible responses" are the model's suggestions and are
+  labelled as that. No change means no push, as for every watcher.
+
+**Built 2026-11-26.** `npm run watcher add niche-watch` installs a weekly watcher from a gitignored `watch-list.md` (example committed, copied by `npm run setup`). `src/watch-list.ts` checks the list at install: `https` only, nothing on a private network, no credentials, at most 5 pages (pages + 4 steps must fit a run's 10), and an unreadable line or an empty list refuses. The task reads only the listed pages, compares under one state key, and on a change writes a report with links and three suggestions labelled as the assistant's, then pushes once. Suite: `test/watch-list.test.mjs`. Not run on a live model.
+
+### U9. A reminder sequence for a booking (Code)
+
+The video's show-up reminders, for a discovery call or a gig.
+
+- **This is new proactive behaviour**, which section 3 holds back. Your choosing it on 2026-11-26 is the
+  decision that lifts the hold for this one item, as you did for the check-in.
+- When Heads-up sees a calendar event that reads as a booking, it offers "Set up reminders". A yes makes, for
+  you, reminders two days before, that morning and an hour before, and for the other person, drafts of a
+  confirmation and of the same three messages.
+- The drafts are not sent. Auto-sending mail is in "Not doing", so the sequence saves the writing and the
+  remembering, and the sending stays yours until section 10 CP2 is decided.
+- Its pushes count against the daily cap and keep quiet hours.
+
+**Built 2026-11-26 on web, iPhone and Mac.** A new Heads-up kind, `booking` (rule in `src/headsup/rules.ts`), is offered five days out. A yes sets three reminders for you and writes one draft file of messages for the other person; nothing is sent and no model is involved (`src/headsup/sequence.ts`). Late steps are skipped, quiet hours and the daily cap hold a step until its late limit, and a moved or cancelled booking has its unsent reminders withdrawn at the next clean morning read. Suite: `test/headsup-sequence.test.mjs`; rollout is Rung 8 of `docs/ROLLOUT-heads-up.md`. The `HEADSUP_REMIND` lock-screen category ("Yes, set up reminders", Not now, Don't suggest this) was added in the integration pass and builds; it has not been seen on a real push. Not done: a cancel button on an accepted card, and a midday calendar re-read. Not seen running.
+
+### U10. Gig carousel drafts (Both)
+
+The video's carousel maker, for a gig announcement.
+
+- From a gig's facts (date, venue, line-up), render a set of slides from a fixed template and write a
+  caption, into a folder as a draft kit. The slides are rendered by code from the template, so the layout is
+  the same every time.
+- The Instagram queue holds one image on one surface per row and has never called Meta (section 1, item 6).
+  A carousel is a different kind of post, so publishing one would be a change to `src/instagram/api.ts`,
+  which needs a recorded decision. Until then the kit is for you to post, or its first slide can be seeded
+  as an ordinary pending row.
+- A person approves the exact content, as the queue already requires.
+
+**Built 2026-11-26, files only.** `npm run carousel -- <facts.json>` plans slides in code (cover, line-up at four acts a slide, details) and draws them at 1080 by 1350 with headless Chrome and the repo's fonts, plus a template caption, into `drafts/carousel/`. No model and no Instagram write; `src/instagram/` is untouched. Publishing a carousel still needs a decision on `api.ts`; queuing the cover is a manual seed. Suite: `test/carousel.test.mjs`. Not posted or seeded anywhere.
+
+### Sequence and decisions
+
+Order: U1 and U2 first, with the UI review they came out of. Then U6 and U5, which extend section 8, the main
+direction. Then U3 and U4. Then U8 and U9. U7 after its fixtures. U10 last.
+
+Open decisions for you, each with the default the build will take:
+- U1: Today as the first tab on the iPhone, with Heads-up moving under More because its open offers are on
+  Today. Proposed: yes; the bar's order is yours to change in Settings on each device.
+- U2: a spoken or pushed brief at a set time. Proposed: no push; on screen and read aloud on request.
+- U4: where the first prospects come from. Proposed: a list you paste, until you say what to search for.
+- U7: draft replies to everything urgent without being asked. Proposed: no, on request only.
+- U10: publishing a carousel through the API. Proposed: not yet.
+- Proposed, not yet agreed, from what you said the agency is for: a **systems map** for a client. The tools
+  they use, what each is for, who owns it, what it connects to and where it hurts, each line cited to the call
+  it came from, assembled by code from reviewed claims like every other brief (section 8, K6). It would follow
+  U5 and U6. Say if you want it.
 
 ---
 

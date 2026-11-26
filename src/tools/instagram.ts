@@ -54,6 +54,14 @@ const isFalse = (v: unknown): boolean => v === false || v === "false" || v === 0
 
 const accountOf = (ids: string[]): string => q.getRow(ids[0] ?? "")?.account ?? "unknown";
 
+/**
+ * The captions a call would make public. No argument carries one (the model names a row id),
+ * so the declaration reads the rows, which is the text that will actually be posted
+ * (src/outbound.ts).
+ */
+const captionsOf = (ids: string[]): { arg: string; text: string }[] =>
+  ids.map((id) => ({ arg: `caption of ${id}`, text: q.getRow(id)?.caption ?? "" }));
+
 const describeAll = (ids: string[]): string =>
   ids.map((id) => (q.getRow(id) ? q.describeRow(q.getRow(id)!) : `${id}\n  (no such queue row)`)).join("\n\n");
 
@@ -96,6 +104,8 @@ export const instagramStatus: Tool = {
 
 export const instagramApprove: Tool = {
   name: "instagram_approve",
+  // Taking an approval back sends nothing.
+  outboundText: (a) => (isFalse(a?.approved) ? [] : captionsOf(idsOf(a))),
   available: gate,
   confirmWhenUnattended: true,
   description:
@@ -150,6 +160,7 @@ export const instagramApprove: Tool = {
 
 export const instagramPublish: Tool = {
   name: "instagram_publish",
+  outboundText: (a) => captionsOf(idsOf(a).slice(0, 1)),
   available: gate,
   confirmWhenUnattended: true,
   description:

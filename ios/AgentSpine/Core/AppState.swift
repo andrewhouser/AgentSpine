@@ -171,3 +171,105 @@ final class AppState {
         }
     }
 }
+
+// MARK: - Today
+
+#if os(macOS)
+import AppKit
+#else
+import UserNotifications
+#endif
+
+/// The number on the app's icon: "waiting on you", the count the server works out for the
+/// Today screen (PLAN-open-work section 14, U1). The web tab title and every push carry the same
+/// one, so the three agree. Set whenever Today is read, which is on launch, on coming forward
+/// and after every answer; zero clears it.
+@MainActor
+enum AppBadge {
+    static func set(_ count: Int) {
+        #if os(macOS)
+        NSApplication.shared.dockTile.badgeLabel = count > 0 ? String(count) : nil
+        #else
+        UNUserNotificationCenter.current().setBadgeCount(max(0, count)) { _ in }
+        #endif
+    }
+}
+
+/// The Today screen's data and its few actions, shared by the iPhone's `TodayView` and the Mac's
+/// `MacTodayView` so the two screens differ only in layout. One instance, because the root
+/// view also reads it to keep the icon's badge current when no Today screen is showing.
+@MainActor
+@Observable
+final class TodayStore {
+    static let shared = TodayStore()
+
+    private(set) var screen: TodayScreen?
+    /// Set while `screen` is the saved copy because the server is unreachable. An approval shown
+    /// from it cannot be answered: it may already have been, or have changed.
+    private(set) var cachedAt: Date?
+    private(set) var error: String?
+    private(set) var loaded = false
+
+    private let api = APIClient.shared
+
+    var isEmpty: Bool {
+        guard let s = screen else { return false }
+        return s.approvals.isEmpty && s.tasks.isEmpty && s.headsups.isEmpty && s.since.isEmpty && s.threads.isEmpty && s.mail.isEmpty
+    }
+
+    func load() async {
+        guard Settings.shared.isConfigured else {
+            // Say so, as the thread list does: a first launch must not sit on "Loading…".
+            error = APIError.notConfigured.localizedDescription
+            loaded = true
+            return
+        }
+        do {
+            let fresh = try await api.today()
+            screen = fresh.value
+            cachedAt = fresh.cachedAt
+            error = nil
+            // A saved copy's count may be stale, and a stale badge is worse than yesterday's.
+            if fresh.cachedAt == nil { AppBadge.set(fresh.value.count) }
+        } catch {
+            if screen == nil { self.error = error.localizedDescription }
+        }
+        loaded = true
+    }
+
+    /// Hide one item until the next morning. The server answers with the whole screen.
+    func later(_ key: String) async { await replace { try await self.api.todayLater(key) } }
+    func bringBack() async { await replace { try await self.api.todayLaterClear() } }
+    func seen() async { await replace { try await self.api.todaySeen() } }
+
+    func done(_ task: TodayTask) async {
+        await then { try await self.api.setTodoDone(task.id, done: true) }
+    }
+
+    /// "yes", "later" or "never", exactly as the Heads-up screen sends them.
+    func answer(_ headsup: Headsup, _ answer: String) async {
+        await then { try await self.api.answerHeadsup(headsup.id, answer: answer) }
+    }
+
+    private func replace(_ call: @escaping () async throws -> TodayScreen) async {
+        do {
+            let next = try await call()
+            screen = next
+            cachedAt = nil
+            error = nil
+            AppBadge.set(next.count)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func then(_ call: @escaping () async throws -> Void) async {
+        do {
+            try await call()
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await load()
+    }
+}

@@ -478,6 +478,31 @@ final class APIClient {
         )
     }
 
+    // MARK: Today
+
+    /// Everything waiting, on one screen (PLAN-open-work section 14, U1). Keeps a copy, so the
+    /// screen the app opens on still shows something with the server out of reach; an approval
+    /// from that copy cannot be answered (the same rule as a saved thread).
+    func today() async throws -> Loaded<TodayScreen> {
+        try await sendKeepingCopy(request("/api/today"), as: TodayScreen.self, key: "today")
+    }
+
+    /// Hide one item ("approval:12", "task:5", "headsup:3", "thread:7") until the next morning,
+    /// or bring it back with `undo`. A confirmation's own expiry is not changed.
+    func todayLater(_ key: String, undo: Bool = false) async throws -> TodayScreen {
+        try await send(jsonRequest("/api/today/later", method: "POST", body: ["key": key, "undo": undo]), as: TodayScreen.self)
+    }
+
+    /// Bring back everything that was put off.
+    func todayLaterClear() async throws -> TodayScreen {
+        try await send(jsonRequest("/api/today/later", method: "POST", body: ["all": true, "undo": true]), as: TodayScreen.self)
+    }
+
+    /// "I have seen these": clears "since you last looked".
+    func todaySeen() async throws -> TodayScreen {
+        try await send(jsonRequest("/api/today/seen", method: "POST"), as: TodayScreen.self)
+    }
+
     // MARK: Check-in
 
     /// The switch, the interval and the recent checks.
@@ -493,6 +518,20 @@ final class APIClient {
     /// "Check now": a real check. It records, and sends if the check-in is on.
     func runCheckin() async throws -> CheckinResult {
         try await send(jsonRequest("/api/checkin/run", method: "POST"), as: CheckinResult.self, using: longSession)
+    }
+
+    /// Switch one check-in source on or off. Stored on the server, so it holds for the timer and
+    /// for every device. Returns the switches as they now stand.
+    func setCheckinSource(_ kind: String, on: Bool) async throws -> [String: Bool] {
+        struct Reply: Decodable { let sources: [String: Bool] }
+        return try await send(jsonRequest("/api/checkin/sources", method: "POST", body: [kind: on]), as: Reply.self).sources
+    }
+
+    /// "Draft a reply" on one unread mail (section 14, U7). The server writes it with the local
+    /// model and queues it like any draft; nothing is sent. Slow, since a model writes it.
+    func draftCheckinReply(messageId: String) async throws -> CheckinReply {
+        let id = messageId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? messageId
+        return try await send(jsonRequest("/api/checkin/mail/\(id)/reply", method: "POST"), as: CheckinReply.self, using: longSession)
     }
 
     /// "Preview": what Check now would offer. Reads the calendars; sends and records nothing.
@@ -521,6 +560,15 @@ final class APIClient {
 
     func deleteHeadsupDate(_ id: Int) async throws {
         try await sendRaw(jsonRequest("/api/headsups/dates/\(id)", method: "DELETE"))
+    }
+
+    /// Correct a remembered date. Yours to change without a question, unlike one the assistant
+    /// proposes. The server refuses a bad value with a sentence saying what is wrong. `year` nil
+    /// means "not known", and is sent by leaving it out.
+    func updateHeadsupDate(_ id: Int, who: String, occasion: String, month: Int, day: Int, year: Int?) async throws -> HeadsupDateUpdate {
+        var body: [String: Any] = ["day": day, "month": month, "occasion": occasion, "who": who]
+        if let year { body["year"] = year }
+        return try await send(jsonRequest("/api/headsups/dates/\(id)", method: "PATCH", body: body), as: HeadsupDateUpdate.self)
     }
 
     /// A cached product photo. `path` is the server-relative path from the card ("/api/headsups/images/4"),
@@ -880,6 +928,28 @@ final class APIClient {
 
     func deleteClient(_ id: Int) async throws {
         try await sendRaw(jsonRequest("/api/clients/\(id)", method: "DELETE"))
+    }
+
+    /// Prospects only, in the order to look at them. The server ranks them over each one's site audit.
+    func prospects() async throws -> [Client] {
+        try await send(request("/api/clients/prospects"), as: [Client].self)
+    }
+
+    /// Paste a list of prospects, one "name, site" a line.
+    func addProspects(_ text: String) async throws -> ProspectPaste {
+        try await send(jsonRequest("/api/clients/prospects", method: "POST", body: ["text": text]), as: ProspectPaste.self)
+    }
+
+    /// Audit one prospect's website. The server loads the page in a browser, so this can take half a minute.
+    @discardableResult
+    func auditClient(_ id: Int) async throws -> ProspectAudit {
+        try await send(jsonRequest("/api/clients/\(id)/audit", method: "POST"), as: ProspectAudit.self, using: longSession)
+    }
+
+    /// Ask for a draft of first outreach to one prospect. It arrives in a new thread as an approval; nothing is sent.
+    @discardableResult
+    func draftOutreach(_ id: Int) async throws -> OutreachStart {
+        try await send(jsonRequest("/api/clients/\(id)/outreach", method: "POST"), as: OutreachStart.self)
     }
 
     func timeSummary(days: Int = 30) async throws -> TimeSummary {
@@ -1375,6 +1445,24 @@ final class APIClient {
         return try await send(req, as: CloseoutSaved.self, using: longSession)
     }
 
+    /// Write a draft runbook from the recording. A 409 carries the reason nothing was written. The local model reads
+    /// the whole transcript, so this waits on the long session like the close-out's save.
+    func meetingRunbook(_ id: Int) async throws -> RunbookSaved {
+        var req = try jsonRequest("/api/meetings/\(id)/runbook", method: "POST", body: [:])
+        req.timeoutInterval = 600
+        return try await send(req, as: RunbookSaved.self, using: longSession)
+    }
+
+    /// The reviewed commitments in a client's project, each with the task made from it.
+    func clientCommitments(_ clientID: Int) async throws -> ClientCommitments {
+        try await send(request("/api/clients/\(clientID)/commitments"), as: ClientCommitments.self)
+    }
+
+    /// Make a task from a commitment that was accepted earlier. Refused when it already has one.
+    func taskFromCommitment(clientID: Int, claimID: Int) async throws -> CommitmentTask {
+        try await send(jsonRequest("/api/clients/\(clientID)/commitments/\(claimID)/task", method: "POST", body: [:]), as: CommitmentTask.self)
+    }
+
     /// Name a detected speaker; an empty name goes back to "Speaker N".
     func renameSpeaker(_ meetingID: Int, index: Int, to name: String) async throws {
         try await sendRaw(
@@ -1441,16 +1529,14 @@ final class APIClient {
     func registerDevice(
         apnsToken: String,
         environment: String,
-        name: String
+        name: String,
+        bundleID: String? = nil
     ) async throws -> DeviceRegistration {
-        try await send(
-            jsonRequest(
-                "/api/devices",
-                method: "POST",
-                body: ["environment": environment, "name": name, "token": apnsToken]
-            ),
-            as: DeviceRegistration.self
-        )
+        // The bundle id is this app's APNs topic. Sent so the server pushes each device under its
+        // own app, and a copy built under another bundle id needs no server setting to match.
+        var body: [String: Any] = ["environment": environment, "name": name, "token": apnsToken]
+        if let bundleID, !bundleID.isEmpty { body["bundleId"] = bundleID }
+        return try await send(jsonRequest("/api/devices", method: "POST", body: body), as: DeviceRegistration.self)
     }
 
     func devices() async throws -> [RegisteredDevice] {

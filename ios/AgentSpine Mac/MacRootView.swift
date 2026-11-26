@@ -10,13 +10,13 @@ struct MacRootView: View {
     @Environment(Settings.self) private var settings
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var section: MacSection = .threads
+    @State private var section: MacSection = .today
     @State private var selectedThread: Int?
     @State private var composingNew = false
     @State private var searching = false
     @State private var headsupPrefs = false
     /// Per window, restored by macOS with the window: the section and thread it was showing.
-    @SceneStorage("mac.section") private var savedSection = MacSection.threads.rawValue
+    @SceneStorage("mac.section") private var savedSection = MacSection.today.rawValue
     @SceneStorage("mac.thread") private var savedThread = 0
     @State private var restored = false
 
@@ -26,6 +26,10 @@ struct MacRootView: View {
                 .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 360)
         } detail: {
             switch section {
+            case .today:
+                // Where the window opens (PLAN-open-work section 14, U1). It needs the selection
+                // to open a thread, so it is drawn here and not by MacSectionContent.
+                MacTodayView { target in open(target) }
             case .threads:
                 threadDetail
             case let other:
@@ -37,8 +41,10 @@ struct MacRootView: View {
         .onAppear {
             guard !restored else { return }
             restored = true
-            section = MacSection(rawValue: savedSection) ?? .threads
+            section = MacSection(rawValue: savedSection) ?? .today
             selectedThread = savedThread == 0 ? nil : savedThread
+            // A window that was on Threads with nothing open has nothing to show: Today instead.
+            if section == .threads, selectedThread == nil { section = .today }
         }
         .onChange(of: section) {
             savedSection = section.rawValue
@@ -70,7 +76,10 @@ struct MacRootView: View {
             }
         }
         .task {
-            if settings.isConfigured { await state.refresh() }
+            if settings.isConfigured {
+                await state.refresh()
+                await TodayStore.shared.load()
+            }
         }
         // A notification was clicked: show that thread.
         .onReceive(NotificationCenter.default.publisher(for: .macOpenThread)) { note in
@@ -82,7 +91,11 @@ struct MacRootView: View {
         .onChange(of: scenePhase) { _, phase in
             // Coming back to the window is when the lists are most likely to be stale.
             guard phase == .active, settings.isConfigured else { return }
-            Task { await state.refreshConversations() }
+            Task {
+                await state.refreshConversations()
+                // Also puts the Dock badge right, whichever section is showing.
+                await TodayStore.shared.load()
+            }
         }
     }
 
@@ -114,6 +127,26 @@ struct MacRootView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Spine.Palette.bg)
+        }
+    }
+
+    /// A row on Today was clicked. A thread or an approval's thread opens in the detail pane; a
+    /// run has no pane of its own here, so it opens Activity, where runs are listed.
+    private func open(_ target: TodayTarget) {
+        switch target {
+        case .thread(let id):
+            composingNew = false
+            selectedThread = id
+            section = .threads
+        case .approval(let approval):
+            guard let id = approval.conversationId else { return }
+            composingNew = false
+            selectedThread = id
+            section = .threads
+        case .run: section = .activity
+        case .tasks: section = .tasks
+        case .headsup: section = .headsup
+        case .schedules: section = .schedules
         }
     }
 

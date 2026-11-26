@@ -1,10 +1,23 @@
 import { useState } from "react";
 
-import type { CheckinPreview, CheckinStatus } from "../../lib/types.ts";
+import type { CheckinItem, CheckinPreview, CheckinStatus } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
-import { checkinGroups, checkinModeLine, checkinRunLabel, checkinRunNote, checkinSendLine } from "../../lib/checkin.ts";
+import {
+  CHECKIN_SOURCES,
+  checkinBucketLine,
+  checkinGroups,
+  checkinMailOrder,
+  checkinMessageId,
+  checkinModeLine,
+  checkinOffKinds,
+  checkinOffLine,
+  checkinRunLabel,
+  checkinRunNote,
+  checkinSendLine,
+  checkinSortLine,
+} from "../../lib/checkin.ts";
 import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import own from "./CheckinView.module.css";
@@ -53,8 +66,47 @@ export const CheckinView = () => {
     }
   };
 
-  const groups = checkinGroups(preview?.items ?? []);
+  /**
+   * Switch one source on or off. Saved on the server, so it holds for the timer and for every
+   * device, and the list is read again because a source that is off is not read at all.
+   */
+  const setSource = async (kind: CheckinItem["kind"], on: boolean): Promise<void> => {
+    setError("");
+    try {
+      await api.setCheckinSources({ [kind]: on });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      refreshStatus();
+      refreshPreview();
+    }
+  };
+
+  /**
+   * "Draft a reply" on one mail. The server writes it with the local model from the sender,
+   * subject and Gmail's preview, and queues it like any draft: it is read and approved in the
+   * AgentSpine thread, and nothing is sent from here.
+   */
+  const [drafting, setDrafting] = useState("");
+  const draftReply = async (key: string): Promise<void> => {
+    setDrafting(key);
+    setNote("");
+    setError("");
+    try {
+      setNote((await api.draftCheckinReply(checkinMessageId(key))).message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDrafting("");
+      refreshPreview();
+    }
+  };
+
+  const sorting = status?.sortMode === "on";
+  const sortLine = checkinSortLine(status?.sortMode);
+  const groups = checkinGroups(preview?.items ?? []).map((g) => (g.kind === "mail" ? { ...g, items: checkinMailOrder(g.items, preview?.buckets) } : g));
   const off = status?.mode === "off";
+  const offLine = checkinOffLine(checkinOffKinds(status?.sources));
 
   return (
     <div className={styles.page}>
@@ -88,6 +140,8 @@ export const CheckinView = () => {
       </div>
 
       {status && <div className={styles.snippet}>{checkinModeLine(status.mode, status.intervalHours)}</div>}
+      {offLine && <div className={styles.snippet}>{offLine}</div>}
+      {sortLine && <div className={styles.snippet}>{sortLine}</div>}
       {note && <div className={styles.snippet}>{note}</div>}
       {error && <div className={styles.error}>{error}</div>}
       {preview && preview.errors.length > 0 && <div className={styles.error}>Couldn&apos;t read everything: {preview.errors.join("; ")}</div>}
@@ -116,7 +170,21 @@ export const CheckinView = () => {
             <div className={own.row} key={i.key}>
               <span className={own.who}>{i.title}</span>
               <span className={own.detail}>{i.detail}</span>
+              {i.kind === "mail" && checkinBucketLine(preview?.buckets?.[i.key]) && (
+                <span className={`${own.bucket} ${preview?.buckets?.[i.key]?.bucket === "urgent" ? own.urgent : ""}`}>{checkinBucketLine(preview?.buckets?.[i.key])}</span>
+              )}
               {i.fresh && i.triggers && <span className={own.fresh}>new</span>}
+              {sorting && i.kind === "mail" && (
+                <button
+                  className={styles.button}
+                  disabled={drafting !== ""}
+                  onClick={() => void draftReply(i.key)}
+                  title="Writes a reply for you to read and approve. Nothing is sent."
+                  type="button"
+                >
+                  {drafting === i.key ? "Drafting…" : "Draft a reply"}
+                </button>
+              )}
             </div>
           ))}
         </section>
@@ -131,6 +199,19 @@ export const CheckinView = () => {
               <span className={own.who}>{checkinRunLabel(r)}</span>
               <span className={own.detail}>{r.title || `${r.total} found`}</span>
             </div>
+          ))}
+        </section>
+      )}
+
+      {status && (
+        <section>
+          <div className={own.section}>What it looks at</div>
+          {CHECKIN_SOURCES.map((src) => (
+            <label className={own.source} key={src.kind}>
+              <input checked={status.sources?.[src.kind] !== false} onChange={(e) => void setSource(src.kind, e.target.checked)} type="checkbox" />
+              <span className={own.who}>{src.label}</span>
+              <span className={own.detail}>{src.hint}</span>
+            </label>
           ))}
         </section>
       )}

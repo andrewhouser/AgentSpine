@@ -10,6 +10,10 @@ struct ProjectsView: View {
     @State private var loading = false
     @State private var newName = ""
     @State private var prompt: Prompt?
+    #if os(macOS)
+    /// The project whose screen is showing in the Mac's pane. Nil is the list.
+    @State private var open: Project?
+    #endif
 
     /// Create, rename and delete share one `.alert`: two alert modifiers on one view do not
     /// both fire reliably (the same trap as the Conversations rename/delete pair).
@@ -41,17 +45,7 @@ struct ProjectsView: View {
                 ErrorNotice(message: error) { Task { await load() } }
             }
             ForEach(projects) { project in
-                NavigationLink {
-                    ProjectDetailView(projectID: project.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(project.name)
-                        if let chunks = project.chunks {
-                            Text("\(chunks) indexed chunk\(chunks == 1 ? "" : "s")")
-                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
-                        }
-                    }
-                }
+                projectLink(project)
                 .swipeActions(edge: .trailing) {
                     Button("Delete", role: .destructive) { prompt = .delete(project) }
                 }
@@ -104,9 +98,71 @@ struct ProjectsView: View {
                 EmptyView()
             }
         }
+        #if os(macOS)
+        .navigationDestination(item: $open) { project in
+            ProjectDetailView(projectID: project.id, onDeleted: { removed(project.id) })
+        }
+        #endif
         .refreshable { await load() }
         .task { await load() }
         .overlay { if loading && projects.isEmpty { ProgressView() } }
+    }
+
+    private func projectLabel(_ project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(project.name)
+            if let chunks = project.chunks {
+                Text("\(chunks) indexed chunk\(chunks == 1 ? "" : "s")")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textDim)
+            }
+        }
+    }
+
+    /// One row that opens a project.
+    ///
+    /// On the Mac the list owns which project is open (`open`), so deleting that project from its
+    /// own Settings tab can close the pane: before, the pane stayed on the project that was gone
+    /// and the list behind it still named it, with no pull-to-refresh on a Mac to clear either.
+    /// The phone keeps a plain link, because its screen may sit inside the system's own More
+    /// list, which has no SwiftUI stack for `navigationDestination` to attach to.
+    @ViewBuilder
+    private func projectLink(_ project: Project) -> some View {
+        #if os(macOS)
+        Button {
+            open = project
+        } label: {
+            HStack {
+                projectLabel(project)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Spine.Palette.textFaint)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Rename…") {
+                newName = project.name
+                prompt = .rename(project)
+            }
+            Button("Delete…", role: .destructive) { prompt = .delete(project) }
+        }
+        #else
+        NavigationLink {
+            ProjectDetailView(projectID: project.id, onDeleted: { removed(project.id) })
+        } label: {
+            projectLabel(project)
+        }
+        #endif
+    }
+
+    /// A project was deleted from its own screen: drop its row now, and on the Mac leave its pane.
+    private func removed(_ id: Int) {
+        projects.removeAll { $0.id == id }
+        #if os(macOS)
+        if open?.id == id { open = nil }
+        #endif
     }
 
     private func create() async {
@@ -134,7 +190,7 @@ struct ProjectsView: View {
     private func delete(_ project: Project) async {
         do {
             try await APIClient.shared.deleteProject(project.id)
-            projects.removeAll { $0.id == project.id }
+            removed(project.id)
         } catch {
             self.error = error.localizedDescription
         }
@@ -164,6 +220,9 @@ private enum ProjectTab: String, CaseIterable, Identifiable {
 
 struct ProjectDetailView: View {
     let projectID: Int
+    /// Told when this project has been deleted from here, so the list can drop its row and, on
+    /// the Mac, close this pane. Nil where nothing is listening.
+    var onDeleted: (() -> Void)? = nil
     @State private var detail: ProjectDetail?
     @State private var error: String?
     @State private var name = ""
@@ -389,7 +448,13 @@ struct ProjectDetailView: View {
     private func deleteProject() async {
         do {
             try await APIClient.shared.deleteProject(projectID)
+            onDeleted?()
+            #if os(macOS)
+            // The list closes the pane itself (see `ProjectsView.removed`); with nobody listening, fall back.
+            if onDeleted == nil { dismiss() }
+            #else
             dismiss()
+            #endif
         } catch {
             self.error = error.localizedDescription
         }

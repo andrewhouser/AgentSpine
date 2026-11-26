@@ -11,6 +11,7 @@ const KIND_LABELS: [string, string][] = [
   ["anniversary", "Anniversaries"],
   ["bill", "Bills"],
   ["appointment", "Appointments"],
+  ["booking", "Bookings (calls and gigs)"],
   ["flight", "Flights"],
   ["recurring", "Recurring events"],
 ];

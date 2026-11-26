@@ -165,6 +165,22 @@ Nothing below has been done. In order:
 Each week after that: render the new dated flyer in djlive, add its occurrences to
 `instagram-plan.json`, upload the image, seed again, approve.
 
+## A carousel kit for a gig (files only)
+
+`npm run carousel -- <facts.json>` (`src/carousel/`, section 14 U10 of the plan) draws a set of
+1080 by 1350 slides for one gig from a fixed template and writes a caption, into
+`drafts/carousel/<date>-<title>/`: `slide-01.jpg` onwards, `caption.txt`, `kit.json` and a
+`README.txt`. `--plan` prints the slides and caption without drawing, and
+`src/carousel/example-gig.json` is a facts file to copy (title, date, venue and line-up are
+required; city, doors, price, link, tagline, handle and tags are optional). Code chooses every
+slide, size and word, so the same facts give the same kit; there is no model in it.
+
+It is not part of the queue and it does not touch `src/instagram/`. A queue row is one image on
+one surface, and publishing a carousel would be a different call in `api.ts`, which needs its
+own recorded decision. So the kit is for you to post by hand. If you want only the cover in the
+queue, add `slide-01.jpg` and the caption to your kit's `instagram-posts.json` and plan, host
+it and seed as in the setup steps above; it arrives as a pending row you approve like any other.
+
 ## Commands
 
 ```

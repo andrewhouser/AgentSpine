@@ -43,6 +43,11 @@ struct MacSidebar: View {
         VStack(spacing: 0) {
             header
             List(selection: $selection) {
+                // Fixed at the top, above the threads: where the window opens.
+                Label(MacSection.today.title, systemImage: MacSection.today.symbol)
+                    .badge(TodayStore.shared.screen?.count ?? 0)
+                    .help(MacSection.today.hint)
+                    .tag(MacSidebarItem.section(.today))
                 Section("Threads") { threadRows }
             }
             .listStyle(.sidebar)

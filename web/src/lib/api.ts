@@ -15,18 +15,23 @@ import type {
   BuildDiff,
   ChatMessage,
   CheckinPreview,
+  CheckinReply,
   CheckinResult,
+  CheckinSources,
   CheckinStatus,
   Client,
+  ClientCommitments,
   CloseoutPlan,
   CloseoutPreview,
   CloseoutSaved,
   CloseoutState,
   CloudUsage,
+  CommitmentTask,
   Confirmation,
   Conversation,
   DictationStatus,
   Headsup,
+  HeadsupDateEdit,
   HeadsupDates,
   HeadsupPrefs,
   HeadsupPreview,
@@ -52,9 +57,11 @@ import type {
   Project,
   ProjectSource,
   PromotionProposal,
+  ProspectPaste,
   Recipe,
   RetentionRule,
   Run,
+  RunbookSaved,
   SavedFile,
   Schedule,
   ScheduleVersion,
@@ -67,6 +74,7 @@ import type {
   Task,
   Thread,
   TimeSummary,
+  Today,
   VisionStatus,
   VoiceStatus,
   WakeResult,
@@ -159,6 +167,8 @@ export const api = {
       { path },
     ),
   // --- tasks, files, clients, search (the personal-assistant surface) ---
+  /** Paste a list of prospects, one "name, site" a line. Lines it could not read come back with the reason. */
+  addProspects: (text: string) => post<ProspectPaste>("/api/clients/prospects", { text }),
   addTask: (fields: { due?: string; kind?: "followup" | "task"; notes?: string; projectId?: number; title: string; waitingOn?: string }) =>
     post<Task>("/api/tasks", fields),
   /** Keep a job's change, or queue its earlier text for approval. */
@@ -193,6 +203,8 @@ export const api = {
     }),
   askMeetingChat: (id: number, question: string) =>
     post<ChatMessage>(`/api/meetings/${id}/chat`, { question }),
+  /** Audit one prospect's website and keep the summary. Answers when the audit is done, which takes a few seconds. */
+  auditClient: (id: number) => post<{ client: Client; file: string }>(`/api/clients/${id}/audit`, {}),
   /**
    * Ask for notes on what was just said. Returns as soon as generation starts — the answer
    * lands on the meeting stream about five seconds later.
@@ -200,6 +212,8 @@ export const api = {
   /** The diff for one build — see src/builds.ts. */
   buildDiff: (runId: number) => request<BuildDiff>(`/api/builds/${runId}/diff`),
   checkinStatus: () => request<CheckinStatus>("/api/checkin"),
+  /** The reviewed commitments in a client's project, each with the task made from it. */
+  clientCommitments: (id: number) => request<ClientCommitments>(`/api/clients/${id}/commitments`),
   /** Cloud tokens against the caps (src/cloud-cap.ts). Read-only. */
   cloudUsage: () => request<CloudUsage>("/api/cloud-usage"),
 
@@ -222,7 +236,6 @@ export const api = {
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
-
   deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
   /**
@@ -239,9 +252,12 @@ export const api = {
     }),
 
   dictationStatus: () => request<DictationStatus>("/api/dictate"),
-
   dismissMeetingQuestion: (id: number) => post<{ ok: boolean }>(`/api/study/questions/${id}/dismiss`),
+  // "Draft a reply" on one unread mail (section 14, U7). Queues a draft to read; sends nothing.
+  draftCheckinReply: (messageId: string) => post<CheckinReply>(`/api/checkin/mail/${encodeURIComponent(messageId)}/reply`),
 
+  /** Ask for a draft of first outreach to one prospect. It arrives in a new thread as an approval; nothing is sent. */
+  draftOutreach: (id: number) => post<{ conversationId: number; runId: number }>(`/api/clients/${id}/outreach`, {}),
   /** Re-run extraction. Returns as soon as it has started; the event stream reports the end. */
   extractMeeting: (id: number) => post<{ meetingId: number; started: boolean }>(`/api/meetings/${id}/extract`),
 
@@ -329,7 +345,6 @@ export const api = {
   listBuilds: (limit = 40) => request<Build[]>(`/api/builds?limit=${limit}`),
 
   listClients: () => request<Client[]>("/api/clients"),
-
   /**
    * The approval queue. With no `state` the server answers the hundred most recent of any
    * state, which is what the Approvals view wants; `"done"` asks for every resolved
@@ -359,33 +374,36 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
+
   listFiles: () => request<SavedFile[]>("/api/files"),
 
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
+
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
+
   listMemories: (query?: string) =>
     request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
-
   listProjects: () => request<Project[]>("/api/projects"),
-
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
+  /** Prospects only, in the order to look at them (ranked by the server over each one's site audit). */
+  listProspects: () => request<Client[]>("/api/clients/prospects"),
 
   listRecipes: () => request<Recipe[]>("/api/recipes"),
 
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
+
   listSchedules: () => request<Schedule[]>("/api/schedules"),
 
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
   /** One utterance said to an assistant that is already listening. */
   listStyles: () => request<StylesState>("/api/styles"),
+
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
-
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
-
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
   markConversationRead: (id: number) => post<{ ok: boolean }>(`/api/conversations/${id}/read`),
 
@@ -402,12 +420,12 @@ export const api = {
 
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
+
   /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
 
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
-
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
 
   /**
@@ -416,6 +434,9 @@ export const api = {
    */
   meetingQuestions: (id: number) =>
     post<{ pairs: number; questions: MeetingQuestion[]; saved: number }>(`/api/meetings/${id}/questions`),
+
+  /** Write a draft runbook from the recording. A 409 carries the reason nothing was written. */
+  meetingRunbook: (id: number) => post<RunbookSaved>(`/api/meetings/${id}/runbook`),
 
   /** Every meeting tag in use, with counts. */
   meetingTags: () => request<{ count: number; tag: string }[]>("/api/meetings/tags"),
@@ -442,6 +463,7 @@ export const api = {
   /** How the briefs would change. Writes nothing. */
   previewMeetingCloseout: (id: number, plan: CloseoutPlan) =>
     request<CloseoutPreview>(`/api/meetings/${id}/closeout/preview`, { body: JSON.stringify(plan), method: "POST" }),
+
   project: (id: number) =>
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,
@@ -449,48 +471,47 @@ export const api = {
 
   reindexProject: (id: number, force = false) =>
     post<{ result: IngestResult }>(`/api/projects/${id}/sources/reindex`, { force }),
-
   rejectConfirmation: (id: number, reason: string) =>
     post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/reject`, { reason }),
 
   rejectStyleProposal: (name: string) => request<{ name: string; removed: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}`, { method: "DELETE" }),
+
   removeProjectSource: (projectId: number, sourceId: number) =>
     request<{ ok: boolean }>(`/api/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
 
   renameConversation: (id: number, title: string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
-
   /** Re-make the final transcript from kept audio; `speakers` pins the head count (omit to detect). */
   reprocessMeeting: (id: number, speakers?: number) =>
     post<{ started: boolean }>(`/api/meetings/${id}/reprocess`, speakers ? { speakers } : {}),
 
   researchHeadsup: (id: number) => post<{ cards: number; error?: string; status: string }>(`/api/headsups/${id}/research`),
+
   /** Queue a job's earlier text for approval. It changes nothing by itself. */
   restoreScheduleVersion: (id: number, versionId: number) =>
     post<{ confirmationId: number; message: string }>(`/api/schedules/${id}/versions/${versionId}/restore`),
 
   retention: () => request<RetentionRule[]>("/api/retention"),
-
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
    * empty answer counts as forgotten. A 503 means the model gave no usable grade; the card is
    * untouched and retrying is safe.
    */
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
+
   run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runCheckin: () => post<CheckinResult>("/api/checkin/run"),
-
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
 
   runSchedule: (id: number) => post<unknown>(`/api/schedules/${id}/run`),
+
   /** Save the close-out, all of it or none. */
   saveMeetingCloseout: (id: number, plan: CloseoutPlan & { keepTranscript: boolean }) =>
     request<CloseoutSaved>(`/api/meetings/${id}/closeout`, { body: JSON.stringify(plan), method: "POST" }),
 
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
     post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
-
   saveStyle: (name: string, body: { appliesTo: StyleAppliesTo; note: string }) =>
     request<WritingStyle>(`/api/styles/${encodeURIComponent(name)}`, { body: JSON.stringify(body), method: "PUT" }),
 
@@ -498,6 +519,7 @@ export const api = {
   scheduleVersions: (id: number) => request<{ versions: ScheduleVersion[] }>(`/api/schedules/${id}/versions`),
 
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
+
   /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */
   searchKnowledge: (q: string, opts: { kind?: string; project?: number } = {}) => {
     const params = new URLSearchParams({ q });
@@ -511,9 +533,10 @@ export const api = {
       attachmentIds,
       task,
     }),
-
   /** "Something I wish I'd been told", stored as a preference memory. */
   sendOutboxWish: (text: string) => post<{ remembered: boolean }>("/api/outbox/wish", { text }),
+
+  setCheckinSources: (sources: Partial<CheckinSources>) => post<{ sources: CheckinSources }>("/api/checkin/sources", sources),
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
@@ -558,10 +581,10 @@ export const api = {
   },
 
   starRun: (runId: number, starred: boolean) => post<{ ok: boolean }>(`/api/runs/${runId}/star`, { starred }),
+
   startDictation: () => post<{ device: string }>("/api/dictate/start"),
   startMeeting: (device: string, projectId: null | number, title?: string) =>
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
-
   status: () =>
     request<{ cloud?: { configured: boolean; host: null | string; model: null | string }; inbox?: null | number; queue: { depth: number; running: boolean }; schedules: number }>("/api/status"),
 
@@ -575,14 +598,25 @@ export const api = {
   /** Cards due now, question only. `topic` narrows to one topic. */
   studyOverview: () => request<StudyOverview>("/api/study"),
 
+  /** Make a task from a commitment that was accepted earlier. Refused when it already has one. */
+  taskFromCommitment: (clientId: number, claimId: number) => post<CommitmentTask>(`/api/clients/${clientId}/commitments/${claimId}/task`),
+
   thread: (id: number) => request<Thread>(`/api/conversations/${id}`),
+
+  today: () => request<Today>("/api/today"),
+
+  todayLater: (key: string, undo = false) => post<Today>("/api/today/later", { key, undo }),
+
+  todayLaterClear: () => post<Today>("/api/today/later", { all: true, undo: true }),
+
+  todaySeen: () => post<Today>("/api/today/seen"),
 
   toggleSchedule: (id: number, enabled: boolean) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify({ enabled }), method: "PATCH" }),
 
+  updateHeadsupDate: (id: number, edit: HeadsupDateEdit) => patch<HeadsupDates & { withdrawn: number }>(`/api/headsups/dates/${id}`, edit),
   updateProject: (id: number, fields: { instructions?: string; instructionsFile?: null | string; name?: string; transcriptRetentionDays?: null | number }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
-
   /**
    * Change any of a schedule's name, task, schedule spec or enabled flag. Editing in place
    * keeps `last_run`, which delete-and-recreate would lose.
@@ -590,10 +624,8 @@ export const api = {
   /** Edit a named recipe. A 400 carries a message saying what to fix (too few steps, a name clash). */
   updateRecipe: (id: number, fields: { name?: string; steps?: string[]; when?: string }) =>
     patch<Recipe>(`/api/recipes/${id}`, fields),
-
   updateSchedule: (id: number, fields: { enabled?: boolean; name?: string; schedule?: string; task?: string }) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),
-
   updateTask: (id: number, fields: { due?: null | string; notes?: string; projectId?: null | number; status?: "done" | "dropped" | "open"; title?: string }) =>
     patch<Task>(`/api/tasks/${id}`, fields),
   /**
@@ -623,6 +655,7 @@ export const api = {
     nextAction?: string;
     nextActionDue?: string;
     note?: string;
+    site?: string;
     status?: string;
   }) => post<Client>("/api/clients", fields),
 

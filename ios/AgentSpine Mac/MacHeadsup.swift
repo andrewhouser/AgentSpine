@@ -20,6 +20,8 @@ struct MacHeadsupDates: View {
     @Environment(AppState.self) private var state
 
     @State private var dates = HeadsupDates(proposals: [], remembered: [])
+    /// The remembered date being corrected, when the editor is up.
+    @State private var editing: RememberedDate?
     @State private var loaded = false
     @State private var error: String?
 
@@ -59,6 +61,15 @@ struct MacHeadsupDates: View {
         }
         .background(Spine.Palette.bgSidebar)
         .task { await load() }
+        .sheet(item: $editing) { date in
+            RememberedDateEditor(date: date) { _ in
+                Task {
+                    await load()
+                    // A heads-up made from the old date may have been withdrawn: the list beside this shows them.
+                    await state.refreshHeadsups()
+                }
+            }
+        }
         // A date proposal is a confirmation, so the waiting count moving is the cue to look again.
         .onChange(of: state.headsupWaiting) { _, _ in Task { await load() } }
     }
@@ -106,7 +117,11 @@ struct MacHeadsupDates: View {
         .padding(.horizontal, Spine.Space.md)
         .padding(.vertical, Spine.Space.sm)
         .contentShape(Rectangle())
+        // A double-click edits, as it opens anything else in a Mac list; the menu has both.
+        .onTapGesture(count: 2) { editing = date }
+        .help("Double-click to edit")
         .contextMenu {
+            Button("Edit…") { editing = date }
             Button("Forget this date", role: .destructive) { Task { await forget(date) } }
         }
     }

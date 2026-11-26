@@ -27,7 +27,7 @@ import type { Policy } from "../types.ts";
 export type PolicyOverlay = {
   apps?: { allow?: string[] };
   autoExecute?: { dryRun?: boolean; irreversibleAlwaysConfirm?: boolean; reversible?: boolean };
-  browser?: { enabled?: boolean; navigateAllowlist?: string[] };
+  browser?: { enabled?: boolean; navigateAllowlist?: string[]; neverDomains?: string[] };
   budgets?: {
     perDay?: { default?: number; tools?: Record<string, number> };
     perRun?: { default?: number; tools?: Record<string, number> };
@@ -124,11 +124,15 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
     },
     browser: (() => {
       const nav = intersectNavigate(base.browser?.navigateAllowlist, overlay.browser?.navigateAllowlist);
+      const never = [...new Set([...(base.browser?.neverDomains ?? []), ...(overlay.browser?.neverDomains ?? [])])];
       return {
         // Once denied, always denied: the base may already carry the flag.
         ...(nav.denyAll || base.browser?.denyAll ? { denyAll: true } : {}),
         enabled: and(base.browser?.enabled, overlay.browser?.enabled),
         navigateAllowlist: nav.list,
+        // The one browser list that grows under an overlay: it refuses, so a project may add
+        // a site it must never touch and can never take one of yours away (section 12, D2).
+        ...(never.length ? { neverDomains: never } : {}),
       };
     })(),
     budgets: {

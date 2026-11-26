@@ -231,5 +231,67 @@ console.log("\nWHAT THE PUSH SAYS, AND WHAT IT LEAVES OUT");
   check("and is never held by the outbox, since it keeps quiet hours itself", outboxRules.GOVERNED_SOURCES.has("checkin"), false);
 }
 
+console.log("\nSOURCES YOU SWITCHED OFF (section 12 D1, Settings)");
+{
+  const prefs = await import("../src/checkin/prefs.ts");
+  const kinds = (r) => [...new Set(r.items.map((i) => i.kind))].sort();
+  // Counts every read, so "off" can be shown to mean "not read", not "read and thrown away".
+  const reads = { approvals: 0, events: 0, headsups: 0, mail: 0, tasks: 0 };
+  const full = { approvals: [{ id: 1, summary: "Send the invoice" }], events: [{ start: at(10).toISOString(), title: "Standup" }], headsups: [{ id: 2, kind: "birthday", subject: "Jordan's birthday" }], mail: [SAM], tasks: [{ due: at(9).toISOString(), id: 3, kind: "task", title: "Call the dentist" }] };
+  const counted = (switches) => ({
+    ...deps,
+    approvals: () => (reads.approvals++, world.approvals),
+    events: async () => (reads.events++, world.events),
+    headsups: () => (reads.headsups++, world.headsups),
+    mail: async () => (reads.mail++, world.mail),
+    sources: () => switches,
+    tasks: () => (reads.tasks++, world.tasks),
+  });
+  const zero = () => Object.keys(reads).forEach((k) => (reads[k] = 0));
+
+  prefs.resetSourcesForTests();
+  check("nothing stored reads as everything on", prefs.sourceSwitches(), { approval: true, calendar: true, headsup: true, mail: true, task: true });
+  check("deps without the setting read everything, as before", kinds(await collect(at(8), (reset(full), deps))), ["approval", "calendar", "headsup", "mail", "task"]);
+
+  reset(full);
+  zero();
+  const noCal = await collect(at(8), counted({ ...prefs.ALL_ON, calendar: false, task: false }));
+  check("a source switched off is left out", kinds(noCal), ["approval", "headsup", "mail"]);
+  check("... is not read at all", [reads.events, reads.tasks, reads.mail], [0, 0, 1]);
+  check("... and is named, in screen order", noCal.off, ["calendar", "task"]);
+
+  reset(full);
+  zero();
+  const noMail = counted({ ...prefs.ALL_ON, mail: false });
+  const p = await previewCheckin(at(8), noMail);
+  check("mail off: the preview makes no Gmail request", reads.mail, 0);
+  check("... lists the rest, says mail is off, and would send nothing", [kinds(p), p.off, p.wouldSend], [["approval", "calendar", "headsup", "task"], ["mail"], false]);
+  zero();
+  const r = await runCheckin(at(8), {}, noMail);
+  check("mail off: a check reads nothing and sends nothing", [r.status, sends.length, Object.values(reads).reduce((a, b) => a + b, 0)], ["nomail", 0, 0]);
+  check("... and leaves no row in the log to read as a working check-in", seen.listRuns().length, 0);
+  check("... Check now is the same: force does not override the setting", (await runCheckin(at(8), { force: true }, noMail)).status, "nomail");
+  check("mail back on: the message is still new, and goes", [(await runCheckin(at(8), {}, counted(prefs.ALL_ON))).status, sends.length], ["sent", 1]);
+
+  reset({ ...full, mailError: "503 from Gmail" });
+  check("a failing source that is off cannot fail the check", (await collect(at(8), { ...deps, sources: () => ({ ...prefs.ALL_ON, mail: false }) })).errors, []);
+
+  prefs.resetSourcesForTests();
+  check("setting one switch keeps the others", prefs.setSourceSwitches({ calendar: false }), { ok: true, sources: { approval: true, calendar: false, headsup: true, mail: true, task: true } });
+  check("... and it is stored", prefs.offKinds(prefs.sourceSwitches()), ["calendar"]);
+  check("... and can be switched back on", prefs.setSourceSwitches({ calendar: true }).sources.calendar, true);
+  check("an unknown source is refused", prefs.setSourceSwitches({ slack: false }).ok, false);
+  check("a value that is not a boolean is refused whole", [prefs.setSourceSwitches({ mail: "no", task: false }).ok, prefs.sourceSwitches().task], [false, true]);
+  check("an empty body is refused", prefs.setSourceSwitches({}).ok, false);
+  check("a list is refused", prefs.setSourceSwitches([false]).ok, false);
+  const { stateSet } = await import("../src/tools/state.ts").catch(() => ({}));
+  const { kvGet } = await import("../src/memory/store.ts");
+  if (stateSet) {
+    await stateSet.run({ key: "checkin:sources", value: '{"mail":false}' }, { policy: {}, runId: null });
+    check("state_set cannot reach the switches: its keys live under watch:", [prefs.sourceSwitches().mail, !!kvGet("watch:checkin:sources")], [true, true]);
+  }
+  prefs.resetSourcesForTests();
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

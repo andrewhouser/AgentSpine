@@ -1,0 +1,108 @@
+/* Today: the brief, then a few short sections of one-line rows that can each be answered. */
+.brief {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 12px 14px;
+}
+
+/* The third line is the one to act on, so it is the one that stands out. */
+.first {
+  font-weight: 600;
+}
+
+.section {
+  color: var(--text-faint);
+  font-size: 0.7188rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin: 18px 0 6px;
+  text-transform: uppercase;
+}
+
+.sectionHead {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.item {
+  border-bottom: 1px solid var(--border);
+}
+
+.row {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  padding: 6px 2px;
+}
+
+.item .row {
+  border-bottom: 0;
+}
+
+/* The row's text is one button, so the whole line opens the thing it names. */
+.rowMain {
+  align-items: baseline;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  font: inherit;
+  gap: 4px 10px;
+  min-width: 0;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.who {
+  flex: 0 1 auto;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowMain:hover .who {
+  text-decoration: underline;
+}
+
+.detail {
+  color: var(--text-dim);
+  font-size: 0.8438rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.urgent {
+  color: var(--warn, var(--accent));
+  font-size: 0.8438rem;
+  font-weight: 600;
+}
+
+.when {
+  color: var(--text-faint);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.7188rem;
+}
+
+/* The whole proposed action, under its row. Approve lives only in here. */
+.full {
+  padding: 2px 0 12px;
+}
+
+.laterLine {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  font-size: 0.8438rem;
+  gap: 10px;
+  margin-top: 18px;
+}

@@ -20,6 +20,7 @@ import * as ledger from "./ledger.ts";
 import { proposeKindsOff, quietKinds } from "./outcomes.ts";
 import { planOffers } from "./plan.ts";
 import type { Offer } from "./plan.ts";
+import { reconcileSequences, sweepSequences } from "./sequence.ts";
 import { getPrefs, isQuietNow } from "./prefs.ts";
 import { recordCalendarFailure } from "./telemetry.ts";
 import { MORNING_HOUR, MORNING_MINUTE, RETRY_AFTER_ERROR_MINUTES } from "./rules.ts";
@@ -79,7 +80,7 @@ export const describeOffer = (o: Offer): string => {
 };
 
 /** The notification category the app registered for each kind of Yes (ios PushManager). */
-const CATEGORY = { ack: "HEADSUP", research: "HEADSUP_RESEARCH", watch: "HEADSUP_WATCH" } as const;
+const CATEGORY = { ack: "HEADSUP", remind: "HEADSUP_REMIND", research: "HEADSUP_RESEARCH", watch: "HEADSUP_WATCH" } as const;
 
 /**
  * Lock-screen buttons, only when the push is about exactly ONE item. A button has to mean one
@@ -157,9 +158,13 @@ export const runMorningHeadsup = async (
   // A kind you keep passing on may earn a proposal to switch it off. Queued, never applied: it waits for you.
   proposeKindsOff(now, (k) => prefs.kinds[k] !== false);
   const quiet = quietKinds(now);
+  const candidates = scanEvents(events, now);
+  // A booking that moved or left the calendar has its unsent reminders withdrawn (sequence.ts).
+  // Only after a clean read of every calendar: a failed one looks like everything was cancelled.
+  if (deps.googleEnabled() && !fetched.errors.length) reconcileSequences(candidates, now);
   const plan = planOffers(
     // A kind you turned off is never offered. Watches already running are not affected.
-    scanEvents(events, now).filter((c) => prefs.kinds[c.kind] !== false),
+    candidates.filter((c) => prefs.kinds[c.kind] !== false),
     { get: ledger.getByKey, lead: (k) => prefs.leadDays[k] ?? [], muted: ledger.isMuted, quiet: (k) => quiet.has(k) },
     now,
     prefs.dailyCap,
@@ -193,6 +198,8 @@ export const runMorningHeadsup = async (
 
 /** Timer entry point. Logs, never throws. */
 export const sweepHeadsup = async (): Promise<void> => {
+  // Booking reminders ride this timer: they are due at their own times, not at the morning run's.
+  await sweepSequences();
   try {
     const r = await runMorningHeadsup();
     if (r.status === "sent") console.log(`[headsup] sent ${r.offered} heads-up${r.offered === 1 ? "" : "s"}`);

@@ -4,6 +4,7 @@ import type { Schedule, ScheduleVersion } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
+import { scheduleSkipLine } from "../../lib/today.ts";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { ScheduleForm } from "../ScheduleForm/ScheduleForm.tsx";
 import styles from "./SchedulesView.module.css";
@@ -156,6 +157,13 @@ export const SchedulesView = () => {
               <div className={styles.meta}>
                 last run {when(s.last_run)} · next {when(s.next_run)}
               </div>
+              {/* A run skipped for being too late (section 13, H6) is said here, so a brief that
+                  never arrived has an explanation where you would look for one. */}
+              {s.last_skip_at && (
+                <div className={styles.meta} title={`Skipped ${when(s.last_skip_at)}`}>
+                  {scheduleSkipLine(s.last_skip_slot ? when(s.last_skip_slot) : "", s.last_skip_reason ?? null)}
+                </div>
+              )}
               <div className={styles.actions}>
                 <button
                   className={styles.button}

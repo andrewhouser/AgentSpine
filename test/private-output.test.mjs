@@ -242,6 +242,35 @@ console.log("\nF7c. A THREAD THAT TOUCHED PRIVATE MATERIAL STAYS LOCAL");
   check("and is not marked", store.getConversation(c2).local_only ?? 0, 0);
 }
 
+console.log("\nH4. SEARCHING PAST RUNS DOES NOT CARRY A PRIVATE RUN'S TEXT TO THE CLOUD");
+{
+  // The transcript read in F7c is now in the full-text index over past runs, under a run recorded
+  // as private. An ordinary run that searches for it must be told only that something was held back.
+  const query = "zebra quarterly workplace";
+  const owner = store.searchPastRuns(query);
+  check("the owner's own search finds the private run by its tool text", owner.hits.some((h) => h.matched === "tool"), true);
+  check("every one of those runs is recorded as pinned", owner.hits.every((h) => store.getRun(h.id).private === 1), true);
+
+  const plain = store.createConversation("asks about the past", null);
+  reset();
+  nextCall = { action: "tool", args: { query }, tool: "find_past_output" };
+  const asked = await runTask("what did we say about the zebra plan", { conversationId: plain, tier: "deep" });
+  check("control: the searching run did use the cloud", cloudLog.length >= 2, true);
+  check("the cloud was sent the search's reply", cloudLog.some((b) => b.includes("in private work")), true);
+  check("and none of the private text", has(cloudLog), 0);
+  check("the searching run was never pinned", store.getRun(asked.runId).private, 0);
+  check("nor its thread", store.getConversation(plain).local_only ?? 0, 0);
+
+  // The same search from a thread that is already local-only gets the text, on the local model.
+  const local = store.createConversation("already local", null);
+  store.setConversationLocalOnly(local);
+  reset();
+  nextCall = { action: "tool", args: { query }, tool: "find_past_output" };
+  await runTask("what did we say about the zebra plan", { conversationId: local, tier: "deep" });
+  check("a pinned run sent nothing to the cloud", cloudLog.length, 0);
+  check("and was shown the private run's text", localLog.some((b) => b.includes("UNTRUSTED CONTENT from past runs") && b.includes(CANARY)), true);
+}
+
 for (const s of [localServer, cloudServer]) s.close();
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

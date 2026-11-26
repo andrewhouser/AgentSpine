@@ -19,6 +19,7 @@ import {
   LLM_TIMEOUT_MIN_MS,
   LLM_TIMEOUT_OVERHEAD_MS,
 } from "./config.ts";
+import { modelCall } from "./stall.ts";
 import { isStopRequested, StoppedError, stopSignal } from "./stop.ts";
 import { loopingReply } from "./reply-loop.ts";
 import { record as recordTiming } from "./timing.ts";
@@ -174,6 +175,12 @@ export interface ChatOpts {
    * so a retry or a tier fallback clears what the failed attempt had written.
    */
   onDelta?: (textSoFar: string) => void;
+  /**
+   * Let a local reasoning model think before it answers, for this one call (LP2, "local deep").
+   * Absent means off, which is what every call was before. Never sent to the cloud tier. The
+   * caller owns the larger `maxTokens` this needs: the thought is spent from the same cap.
+   */
+  thinking?: boolean;
 }
 
 /**
@@ -210,6 +217,38 @@ export const stripControlTokens = (text: string): string => text.replace(CONTROL
  * a 400, and gpt-4o has no chat template to configure.
  */
 const NO_THINKING = { chat_template_kwargs: { enable_thinking: false } };
+
+/**
+ * The same switch, on. Sent only for a call that asked for it (`ChatOpts.thinking`), which today
+ * is the plan step and the re-ask of a run sized `deep` that privacy keeps on the local model
+ * (PLAN-open-work section 10, LP2). Said explicitly rather than by leaving the kwarg out, so the
+ * request states what it wants whatever a template's default is.
+ */
+const THINKING = { chat_template_kwargs: { enable_thinking: true } };
+
+/**
+ * Drop a chain of thought that arrived inside the content.
+ *
+ * mlx-lm returns Qwen3.6's reasoning in its own `reasoning` field, and then this does nothing.
+ * But the smaller Qwen3 models write `<think>…</think>` straight into the content
+ * (docs/MODELS.md), and a server or template change could make the standard model do the same.
+ * A thought shown as the answer, or read by `readReply` as prose, is the failure LP1's parser
+ * cannot tell from a real reply, so it is removed here, at the one place every completion passes.
+ *
+ * An OPEN block (the stream so far, or a reply cut off mid-thought) yields "": nothing after an
+ * unclosed `<think>` is the answer yet. Only a block that opens the reply is treated as thought;
+ * the tag in the middle of prose is somebody writing about it.
+ */
+export const stripThinking = (text: string): string => {
+  let rest = text;
+  for (;;) {
+    const lead = rest.trimStart();
+    if (!lead.startsWith("<think>")) return rest === text ? text : lead;
+    const close = lead.indexOf("</think>");
+    if (close === -1) return "";
+    rest = lead.slice(close + "</think>".length);
+  }
+};
 
 const sameEndpoint = (a: string, b: string): boolean =>
   a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
@@ -261,6 +300,12 @@ export interface ChatReply {
    * still a loop.
    */
   looped: boolean;
+  /**
+   * What the server said this call read and wrote, when it said. The loop's token budget and
+   * its compaction threshold read these (PLAN-open-work section 10, LP3); null where a server
+   * reports no usage, and the reader then estimates from characters.
+   */
+  usage?: { completionTokens: null | number; promptTokens: null | number };
 }
 
 /** Our own finish reason for a stream we hung up on because it was looping. */
@@ -396,7 +441,7 @@ export const chatReply = async (
   client: OpenAI,
   model: string,
   messages: Msg[],
-  { maxTokens, onDelta, purpose, runId, step, temperature = 0.2, tier, timeoutMs }: ChatOpts = {},
+  { maxTokens, onDelta, purpose, runId, step, temperature = 0.2, thinking = false, tier, timeoutMs }: ChatOpts = {},
 ): Promise<ChatReply> => {
   const budgetMs = timeoutMs ?? timeoutForTokens(maxTokens);
   const isCloud = sameEndpoint(String(client.baseURL ?? ""), CLOUD_BASE_URL);
@@ -417,18 +462,21 @@ export const chatReply = async (
       tier: tier ?? null,
     });
 
+  // Tells the stall watchdog a call is in flight and what its own time limit is (src/stall.ts).
+  const callEnded = modelCall(runId, budgetMs);
   try {
     const params = {
       model,
       messages: foldSystemMessages(messages),
       temperature,
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
-      ...(isCloud ? {} : NO_THINKING),
+      ...(isCloud ? {} : thinking ? THINKING : NO_THINKING),
     };
     // A display callback must never be able to fail the model call it is watching.
     const report = (partial: string): void => {
       try {
-        onDelta?.(partial);
+        // A thinking call shows nothing until the thought has closed: see stripThinking.
+        onDelta?.(thinking ? stripThinking(partial) : partial);
       } catch (err) {
         console.warn(`[llm] stream listener failed: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -454,17 +502,25 @@ export const chatReply = async (
       if (typeof message?.reasoning === "string") {
         throw new LLMError(
           `${model} returned reasoning and no content — its max_tokens budget ` +
-            `(${maxTokens ?? "unset"}) ran out mid-thought. The endpoint is ignoring ` +
-            `chat_template_kwargs.enable_thinking=false.`,
+            `(${maxTokens ?? "unset"}) ran out mid-thought. ` +
+            // With thinking asked for, that is the cap being too small for the thought, and the
+            // caller's answer is to ask again without it (the agent loop does).
+            (thinking ? "Thinking was on for this call." : "The endpoint is ignoring chat_template_kwargs.enable_thinking=false."),
         );
       }
       throw new LLMError("unexpected response shape");
     }
     const finish = res.choices?.[0]?.finish_reason;
+    const answer = thinking ? stripThinking(text) : text;
     // The stream reader hangs up on a loop as it happens. A reply that was not streamed has
     // already cost its full length, but is still named for what it is.
-    const looped = finish === FINISH_LOOPED || loopingReply(`${text}\n`);
-    return { looped, text: stripControlTokens(text), truncated: !looped && finish === "length" };
+    const looped = finish === FINISH_LOOPED || loopingReply(`${answer}\n`);
+    return {
+      looped,
+      text: stripControlTokens(answer),
+      truncated: !looped && finish === "length",
+      usage: { completionTokens: res.usage?.completion_tokens ?? null, promptTokens: res.usage?.prompt_tokens ?? null },
+    };
   } catch (err) {
     // A failed call is time the user waited too, so it is recorded rather than dropped —
     // but only when the request itself failed. The two throws above have already timed
@@ -489,6 +545,8 @@ export const chatReply = async (
           : String(err),
       { retryable: isTransient(err), timedOut },
     );
+  } finally {
+    callEnded();
   }
 };
 

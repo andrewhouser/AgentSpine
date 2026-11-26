@@ -387,7 +387,7 @@ const main = [
   "",
   "    let pf = try dec.decode(HeadsupPrefs.self, from: load(CommandLine.arguments[11]))",
   '    check("preferences decode", pf.dailyCap == 2, "\\(pf.dailyCap)")',
-  '    check("kinds is a map of booleans", pf.kinds["bill"] == false && pf.kinds["birthday"] == true && pf.kinds.count == 6, "\\(pf.kinds)")',
+  '    check("kinds is a map of booleans", pf.kinds["bill"] == false && pf.kinds["birthday"] == true && pf.kinds["booking"] == true && pf.kinds.count == 7, "\\(pf.kinds)")',
   '    check("quiet hours are whole hours", pf.quietStartHour == 22 && pf.quietEndHour == 7, "\\(pf.quietStartHour)-\\(pf.quietEndHour)")',
   '    check("the floor is carried, read-only", pf.floorMinutes == 30, "\\(pf.floorMinutes)")',
   '    check("unavailable carries reasons as strings", (pf.unavailable.flights ?? "").contains("AERODATABOX_RAPIDAPI_KEY") && (pf.unavailable.drive ?? "").contains("TOMTOM_API_KEY"), "\\(pf.unavailable)")',

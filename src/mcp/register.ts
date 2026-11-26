@@ -15,6 +15,8 @@
  */
 import { McpClient } from "./client.ts";
 import type { McpToolInfo } from "./client.ts";
+import { clearToolLabels, mcpLabel, registerToolLabel } from "../plan.ts";
+import { everyString } from "../outbound.ts";
 import { clip } from "../stash.ts";
 import { registry, tools } from "../tools/index.ts";
 import type { ClassifiedAction, McpServerPolicy, Policy, PolicyDecision, Tool } from "../types.ts";
@@ -73,6 +75,9 @@ export const makeTool = (server: string, client: McpClient, info: McpToolInfo): 
       };
     },
     confirmWhenUnattended: !readOnly,
+    // Everything handed to an MCP server leaves this process for a third party, read-only
+    // tool or not, so every string in the arguments is outgoing text (src/outbound.ts).
+    outboundText: (args: any) => everyString(args),
     description:
       `[MCP server "${server}"${readOnly ? ", read-only" : ", asks for approval"}] ` +
       (oneLine(info.description, DESCRIPTION_MAX) || oneLine(info.annotations?.title, 80) || info.name),
@@ -86,6 +91,7 @@ export const makeTool = (server: string, client: McpClient, info: McpToolInfo): 
 
 /** Drop every MCP tool from the live registry, so a removed server or tool disappears on refresh. */
 const unregisterAll = (): void => {
+  clearToolLabels(PREFIX);
   for (let i = tools.length - 1; i >= 0; i--) {
     if (tools[i].name.startsWith(PREFIX)) {
       delete registry[tools[i].name];
@@ -102,6 +108,7 @@ const unregisterAll = (): void => {
 export const syncMcpTools = async (policy: Policy): Promise<string[]> => {
   const lines: string[] = [];
   const fresh: Tool[] = [];
+  const labels = new Map<string, string>();
   const servers = policy.mcp?.enabled ? Object.entries(policy.mcp.servers ?? {}) : [];
 
   for (const [server, s] of servers) {
@@ -114,7 +121,12 @@ export const syncMcpTools = async (policy: Policy): Promise<string[]> => {
       if (s.tokenEnv && !token) throw new Error(`${s.tokenEnv} is not set`);
       const client = new McpClient(server, s.url, token);
       const listed = (await client.listTools()).filter((t) => !s.tools || s.tools.includes(t.name));
-      for (const info of listed) fresh.push(makeTool(server, client, info));
+      for (const info of listed) {
+        const tool = makeTool(server, client, info);
+        fresh.push(tool);
+        // What the plan card calls a call to this tool: the server's title when it sent one.
+        labels.set(tool.name, mcpLabel(server, info.name, info.annotations?.title));
+      }
       lines.push(`${server}: ${listed.length} tool(s)`);
     } catch (err) {
       lines.push(`${server}: unavailable (${err instanceof Error ? err.message : String(err)})`);
@@ -128,6 +140,7 @@ export const syncMcpTools = async (policy: Policy): Promise<string[]> => {
     if (registry[t.name]) continue;
     tools.push(t);
     registry[t.name] = t;
+    registerToolLabel(t.name, labels.get(t.name) ?? "");
   }
   return lines;
 };

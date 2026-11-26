@@ -7,13 +7,21 @@
  * lands or none of it does: a half-finished close-out would leave a decision accepted but the one it replaced in force.
  *
  * No model is involved. Every change here is a person's act, which is what makes supersession safe to offer.
+ *
+ * An accepted commitment can also become a task (PLAN-open-work section 14, U6). That is one more tick on the
+ * same card and one more write in the same transaction, so the preview shows the task before it exists and a
+ * failed save leaves none behind. Nothing makes a task without that tick: extracted work items are mostly
+ * false positives, and a to-do list that fills itself is one nobody reads.
  */
+import { MEETING_SELF_NAMES } from "../config.ts";
 import { logDataEvent, rawDb } from "../memory/store.ts";
 import * as meetings from "../meetings/store.ts";
 import { getProject } from "../projects/store.ts";
 import * as briefs from "./briefs.ts";
 import { normalizeMeeting } from "./extract.ts";
 import * as k from "./store.ts";
+import { addTaskForClaim, dropDeadClaimLinks, getTask, taskForClaim } from "../tasks/store.ts";
+import type { TaskRow } from "../tasks/store.ts";
 
 /** Only these state something that a later meeting can change its mind about. */
 const REPLACEABLE: k.ClaimKind[] = ["decision", "status"];
@@ -28,6 +36,8 @@ export interface CloseoutClaimPlan {
   owner?: string;
   /** Earlier reviewed claims this one replaces. Only on an accepted claim. */
   replaces?: number[];
+  /** Also make a task from it. Only on an accepted commitment. */
+  task?: boolean;
   text?: string;
   topic?: string;
 }
@@ -44,7 +54,77 @@ export interface CloseoutCounts {
   left: number;
   rejected: number;
   replaced: number;
+  /** The tasks made from accepted commitments, as they were written. */
+  tasks: CommitmentTask[];
 }
+
+/** A task made from a commitment, in the words the screens show. */
+export interface CommitmentTask {
+  claimId: number;
+  clientName: null | string;
+  due: null | string;
+  id: number;
+  kind: "followup" | "task";
+  status: string;
+  title: string;
+  waitingOn: null | string;
+}
+
+/** Nine in the morning, local. A commitment records a day; a task nudges at a time, and midnight is the wrong one. */
+const DUE_HOUR = 9;
+
+/** A claim's due date as a task's due time: a bare day becomes 9am local on that day, anything else is kept if it parses. */
+export const taskDue = (due: null | string): null | string => {
+  if (!due) return null;
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(due.trim());
+  if (day) return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]), DUE_HOUR, 0, 0, 0).toISOString();
+  const t = Date.parse(due);
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+};
+
+/** Whether the owner is you: nobody named, "me", or a name listed in MEETING_SELF_NAMES. */
+export const isSelf = (owner: null | string | undefined): boolean => {
+  const name = String(owner ?? "").trim().toLowerCase();
+  return !name || MEETING_SELF_NAMES.includes(name);
+};
+
+/** The client a project belongs to, when exactly one way to read it exists: the first client filed under it. */
+const clientOfProject = (projectId: null | number): undefined | { id: number; name: string } =>
+  projectId == null
+    ? undefined
+    : (rawDb.prepare("SELECT id, name FROM clients WHERE project_id = ? ORDER BY id LIMIT 1").get(projectId) as undefined | { id: number; name: string });
+
+const describeTask = (t: TaskRow, claimId: number): CommitmentTask => ({
+  claimId,
+  clientName: t.client_id == null ? null : ((rawDb.prepare("SELECT name FROM clients WHERE id = ?").get(t.client_id) as undefined | { name: string })?.name ?? null),
+  due: t.due,
+  id: t.id,
+  kind: t.kind,
+  status: t.status,
+  title: t.title,
+  waitingOn: t.waiting_on,
+});
+
+/**
+ * Make the task for one reviewed commitment. Someone else's promise becomes a waiting-on task naming them,
+ * which is what the task list's nudge needs to say who you are waiting for.
+ */
+const taskFromCommitment = (claim: k.Claim, meetingTitle: string): CommitmentTask => {
+  if (claim.kind !== "commitment") throw new Error(`claim #${claim.id} is not a commitment, so it cannot become a task`);
+  if (claim.review_state !== "reviewed") throw new Error(`claim #${claim.id} has not been accepted`);
+  const mine = isSelf(claim.ownerName);
+  const client = clientOfProject(claim.project_id);
+  const id = addTaskForClaim(claim.id, {
+    clientId: client?.id ?? null,
+    due: taskDue(claim.due),
+    kind: mine ? "task" : "followup",
+    notes: `From a commitment in the meeting "${meetingTitle}"${claim.said_on ? ` on ${claim.said_on}` : ""} (claim #${claim.id}).`,
+    projectId: claim.project_id,
+    title: claim.text,
+    waitingOn: mine ? null : (claim.ownerName ?? null),
+  });
+  return describeTask(getTask(id)!, claim.id);
+};
 
 const refOf = (meetingId: number): string => `meeting:${meetingId}`;
 
@@ -71,6 +151,9 @@ export const closeoutState = (meetingId: number, projectId?: null | number) => {
     claims: proposedClaims(meetingId).map((c) => ({
       atMs: c.at_ms,
       canReplace: candidatesFor(c, meetingId, target).map((o) => ({ id: o.id, saidOn: o.said_on, text: o.text })),
+      // Only a commitment can become a task, and only once: the tick is offered where it can be honoured.
+      canTask: c.kind === "commitment" && !taskForClaim(c.id),
+      due: c.due,
       id: c.id,
       kind: c.kind,
       ownerName: c.ownerName ?? null,
@@ -98,6 +181,7 @@ export const parsePlan = (b: any): CloseoutPlan => {
       id: c.id,
       ...(typeof c.owner === "string" ? { owner: c.owner } : {}),
       replaces,
+      ...(c.task === true ? { task: true } : {}),
       ...(typeof c.text === "string" ? { text: c.text } : {}),
       ...(typeof c.topic === "string" ? { topic: c.topic } : {}),
     };
@@ -131,7 +215,8 @@ const applyPlan = (meetingId: number, plan: CloseoutPlan): CloseoutCounts => {
   }
 
   const open = new Map(proposedClaims(meetingId).map((c) => [c.id, c]));
-  const counts: CloseoutCounts = { accepted: 0, left: 0, rejected: 0, replaced: 0 };
+  const counts: CloseoutCounts = { accepted: 0, left: 0, rejected: 0, replaced: 0, tasks: [] };
+  dropDeadClaimLinks();
   const answered = new Set<number>();
   for (const c of plan.claims) {
     // Not open means another screen already answered it. Refusing is what makes a double tap harmless.
@@ -160,8 +245,12 @@ const applyPlan = (meetingId: number, plan: CloseoutPlan): CloseoutCounts => {
       k.supersede(older, c.id);
       counts.replaced++;
     }
+    // After the review, so the task carries the corrected words and owner, and after the filing above, so it
+    // lands in the project the meeting is going to.
+    if (c.task) counts.tasks.push(taskFromCommitment(k.getClaim(c.id)!, meeting.title?.trim() || `meeting #${meetingId}`));
   }
   for (const c of plan.claims) if (c.answer !== "accept" && c.replaces?.length) throw new Error("only an accepted claim can replace another");
+  for (const c of plan.claims) if (c.answer !== "accept" && c.task) throw new Error("only an accepted commitment can become a task");
   counts.left = open.size - answered.size;
   rawDb.exec("DELETE FROM kn_briefs");
   return counts;
@@ -225,11 +314,74 @@ export const closeMeeting = (meetingId: number, plan: CloseoutPlan): CloseoutCou
     logDataEvent(
       "meeting_closed_out",
       `meeting #${meetingId}`,
-      `${counts.accepted} accepted, ${counts.rejected} rejected, ${counts.replaced} replaced, ${counts.left} left for later`,
+      `${counts.accepted} accepted, ${counts.rejected} rejected, ${counts.replaced} replaced, ${counts.left} left for later, ${counts.tasks.length} made into tasks`,
     );
     rawDb.exec("COMMIT");
     const projectId = meetings.getMeeting(meetingId)?.project_id ?? null;
     return { ...counts, projectChanged: projectId !== was, projectId };
+  } catch (err) {
+    rawDb.exec("ROLLBACK");
+    throw err;
+  }
+};
+
+// --- a client's commitments (PLAN-open-work section 14, U6) ---
+
+export interface ClientCommitment {
+  claimId: number;
+  due: null | string;
+  overdue: boolean;
+  ownerName: null | string;
+  saidOn: null | string;
+  /** The task made from it, or null when nobody made one. */
+  task: CommitmentTask | null;
+  text: string;
+}
+
+/**
+ * The reviewed commitments still in force in a client's project, with the task made from each. Read-only, and
+ * only reviewed claims: an unreviewed one is counted, never listed, as in every brief. `today` is passed in so
+ * "overdue" is a comparison of two days and not a reading of the clock.
+ */
+export const clientCommitments = (clientId: number, today: string = new Date().toISOString().slice(0, 10)) => {
+  const client = rawDb.prepare("SELECT id, name, project_id FROM clients WHERE id = ?").get(clientId) as undefined | { id: number; name: string; project_id: null | number };
+  if (!client) return undefined;
+  dropDeadClaimLinks();
+  if (client.project_id == null) return { client: { id: client.id, name: client.name, projectId: null }, commitments: [] as ClientCommitment[], waitingForReview: 0 };
+  const inProject = (reviewState: k.ReviewState): k.Claim[] =>
+    k.listClaims({ kind: "commitment", limit: 500, reviewState, status: "active" }).filter((c) => c.project_id === client.project_id);
+  const commitments = inProject("reviewed")
+    .filter((c) => !c.sensitive)
+    .map((c): ClientCommitment => {
+      const t = taskForClaim(c.id);
+      return {
+        claimId: c.id,
+        due: c.due,
+        overdue: !!c.due && c.due.slice(0, 10) < today,
+        ownerName: c.ownerName ?? null,
+        saidOn: c.said_on,
+        task: t ? describeTask(t, c.id) : null,
+        text: c.text,
+      };
+    })
+    // Overdue first, then by due day, then undated: the order a person would work them in.
+    .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.claimId - b.claimId);
+  return { client: { id: client.id, name: client.name, projectId: client.project_id }, commitments, waitingForReview: inProject("proposed").length };
+};
+
+/** Make a task from a commitment that was accepted earlier, from the client's page. One transaction, like the close-out. */
+export const taskForReviewedCommitment = (claimId: number): CommitmentTask => {
+  const claim = k.getClaim(claimId);
+  if (!claim) throw new Error("no such claim");
+  if (claim.status !== "active") throw new Error(`claim #${claimId} is no longer in force`);
+  const meetingId = claim.source_kind === "meeting" ? Number(claim.source_ref.split(":")[1]) : NaN;
+  const title = Number.isInteger(meetingId) ? (meetings.getMeeting(meetingId)?.title?.trim() || `meeting #${meetingId}`) : claim.source_ref;
+  rawDb.exec("BEGIN IMMEDIATE");
+  try {
+    dropDeadClaimLinks();
+    const task = taskFromCommitment(claim, title);
+    rawDb.exec("COMMIT");
+    return task;
   } catch (err) {
     rawDb.exec("ROLLBACK");
     throw err;

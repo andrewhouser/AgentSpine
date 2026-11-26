@@ -336,6 +336,15 @@ struct ScheduleCard: View {
             .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
             .foregroundStyle(Spine.Palette.textFaint)
 
+            // A run skipped for being too late (section 13, H6), so a brief that never arrived
+            // has an explanation where you would look for one. The sentence is shared with the web.
+            if schedule.lastSkipAt != nil {
+                Text(TodayWords.scheduleSkipLine(slot: schedule.lastSkipSlot.map { when($0) } ?? "", reason: schedule.lastSkipReason))
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.warn)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // What it has actually been doing. `last_run` says a job ran; this says whether
             // it worked, which is the question that brings you to this screen. Each chip
             // opens the run in full — a watcher's output exists nowhere else.

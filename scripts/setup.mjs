@@ -20,6 +20,7 @@ const COPIES = [
   ["goals.example.md", "goals.md", "what the heartbeat works on. Empty tasks mean it does nothing."],
   ["profile.example.md", "profile.md", "standing facts about you, given to every run. Fill it in."],
   ["inbox-rules.example.md", "inbox-rules.md", "your own rules for the inbox cleanup watcher."],
+  ["watch-list.example.md", "watch-list.md", "the pages the weekly niche watch reads. Empty until you list some."],
 ];
 
 let made = 0;

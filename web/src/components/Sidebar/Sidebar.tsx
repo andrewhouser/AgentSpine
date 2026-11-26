@@ -43,9 +43,13 @@ interface SidebarProps {
   onSelectConversation: (id: number) => void;
   onSelectProject: (id: number) => void;
   onSelectView: (view: View) => void;
+  /** Open Today, the screen with no thread selected (section 14, U1). */
+  onToday: () => void;
   projects: Project[];
   status: Status;
   view: View;
+  /** "Waiting on you": the same number the tab title shows. */
+  waiting: number;
 }
 
 const COLLAPSE_KEY = "sidebar-nav-collapsed";
@@ -94,9 +98,11 @@ export const Sidebar = ({
   onSelectConversation,
   onSelectProject,
   onSelectView,
+  onToday,
   projects,
   status,
   view,
+  waiting,
 }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [moreOpen, setMoreOpen] = useState(readMoreOpen);
@@ -176,6 +182,21 @@ export const Sidebar = ({
 
     <button className={styles.newChat} onClick={onNewChat} type="button">
       <span className={styles.plus}>+</span> New conversation
+    </button>
+
+    <button
+      aria-current={view === "chat" && activeConversation === null ? "page" : undefined}
+      className={`${styles.today} ${view === "chat" && activeConversation === null ? styles.todayActive : ""}`}
+      onClick={onToday}
+      title="What is waiting on you, what is due, and what ran while you were away"
+      type="button"
+    >
+      Today
+      {waiting > 0 && (
+        <span aria-label={`${waiting} waiting on you`} className={styles.badge}>
+          {waiting}
+        </span>
+      )}
     </button>
 
     <div className={styles.scroll}>

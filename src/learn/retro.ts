@@ -8,14 +8,16 @@
  * a kind, or attach itself to different runs.
  *
  * Nothing here applies anything. A card is shown in the weekly review. Accepting a routine queues the same
- * disabled-job confirmation the proposer uses, which you then approve. Every other kind only records your
- * answer, including `code_change`, which has nothing to start until SC5 exists.
+ * disabled-job confirmation the proposer uses, which you then approve. Accepting a `code_change` queues a
+ * proposed change (SC5, src/change-proposals.ts): a second card, showing the whole task the builder would be
+ * handed, and only approving that one starts work. Every other kind only records your answer.
  *
  * Off unless `RETRO_ENABLED` is exactly "true", because N2's live eval has to come before any learner that
  * reads a trace is switched on. It lives apart from `outbox-review.ts` so that file's "no model" rule holds.
  */
-import { MAX_STEPS, RETRO_ENABLED } from "../config.ts";
+import { loadPolicy, MAX_STEPS, RETRO_ENABLED } from "../config.ts";
 import { tagUntrusted } from "../audit.ts";
+import { DEFAULT_TEST_PLAN, queueChangeProposal } from "../change-proposals.ts";
 import { isQuietNow } from "../headsup/prefs.ts";
 import { extractJson } from "../llm.ts";
 import { kvGet, kvSet, listSchedules, rawDb } from "../memory/store.ts";
@@ -470,7 +472,7 @@ export interface RetroAnswerResult {
 
 const ACCEPTED: Record<RetroKind, string> = {
   auto_approval: "Noted. Nothing was changed. You can apply it under Auto-approval proposals.",
-  code_change: "Noted. Nothing was changed, and no work has started.",
+  code_change: "Noted. Nothing was changed, and no work has started.", // replaced below when a proposal is queued
   memory_correction: "Noted. Nothing was changed.",
   missing_capability: "Noted. Nothing was changed.",
   recipe: "Noted. Nothing was changed. Next time you ask for it, you can tell me to save it as a recipe.",
@@ -479,9 +481,9 @@ const ACCEPTED: Record<RetroKind, string> = {
 
 /** Answer one open card. Null if it is not open, so a double tap cannot answer twice. */
 export const answerRetro = (id: number, answer: RetroAnswer, now: Date = new Date()): null | RetroAnswerResult => {
-  const row = rawDb.prepare("SELECT kind, run_ids, task FROM retro_proposals WHERE id = ? AND state = 'open'").get(id) as
+  const row = rawDb.prepare("SELECT kind, run_ids, task, title, why FROM retro_proposals WHERE id = ? AND state = 'open'").get(id) as
     | undefined
-    | { kind: RetroKind; run_ids: string; task: null | string };
+    | { kind: RetroKind; run_ids: string; task: null | string; title: string; why: string };
   if (!row) return null;
   const close = rawDb.prepare("UPDATE retro_proposals SET state = ?, decided = ?, task = NULL WHERE id = ? AND state = 'open'");
 
@@ -497,8 +499,32 @@ export const answerRetro = (id: number, answer: RetroAnswer, now: Date = new Dat
     const count = (JSON.parse(row.run_ids) as number[]).length;
     queued = queueIntentProposal({ count, key: taskKey(row.task), sample: row.task });
   }
+  // A code change becomes a proposal in the approval queue and nothing more (SC5). Saying yes
+  // here is yes to the idea; the card it queues shows the builder's whole task, and only
+  // approving that card starts any work.
+  let change: null | { id: number } | { problem: string } = null;
+  if (row.kind === "code_change") {
+    try {
+      change = queueChangeProposal(
+        { run_ids: JSON.parse(row.run_ids) as number[], test_plan: DEFAULT_TEST_PLAN, what: row.title, why: row.why.length >= 10 ? row.why : row.title },
+        loadPolicy(),
+      );
+    } catch (err) {
+      change = { problem: err instanceof Error ? err.message : String(err) };
+    }
+    if ("id" in change) queued = change.id;
+  }
   if (Number(close.run("accepted", now.toISOString(), id).changes) !== 1) return null;
   recordProposalOutcome(-id, "accepted", now);
+  if (change) {
+    return {
+      message:
+        "id" in change
+          ? "Queued as a proposed change. Approving that card starts the builder on its own branch; merging stays yours."
+          : `Noted. No work has started, because ${change.problem}`,
+      queued,
+    };
+  }
   if (row.kind === "routine") {
     return {
       message: queued == null ? "Noted. A card for this job is already waiting, or you turned it down before." : "Queued as a disabled job. Approve it to create it.",

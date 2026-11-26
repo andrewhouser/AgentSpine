@@ -9,11 +9,13 @@
  * ledger as the calendar, which means lead times, snooze, mute, the daily cap and quiet hours
  * all apply with no second code path to keep in step.
  */
-import { remember } from "../memory/rag.ts";
+import { forgetSeen } from "../checkin/store.ts";
+import { deleteMemory, remember } from "../memory/rag.ts";
 import * as store from "../memory/store.ts";
 import { rawDb } from "../memory/store.ts";
-import { findDateMentions, titleOf } from "./detect.ts";
+import { findDateMentions, normalizeWho, titleOf } from "./detect.ts";
 import type { DateMention, Occasion } from "./detect.ts";
+import { withdrawOpenForSource } from "./ledger.ts";
 import { classify } from "./rules.ts";
 import { daysBetween, localDate } from "./scan.ts";
 import type { ScanEvent } from "./scan.ts";
@@ -65,8 +67,55 @@ export const addDate = (d: { day: number; month: number; occasion: Occasion; who
   return Number(r.lastInsertRowid);
 };
 
-export const deleteDate = (id: number): boolean =>
-  Number(rawDb.prepare("DELETE FROM headsup_dates WHERE id = ?").run(id).changes) > 0;
+/**
+ * Cards already made from a remembered date, taken back because the date they state is no longer
+ * true (it was edited or forgotten). Withdrawn, not expired: an expired row keeps its dedupe key,
+ * and a name-only edit keeps the same key, so the corrected date would never be offered this
+ * year. The check-in's "seen" key for each goes with it, so nothing points at a card that is gone.
+ */
+const withdrawCards = (id: number): number => {
+  const ids = withdrawOpenForSource(`date:${id}`);
+  forgetSeen(ids.map((h) => `headsup:${h}`));
+  return ids.length;
+};
+
+/** Forget a date. Its open cards go with it: a reminder for a date you removed is the stale thing. */
+export const deleteDate = (id: number): boolean => {
+  const removed = Number(rawDb.prepare("DELETE FROM headsup_dates WHERE id = ?").run(id).changes) > 0;
+  if (removed) withdrawCards(id);
+  return removed;
+};
+
+const DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+export interface ParsedDate {
+  day: number;
+  month: number;
+  occasion: Occasion;
+  who: string;
+  year?: number;
+}
+
+/**
+ * The one reading of a date's fields, shared by the `date_remember` tool and the edit route, so a
+ * date cannot be edited into a shape the tool would have refused. `who` goes through the same
+ * person check as the chat detector, which is what stops either path storing arbitrary text.
+ */
+export const parseDateArgs = (a: any): { error: string } | ParsedDate => {
+  const occasion = a?.occasion === "anniversary" ? "anniversary" : a?.occasion === "birthday" ? "birthday" : null;
+  if (!occasion) return { error: 'occasion must be "birthday" or "anniversary".' };
+  const month = Number(a?.month);
+  const day = Number(a?.day);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return { error: "month must be 1 to 12." };
+  if (!Number.isInteger(day) || day < 1 || day > DAYS[month - 1]) return { error: `day ${day} is not a day of month ${month}.` };
+  const raw = String(a?.who ?? "").trim().slice(0, 60);
+  // "you two" is how the detector spells the anniversary of the two of you; anything else is
+  // run through the same person check, so the tool cannot be used to store arbitrary text.
+  const who = raw.toLowerCase() === "you two" ? "you two" : /^your /i.test(raw) ? normalizeWho(`my ${raw.slice(5)}`) : normalizeWho(raw);
+  if (!who) return { error: "who must be a person's name or a relation like 'my wife'." };
+  const year = Number(a?.year);
+  return { day, month, occasion, who, ...(Number.isInteger(year) && year > 1900 && year < 2200 ? { year } : {}) };
+};
 
 const MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -79,6 +128,49 @@ export const memorySentence = (d: { day: number; month: number; occasion: Occasi
   d.who === "you two"
     ? `Your ${d.occasion} is ${MONTH[d.month - 1]} ${d.day}.`
     : `${titleOf(d.who, d.occasion).replace(/ (Birthday|Anniversary)$/, (m) => m.toLowerCase())} is ${MONTH[d.month - 1]} ${d.day}.`;
+
+// --- editing --------------------------------------------------------------------------------
+
+export type UpdateResult = { error: string; ok: false; status: 400 | 404 | 409 } | { ok: true; row: DateRow; withdrawn: number };
+
+/**
+ * Change a remembered date from your own screen (PLAN-open-work section 3, H8). Not a model
+ * action, so it does not queue: the confirmation queue guards what the assistant proposes, and
+ * this is you correcting your own list. The fields are read exactly as `date_remember` reads them.
+ *
+ * What follows the edit:
+ *   - a change to who, the occasion or the day withdraws the open cards made from the old date
+ *     (see `withdrawCards`); the next scan offers the corrected date when it is within its lead
+ *     time. A change to the year alone touches no card, because no card states the year.
+ *   - the recallable sentence is replaced, so "when is Garrett's birthday?" stops answering with
+ *     the old day. Only the exact sentence this module wrote is removed, never one you wrote.
+ */
+export const updateDate = async (id: number, input: unknown): Promise<UpdateResult> => {
+  const old = rawDb.prepare("SELECT id, who, occasion, month, day, year, created FROM headsup_dates WHERE id = ?").get(id) as DateRow | undefined;
+  if (!old) return { error: "no such remembered date", ok: false, status: 404 };
+  const p = parseDateArgs(input);
+  if ("error" in p) return { error: p.error, ok: false, status: 400 };
+  const clash = rawDb
+    .prepare("SELECT id FROM headsup_dates WHERE who_key = ? AND occasion = ? AND month = ? AND day = ? AND id != ?")
+    .get(keyOf(p.who), p.occasion, p.month, p.day, id);
+  if (clash) return { error: `already remembered: ${describeDate(p)}.`, ok: false, status: 409 };
+
+  rawDb
+    .prepare("UPDATE headsup_dates SET who = ?, who_key = ?, occasion = ?, month = ?, day = ?, year = ? WHERE id = ?")
+    .run(p.who, keyOf(p.who), p.occasion, p.month, p.day, p.year ?? null, id);
+
+  const stated = old.who !== p.who || old.occasion !== p.occasion || old.month !== p.month || old.day !== p.day;
+  let withdrawn = 0;
+  if (stated) {
+    withdrawn = withdrawCards(id);
+    const stale = rawDb.prepare("SELECT id FROM memories WHERE kind = ? AND text = ?").all(DATE_KIND, memorySentence(old)) as unknown as { id: number }[];
+    for (const m of stale) deleteMemory(m.id);
+    // As on approval: the memory is a convenience for recall, and failing to write it must not undo the edit.
+    await remember(memorySentence(p), DATE_KIND, { origin: "date" }).catch(() => false);
+  }
+  const row = rawDb.prepare("SELECT id, who, occasion, month, day, year, created FROM headsup_dates WHERE id = ?").get(id) as unknown as DateRow;
+  return { ok: true, row, withdrawn };
+};
 
 // --- proposing from chat -------------------------------------------------------------------
 

@@ -193,6 +193,42 @@ export const AGENT_STEP_MAX_TOKENS = Number(env.AGENT_STEP_MAX_TOKENS ?? "4096")
 // model is overwhelmingly likely to reproduce the same failure.
 export const MAX_PARSE_FAILURES = Number(env.MAX_PARSE_FAILURES ?? "2");
 
+// --- Loop changes that wait on a measurement (PLAN-open-work section 10, LP2, LP3 and LP6) ---
+// Each is off until someone has timed it on the model host, because each changes what a 28 tok/s
+// model is asked to do on every step. Off means the loop and its prompt are byte-for-byte what
+// they were (test/prompt-snapshot.test.mjs holds the prompt to that).
+//
+// LP2, "local deep". A task sized `deep` whose run must stay on the local model (it read mail, a
+// file, a project) gets the standard model with thinking off, the same effort as an easy one.
+// With this on, the first step of such a run, the re-ask after an unreadable reply and the step
+// after a tool error run on the same endpoint with thinking on. No model switch, so no reload.
+export const LOCAL_DEEP_THINKING = (env.LOCAL_DEEP_THINKING ?? "false") === "true";
+// The completion cap for one of those calls. Larger than AGENT_STEP_MAX_TOKENS because the thought
+// is spent from the same cap as the answer: at 4,096 a long thought leaves no room to reply. At
+// LLM_BUDGET_TOK_PER_S this allows 576s, inside LLM_TIMEOUT_MAX_MS. A guess until measured.
+export const LOCAL_DEEP_MAX_TOKENS = Number(env.LOCAL_DEEP_MAX_TOKENS ?? "8192");
+// LP6. Every visible tool's description and schema sits in the prompt prefix (about 35,000
+// characters for the full registry). With this on, a run that can see many tools gets a short core
+// set in full and the rest as one line each, and asks for a tool's full entry by name
+// (src/tool-docs.ts). A small local model is the least reliable at extra protocol, which is why
+// this is a switch and not the default.
+export const TOOL_DOCS_ON_DEMAND = (env.TOOL_DOCS_ON_DEMAND ?? "false") === "true";
+// LP3. "steps" is the cap as it has always been: MAX_STEPS, or a unit's own. "tokens" spends the
+// same allowance as tokens generated and active wall-clock time instead (src/loop-budget.ts), so
+// ten cheap lookups cost less than ten long writes, and sets old tool results aside as stubs once
+// the context passes half the window below. Anything else reads as "steps".
+export const LOOP_BUDGET: "steps" | "tokens" = env.LOOP_BUDGET === "tokens" ? "tokens" : "steps";
+// What one step of the old cap is worth under LOOP_BUDGET=tokens. A run capped at 10 steps may
+// generate 12,000 tokens and work for 15 minutes; a subagent capped at 6 gets 7,200 and 9. Both
+// are starting points: 1,200 tokens is a long answer or a dozen tool calls, 90s is one slow step.
+export const RUN_TOKENS_PER_STEP = Number(env.RUN_TOKENS_PER_STEP ?? "1200");
+export const RUN_MS_PER_STEP = Number(env.RUN_MS_PER_STEP ?? "90000");
+// The context the loop plans around, in tokens. NOT the model's advertised window (Qwen3.6 claims
+// far more): it is what this host can prefill and attend over without a step turning into
+// minutes. Compaction starts at half of it, Hermes Agent's threshold (section 13, H5), and both
+// numbers are guesses to set from the model host.
+export const LOCAL_CONTEXT_TOKENS = Number(env.LOCAL_CONTEXT_TOKENS ?? "65536");
+
 // --- Active memory ---
 // How many stored memories are auto-recalled and injected before every run. Keep small;
 // each hit costs context on every step of the loop.
@@ -422,6 +458,17 @@ export const CHECKIN_MODE: "log" | "off" | "push" = env.CHECKIN_MODE === "log" |
  * lines. The list in the app and the CLI shows subjects either way: that stays local.
  */
 export const CHECKIN_PUSH_DETAIL: "senders" | "subjects" = env.CHECKIN_PUSH_DETAIL === "subjects" ? "subjects" : "senders";
+/**
+ * Inbox buckets (src/checkin/buckets.ts, PLAN-open-work section 14, U7). A local model, pinned
+ * private, gives each unread mail from a person one of three labels. It never decides whether
+ * a push is sent; that stays the check-in's code. Same rollout shape as the check-in:
+ *   "off" — the default. Nothing is read by a model. `npm run checkin sort` still previews.
+ *   "log" — it labels on the check-in's interval and records the labels, and shows none.
+ *   "on"  — the labels show on the Check-in screens.
+ * Anything else is read as "off". Do not go past "off" before the injection eval's live half
+ * (section 4, N2) has run with this surface in it.
+ */
+export const INBOX_SORT_MODE: "log" | "off" | "on" = env.INBOX_SORT_MODE === "log" || env.INBOX_SORT_MODE === "on" ? env.INBOX_SORT_MODE : "off";
 
 /**
  * Heads-up watches: a flight's status, and how long a drive will take. Each needs a key AND a
@@ -590,6 +637,11 @@ export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true"
 // it only records what it would have done (quiet hours, repeats, the daily cap) and delivers
 // everything as before. Turn it on after a week of `npm run digest` shows the numbers are right.
 export const OUTBOX_ENFORCE = (env.OUTBOX_ENFORCE ?? "false") === "true";
+// The check on text leaving the machine (src/outbound.ts, PLAN-open-work section 12, D3) always
+// RECORDS a match: a card number, a Social Security number, a credential. With this off, the
+// default, that is all it does. Turn it on after a fortnight of `npm run digest 336` shows the
+// false positives are ones you can live with; from then on a match denies the call.
+export const OUTBOUND_ENFORCE = (env.OUTBOUND_ENFORCE ?? "false") === "true";
 
 /**
  * The confirmation watchdog — the clock on the approval queue.
@@ -1134,3 +1186,34 @@ export const COMMAND_OUTPUT_CHARS = Number(env.COMMAND_OUTPUT_CHARS ?? "12000");
 // stop a clean `npm test` costing 12,000 characters, not to withhold a report. The rest is
 // kept behind a read_more ref either way.
 export const COMMAND_OUTPUT_PASS_CHARS = Number(env.COMMAND_OUTPUT_PASS_CHARS ?? "2000");
+
+// --- Chat goes ahead of background work (PLAN-open-work section 10, LP5) ---
+// Runs are serialized because the model host answers one request at a time, so a chat turn
+// that arrives during a scheduled job waits for the whole job. With this on, work a person is
+// waiting for (a chat turn, an approved action, `npm run do`) goes ahead of queued unattended
+// runs, and a running one parks at its next step boundary and resumes afterwards. Off by
+// default: parking costs the background run its cached prompt prefix, so it pays prefill again
+// when it resumes, and whether that trade is worth it has to be measured on the model host.
+// Only the exact string "true" turns it on. See src/queue.ts and src/turn-gate.ts.
+export const CHAT_FIRST = env.CHAT_FIRST === "true";
+
+// --- Stall watchdog for unattended runs (PLAN-open-work section 13, H6) ---
+// Runs are serialized, so a scheduled run that hangs holds up everything behind it. A run
+// nobody is watching is interrupted once it has shown no model or tool activity for this
+// long. Idle time, not wall clock: a run that is slow but working is left alone, and time
+// spent parked for a chat turn or waiting in the queue is not counted. 600 s is Hermes
+// Agent's number, not one measured here. 0 turns the watchdog off.
+export const STALL_IDLE_MS = Number(env.STALL_IDLE_MS ?? "600000");
+// A model call in flight is judged by its own timeout plus this margin, not by STALL_IDLE_MS:
+// LLM_TIMEOUT_MAX_MS is itself 600 s, and a call may not be called stalled before its own
+// clock has had the chance to fire.
+export const STALL_MODEL_MARGIN_MS = Number(env.STALL_MODEL_MARGIN_MS ?? "30000");
+// A tool call in flight is allowed the longest any tool may legitimately take, which is a
+// declared command's ceiling (COMMAND_MAX_TIMEOUT_MS), plus a minute.
+export const STALL_TOOL_MS = Number(env.STALL_TOOL_MS ?? String(COMMAND_MAX_TIMEOUT_MS + 60_000));
+// A stop takes effect between steps, so a tool that never returns never notices one. This
+// long after a stalled run was asked to stop, it is closed out as failed and the queue is
+// released without it, so one hung tool cannot hold every later job.
+export const STALL_GRACE_MS = Number(env.STALL_GRACE_MS ?? "60000");
+// How often the watchdog looks. Far finer than the thresholds it enforces.
+export const STALL_SWEEP_MS = Number(env.STALL_SWEEP_MS ?? "30000");

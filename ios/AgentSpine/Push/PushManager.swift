@@ -40,6 +40,8 @@ final class PushManager: NSObject {
         static let headsupResearch = "HEADSUP_RESEARCH"
         /// A heads-up about a flight or a drive, where "Yes" starts watching it.
         static let headsupWatch = "HEADSUP_WATCH"
+        /// A heads-up about a booking, where "Yes" sets up its reminders.
+        static let headsupRemind = "HEADSUP_REMIND"
     }
 
     private enum ActionID {
@@ -152,6 +154,16 @@ final class PushManager: NSObject {
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
+        let headsupRemind = UNNotificationCategory(
+            identifier: Category.headsupRemind,
+            actions: [
+                UNNotificationAction(identifier: ActionID.headsupYes, title: "Yes, set up reminders", options: []),
+                later,
+                never,
+            ],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
         let headsup = UNNotificationCategory(
             identifier: Category.headsup,
             actions: [
@@ -162,7 +174,7 @@ final class PushManager: NSObject {
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        UNUserNotificationCenter.current().setNotificationCategories([confirmation, run, headsup, headsupResearch, headsupWatch])
+        UNUserNotificationCenter.current().setNotificationCategories([confirmation, run, headsup, headsupResearch, headsupWatch, headsupRemind])
         refreshAuthorization()
     }
 
@@ -221,7 +233,8 @@ final class PushManager: NSObject {
             let result = try await APIClient.shared.registerDevice(
                 apnsToken: token,
                 environment: Self.environment,
-                name: Settings.shared.effectiveDeviceName
+                name: Settings.shared.effectiveDeviceName,
+                bundleID: Bundle.main.bundleIdentifier
             )
             registrationNote = "Registered as device #\(result.id) (\(result.environment))."
         } catch {
@@ -248,6 +261,7 @@ final class PushManager: NSObject {
         if let token = userInfo["headsupToken"] as? String, !token.isEmpty {
             do {
                 try await APIClient.shared.respondToHeadsup(id: id, answer: answer, token: token, baseURL: base)
+                await TodayStore.shared.load()
                 return
             } catch {
                 // Fall through to the dashboard-token path.
@@ -259,6 +273,7 @@ final class PushManager: NSObject {
         } catch {
             pendingDeepLink = .headsup
         }
+        await TodayStore.shared.load()
     }
 
     /// Approve or reject straight from the lock screen.
@@ -278,6 +293,8 @@ final class PushManager: NSObject {
                 try await APIClient.shared.respondToConfirmation(
                     id: id, approve: approve, approvalToken: approvalToken, baseURL: base
                 )
+                // An answer changes "waiting on you", so the icon's badge is read again.
+                await TodayStore.shared.load()
                 return
             } catch {
                 // Fall through: a token that has already been used — because you also tapped
@@ -301,6 +318,7 @@ final class PushManager: NSObject {
                 pendingDeepLink = .threads
             }
         }
+        await TodayStore.shared.load()
     }
 }
 

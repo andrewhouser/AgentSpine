@@ -61,6 +61,8 @@ export interface RouteResult {
   truncated: boolean;
   /** The reply was repeating itself and was stopped. See ChatReply in llm.ts. */
   looped: boolean;
+  /** Tokens the answering server reported for this call. See ChatReply in llm.ts. */
+  usage?: { completionTokens: null | number; promptTokens: null | number };
   via: "cloud" | "local";
 }
 
@@ -74,7 +76,7 @@ const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promis
   // knows which tier is actually being asked. On a fallback the caller's answer is stale,
   // and a timing row blaming `fast` for a call that `standard` served would make the one
   // table meant to settle arguments the source of a new one.
-  const { looped, text, truncated } = await chatReply(clientFor(config.baseUrl, config.apiKey), config.model, messages, {
+  const { looped, text, truncated, usage } = await chatReply(clientFor(config.baseUrl, config.apiKey), config.model, messages, {
     ...opts,
     tier: config.tier,
   });
@@ -88,7 +90,7 @@ const send = async (config: TierConfig, messages: Msg[], opts: ChatOpts): Promis
       console.warn(`[router] could not note which model served run ${opts.runId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  return { looped, model: config.model, text, tier: config.tier, truncated, via };
+  return { looped, model: config.model, text, tier: config.tier, truncated, usage, via };
 };
 
 /**

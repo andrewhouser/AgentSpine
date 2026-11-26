@@ -14,8 +14,9 @@
  * does not become trustworthy by being remembered. The header says so, and each tool
  * result is clipped hard: this is a recall, not a replay.
  */
+import { tagUntrusted } from "../audit.ts";
 import * as store from "../memory/store.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
 
 interface Args {
   run_id?: number;
@@ -178,32 +179,63 @@ interface FindArgs {
   query?: string;
 }
 
+/** How each place a match was found is said to the model. */
+const FOUND_IN: Record<store.RunMatch, string> = {
+  answer: "in the answer",
+  goal: "in the question",
+  title: "in the thread's title",
+  tool: "in what it looked up",
+};
+
 /**
- * `find_past_output` — search every earlier conversation for something it wrote or was asked.
+ * `find_past_output` — search every earlier run for something it wrote, was asked or looked up.
  *
  * `recall_output` needs a run id, which only exists in the background list of the CURRENT
  * thread. "What was that business plan from last week?" starts in a new thread with no id at
- * all; this is how it gets one.
+ * all; this is how it gets one. The search is the full-text index over each run's question,
+ * answer and tool results (`searchPastRuns` in src/memory/store.ts), with no model call.
+ *
+ * Privacy, and why this tool does not declare `privateOutput`: a run that touched private
+ * material (a project, mail, calendar, files, meetings, a memory that is not cloud-safe) is
+ * recorded as private, and its hits are returned only to a run that is ALREADY pinned local.
+ * Any other run is told how many matches were held back and nothing about them. Declaring
+ * `privateOutput` instead would be simpler and wrong in the other direction: every "what was that
+ * plan?" would pin the asking thread local for good, whether or not anything private came back,
+ * and `privateOutput` is decided from the arguments, before the results exist. Withholding is
+ * what the plan asks for ("searchable only by runs that are already pinned local"), and it means
+ * what this returns to an unpinned run is, by construction, text that was already free to leave.
+ *
+ * What comes back quotes old tool output and old answers, which were untrusted when they were
+ * fetched and do not become trustworthy by being remembered, so the listing is tagged untrusted.
  */
 export const findPastOutput: Tool = {
   name: "find_past_output",
   description:
-    "Search ALL earlier conversations for something you wrote or were asked — a plan, draft, " +
-    "list, decision — by keywords. Returns run #ids with a snippet; pass an id to recall_output " +
-    "for the full text. Set long_only to restrict to substantial outputs (plans, reports).",
+    "Search ALL earlier conversations and scheduled jobs for something you wrote, were asked or " +
+    "looked up — a plan, draft, list, decision, a page you read — by keywords (every word must " +
+    "match). Returns run #ids with a snippet; pass an id to recall_output for the full text. " +
+    "Set long_only to restrict to substantial outputs (plans, reports).",
   argsSchema: '{ "query": string, "long_only"?: boolean }',
   classify: (): ClassifiedAction => ({ reversibility: "reversible", target: "conversations", summary: "Search past conversations" }),
   checkPolicy: (_p: Policy): PolicyDecision => ({ allowed: true, reason: "local conversation history access" }),
-  run: async (a: FindArgs) => {
+  run: async (a: FindArgs, ctx?: ToolContext) => {
     const q = String(a?.query ?? "").trim();
     if (q.length < 2) return 'ERROR: find_past_output needs a "query".';
-    const rows = store.searchRuns(q, { limit: 8, minNoteChars: a?.long_only ? 800 : 0 });
-    if (!rows.length) return `Nothing in past conversations matches "${q}".`;
-    return rows
-      .map((r: any) => {
-        const note = oneLine(String(r.note ?? ""));
-        return `#${r.id} (${r.conversationTitle ?? "untitled"}, ${String(r.finished ?? "").slice(0, 10)}, ${note.length} chars) asked: "${clip(oneLine(String(r.task ?? "")), 80)}" -> ${clip(note, 140)}`;
-      })
-      .join("\n");
+    // Read from the ledger, where the pin is written the moment it happens (src/sensitivity.ts), and
+    // not from the in-memory set: importing that module here would close an import cycle through
+    // the tool registry. No run id, or a pin that failed to be written, reads as not pinned.
+    const local = ctx?.runId != null && store.runTreeIsPinned(ctx.runId);
+    const { hits, withheld } = store.searchPastRuns(q, { includePrivate: local, limit: 8, minNoteChars: a?.long_only ? 800 : 0 });
+    const held = withheld
+      ? `${withheld} more ${withheld === 1 ? "match is" : "matches are"} in private work (a project, or a run that read mail, calendar, files or meetings, ` +
+        "or one from before this was recorded) and cannot be shown in this conversation. Tell the user they can ask again inside that project or thread."
+      : "";
+    if (!hits.length) return [`Nothing in past runs matches "${q}".`, held].filter(Boolean).join("\n");
+    const lines = hits.map((r) => {
+      const where = r.scheduleName ? `scheduled job "${r.scheduleName}"` : (r.conversationTitle ?? (r.conversationId != null ? "untitled" : r.kind));
+      const chars = String(r.note ?? "").length;
+      return `#${r.id} (${where}, ${String(r.finished ?? "").slice(0, 10)}, ${chars} chars) asked: "${clip(oneLine(String(r.task ?? "")), 80)}" -> ${clip(r.snippet, 200)} [found ${FOUND_IN[r.matched]}]`;
+    });
+    return [tagUntrusted("past runs", lines.join("\n")), held].filter(Boolean).join("\n\n");
   },
 };

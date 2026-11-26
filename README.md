@@ -81,16 +81,50 @@ irreversible actions run without asking again. The allowlist, budgets and dry ru
 One exception: a job can't change the standing work itself. `schedule_create`, `_update` and
 `_delete` still queue from a scheduled run, and `recipe_save` is refused there, so a job that
 reads a hostile page can't schedule itself more jobs or write itself new instructions.
-A second exception, for the same reason: a browser click or form submit that reads as buying,
-paying or moving money (buy, order, checkout, pay, transfer, withdraw, subscribe) still asks
-from a scheduled run. A plain submit does not, so a job can still use a search box. The test
-reads the model's own description of the button, so one labelled "Continue" gets past it;
+A second exception, for the same reason: a browser click or form submit that reads as buying
+or paying (buy, order, checkout, pay, subscribe) still asks from a scheduled run. A plain
+submit does not, so a job can still use a search box. The test reads the model's own
+description of the button, so one labelled "Continue" gets past it;
 `BROWSER_MODE=headless` keeps scheduled jobs out of a signed-in Chrome altogether.
 A third: a scheduled job sends mail or a message without asking only to someone its own task
 text tells it to send to ("every Friday, email sam@example.com the numbers"). Any other
 recipient asks, because a job that has read a hostile email could otherwise post what it read
 to anyone. "Text me the brief" names nobody, so name the number or the contact, or have the
 job use `notify`.
+A fourth, from reading every tool with that same question (2026-11-26): `git_write` pushing,
+restoring or committing anywhere but a branch it made, a write to a build manifest
+(`package.json`, a `Podfile`), and deleting a study topic each ask from a scheduled run as
+they do in a chat. A test reads the tool sources, so a new irreversible tool fails until it
+either asks when unattended or is listed with the reason it does not.
+
+**A few things are refused, whoever approves.** The broker has a third tier beside "runs" and
+"asks": `forbidden`. A browser click or submit that reads as moving money between accounts
+(transfer, withdraw, wire, send money, cash out) or as trading (buy or sell shares, place a
+trade) is denied in a chat and in a schedule alike. No setting in `policy.json`, no trusted
+tool and no approval card lets it through, and it is never queued, because a card for
+"Transfer $500" is one tap from done. Buying goods is not on the list: that still asks. The
+test reads the model's description of the button, so it fails both ways: a bank that labels
+the button "Continue" passes it, and a file-sharing site's "Transfer" button is refused and
+is yours to click. For the sites where that matters, list them in
+`policy.json` under `"browser": { "neverDomains": ["yourbank.example", "yourbroker.example"] }`.
+The browser and `web_read` then refuse to open or act on them (subdomains included), by
+where the page is and not by what a button says, and a click or redirect that lands on one
+leaves it for a blank page. A project can add to that list and never remove from it.
+
+**It opens on Today.** With no thread selected, the web, the iPhone's first tab and the Mac's
+start pane show one screen of what is waiting: approvals (a row opens the whole proposed action
+and the Approve button is only there, never on the row or behind a swipe), tasks overdue or due
+today, open Heads-up offers, replies you have not read, and what your scheduled jobs did since
+you last pressed **Seen**: finished, failed, stalled or skipped. Three lines at the top say the
+same thing shorter: what ran, what is waiting, and what to do first, chosen by a fixed order in
+code (an approval within a day of expiring, then the task overdue longest, then the earliest
+thing due today). **Later** hides one item until six the next morning and does not move an
+approval's own expiry. Nothing on it asks the model anything; `GET /api/today` is a few
+queries (`src/today.ts`). One number, the threads that need you plus approvals that belong to
+no thread, is the web tab title, the iPhone icon badge and the Mac Dock badge; every push
+carries it, stacks by where it came from (approvals, heads-ups, check-ins, finished runs) when
+it has no thread to stack under, and names that source in its subtitle, which is the line the
+Watch shows under the title.
 
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the
@@ -247,6 +281,24 @@ The tier itself is untouched, and that distinction is the point: `runner`, `insp
 remaining use is narrow, mechanical and **opted into by a file someone wrote**. The failure
 was never "a 3B is bad" — it was handing one an open-ended turn with the entire tool registry
 and your profile in context, which no declared-tier caller does.
+
+### Loop switches that wait on a measurement
+
+Four things about the loop are built and switched off, because each changes what a 28 tok/s
+model is asked to do on every step and none has been timed on the model host yet. With all of
+them off the loop and its prompt are byte-for-byte what they were; `test/prompt-snapshot.test.mjs`
+holds the prompt to that, and fails until its snapshot is updated whenever the prompt's wording
+changes (`UPDATE_SNAPSHOT=1 node test/prompt-snapshot.test.mjs`).
+
+| `.env` | Default | What it does when on |
+|---|---|---|
+| `LOCAL_DEEP_THINKING=true` | off | A task sized `deep` that the local model has to serve (the run read mail, a file or a project, or there is no cloud tier) asks the model to think on its first step, on the re-ask after an unreadable reply, and on the step after a tool error. Same endpoint, no model switch. `LOCAL_DEEP_MAX_TOKENS` (8192) is the cap for those calls. A thought is never shown or read as the answer, and a thinking call that fails is asked again without it. The timing table lists these as `step-think` and `step-reask-think`. |
+| `TOOL_DOCS_ON_DEMAND=true` | off | A run that can see more than 16 tools gets a core set in full (`CORE_TOOLS` in `src/tool-docs.ts`) and the rest as a name and one line, and loads a full entry with `tool_docs`. Roughly halves the system prompt. Loading is not a permission: every call still goes through the broker. |
+| `LOOP_BUDGET=tokens` | `steps` | The step cap becomes an allowance: each step of the cap is worth `RUN_TOKENS_PER_STEP` (1200) generated tokens and `RUN_MS_PER_STEP` (90000) of working time, with a ceiling of three times the cap. Time parked so a chat turn could go first is not counted. Once the context passes half of `LOCAL_CONTEXT_TOKENS` (65536), old tool results are replaced by one-line stubs that `read_more` brings back. No model writes a summary. |
+
+To measure the fourth question, what a moved system prompt costs on the second turn of a
+thread, run `node bench/h1-prefix.mjs --runs 3` on a machine whose `.env` points at the model
+host. It sends only invented text and uses a throwaway database.
 
 ### Setting up the fast tier on the model host
 
@@ -589,6 +641,29 @@ Extraction is **local only** by construction: every call is `sensitivity: "priva
 default `LOCAL_MODEL` is a *Coder* fine-tune doing conversation analysis. Re-run any time from
 the meeting's **Re-run** button; a transcript cannot be re-recorded, an extraction is free.
 
+**A commitment can become a task.** In "Close out this meeting" (web, iPhone and Mac), an accepted
+commitment has an "Add as a task" tick. The task takes the commitment's words and due day (nine
+in the morning, local), the meeting's project and the client that project belongs to, and it
+remembers which commitment it came from. Someone else's promise becomes a waiting-on task naming
+them; yours, or one with no owner, is a plain task. `MEETING_SELF_NAMES` says which names are
+you. Nothing becomes a task without the tick, the preview lists the tasks before anything is
+saved, and the close-out still saves whole or not at all. One commitment makes one task.
+Deleting the meeting leaves the task and adds a line to its notes saying the commitment is gone.
+A client's card lists the reviewed commitments in its project with the task made from each, or
+an "Add as a task" button (`GET /api/clients/:id/commitments`).
+
+**A recording can become a runbook.** "Make a runbook" on a finished meeting (web, iPhone and
+Mac) has the local model write down the procedure the recording describes: a title, what it is
+for, what is needed first, numbered steps, a checklist and the questions left open. Every step
+must quote the recording, and code looks the quote up: a step whose quote is not in the
+transcript is dropped, and the file says how many were. The time and speaker beside each step
+come from the transcript, not from the model. The result is a Markdown **draft** on the Files
+page, in the meeting's project folder or `docs/`, with a first line saying a machine wrote it
+and nobody has checked it. It never overwrites an earlier one. If no step survives, nothing is
+written and it says why; an expired transcript says it expired. It is local only like the rest
+of meeting work, and writing it leaves an `export` row in the data audit with counts and no
+content. Not yet run against the real model.
+
 ### The sidecar — context while you are still in the room
 
 Beside the running transcript, three cards show what you already know about whatever is being
@@ -696,6 +771,42 @@ Ways to give it work:
 - **`goals.md`** — the standing goal read on every `tick`/`loop` heartbeat. Keep it
   idempotent (a task left there runs every tick). With no `goals.md` it does a harmless
   low-risk check-in.
+
+### A job that is late, hung, or in the way
+
+Three rules about scheduled work nobody is watching. The numbers are in code.
+
+**A slot the server slept through is skipped, not run late.** The scheduler used to fire
+every job whose time had passed, however long ago, so a 7am brief could arrive at noon after
+the Mini woke up. Now a slot missed by more than half the job's period is skipped and the job
+is armed for its next slot. The allowance is never under 2 minutes (the scheduler ticks once a
+minute, so a job one tick late is not late) and never over 2 hours (half of a daily job's
+period is 12 hours). An "every 8 hours" job keeps its own times instead of restarting the count
+from when the machine woke. A one-off reminder is never skipped, because a late reminder is
+better than none. Each skip is logged, and the job's row keeps the last one (`last_skip_at`,
+`last_skip_slot`, `last_skip_reason` in `GET /api/schedules`). One job can have its own limit:
+`PATCH /api/schedules/:id` with `{"catchup_minutes": 360}` allows six hours, `0` means always
+run however late (the old behaviour), and `null` goes back to the rule. The rule is
+`src/schedule-catchup.ts`.
+
+**A scheduled run that stops doing anything is interrupted.** Runs go one at a time, so a
+hung job used to hold up everything behind it, chat included. An unattended run (a schedule,
+a watcher, the heartbeat, and their helpers) with no model or tool activity for 10 minutes is
+asked to stop and ends as **failed** with a note beginning "Stalled:", and you get the same
+push a failed run sends. It measures idle time, not how long the run has taken: a model call
+or a tool still inside its own time limit is slow, not stalled, and time spent waiting in the
+queue does not count. A stop cannot reach a tool that never returns, so a minute later a run
+that still has not ended is closed out and the queue goes on without it. Chat turns are never
+interrupted this way; they have a Stop button and a person. `STALL_IDLE_MS=0` in `.env` turns
+it off. The watchdog is `src/stall.ts`.
+
+**A chat turn can go ahead of scheduled work (off by default).** With `CHAT_FIRST=true` in
+`.env`, anything a person is waiting for (a chat message, an approved action, `npm run do`)
+is taken before scheduled jobs that have not started, and a scheduled job that is running
+gives up the model at its next step, lets the chat turn answer, and then carries on. It is
+never cut off mid-step. The cost is that the model host keeps one prompt warm: the scheduled
+job pays its prefill again when it resumes. That is why it ships off until it has been timed
+on the model host. Scheduled jobs never go ahead of anything.
 
 ## Asking it to change itself
 
@@ -915,6 +1026,10 @@ src/                 the agent — no build step, two runtime dependencies
   judge.ts         cloud-preferring yes/no for the rare real judgment call
   spine.ts         heartbeat (once | loop)
   confirm.ts       human approval CLI for queued actions
+  protected-paths.ts  the gate files: an edit to one always waits for you, with its diff
+  area-map.md      the map of this codebase, trusted context for a run working in this repo
+  area-map.ts      reads that map; no tool may write it
+  change-proposals.ts  propose, then patch: a change to its own code starts as one card
   tools/
     mac-control.ts gated, templated AppleScript (no arbitrary scripts)
     web-search.ts  Tavily (primary) + browser/SearXNG fallback, UNTRUSTED-tagged
@@ -933,6 +1048,7 @@ src/                 the agent — no build step, two runtime dependencies
     weather-alerts.ts  weather_alerts — thresholds applied in code, not by the model
     git-status.ts  git_status — read-only branch/dirty/recent-commits
     git-write.ts   git_write — branch/add/commit/diff on its own branch; closed verb list
+    propose-change.ts  propose_change — ask to change AgentSpine's own code; chat only, starts on approval
     run-command.ts run_command / commands_list — run a command YOU declared, read the output
     command-output.ts  reduces a build log to the verdict and the first failure
     look-at-file.ts look_at_file — point the vision tier at an image on disk, e.g. a screenshot
@@ -1198,6 +1314,13 @@ npm run watcher state                 # what they've observed so far
 npm run watcher template              # the pattern, for writing your own
 ```
 
+`niche-watch` is the one starter that reads a file of yours: list up to five pages in
+`watch-list.md` (competitors, venues, promoters; start from `watch-list.example.md`) and it
+tells you each Monday what changed on them, as a report file with links and three suggested
+responses that are labelled as the assistant's own. No change, no push. The list is checked
+when you add the watcher: `https` only, nothing on a private network, and a line it cannot read
+stops the install.
+
 An unchanged run costs one tool call and two model turns, and pushes nothing. See
 [WATCHERS.md](docs/WATCHERS.md) for the template and the three ways watchers go wrong.
 
@@ -1255,6 +1378,39 @@ a list: what is waiting by kind, the notification a check now would send or why 
 It always shows subjects, since that page is yours and the push setting is about what leaves the
 machine. The numbers are in
 `src/checkin/rules.ts`, and what is left is in `docs/PLAN-open-work.md` section 12, D1.
+
+**What it looks at** on that screen (web, iPhone and Mac) has a switch for each source: mail from
+people, approvals, calendar, tasks and Heads-up. They are saved on the server, so they hold for the
+timer and for every device, and a source that is off is not read at all: with mail off there is no
+Gmail request. Mail is the only source that can start a notification, so switching it off silences
+the check-in; the screen says so, and a check then reads nothing and leaves no row in the log.
+Everything is on until you change it. No tool can reach these switches.
+
+**Inbox buckets (off by default).** With `INBOX_SORT_MODE` set, a local model gives each unread
+mail from a person one of three labels: urgent, reply today, for your information. It is kept
+apart from everything above on purpose. The check-in stays code only, and a label never starts,
+stops or changes a notification; it is something you see when you look. The model reads what the
+check-in already reads (sender, subject and Gmail's 300-character preview, never a body), one
+mail per call so a hostile mail can mislabel only itself, pinned to the local model, with the
+mail last in the prompt and marked untrusted. Its whole answer is two words from two fixed
+lists in `src/checkin/buckets.ts`; anything else is thrown away and the mail shows as
+"Unsorted", so a sender has nowhere to put words on your screen. The rollout is the check-in's:
+
+```bash
+npm run checkin sort        # preview: reads mail, asks the model, stores nothing. Works with the mode off.
+# INBOX_SORT_MODE=log       labels on the check-in's interval, records them, shows none
+npm run checkin sort log    # what it has recorded: read a week of this first
+# INBOX_SORT_MODE=on        the labels show on the Check-in screens, urgent first
+```
+
+With the mode `on`, each mail on the Check-in screen (web and Mac: a button; iPhone: swipe the
+row) has **Draft a reply**. Code picks the mail, addresses the reply to its sender and nobody
+else, sets the subject and looks up your writing style; the local model writes only the body,
+from the same sender, subject and preview, leaving a `[placeholder]` where it lacks a fact. The
+result goes through `draft` like any other, so it waits for you to read in full and nothing is
+sent. Nothing is drafted unless you ask for that one mail. Do not go past `off` until the
+injection eval's live half has run with this surface in it; the offline half is in
+`test/injection.test.mjs`.
 
 ## Reaching you, and approving from your phone
 
@@ -1477,7 +1633,9 @@ The `browser` tool drives real Chrome via `playwright-core` (no bundled-browser 
 Enable it in `policy.json` (`"browser": { "enabled": true }`) and optionally restrict
 domains with `navigateAllowlist` (`[]` = any). Navigation, reads, and typing auto-run;
 clicks that look like buy/submit/send/delete/pay — and all form submits — are queued for
-`npm run confirm`.
+`npm run confirm`. Clicks and submits that read as moving money or trading are refused
+outright, and `neverDomains` lists sites it must never open or act on (see "A few things are
+refused, whoever approves" near the top).
 
 ### Web search vs. page reading — use the right tool
 
@@ -1495,6 +1653,34 @@ The honest split, because public search engines serve a CAPTCHA to headless brow
 Idiomatic flow: `web_search` (Tavily) to find URLs → `browser` navigate/read (headless) to
 read them. Both feed the model UNTRUSTED-tagged text, clipped to a cap with the remainder
 kept for `read_more` — see "Long results" below.
+
+### A website audit — `site_audit` and `npm run audit`
+
+```bash
+npm run audit -- rivera-plumbing.example
+```
+
+or ask in a chat ("audit rivera-plumbing.example"). It loads the page once on a desktop screen
+and once at phone width and reports, most important first: whether it is served over HTTPS,
+whether a visitor can book or get in touch (a booking link, a phone or email link, a form), how
+it behaves on a phone (a viewport tag, sideways scrolling), how long the main content takes to
+appear and the page to finish loading, the page's weight and request count, images that are
+very large files or much larger than they are shown, and the title and description search
+results will use. Each finding has its number and a recommendation, and the report is saved
+under `data/site-audits/` and listed on the Files page. The thresholds are constants in
+`src/siteaudit/score.ts`, each tested at its boundary.
+
+It is **not Lighthouse**, which would be a third runtime dependency: these are one load's
+measurements from this machine against fixed thresholds, and the report says so. It only
+reports; nothing here can change a site.
+
+It is stricter than the other page tools in two ways. It always launches its own logged-out
+headless Chrome, whatever `BROWSER_MODE` says, so a stranger's site is never opened in a
+signed-in browser. And it refuses an address on a private network: the redirect chain is walked
+first with every hop's address checked, and every request the page then makes is checked by
+host before it leaves. Not closed: a host whose DNS answer changes between that check and
+Chrome's own lookup. It still needs `browser.enabled`, and it keeps `navigateAllowlist` and
+`neverDomains`, for the address given and for where the page ends up.
 
 ## The build loop — running what it wrote
 
@@ -1793,6 +1979,90 @@ diff is exactly the thing that gets waved through. All four are editable in the 
 for, and a code change is reviewable as a diff. Those four files change what runs, or what
 is trusted, with no diff anyone would see.
 
+A fifth file joined them on 2026-11-26: `src/area-map.md`, the map of this codebase described
+under "A map of its own code" below. It reaches a run as trusted context, so it is refused
+for the same reason `profile.md` is.
+
+### Its own gates always ask
+
+A builder that cannot write `policy.json` could still get the same result one step earlier:
+edit the broker so it stops asking, the pin so private text may leave, the approval code so a
+card approves itself, or the test that would have caught any of those. Those are ordinary
+`.ts` files in a writable folder, so until 2026-11-26 such an edit classified reversible and
+ran unasked.
+
+Nine files are now **protected**, listed in code in `src/protected-paths.ts` and pinned by
+`test/architecture.test.mjs`: `src/broker.ts`, `src/sensitivity.ts`, `src/confirmations.ts`,
+`src/learn/promote.ts`, `src/google/write.ts`, `src/instagram/api.ts`,
+`src/instagram/token.ts`, the list itself, and the architecture test. Not refused, as the
+control files are: changing the broker is real work, and a diff of it is something you can
+read. What changes is that an edit to one **always waits for you, with the diff on the card**:
+
+- The write tools classify it irreversible and `alwaysConfirm`, which the broker honours ahead
+  of every skip it has: `policy.autoApprove`, a user-directed request, a tool trusted in chat,
+  and a schedule's pre-approval. `irreversibleAlwaysConfirm: false` does not switch it off.
+- The tools check again themselves. A protected file is written only while your approval of
+  that card is being carried out, so a broker that forgot to ask still writes nothing.
+- The card records which version of the file its diff was made against. If the file changed
+  after the card was queued, approving it fails and says so, where it would otherwise have
+  replaced a fix made since with text approved before the fix existed.
+- A declared command or a project generator that changes one (a `lint --fix`, a formatter)
+  has that change put back when it finishes, and the change is queued as a card with its diff.
+  That includes your own hand edit, if you happen to make one while a long test command is
+  running in the same checkout: it is put back and waiting in the queue, one tap from applied.
+- `git_write` writes no content of its own, but `switch`, `stash` and `restore` swap a file
+  for a version git already holds. One of those that would change a protected file asks too.
+
+Only the files in the checkout the service runs from are protected. A second clone of the
+repo is just source, read as a diff before anyone merges it. And the list is a tripwire for
+the named files, not a proof: a change to `src/types.ts` or `src/runner.ts` can weaken a gate
+too, which is why the merge stays yours. Suite: `test/protected-paths.test.mjs`.
+
+### Changing itself: propose, then patch
+
+> *"The plan card shows 'Using acme_lookup' for my MCP tools. Fix that."*
+
+A change to AgentSpine's own code starts as one card in the approval queue and as nothing
+else. The `propose_change` tool writes it from a live chat: what will change, why, the files,
+how it will be checked, and the runs that showed the problem. Under those, word for word, is
+the task the builder will be handed, because that text becomes instructions an unwatched run
+follows, and a summary is not something you can judge.
+
+Approving starts the `builder` unit on a new `agentspine/…` branch in this checkout. The
+result is on the Builds page with its diff, and you get a notification when it ends. **Merging,
+pushing, `update.sh` and the restart stay yours**, so the service never restarts onto code you
+have not read. Approving the proposal approves none of the builder's own irreversible calls: a
+build manifest, a protected file or a push each still ask.
+
+What is refused, in code:
+
+- A proposal from anything but a live chat. A scheduled run or a helper that had just read a
+  hostile page could otherwise write the builder's instructions.
+- A file under `web/` or `ios/`. No declared command builds the Swift apps, and a UI change
+  has to land in all three clients, so a self-made one would break that rule.
+- A control file. No tool writes those, so proposing it would promise what cannot happen.
+- A proposal you rejected before, and a second copy of one still waiting.
+- Anything at all unless `policy.build` declares this checkout with `"gitWrite": true`.
+
+A proposal that names a protected file says so on the card, and each edit to that file asks
+again with its diff. The weekly retrospective's code-change cards feed the same queue:
+accepting one in the review queues a proposal (with "files not known yet", since no code was
+read to make it), and only approving that second card starts work.
+Suite: `test/self-change.test.mjs`.
+
+### A map of its own code
+
+Working in this repo, an editor's assistant starts from an area table: which folder holds
+what, and which design record to read before changing it. AgentSpine working on itself had no
+equivalent. `src/area-map.md` is that table, and the server gives it as **trusted** context to
+a run that is working inside this checkout: a project whose folder is here, or the builder
+started from an approved proposal. Every other run gets nothing, so its prompt is byte for
+byte what it was (prefill is the slow part on the model host).
+
+It is not a document. It is never indexed or retrieved, no tool may write it, and a declared
+command that changes it has the change put back. Edit it yourself, in an editor, when the
+layout of the code changes.
+
 ## Local files
 
 `read_file` and `list_dir` are confined to `policy.fs.readableDirs` (empty = no access,
@@ -1939,12 +2209,38 @@ does too; replies can be starred; **Context used** under a reply shows which mem
 documents and earlier turns it had. Idle threads are summarised into long-term memory by
 default (`CONVERSATION_SUMMARY_ENABLED=false` to stop).
 
+Both searches use one full-text index (SQLite FTS5, no model call) over what each run was asked,
+what it answered and what its tools returned, so a thread can be found by something it only read.
+Every word must match, as a prefix, so the box searches as you type. A match in the question ranks
+above one in the answer, and that above one in tool text; a thread whose title matches comes first;
+a scheduled job is found too but ranked lower, because it repeats itself daily (the Search page
+shows threads only; `GET /api/search?scope=all` adds scheduled jobs). Indexed text is capped (2,000
+characters a tool result) and follows retention: a pruned audit row, a pruned run and a deleted
+thread each leave the index. The Search page is you reading your own ledger and shows everything.
+The agent's tool is stricter: a run that touched private material (a project, mail, calendar,
+files, meetings) is recorded as private, and its matches are shown only to a run that is already
+pinned to the local model. Any other run is told how many matches were held back and nothing else.
+Runs from before this record existed count as private. After an update the server indexes older
+runs in the background, 200 at a time, and logs one line when it has finished.
+
 **Briefing and research** — a "Morning brief" schedule (weekdays 7:30am) is created once on first
 start; edit or delete it on the Schedules page. Every page `web_read` fetches is kept as a
 numbered source (`sources_list`, `source_read`), and the `researcher` unit writes cited reports.
 
 **Clients and time** — `client_upsert`, `client_list`, `time_log`, `time_report`; the Clients
 page. A client's dated next action also becomes a task.
+
+**Prospects** — the same list, before someone is a client. On the Clients page (web, iPhone and
+Mac) paste a list, one a line, as `name, website`. Each becomes a row with the status `new`
+(then `contacted`, `replied`, `pilot` or `not-a-fit`). **Audit** looks at that one website (see
+"A website audit" under Chrome control) and keeps only the finding ids and their numbers, never
+the page's own words. The list is then ranked by code: the findings' weights added up, most to
+talk about first, and the reasons shown under a name are that audit's top three findings. No
+model scores anyone. **Draft outreach** on one prospect starts an ordinary chat turn in a new
+thread, asking for one email through `draft` in your learned style, built from the name, the
+site and those findings; it arrives as an approval and nothing is sent. A line the paste could
+not read is reported with the reason and skipped (`src/clients/prospects.ts`,
+`test/prospects.test.mjs`).
 
 ## Saving files (`write_file`)
 
@@ -2139,6 +2435,21 @@ Drafts are unchanged otherwise: nothing is sent.
   count is made of would not exist. Deleting a conversation deletes its runs and so lowers the count.
 - The audit log in the `actions` table records every broker decision, kept for
   `RETENTION_DAYS` (default 90). Set `AUDIT_RETENTION_DAYS=0` to keep it indefinitely.
+- **A check on text leaving the machine (log-only until you switch it on).** Before a tool
+  sends text off the machine, the broker reads the arguments that tool declares as outgoing: a
+  draft's subject and body, a `mac_control` mail or message, a push, a search query, what the
+  browser types and the address it opens, an Instagram caption, and every string handed to an
+  MCP server. Three tests, in plain code: 13 to 19 digits that pass the payment-card (Luhn)
+  check, a US Social Security number written with its separators, and what the recipe filter
+  already treats as a secret (a key block, a value after a password or key label, a long
+  opaque string). By default a match is only recorded: the call goes ahead and the model is
+  told nothing. `npm run digest 336` lists a fortnight of matches by tool and kind, which is
+  where the false positives show (one number in ten passes the card check by chance, so order
+  and tracking numbers will appear). When you are content with that list, set
+  `OUTBOUND_ENFORCE=true` in `.env` and restart: a match then denies the call, before it can
+  run or reach an approval card, and the denial names the argument and the kind. The record
+  and the denial never hold the text itself. It does not judge meaning: health or money
+  matters written in ordinary words pass, and the local pin is what keeps those off the cloud.
 - Move any credential files (e.g. `client_secret_*.json`) out of this directory; they are
   gitignored but should not live in the project at all.
 

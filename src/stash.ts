@@ -116,6 +116,35 @@ export const clip = (ctx: ClipCtx, text: string): string => {
   );
 };
 
+/**
+ * Keep a whole tool result where `read_more` can reach it, for a caller that is about to take
+ * it out of the model's view (the loop's compaction, PLAN-open-work section 10, LP3).
+ *
+ * `clip` stashes what a tool never showed. This stashes what WAS shown and is being set aside,
+ * so offset 0 is the start of the result as the model first read it.
+ *
+ * Always stored as untrusted. The loop cannot tell which results a tool tagged, and the text it
+ * holds may be a page or a file with the tool's own UNTRUSTED header at the top. `read_more`
+ * hands it back in windows, and a window from the middle would arrive with no header at all,
+ * so every window gets one here. Tagging something this machine wrote costs a line; the other
+ * mistake is hostile text read as instructions.
+ *
+ * Returns the ref, or null when there is no run to scope it to (then nothing may be set aside).
+ */
+export const hold = (ctx: { runId: null | number; source: string; tool: string; window: number }, text: string): null | string => {
+  if (ctx.runId == null) return null;
+  const ref = newRef();
+  store.stashPut(ctx.runId, {
+    content: String(text ?? "").slice(0, STASH_MAX_CHARS),
+    ref,
+    shown: Math.max(1, Math.floor(ctx.window)),
+    source: ctx.source,
+    tool: ctx.tool,
+    untrusted: true,
+  });
+  return ref;
+};
+
 export interface ReadMoreResult {
   ok: boolean;
   text: string;

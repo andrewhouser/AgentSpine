@@ -48,7 +48,7 @@ import { api } from "../../lib/api.ts";
 import { ConfirmDialog } from "../ConfirmDialog/ConfirmDialog.tsx";
 import { ImportRecording } from "../ImportRecording/ImportRecording.tsx";
 import { ChatThread, MeetingChat } from "../MeetingChat/MeetingChat.tsx";
-import { MeetingCloseout } from "../MeetingCloseout/MeetingCloseout.tsx";
+import { MeetingCloseout, MeetingRunbook } from "../MeetingCloseout/MeetingCloseout.tsx";
 import { MeetingQuestions } from "../MeetingQuestions/MeetingQuestions.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
@@ -951,6 +951,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
                 }}
                 projects={projects}
               />
+              <MeetingRunbook key={`runbook-${m.id}`} meeting={m} />
               <MeetingQuestions
                 meetingId={m.id}
                 onChange={() => void load(m.id)}

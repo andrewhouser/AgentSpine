@@ -104,6 +104,16 @@ check("  and does not create a second row", (await call("GET", "/api/devices")).
 check("  it updates the environment", (await call("GET", "/api/devices")).json[0].environment, "production");
 check("  and the name", (await call("GET", "/api/devices")).json[0].name, "Renamed");
 
+console.log("\nWHICH APP — the bundle id is the APNs topic for that device (section 11)");
+check("a device that has not said which app it is has none", (await call("GET", "/api/devices")).json[0].bundleId, null);
+const named = await call("POST", "/api/devices", { body: { bundleId: "com.example.AgentSpine", environment: "production", name: "Renamed", token: DEVICE } });
+check("registering with a bundle id reports it back", named.json.bundleId, "com.example.AgentSpine");
+check("  and lists it", (await call("GET", "/api/devices")).json[0].bundleId, "com.example.AgentSpine");
+await call("POST", "/api/devices", { body: { environment: "production", name: "Renamed", token: DEVICE } });
+check("an older build that does not say keeps what was stored", (await call("GET", "/api/devices")).json[0].bundleId, "com.example.AgentSpine");
+await call("POST", "/api/devices", { body: { bundleId: "not a bundle id\r\nx: 1", environment: "production", token: DEVICE } });
+check("a value that is not a bundle id is ignored, not stored", (await call("GET", "/api/devices")).json[0].bundleId, "com.example.AgentSpine");
+
 console.log("\nBAD TOKENS — rejected at the door, not stored and discovered later");
 for (const [label, token] of [
   ["empty", ""],

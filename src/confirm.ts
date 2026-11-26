@@ -10,6 +10,7 @@
  * The optional reason on a reject is stored as a preference memory, so a similar proposal
  * later arrives with your past objection already in context. Skipping it is fine.
  */
+import { CHANGE_TOOL } from "./change-proposals.ts";
 import { approveConfirmation, expiredAt, rejectConfirmation } from "./confirmations.ts";
 import * as store from "./memory/store.ts";
 
@@ -43,6 +44,13 @@ switch (cmd) {
     // copy of "re-check policy, run, record" — the same three steps as approveConfirmation,
     // drifting independently — which meant a gate added to one approval route silently did
     // not apply to the other. The expiry window was the gate that exposed it.
+    // A proposed change to AgentSpine's own code starts a long build run when approved
+    // (src/change-proposals.ts). Started from here it would run inside this one-shot command,
+    // beside the dashboard's own queue, on a model host that serves one request at a time.
+    if (store.getConfirmation(Number(idArg))?.tool === CHANGE_TOOL) {
+      console.log(`#${idArg} is a proposed change to AgentSpine's own code. Approve it in the dashboard or the app, so the build runs in the service's queue.`);
+      break;
+    }
     const outcome = await approveConfirmation(Number(idArg), { resume: false });
     console.log(outcome.message);
     break;

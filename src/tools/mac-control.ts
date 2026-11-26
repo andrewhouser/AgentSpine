@@ -344,6 +344,15 @@ const runTool = async (args: Args): Promise<string> => {
 
 export const macControl: Tool = {
   name: "mac_control",
+  // Only the two sends leave the machine. Notes, reminders and events stay in your own apps.
+  outboundText: (a) =>
+    a?.action === "send_mail" || a?.action === "send_message"
+      ? [
+          { arg: "subject", text: String(a?.subject ?? "") },
+          { arg: "body", text: String(a?.body ?? "") },
+          { arg: "text", text: String(a?.text ?? "") },
+        ]
+      : [],
   description:
     "Act in the user's own Mac apps: Apple Mail, Messages, Calendar, Reminders and Notes. " +
     "send_mail sends a real email from their Mail account — when the user tells you to email someone, use this, " +

@@ -57,6 +57,12 @@ export const localDate = (iso: string, allDay: boolean): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
+/** The local time of day of an ISO timestamp as HHMM, with no colon because a key is split on them. */
+const localClock = (iso: string): string => {
+  const d = new Date(iso);
+  return `${pad(d.getHours())}${pad(d.getMinutes())}`;
+};
+
 /** Whole local days from `now`'s date to `date` (YYYY-MM-DD). DST-safe: counts dates, not 24h blocks. */
 export const daysBetween = (now: Date, date: string): number => {
   const [y, m, d] = date.split("-").map(Number);
@@ -115,7 +121,13 @@ export const scanEvents = (
       ...(amount ? { amount } : {}),
       daysUntil,
       // A series is one subject across all its dates. Anything else is that thing on that day.
-      dedupeKey: recurring ? `recurring:${e.recurringEventId}` : `${kind}:${e.id}:${date}`,
+      // A booking's key carries its start time too, so one moved to another hour the same day
+      // is a new offer and the reminders set for the old hour are withdrawn (sequence.ts).
+      dedupeKey: recurring
+        ? `recurring:${e.recurringEventId}`
+        : kind === "booking" && !e.allDay
+          ? `${kind}:${e.id}:${date}T${localClock(e.start)}`
+          : `${kind}:${e.id}:${date}`,
       // Time of day and place, never the date: the date advances every week by design, so
       // including it would make every instance of a weekly event look "changed".
       ...(flight ? { flightNumber: flight.display } : {}),

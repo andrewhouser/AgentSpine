@@ -70,6 +70,22 @@ Measured warm, with thinking off:
 So the tier argument below survives the swap: the 35B MoE is within ~25% of a dense 3B's
 throughput, and `standard` stays the right default.
 
+### The one place thinking may be turned back on ("local deep")
+
+Built 2026-11-26, off by default (`LOCAL_DEEP_THINKING`), not yet measured on this host. A
+task sized `deep` whose run is pinned local is served by this model with thinking off, the
+same effort as an easy one. With the switch on, three calls of such a run send
+`"enable_thinking": true` and a larger cap (`LOCAL_DEEP_MAX_TOKENS`, 8192): the first step,
+the re-ask after an unreadable reply, and the step after a tool error. Everything else, and
+every short structured call, still sends `false`.
+
+What to measure before leaving it on: the seconds a `step-think` call adds over a `step` call
+in `npm run timing`, and whether the builder and multi-part chat tasks finish more often. Two
+things are handled in code and tested against a stand-in server (`test/local-deep.test.mjs`),
+not against 8080: a reply that is all `reasoning` and no `content` (the cap ran out mid-thought)
+is asked again with thinking off, and a `<think>…</think>` block that arrives inside the
+content is removed before the reply is parsed or streamed to the screen.
+
 ## Running them by hand (to try it)
 
 ```bash

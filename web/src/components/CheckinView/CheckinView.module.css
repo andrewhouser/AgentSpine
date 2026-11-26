@@ -68,3 +68,25 @@
   font-size: 0.7188rem;
   width: 9.5rem;
 }
+
+/* One source switch: the box, its name, and what it reads. A whole-row label, so the text toggles it too. */
+.source {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 7px 2px;
+}
+
+/* An inbox bucket beside a mail: our words for the label, never the sender's. */
+.bucket {
+  color: var(--text-dim);
+  flex: none;
+  font-size: 0.7813rem;
+}
+
+.urgent {
+  color: var(--warn);
+  font-weight: 600;
+}

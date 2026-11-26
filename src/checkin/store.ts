@@ -54,6 +54,15 @@ export const markSeen = (items: Pick<Item, "key" | "state">[], now: Date): void 
   for (const i of items) upsert.run(i.key, i.state, at, at);
 };
 
+/**
+ * Drop the memory of items that no longer exist (a Heads-up card withdrawn because its date was
+ * edited). The age prune would get them eventually; this keeps a key from outliving its item.
+ */
+export const forgetSeen = (keys: string[]): void => {
+  const del = rawDb.prepare("DELETE FROM checkin_seen WHERE key = ?");
+  for (const k of keys) del.run(k);
+};
+
 export interface RunRow {
   at: string;
   body: string;

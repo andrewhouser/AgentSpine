@@ -28,9 +28,10 @@ import type { NotifyOpts } from "../notify.ts";
 import { sentToday } from "../outbox.ts";
 import { PROACTIVE_DAILY_CAP } from "../outbox-rules.ts";
 import { listTasks } from "../tasks/store.ts";
+import { sourceSwitches } from "./prefs.ts";
 import { CALENDAR_HOURS, INTERVAL_HOURS, MAIL_MAX, MAIL_QUERY, PUSH_LIST_MAX, RETRY_AFTER_ERROR_MINUTES, TASK_DUE_DAYS } from "./rules.ts";
 import { collect } from "./sources.ts";
-import type { Item, SourceDeps } from "./sources.ts";
+import type { Item, ItemKind, SourceDeps } from "./sources.ts";
 import * as store from "./store.ts";
 
 export type CheckinMode = "log" | "off" | "push";
@@ -56,6 +57,7 @@ export const realDeps: CheckinDeps = {
   quiet: (now) => isQuietNow(now),
   send: (title, body, opts) => notify(title, body, opts),
   sentToday: (now) => sentToday(now),
+  sources: () => sourceSwitches(),
   tasks: () => listTasks({ dueWithinDays: TASK_DUE_DAYS }),
 };
 
@@ -65,6 +67,7 @@ export type CheckinStatus =
   | "early" // the interval has not passed
   | "error" // mail could not be read
   | "logged" // log mode: recorded what it would have sent
+  | "nomail" // mail is switched off in Settings, and nothing else can start a push
   | "nothing" // read everything, nothing new to say
   | "off"
   | "quiet"
@@ -122,9 +125,9 @@ export const composeNotification = (mail: Item[], rest: Item[], detail: PushDeta
 };
 
 /** Read everything and mark what is new. Writes nothing. */
-const look = async (now: Date, deps: CheckinDeps): Promise<{ errors: string[]; items: SeenItem[] }> => {
-  const { errors, items } = await collect(now, deps);
-  return { errors, items: items.map((i) => ({ ...i, fresh: store.isFresh(i) })) };
+const look = async (now: Date, deps: CheckinDeps): Promise<{ errors: string[]; items: SeenItem[]; off: ItemKind[] }> => {
+  const { errors, items, off } = await collect(now, deps);
+  return { errors, items: items.map((i) => ({ ...i, fresh: store.isFresh(i) })), off };
 };
 
 const mailFailed = (errors: string[]): boolean => errors.some((e) => e.startsWith("mail:"));
@@ -134,6 +137,8 @@ export interface CheckinPreview {
   errors: string[];
   items: SeenItem[];
   mode: CheckinMode;
+  /** Sources switched off in Settings, which were not read. With `mail` here no push is ever sent. */
+  off: ItemKind[];
   title: string;
   /** Whether a check right now would have something to send, before the gates below. */
   wouldSend: boolean;
@@ -146,12 +151,12 @@ export interface CheckinPreview {
  * sent, and it works with the mode switched off. This is rung 0 of the rollout.
  */
 export const previewCheckin = async (now: Date = new Date(), deps: CheckinDeps = realDeps): Promise<CheckinPreview> => {
-  const { errors, items } = await look(now, deps);
+  const { errors, items, off } = await look(now, deps);
   const mail = items.filter((i) => i.triggers && i.fresh);
   const { body, title } = mail.length ? composeNotification(mail, items.filter((i) => !i.triggers), deps.detail()) : { body: "", title: "" };
   const mode = deps.mode();
   const heldBy = mode === "off" ? "off" : deps.quiet(now) ? "quiet" : deps.sentToday(now) >= PROACTIVE_DAILY_CAP ? "cap" : null;
-  return { body, errors, heldBy, items, mode, title, wouldSend: mail.length > 0 };
+  return { body, errors, heldBy, items, mode, off, title, wouldSend: mail.length > 0 };
 };
 
 /**
@@ -163,6 +168,10 @@ export const runCheckin = async (now: Date = new Date(), opts: { force?: boolean
 
   const mode = deps.mode();
   if (mode === "off") return result("off");
+  // Mail is the only thing that can start a push. With it switched off there is nothing a check
+  // could send, so it reads nothing and leaves no row in the log: a timer that recorded "nothing
+  // new" every four hours would read as a check-in that is working.
+  if (deps.sources?.().mail === false) return result("nomail");
   // Before reading, so nothing is marked seen while you are asleep.
   if (deps.quiet(now)) return result("quiet");
   if (!opts.force) {

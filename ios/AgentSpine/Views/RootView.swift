@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Thirteen tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
+/// Seventeen tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
+/// The app opens on Today, the one screen that says what is waiting on you (section 14, U1).
 ///
 /// Approvals are not a tab: they are asked in the thread that wanted them, and a thread with a
 /// question waiting carries a blue dot. The Threads tab's badge counts those threads, because
@@ -11,7 +12,7 @@ struct RootView: View {
     @Environment(Settings.self) private var settings
     @Environment(PushManager.self) private var push
 
-    @State private var tab: AppTab = .threads
+    @State private var tab: AppTab = .today
     @State private var threadPath: [Int] = []
     @State private var showingWeeklyReview = false
     @Environment(\.scenePhase) private var scenePhase
@@ -55,6 +56,8 @@ struct RootView: View {
                 await state.refreshConversations()
                 push.refreshAuthorization()
                 if recovered { push.registerIfAuthorized() }
+                // Also puts the icon's badge right, whichever tab is showing.
+                await TodayStore.shared.load()
             }
         }
         .onChange(of: push.pendingDeepLink) { _, link in
@@ -101,6 +104,8 @@ struct RootView: View {
 
     private func badge(for tab: AppTab) -> Int {
         switch tab {
+        // Today has none: its count is the app icon's badge, and the same number again beside
+        // the Threads badge would be two badges saying one thing.
         case .threads: return state.waitingThreads
         case .headsup: return state.headsupWaiting
         default: return 0
@@ -121,6 +126,8 @@ struct RootView: View {
 
     @ViewBuilder private func content(for tab: AppTab) -> some View {
         switch tab {
+        // Its own stack, inside the view: Today is always in the bar, never under More.
+        case .today: TodayView(openTab: { self.tab = $0 })
         case .threads:
             NavigationStack(path: $threadPath) {
                 ConversationsView()

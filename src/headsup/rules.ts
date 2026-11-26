@@ -7,7 +7,7 @@
  * comes later and is small: wording the offer and doing the research once you say yes.
  */
 
-export type HeadsupKind = "anniversary" | "appointment" | "bill" | "birthday" | "flight" | "recurring";
+export type HeadsupKind = "anniversary" | "appointment" | "bill" | "birthday" | "booking" | "flight" | "recurring";
 
 /**
  * Days before the event at which each mention happens, largest first. `[10, 2]` means: a first
@@ -21,6 +21,9 @@ export const LEAD_DAYS: Record<HeadsupKind, number[]> = {
   appointment: [2, 0],
   bill: [5, 1, 0],
   birthday: [10, 2],
+  // Earlier than an appointment, because saying yes sets up a reminder two days before
+  // (BOOKING_REMINDERS below): a first mention at two days would arrive after that moment.
+  booking: [5, 3],
   flight: [3, 1],
   // One mention per series, then only when it changes. See scan.ts, not a lead-time list.
   recurring: [2],
@@ -32,6 +35,7 @@ export const KIND_PRIORITY: Record<HeadsupKind, number> = {
   anniversary: 2,
   bill: 1,
   birthday: 2,
+  booking: 2,
   flight: 0,
   recurring: 4,
 };
@@ -107,6 +111,28 @@ export const FIRST_LOOK_NOTIFY_DELAY_MINUTES = 30;
 /** The first "leave by" notice comes this long before the time to leave. */
 export const LEAVE_NOTICE_MINUTES = 60;
 
+// --- a booking's reminder sequence (PLAN-open-work section 14, U9) --------------------------
+
+/**
+ * The reminders a Yes on a booking sets up, for you. `minutesBefore` counts back from the
+ * start; the morning step has a clock time instead (below). `lateMinutes` is how long after
+ * its moment a step may still be sent: quiet hours, the daily limit or a server that was off
+ * can hold one, and a reminder that arrives after it is useful is worse than none. Two days
+ * out, half a day late still does its job. An hour out, half an hour late is the limit.
+ */
+export const BOOKING_REMINDERS = [
+  { id: "two-days", label: "Two days before", lateMinutes: 720, minutesBefore: 2880 },
+  { id: "morning", label: "That morning", lateMinutes: 180, minutesBefore: null },
+  { id: "hour", label: "An hour before", lateMinutes: 30, minutesBefore: 60 },
+] as const;
+/** "That morning" is this local time on the day: after quiet hours end and after the morning heads-up. */
+export const BOOKING_MORNING_HOUR = 7;
+export const BOOKING_MORNING_MINUTE = 30;
+/** No morning reminder when the booking starts sooner than this after it: the hour-before one covers it. */
+export const BOOKING_MORNING_MIN_GAP_MINUTES = 180;
+/** An all-day booking has no start time, so its two-days reminder is at this local hour two days before, and it has no hour-before one. */
+export const BOOKING_ALLDAY_HOUR = 9;
+
 // --- classification -----------------------------------------------------------------------
 
 /** `PAID` as a word, any case. Paid bills are ignored, so this runs before anything else. */
@@ -117,6 +143,14 @@ const ANNIVERSARY = /\banniversary\b/i;
 const FLIGHT = /\bflights?\b|✈/i;
 const BILL = /\b(bills?|due|payments?|rent|renewals?|renews?|invoice|statement|premium|subscription|autopay)\b/i;
 const APPOINTMENT = /\b(appointment|appt|dentist|doctor|dr\.|check-?up|physical|haircut|vet|orthodontist|optometrist)\b/i;
+/**
+ * A booking: something another person is counting on you to turn up for, and you on them. A
+ * discovery or intro call, a consultation, a client call or meeting, a kickoff, a gig or a DJ
+ * set, or a title that says "booking" or "booked". Deliberately not a bare "call" or
+ * "meeting": most of those are not bookings, and this kind offers to set up reminders and
+ * draft messages to someone, which is noise on a call with your sister.
+ */
+const BOOKING = /\b(discovery|consult(?:ation)?|intro(?:ductory)? call|client (?:call|meeting)|kick-?off|gigs?|bookings?|booked|dj set)\b/i;
 
 /** Money in the text, as written: "$140", "$1,250.00". Undefined if none. */
 const AMOUNT = /\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?/;
@@ -145,6 +179,10 @@ export const classify = (e: Classifiable): HeadsupKind | null => {
   if (FLIGHT.test(e.title)) return "flight";
   if (BILL.test(e.title)) return "bill";
   if (APPOINTMENT.test(e.title)) return "appointment";
+  // After bills and appointments, so "Gig payment due" is a bill and "Dentist consultation" an
+  // appointment. Not a repeating series: a weekly client call is a routine, and reminders and
+  // drafts for every instance would be the nagging this feature is meant not to be.
+  if (!e.recurringEventId && BOOKING.test(e.title)) return "booking";
   if (e.recurringEventId) return "recurring";
   return null;
 };

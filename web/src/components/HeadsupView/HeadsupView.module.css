@@ -78,3 +78,25 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+/* Editing a remembered date in place: the same card, its title swapped for the fields that make it. */
+.edit {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.field {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 6px 9px;
+}
+
+.narrow {
+  width: 8.5rem;
+}

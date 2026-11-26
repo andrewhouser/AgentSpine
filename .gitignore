@@ -11,6 +11,7 @@ profile.md
 policy.json
 goals.md
 inbox-rules.md
+watch-list.md
 # Audio you captured. A meeting recording is other people's voices, recorded in a room they
 # were in; it does not belong in a repo whatever it was useful for.
 test_recording/
@@ -78,3 +79,8 @@ docs/*
 
 # Python venv for the speaker-diarization helper (services/diarize).
 services/diarize/.venv/
+
+# Python bytecode. Each machine's own interpreter writes it when it runs services/*, so it
+# is never committed (PLAN-open-work section 11).
+__pycache__/
+*.pyc

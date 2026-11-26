@@ -49,6 +49,8 @@ import { headsupStatus } from "./headsup.ts";
 import { headsupKindSet } from "./headsup-kind-set.ts";
 import { styleFor, styleLearn } from "./styles.ts";
 import { instagramTools } from "./instagram.ts";
+import { proposeChange } from "./propose-change.ts";
+import { siteAudit } from "./site-audit.ts";
 
 export const tools: Tool[] = [
   macControl,
@@ -118,6 +120,8 @@ export const tools: Tool[] = [
   styleLearn,
   harnessStatus,
   ...instagramTools,
+  proposeChange,
+  siteAudit,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

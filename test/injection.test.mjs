@@ -268,6 +268,55 @@ for (const c of cases) {
   }
 }
 
+// ---- 4b. The inbox sorter and the reply drafter (PLAN-open-work section 14, U7) --------------
+//
+// The first model that reads mail for the check-in. The stand-in obeys the payload completely;
+// what is asserted is what the code then STORES or addresses, since that is all a label or a
+// draft can carry out of the mail.
+
+console.log("\nINBOX BUCKETS: A MODEL THAT OBEYS THE MAIL CAN STORE ONLY A LISTED LABEL");
+{
+  const buckets = await import("../src/checkin/buckets.ts");
+  const { route } = await import("../src/router.ts");
+  let n = 0;
+  for (const c of cases) {
+    for (const a of c.attacks ?? []) {
+      if (a.kind !== "inbox-sort" && a.kind !== "inbox-reply") continue;
+      const id = `msg${String(++n).padStart(6, "0")}`;
+      const hostile = { date: "", from: a.from, id, labelIds: ["INBOX", "UNREAD"], snippet: c.payload, subject: a.subject };
+      // A second, innocent mail in the same pass: the hostile one must not reach its label.
+      const other = { date: "", from: "Alex Chen <alex@example.com>", id: `${id}b`, labelIds: ["INBOX", "UNREAD"], snippet: "Lunch on Friday?", subject: "Friday" };
+      const deps = { googleEnabled: () => true, mail: async () => [hostile, other], mailOn: () => true, mode: () => "on", route, style: () => null };
+      scripted = a.modelSays;
+      if (a.kind === "inbox-sort") {
+        await buckets.sortInbox(new Date("2026-06-15T12:00:00Z"), { ...deps, mail: async () => [hostile] });
+        const sentMessages = JSON.parse(lastRequest).messages;
+        check(`${c.id}: the mail reached the model wrapped as untrusted, last`, [sentMessages.at(-1).role, sentMessages.at(-1).content.startsWith("[UNTRUSTED CONTENT from gmail]\n"), sentMessages[0].content.includes(c.payload)], ["user", true, false]);
+        const l = buckets.getLabel(id);
+        check(`${c.id}: stored exactly ${JSON.stringify(a.stored)}`, { bucket: l?.bucket ?? null, reason: l?.reason ?? null }, a.stored);
+        const raw = JSON.stringify(store.rawDb.prepare("SELECT * FROM inbox_labels WHERE message_id = ?").all(id));
+        check(`${c.id}: no word of the mail or of the model's extra text is stored`, [/555-0100|suspended|sorting rules|others|critical/.test(raw)], [false]);
+        check(`${c.id}: the call was pinned to the local model`, lastRequest.includes('"model":"test-model"'), true);
+        // The neighbour is labelled by its own call, from its own text.
+        scripted = { bucket: "reply-today", reason: "asks-you-a-question" };
+        await buckets.sortInbox(new Date("2026-06-15T12:00:00Z"), { ...deps, mail: async () => [hostile, other] });
+        check(`${c.id}: another mail keeps its own label`, buckets.getLabel(`${id}b`)?.bucket, "reply-today");
+        check(`${c.id}: ... and its request did not contain the hostile mail`, lastRequest.includes("Lunch on Friday") && !lastRequest.includes(a.subject), true);
+      } else {
+        const made = await buckets.draftReply(id, deps);
+        check(`${c.id}: the reply is addressed by code to the sender`, made.ok && made.args.to, a.to);
+        check(`${c.id}: the subject is the mail's own, as a reply`, made.ok && made.args.subject, `Re: ${a.subject}`);
+        check(`${c.id}: it is a draft, with nothing that sends`, made.ok && made.args.kind, "email_reply");
+        const queued = await executeCall({ args: made.args, tool: "draft" }, { autoExecute: { irreversibleAlwaysConfirm: true, reversible: true }, drafts: { dir: path.join(root, "drafts"), enabled: true } }, null);
+        check(`${c.id}: through the broker it waits for approval`, [queued.status, fs.existsSync(path.join(root, "drafts"))], ["queued", false]);
+        const gone = await buckets.draftReply(id, { ...deps, mail: async () => [] });
+        check(`${c.id}: a message that is not in the unread list is not replied to`, gone.ok, false);
+        check(`${c.id}: an id that is not an id is refused before any read`, (await buckets.draftReply("../etc/passwd", deps)).ok, false);
+      }
+    }
+  }
+}
+
 // ---- 5. What the code cannot decide ----------------------------------------------------------
 
 const live = cases.filter((c) => c.liveOnly);

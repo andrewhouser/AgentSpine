@@ -22,6 +22,7 @@ struct HeadsupPrefsView: View {
         Kind(id: "anniversary", label: "Anniversaries"),
         Kind(id: "bill", label: "Bills"),
         Kind(id: "appointment", label: "Appointments"),
+        Kind(id: "booking", label: "Bookings (calls and gigs)"),
         Kind(id: "flight", label: "Flights"),
         Kind(id: "recurring", label: "Recurring events"),
     ]

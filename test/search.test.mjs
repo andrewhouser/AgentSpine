@@ -28,20 +28,27 @@ const mk = (title, task, note, kind = "chat") => {
 
 const plan = mk("Agency plan", "write a business plan for an AI agency", "Executive summary. " + "Niche and pricing. ".repeat(80));
 const weather = mk("Weather", "what is the weather in Boston", "Boston: 41F and clear.");
-const job = mk("Cron", "daily brief", "business news digest", "schedule");
+// A scheduled job has no thread, as the scheduler starts it (runScheduler in src/server.ts).
+const job = { id: store.startRun({ kind: "schedule", task: "daily brief" }) };
+store.finishRun(job.id, "ok", "business news digest");
 
 console.log("\nsearching\n");
 check("finds by words in the question", store.searchRuns("business plan").map((r) => r.id), [plan.id]);
 check("every word must match", store.searchRuns("business weather").length, 0);
 check("finds by words in the answer", store.searchRuns("boston clear").map((r) => r.id), [weather.id]);
 check("finds by conversation title", store.searchRuns("agency").map((r) => r.id), [plan.id]);
-check("scheduled runs are not conversations", store.searchRuns("digest").length, 0);
+// Changed with the run index (PLAN-open-work section 13, H4): a scheduled job is found, ranked below
+// conversations, and only the threads-only search the dashboard uses leaves it out. The rest of the
+// rules are in test/run-search.test.mjs.
+check("a scheduled run is found", store.searchRuns("digest").map((r) => r.id), [job.id]);
+check("but it is not a conversation", store.searchRuns("digest", { conversationsOnly: true }).length, 0);
 check("long_only keeps just the substantial outputs", store.searchRuns("boston", { minNoteChars: 800 }).length, 0);
 check("a one-letter query finds nothing", store.searchRuns("a").length, 0);
 
 console.log("\nthe tool\n");
 const out = await findPastOutput.run({ query: "business plan", long_only: true });
-check("lists the run id and the way to fetch it", out.startsWith(`#${plan.id} (Agency plan`), true);
+check("lists the run id and the way to fetch it", out.includes(`\n#${plan.id} (Agency plan`), true);
+check("as untrusted text", out.startsWith("[UNTRUSTED CONTENT from past runs]"), true);
 check("says so when nothing matches", /Nothing/.test(await findPastOutput.run({ query: "zebra" })), true);
 
 console.log("\nstars and context\n");

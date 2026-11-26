@@ -109,6 +109,12 @@ export const draftsDir = (policy: Policy): string => expand(policy.drafts?.dir |
 
 export const draft: Tool = {
   name: "draft",
+  // A draft is text written to be sent onward, so it is read as outgoing (src/outbound.ts).
+  outboundText: (a) => [
+    { arg: "subject", text: String(a?.subject ?? "") },
+    { arg: "body", text: String(a?.body ?? "") },
+    { arg: "location", text: String(a?.location ?? "") },
+  ],
   // Mail, calendar, files and project sources stay local: once this has run, the rest of the run is pinned (src/sensitivity.ts).
   privateOutput: true,
   description:

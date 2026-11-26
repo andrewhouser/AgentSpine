@@ -50,6 +50,7 @@ import path from "node:path";
 
 import { COMMAND_MAX_TIMEOUT_MS, COMMAND_OUTPUT_CHARS, COMMAND_OUTPUT_PASS_CHARS, COMMAND_TIMEOUT_MS } from "../config.ts";
 import { expand, real } from "../fs-scope.ts";
+import { keepingProtected, putBackNote } from "../protected-paths.ts";
 import { clip } from "../stash.ts";
 import { writeDefaultDir } from "./write-file.ts";
 import type { BuildRepo, ClassifiedAction, DeclaredCommand, Policy, PolicyDecision, Tool } from "../types.ts";
@@ -278,8 +279,15 @@ export const runCommand: Tool = {
 
     const started = Date.now();
     let r: RawResult;
+    // A declared command writes what it likes inside the repo: a formatter, a code generator,
+    // `lint --fix`. In AgentSpine's own checkout that must not be a way to change a gate file
+    // with nobody reading the diff, so a protected file the command changed is put back and
+    // the report says so (src/protected-paths.ts). Any other repo runs exactly as before.
+    let putBack: string[] = [];
     try {
-      r = await runDeclared(cmd, found.root, timeoutMs);
+      const kept = await keepingProtected(found.root, () => runDeclared(cmd, found.root, timeoutMs), ctx?.runId ?? null);
+      r = kept.value;
+      putBack = kept.putBack;
     } catch (err) {
       // A missing binary lands here (ENOENT), which is a configuration fact worth stating
       // plainly rather than as a stack trace: the fix is in policy.json or in PATH.
@@ -302,18 +310,23 @@ export const runCommand: Tool = {
     // whole answer, and pasting a successful build log into the loop costs context for
     // nothing. The raw text is still available through the ref when there is a lot of it.
     if (r.code === 0 && !summary) {
-      return clip(
-        { max: COMMAND_OUTPUT_PASS_CHARS, runId: ctx?.runId ?? null, source: `command ${name} in ${found.root}`, tool: "run_command" },
-        `${head}\n\n${raw}`,
+      return (
+        clip(
+          { max: COMMAND_OUTPUT_PASS_CHARS, runId: ctx?.runId ?? null, source: `command ${name} in ${found.root}`, tool: "run_command" },
+          `${head}\n\n${raw}`,
+        ) + putBackNote(putBack)
       );
     }
 
     const body = [head, summary ? `\n${summary}` : "", raw ? `\n--- output ---\n${raw}` : ""].join("\n");
     // Build output is UNTRUSTED: it carries file contents, dependency names, test fixtures and
     // panic messages, any of which a third party may have written. `clip` tags it.
-    return clip(
-      { max: COMMAND_OUTPUT_CHARS, runId: ctx?.runId ?? null, source: `command ${name} in ${found.root}`, tool: "run_command" },
-      body,
+    // Outside the clipped, untrusted block on purpose: this line is ours, about what we did.
+    return (
+      clip(
+        { max: COMMAND_OUTPUT_CHARS, runId: ctx?.runId ?? null, source: `command ${name} in ${found.root}`, tool: "run_command" },
+        body,
+      ) + putBackNote(putBack)
     );
   },
 };

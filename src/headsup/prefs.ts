@@ -13,7 +13,7 @@ import { kvGet, kvSet } from "../memory/store.ts";
 import { DAILY_CAP, FAST_LOOP_FLOOR_MINUTES, inQuietHours, LEAD_DAYS, LOOKAHEAD_DAYS, QUIET_END_HOUR, QUIET_START_HOUR } from "./rules.ts";
 import type { HeadsupKind } from "./rules.ts";
 
-export const ALL_KINDS: HeadsupKind[] = ["anniversary", "appointment", "bill", "birthday", "flight", "recurring"];
+export const ALL_KINDS: HeadsupKind[] = ["anniversary", "appointment", "bill", "birthday", "booking", "flight", "recurring"];
 
 export const MAX_DAILY_CAP = 10;
 export const MAX_LEAD_STAGES = 3;

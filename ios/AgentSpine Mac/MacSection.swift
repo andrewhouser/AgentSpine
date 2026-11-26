@@ -4,12 +4,13 @@ import SwiftUI
 /// the phone's sections, grouped by what they are for. Search is not a section here: ⌘K does it
 /// from anywhere, and Settings is the ⌘, scene.
 enum MacSection: String, CaseIterable, Hashable {
-    case threads, headsup, checkin, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
+    case today, threads, headsup, checkin, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
     case builds, activity, memory, proposals, agents
 
     /// The menu order on a fresh install: the first six are pinned, the rest fold under More.
     /// Threads is not here: the threads are listed above the menu, so `.threads` is the state of
-    /// having a thread (or the new-thread screen) open rather than a row.
+    /// having a thread (or the new-thread screen) open rather than a row. Today is not here
+    /// either: it has a fixed row at the top of the sidebar, because it is where the window opens.
     static let defaultOrder: [MacSection] = [
         .headsup, .checkin, .tasks, .meetings, .inbox, .knowledge, .schedules,
         .projects, .files, .builds, .study, .clients, .activity, .memory, .proposals, .agents,
@@ -25,6 +26,7 @@ enum MacSection: String, CaseIterable, Hashable {
 
     var title: String {
         switch self {
+        case .today: return "Today"
         case .threads: return "Threads"
         case .headsup: return "Heads-up"
         case .checkin: return "Check-in"
@@ -65,11 +67,13 @@ enum MacSection: String, CaseIterable, Hashable {
         case .proposals: return "Suggested rules to skip repeat approvals"
         case .agents: return "Sub-agents and the model tier each uses"
         case .threads: return "Your conversations"
+        case .today: return "What is waiting on you, what is due, and what ran while you were away"
         }
     }
 
     var symbol: String {
         switch self {
+        case .today: return "sun.max"
         case .threads: return "bubble.left.and.text.bubble.right"
         case .headsup: return "sparkles"
         case .checkin: return "envelope.badge"
@@ -98,7 +102,7 @@ struct MacSectionContent: View {
     var body: some View {
         NavigationStack {
             switch section {
-            case .threads: EmptyView() // drawn by MacRootView, which owns the selection
+            case .threads, .today: EmptyView() // drawn by MacRootView, which owns the selection
             case .headsup: MacHeadsupView()
             case .checkin: MacCheckinView()
             case .tasks: TasksView()
