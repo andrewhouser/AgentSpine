@@ -121,6 +121,13 @@ often enough the card offers **Always allow**, which is the existing auto-approv
 for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
 returns the card (`src/decision-card.ts`).
 
+**People are pages built from your meetings** (section 15, R7). **People** lists everyone your reviewed
+meeting notes name, your team first (add someone from their page). A person's page shows what is open
+between you both ways, with the words and the moment each promise was made, what you have heard from
+them lately, and your last and next 1:1. Which way a promise runs is worked out in code when you review
+it, and **Swap** corrects it. Sensitive and unreviewed notes are left out, and nothing is collected about
+anyone beyond what the meetings already keep (`src/knowledge/people.ts`, `GET /api/people`).
+
 **Today is one line through the day** (section 15 of the plan). Below the three lines, **Behind**
 is what ran since you last looked, **Now** is what is waiting, and **Ahead** is the rest of today:
 each schedule's next run before midnight and today's calendar as it was last read. The spine never

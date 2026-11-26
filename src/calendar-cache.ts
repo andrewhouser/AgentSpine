@@ -131,3 +131,20 @@ export const eventsOnDay = (now: Date): DayEvent[] => {
   }
   return [...seen.values()].sort((a, b) => (a.allDay === b.allDay ? startMs(a.start) - startMs(b.start) : a.allDay ? -1 : 1));
 };
+
+/** Every stored event starting in [from, to), soonest first, one per start and title. For the person page's next 1:1. */
+export const calendarEventsBetween = (from: Date, to: Date): DayEvent[] => {
+  const seen = new Map<string, DayEvent>();
+  for (const r of rawDb.prepare("SELECT start, all_day, title, calendar FROM calendar_seen ORDER BY source DESC").all() as {
+    all_day: number;
+    calendar: string;
+    start: string;
+    title: string;
+  }[]) {
+    const t = startMs(r.start);
+    if (!(t >= from.getTime() && t < to.getTime())) continue;
+    const key = `${t}|${r.title.trim().toLowerCase()}`;
+    if (!seen.has(key)) seen.set(key, { allDay: r.all_day === 1, calendar: r.calendar, start: r.start, title: r.title });
+  }
+  return [...seen.values()].sort((a, b) => startMs(a.start) - startMs(b.start));
+};

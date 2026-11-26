@@ -442,11 +442,11 @@ struct ClientCommitmentsView: View {
     }
 }
 
-/// People (PLAN-open-work section 15), shared by the iPhone and the Mac. For now, the people the
-/// knowledge store already names, from meetings and claims you reviewed. A page for each person,
-/// with what is open between you, is R7; until then this says so. Nothing here collects anything.
+/// People (PLAN-open-work section 15, R7), shared by the iPhone and the Mac: everyone the knowledge
+/// store names, your team first, with what is open each way. Built from reviewed meeting claims only;
+/// nothing here collects anything about anyone.
 struct PeopleView: View {
-    @State private var people: [KnowledgeEntity] = []
+    @State private var people: [PersonRow] = []
     @State private var loaded = false
     @State private var error: String?
 
@@ -460,19 +460,25 @@ struct PeopleView: View {
                 EmptyNotice(symbol: "person.2", title: "No one yet", detail: "People appear here as meetings are reviewed.")
                     .listRowBackground(Color.clear)
             }
-            Section {
-                ForEach(people) { person in
+            ForEach(people) { p in
+                NavigationLink {
+                    PersonView(personID: p.id)
+                } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(person.name).fontWeight(.semibold)
-                        if !person.aliases.isEmpty {
-                            Text("also \(person.aliases.joined(separator: ", "))")
-                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                                .foregroundStyle(Spine.Palette.textDim)
+                        HStack(spacing: Spine.Space.sm) {
+                            Text(p.name).fontWeight(.semibold)
+                            if p.onTeam {
+                                Text("my team")
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
+                                    .foregroundStyle(Spine.Palette.accent)
+                            }
                         }
+                        Text(PeopleWords.openCountLine(youOwe: p.youOwe, theyOwe: p.theyOwe)
+                             + (p.onTeam ? " · \(PeopleWords.oneToOneLine(p.daysSince))" : ""))
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.textDim)
                     }
                 }
-            } footer: {
-                Text("A page for each person, with what is open between you, comes next (section 15, R7).")
             }
         }
         .navigationTitle("People")
@@ -483,13 +489,132 @@ struct PeopleView: View {
 
     private func load() async {
         do {
-            people = try await APIClient.shared.knowledgeEntities()
-                .filter { $0.kind == "person" }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            people = try await APIClient.shared.people()
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
         loaded = true
+    }
+}
+
+/// One person (section 15, R7): what is open between you both ways, what you have heard lately, and
+/// your 1:1s. Swap corrects which way a promise runs, as a review on the server.
+struct PersonView: View {
+    let personID: Int
+
+    @State private var person: Person?
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            if let error {
+                ErrorNotice(message: error) { Task { await load() } }
+                    .listRowBackground(Color.clear)
+            }
+            if let p = person {
+                Section {
+                    Text(PeopleWords.oneToOneLine(p.daysSince))
+                    if let next = p.nextOneToOne {
+                        Text("Next: \(next.title), \(SpineDate.relative(next.at))")
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                    Button(p.onTeam ? "Remove from my team" : "Add to my team") {
+                        Task { await setTeam(!p.onTeam) }
+                    }
+                }
+                if p.open.isEmpty {
+                    Section { Text("Nothing open between you.").foregroundStyle(Spine.Palette.textDim) }
+                }
+                openSection(p, "you-owe")
+                openSection(p, "they-owe")
+                if !p.heard.isEmpty {
+                    Section("Heard lately") {
+                        ForEach(p.heard) { h in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(h.text).fontWeight(.semibold)
+                                Text(h.kind)
+                                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                    .foregroundStyle(Spine.Palette.textFaint)
+                                moment(h.moment)
+                            }
+                        }
+                    }
+                }
+            } else if error == nil {
+                ProgressView()
+            }
+        }
+        .navigationTitle(person?.name ?? "Person")
+        .spineInlineTitle()
+        .refreshable { await load() }
+        .task { await load() }
+    }
+
+    @ViewBuilder private func openSection(_ p: Person, _ direction: String) -> some View {
+        let items = p.open.filter { $0.direction == direction }
+        if !items.isEmpty {
+            Section("\(PeopleWords.directionLabel(direction, name: p.name)) (\(items.count))") {
+                ForEach(items) { o in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: Spine.Space.sm) {
+                            Text(o.text).fontWeight(.semibold)
+                            if o.late {
+                                Text("late")
+                                    .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
+                                    .foregroundStyle(Spine.Palette.danger)
+                            }
+                        }
+                        moment(o.moment)
+                        Button("Swap") { Task { await swap(o, person: p) } }
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func moment(_ m: PersonMoment?) -> some View {
+        if let m {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\u{201C}\(m.quote)\u{201D}")
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).italic())
+                    .foregroundStyle(Spine.Palette.textDim)
+                Text([m.meetingTitle, PeopleWords.atLine(m.atMs)].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textFaint)
+            }
+        }
+    }
+
+    private func load() async {
+        do {
+            person = try await APIClient.shared.person(personID)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func setTeam(_ on: Bool) async {
+        do {
+            person = try await APIClient.shared.setOnTeam(personID, on: on)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func swap(_ o: PersonOpenItem, person p: Person) async {
+        do {
+            if o.direction == "you-owe" {
+                try await APIClient.shared.setDirection(o.claimId, owner: p.name, owedTo: "me")
+            } else {
+                try await APIClient.shared.setDirection(o.claimId, owner: "me", owedTo: p.name)
+            }
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }

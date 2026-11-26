@@ -2001,6 +2001,19 @@ leaves the machine stops and writes down what it found.
   recalled into a run about someone else, and has its own retention and a one-step delete for a person who
   leaves. This is information about employees, so the rules come first and the screen second.
 - [Sonnet] The person page and the team list on three clients, and the tests.
+- **Built 2026-11-26.** You decided: no evidence store at all, and People lists everyone the store names with
+  your team marked and first. `kn_claims.owed_to_id` / `owed_to_me` hold which way a commitment runs; review
+  fills them in code (someone else's promise is owed to you; yours is owed to the one other person in the
+  meeting, or to the named speaker who asked, else nobody in particular), and a named speaker not yet in the
+  store becomes a person at review only, never on read. Older reviewed rows are inferred on read and marked
+  so. Swap on the page corrects it, as a review (`owedTo` on the claims PATCH). `src/knowledge/people.ts`:
+  `readPerson` (open between you both ways with quote and time, late from the due date; heard lately, 60
+  days; last 1:1 as a meeting whose only other named speaker is them; next 1:1 from the stored calendar, a
+  title naming them and reading as a 1:1) and `listPeople`. Sensitive and unreviewed claims are left out.
+  `kn_entities.my_team`, set only by `POST /api/people/:id/team`. Screens on web (People and a person page),
+  iPhone and Mac (`PeopleView`, `PersonView`). No tool reads any of it. Not done: a your-commitment with no
+  one else in the meeting and no named asker shows on nobody's page until you set who it is owed to, which
+  today only the knowledge review route can do; the ask bar has no person scope yet.
 
 ### R8. A project (Code)
 

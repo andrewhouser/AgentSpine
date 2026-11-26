@@ -16,6 +16,7 @@
  * Do not call this a ledger: the Heads-up code already uses that word for something else.
  */
 import crypto from "node:crypto";
+import { MEETING_SELF_NAMES } from "../config.ts";
 import { rawDb } from "../memory/store.ts";
 
 export type ClaimKind = "claim" | "commitment" | "decision" | "goal" | "measure" | "question" | "risk" | "status";
@@ -115,6 +116,12 @@ export interface Claim {
   status_changed: null | string;
   supersedes_id: null | number;
   text: string;
+  /**
+   * Which way a commitment runs (section 15, R7): owed to this person, or to you (`owed_to_me` 1). Both null
+   * means not worked out yet; `directionOf` then infers it on read. Set at review and correctable.
+   */
+  owed_to_id?: null | number;
+  owed_to_me?: null | number;
   /** The words the source or reviewer used. `topicName` is the one name those words resolve to. */
   topic: null | string;
   topic_id: null | number;
@@ -145,6 +152,82 @@ try {
   // already there
 }
 rawDb.exec("CREATE INDEX IF NOT EXISTS idx_kn_claims_topic ON kn_claims (topic_id)");
+
+// Which way a commitment runs (section 15, R7), and who is on your team. Added in place, so old rows read as
+// "not worked out yet" and the person page infers them rather than guessing a stored answer.
+for (const sql of [
+  "ALTER TABLE kn_claims ADD COLUMN owed_to_id INTEGER",
+  "ALTER TABLE kn_claims ADD COLUMN owed_to_me INTEGER",
+  "ALTER TABLE kn_entities ADD COLUMN my_team INTEGER",
+]) {
+  try {
+    rawDb.exec(sql);
+  } catch {
+    // already there
+  }
+}
+
+/** Whether a name is you: none, "me", or one listed in MEETING_SELF_NAMES. The same rule as closeout.ts's isSelf. */
+export const isSelfName = (name: null | string | undefined): boolean => {
+  const n = String(name ?? "").trim().toLowerCase();
+  return !n || MEETING_SELF_NAMES.includes(n);
+};
+
+/**
+ * The people named as speakers in a meeting, other than you. Empty when the source is not a meeting. With
+ * `create`, a speaker you named who is not yet in the store becomes a person: only a review does this, because
+ * you named them on the meeting; reading a page never adds anyone.
+ */
+export const othersInMeeting = (sourceKind: string, sourceRef: string, create = false): Entity[] => {
+  if (sourceKind !== "meeting") return [];
+  const id = Number(sourceRef.split(":")[1]);
+  if (!Number.isInteger(id)) return [];
+  let names: string[] = [];
+  try {
+    names = (rawDb.prepare("SELECT name FROM meeting_speakers WHERE meeting_id = ?").all(id) as { name: string }[]).map((r) => r.name);
+  } catch {
+    return []; // no meetings table in this database
+  }
+  const out = new Map<number, Entity>();
+  for (const n of names) {
+    if (isSelfName(n)) continue;
+    const e = findEntity(n, ["person"]) ?? (create ? upsertEntity("person", n) : undefined);
+    if (e) out.set(e.id, e);
+  }
+  return [...out.values()];
+};
+
+export type Direction = { owedToId: null | number; owedToMe: boolean };
+
+/**
+ * Which way a commitment runs, when nobody has said. Code only:
+ *   - someone else owns it: it is owed to you (you were in the meeting it was said in);
+ *   - you own it: owed to the one other person in the meeting, or to the speaker when that was not you,
+ *     else unknown (a room full of people, and no one named).
+ */
+export const inferDirection = (c: Pick<Claim, "owner_id" | "ownerName" | "source_kind" | "source_ref" | "speaker">, create = false): Direction => {
+  if (c.owner_id != null && !isSelfName(c.ownerName)) return { owedToId: null, owedToMe: true };
+  const others = othersInMeeting(c.source_kind, c.source_ref, create);
+  if (others.length === 1) return { owedToId: others[0].id, owedToMe: false };
+  if (c.speaker && !isSelfName(c.speaker)) {
+    const e = findEntity(c.speaker, ["person"]);
+    if (e) return { owedToId: e.id, owedToMe: false };
+  }
+  return { owedToId: null, owedToMe: false };
+};
+
+/** The stored direction when a person (or a review) set one, else the inferred one. */
+export const directionOf = (c: Claim): Direction & { inferred: boolean } =>
+  c.owed_to_id != null || c.owed_to_me != null
+    ? { inferred: false, owedToId: c.owed_to_id ?? null, owedToMe: c.owed_to_me === 1 }
+    : { ...inferDirection(c), inferred: true };
+
+/** Put someone on your team, or take them off. Only a person's click does this. */
+export const setMyTeam = (entityId: number, on: boolean): boolean =>
+  rawDb.prepare("UPDATE kn_entities SET my_team = ? WHERE id = ? AND kind = 'person'").run(on ? 1 : null, entityId).changes > 0;
+
+export const myTeamIds = (): Set<number> =>
+  new Set((rawDb.prepare("SELECT id FROM kn_entities WHERE my_team = 1").all() as { id: number }[]).map((r) => r.id));
 
 const dropStoredBriefs = (): void => {
   try {
@@ -416,6 +499,15 @@ export const addClaim = (c: NewClaim): number => {
   );
 };
 
+/**
+ * Every reviewed, active, not-sensitive claim, with no row cap: the person page (section 15, R7) counts what is
+ * open between you, and a cap would quietly drop the oldest promises, which are the ones that matter most.
+ */
+export const reviewedActiveClaims = (): Claim[] =>
+  (rawDb.prepare(`${SELECT} WHERE c.review_state = 'reviewed' AND c.status = 'active' AND c.sensitive != 1 ORDER BY c.id`).all() as unknown as ClaimRow[]).map(
+    hydrateClaim,
+  );
+
 export interface ClaimFilter {
   /** Leave out claims a person marked sensitive. Briefs and answers always set this. */
   excludeSensitive?: boolean;
@@ -471,6 +563,8 @@ export const listClaims = (f: ClaimFilter = {}): Claim[] => {
 export interface ClaimEdit {
   due?: null | string;
   owner?: null | string;
+  /** Who a commitment is owed to: "me", a person's name, or null for nobody in particular (section 15, R7). */
+  owedTo?: null | string;
   text?: string;
   topic?: null | string;
 }
@@ -491,6 +585,16 @@ export const reviewClaim = (id: number, decision: "accept" | "reject", edit: Cla
     .prepare("UPDATE kn_claims SET review_state = 'reviewed', reviewed = ?, text = ?, topic = ?, topic_id = ?, due = ?, owner_id = ? WHERE id = ?")
     .run(now(), (edit.text ?? cur.text).trim().slice(0, 1000), topic, topicId, edit.due === undefined ? cur.due : iso(edit.due), owner, id);
   if (cur.topic_id !== topicId) pruneTopic(cur.topic_id);
+  // Which way it runs: what the reviewer said, else worked out now from the owner and the meeting, and kept.
+  const after = getClaim(id);
+  if (after && after.kind === "commitment") {
+    let d: Direction | null = null;
+    if (edit.owedTo !== undefined) {
+      const t = String(edit.owedTo ?? "").trim();
+      d = !t ? { owedToId: null, owedToMe: false } : isSelfName(t) ? { owedToId: null, owedToMe: true } : { owedToId: upsertEntity("person", t).id, owedToMe: false };
+    } else if (after.owed_to_id == null && after.owed_to_me == null) d = inferDirection(after, true);
+    if (d) rawDb.prepare("UPDATE kn_claims SET owed_to_id = ?, owed_to_me = ? WHERE id = ?").run(d.owedToId, d.owedToMe ? 1 : 0, id);
+  }
   return getClaim(id);
 };
 

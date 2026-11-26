@@ -199,27 +199,28 @@ interface MemoryRow {
 // GET /api/memories?unusedDays=90         [new R6]
 ```
 
-## 7. A person — `GET /api/people/:id` **[new R7]**
+## 7. A person — `GET /api/people/:id`, `GET /api/people` **[built R7]**
+
+As built (`src/knowledge/people.ts`). No evidence store: you decided to leave it out.
 
 ```ts
 interface Person {
-  id: number;                             // kn_entities, kind person [exists]
+  aliases: string[];
+  daysSince: null | number;               // since the last 1:1
+  heard: { claimId: number; kind: string; moment: null | Moment; reviewed: null | string; text: string }[];
+  id: number;
+  lastOneToOne: null | { at: string; meetingId: number; title: string };
   name: string;
-  team: null | string;                    // kn_entities kind team [exists]
-  lastOneToOne: null | { at: string; meetingId: number };
-  nextOneToOne: null | { at: string };    // from the stored calendar [check R1]
-  daysSince: null | number;               // code
-  open: { claimId: number; text: string; direction: Direction; due: null | string; late: boolean; moment: null | Moment }[];
-  heard: { claimId: number; text: string; kind: string; moment: null | Moment; times: number }[]; // reviewed claims naming them
-  forToday: string[];                     // R9 first version: code-built lines, oldest owed first
-  evidence?: { id: number; text: string; tag: "strength" | "growth"; markedAt: string }[]; // [R7, only if you decide it exists]
+  nextOneToOne: null | { at: string; title: string };   // from the stored calendar
+  onTeam: boolean;
+  open: { claimId: number; direction: "they-owe" | "you-owe"; due: null | string; inferred: boolean; late: boolean; moment: null | Moment; text: string }[];
 }
-// GET /api/people -> { id, name, team, youOwe, theyOwe, daysSince }[]
+// GET  /api/people -> { aliases, daysSince, id, name, onTeam, theyOwe, youOwe }[], team first
+// POST /api/people/:id/team {on}
+// PATCH /api/knowledge/claims/:id {review: "accept", owner, owedTo: "me" | name | null}  corrects direction
 ```
 
-`evidence` is absent unless R7's Fable read and your decision say it exists. When present it is
-local-only, never recalled into a run about anyone else, and `DELETE /api/people/:id/evidence`
-removes all of it in one step.
+`Moment` here has no `untrusted` flag field, but its `quote` and `meetingTitle` are other people's words.
 
 ## 8. A project — `GET /api/projects/:id/page` **[new R8]**
 

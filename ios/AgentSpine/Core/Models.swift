@@ -2646,3 +2646,102 @@ enum DecisionWords {
         "You have approved this \(a.approvals) times and never said no. Always allow \(a.tool)\(a.target.isEmpty ? "" : " on \(a.target)")?"
     }
 }
+
+// MARK: - People
+
+/// `GET /api/people`: everyone the knowledge store names, your team first (section 15, R7).
+struct PersonRow: Codable, Hashable, Identifiable {
+    let aliases: [String]
+    let daysSince: Int?
+    let id: Int
+    let name: String
+    let onTeam: Bool
+    let theyOwe: Int
+    let youOwe: Int
+}
+
+/// A point in a meeting a claim came from. The quote is someone's words: shown, never sent anywhere.
+struct PersonMoment: Codable, Hashable {
+    let at: String?
+    let atMs: Int?
+    let audio: Bool
+    let meetingId: Int
+    let meetingTitle: String
+    let quote: String
+    let speaker: String?
+}
+
+struct PersonOpenItem: Codable, Hashable, Identifiable {
+    let claimId: Int
+    let direction: String
+    let due: String?
+    let inferred: Bool
+    let late: Bool
+    let moment: PersonMoment?
+    let text: String
+
+    var id: Int { claimId }
+}
+
+struct PersonHeardItem: Codable, Hashable, Identifiable {
+    let claimId: Int
+    let kind: String
+    let moment: PersonMoment?
+    let reviewed: String?
+    let text: String
+
+    var id: Int { claimId }
+}
+
+/// `GET /api/people/:id`: one person's page, built in code from reviewed claims.
+struct Person: Codable, Hashable {
+    struct Last: Codable, Hashable {
+        let at: String
+        let meetingId: Int
+        let title: String
+    }
+
+    struct Next: Codable, Hashable {
+        let at: String
+        let title: String
+    }
+
+    let aliases: [String]
+    let daysSince: Int?
+    let heard: [PersonHeardItem]
+    let id: Int
+    let lastOneToOne: Last?
+    let name: String
+    let nextOneToOne: Next?
+    let onTeam: Bool
+    let open: [PersonOpenItem]
+}
+
+/// Mirrors `web/src/lib/people.ts`; test/people-screen.test.mjs holds the two equal.
+enum PeopleWords {
+    private static func first(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespaces).split(separator: " ").first.map(String.init) ?? name
+    }
+
+    static func directionLabel(_ direction: String, name: String) -> String {
+        direction == "you-owe" ? "You owe" : "\(first(name)) owes"
+    }
+
+    static func oneToOneLine(_ daysSince: Int?) -> String {
+        guard let d = daysSince else { return "No 1:1 recorded" }
+        return d == 0 ? "Last 1:1 today" : d == 1 ? "Last 1:1 yesterday" : "Last 1:1 \(d) days ago"
+    }
+
+    static func openCountLine(youOwe: Int, theyOwe: Int) -> String {
+        youOwe + theyOwe == 0 ? "Nothing open" : "You owe \(youOwe) · they owe \(theyOwe)"
+    }
+
+    static func atLine(_ atMs: Int?) -> String {
+        guard let atMs, atMs >= 0 else { return "" }
+        let s = atMs / 1000
+        let h = s / 3600
+        let m = (s % 3600) / 60
+        let sec = String(format: "%02d", s % 60)
+        return "\(h > 0 ? "\(h):\(String(format: "%02d", m))" : "\(m)"):\(sec) into the meeting"
+    }
+}

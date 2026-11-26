@@ -820,6 +820,24 @@ final class APIClient {
     }
 
     /// Accept (optionally corrected) or reject a proposed claim, or change its status.
+    /// Everyone the knowledge store names, your team first (section 15, R7).
+    func people() async throws -> [PersonRow] {
+        try await send(request("/api/people"), as: [PersonRow].self)
+    }
+
+    func person(_ id: Int) async throws -> Person {
+        try await send(request("/api/people/\(id)"), as: Person.self)
+    }
+
+    func setOnTeam(_ id: Int, on: Bool) async throws -> Person {
+        try await send(jsonRequest("/api/people/\(id)/team", method: "POST", body: ["on": on]), as: Person.self)
+    }
+
+    /// Swap which way a commitment runs: a review with a new owner and who it is owed to ("me" is you).
+    func setDirection(_ claimId: Int, owner: String, owedTo: String) async throws {
+        try await sendRaw(jsonRequest("/api/knowledge/claims/\(claimId)", method: "PATCH", body: ["owedTo": owedTo, "owner": owner, "review": "accept"]))
+    }
+
     func knowledgeReview(_ id: Int, review: String? = nil, text: String? = nil, status: String? = nil, sensitive: Bool? = nil) async throws {
         var body: [String: Any] = [:]
         if let sensitive { body["sensitive"] = sensitive }

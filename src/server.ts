@@ -88,6 +88,7 @@ import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { readSpine } from "./day-line.ts";
 import { decisionCard } from "./decision-card.ts";
+import { listPeople, readPerson } from "./knowledge/people.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
@@ -821,6 +822,28 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     }
 
     // /api/confirmations , approve, reject
+    /*
+     * /api/people (section 15, R7): everyone the knowledge store names, your team first, and one person's page.
+     * Built in code from reviewed claims (src/knowledge/people.ts); work material, served to your screens only.
+     *   GET  /api/people              the list, with what is open each way
+     *   GET  /api/people/:id          one person
+     *   POST /api/people/:id/team     {on}: put them on your team or take them off; a person's click only
+     */
+    if (seg[1] === "people") {
+      if (m === "GET" && seg.length === 2) return sendJson(res, 200, listPeople());
+      const personId = Number(seg[2]);
+      if (seg.length >= 3 && Number.isInteger(personId)) {
+        if (m === "GET" && seg.length === 3) {
+          const person = readPerson(personId);
+          return person ? sendJson(res, 200, person) : sendJson(res, 404, { error: "no such person" });
+        }
+        if (m === "POST" && seg.length === 4 && seg[3] === "team") {
+          const b = await readBody(req);
+          return knowledge.setMyTeam(personId, b?.on === true) ? sendJson(res, 200, readPerson(personId)) : sendJson(res, 404, { error: "no such person" });
+        }
+      }
+    }
+
     if (seg[1] === "confirmations") {
       if (m === "GET" && seg.length === 2)
         return sendJson(res, 200, store.listConfirmations(url.searchParams.get("state") ?? undefined));
@@ -1170,7 +1193,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             if (m === "PATCH" && seg.length === 4) {
               const b = await readBody(req);
               if (typeof b.sensitive === "boolean") knowledge.setClaimSensitive(claimId, b.sensitive);
-              if (b.review === "accept" || b.review === "reject") knowledge.reviewClaim(claimId, b.review, { due: b.due, owner: b.owner, text: b.text, topic: b.topic });
+              if (b.review === "accept" || b.review === "reject")
+                knowledge.reviewClaim(claimId, b.review, { due: b.due, owedTo: b.owedTo === undefined ? undefined : b.owedTo === null ? null : String(b.owedTo), owner: b.owner, text: b.text, topic: b.topic });
               if (b.status) knowledge.setClaimStatus(claimId, b.status);
               return sendJson(res, 200, present(knowledge.getClaim(claimId) as knowledge.Claim));
             }

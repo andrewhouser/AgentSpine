@@ -1,5 +1,6 @@
 import type { DecisionCard } from "./decision.ts";
 import type { Dial, DialAgreement, DialLevel, WouldHave } from "./dials.ts";
+import type { Person, PersonRow } from "./people.ts";
 import type { FinishedRun } from "./spokenAlerts.ts";
 /**
  * The API client.
@@ -346,7 +347,7 @@ export const api = {
     request<{ markdown: string }>("/api/knowledge/briefs/plan?format=md", { body: JSON.stringify({ plan, project }), method: "POST" }),
 
   /** Accept (optionally corrected) or reject a proposed claim, or change its status. */
-  knowledgeReview: (id: number, body: { due?: null | string; owner?: null | string; review?: "accept" | "reject"; sensitive?: boolean; status?: string; text?: string }) =>
+  knowledgeReview: (id: number, body: { due?: null | string; owedTo?: null | string; owner?: null | string; review?: "accept" | "reject"; sensitive?: boolean; status?: string; text?: string }) =>
     request<KnowledgeClaim>(`/api/knowledge/claims/${id}`, { body: JSON.stringify(body), method: "PATCH" }),
 
   /** The newer claim replaces the older one. Only a person does this. */
@@ -463,6 +464,9 @@ export const api = {
   /** Everything installed, read-only, with the prune list. */
   overview: () => request<Overview>("/api/overview"),
 
+  /** Everyone the knowledge store names, your team first (section 15, R7). */
+  people: () => request<PersonRow[]>("/api/people"),
+  person: (id: number) => request<Person>(`/api/people/${id}`),
   /**
    * What to say aloud for a reply: cleaned of markup and cut into pieces to synthesise in turn,
    * so the first sentence can start playing while the rest are still being made. Empty when
@@ -589,6 +593,7 @@ export const api = {
   setMeetingTitle: (id: number, title: string) =>
     request<Meeting>(`/api/meetings/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
 
+  setOnTeam: (id: number, on: boolean) => post<Person>(`/api/people/${id}/team`, { on }),
   /** Name a speaker in a finished meeting; an empty name goes back to "Speaker N". */
   setSpeakerName: (id: number, index: number, name: string) =>
     request<MeetingSpeaker[]>(`/api/meetings/${id}/speakers`, { body: JSON.stringify({ index, name }), method: "PATCH" }),
