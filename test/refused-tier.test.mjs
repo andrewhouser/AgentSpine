@@ -8,16 +8,24 @@
  * No Chrome is needed: a refused call is stopped before the tool runs, and the control rows use
  * dry run. Run with `node test/refused-tier.test.mjs`.
  */
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-refused-${process.pid}-${Date.now()}.db`);
+// Approving a card reads the policy file, so the approval rows below get one of their own with the browser on.
+process.env.POLICY_PATH = path.join(os.tmpdir(), `agentspine-refused-policy-${process.pid}-${Date.now()}.json`);
+fs.writeFileSync(
+  process.env.POLICY_PATH,
+  JSON.stringify({ autoExecute: { dryRun: false, irreversibleAlwaysConfirm: true, reversible: true }, browser: { enabled: true, navigateAllowlist: [], neverDomains: ["bank.example"] } }),
+);
 process.env.EMBEDDINGS_URL = "";
 process.env.NOTIFY_ON_CONFIRMATION = "false";
 
 const store = await import("../src/memory/store.ts");
 const { registry } = await import("../src/tools/index.ts");
 const { executeCall } = await import("../src/broker.ts");
+const { approveConfirmation } = await import("../src/confirmations.ts");
 const { narrowPolicy } = await import("../src/projects/narrow-policy.ts");
 
 let passed = 0;
@@ -139,6 +147,43 @@ console.log("\nA REFUSER THAT THROWS REFUSES");
   check("denied, and the tool did not run", [r.status, ran], ["denied", 0]);
   delete registry.__fake_refused;
 }
+
+console.log("\nAN OLD CARD — approving it does not run a call that is refused now");
+{
+  // The broker never queues a refused call, so this card is put in the queue the way an older version
+  // left it: a transfer click from before the tier existed, when moving money only asked. (A click on a
+  // page that has since gone onto neverDomains needs no row here: the browser checks where the page is
+  // when it runs, approved or not.)
+  const state = (id) => store.getConfirmation(id).state;
+  let ran = 0;
+  const real = registry.browser.run;
+  registry.browser.run = async () => {
+    ran++;
+    return "clicked";
+  };
+  const runId = store.startRun({ kind: "chat", task: "probe" });
+  const old = store.queueConfirmation({ args: transfer, tool: "browser" }, "Click Transfer $500 to external account", runId);
+  const outcome = await approveConfirmation(old, { resume: false });
+  check("approving a transfer card is refused, and nothing ran", [outcome.ok, ran, state(old)], [false, 0, "rejected"]);
+  check("the answer says an approval does not change it", /approving it does not change that/.test(outcome.message), true);
+
+  // Control: a card for an ordinary risky click still runs when approved.
+  const buy = store.queueConfirmation({ args: click("Buy now"), tool: "browser" }, "Click Buy now", runId);
+  const buyOutcome = await approveConfirmation(buy, { resume: false });
+  check("control: an ordinary card runs when approved", [buyOutcome.ok, ran, state(buy)], [true, 1, "done"]);
+
+  // A refuser that throws at approval refuses, as it does in the broker.
+  const realRefuse = registry.browser.refuse;
+  registry.browser.refuse = () => {
+    throw new Error("boom");
+  };
+  const broken = store.queueConfirmation({ args: click("Buy now"), tool: "browser" }, "Click Buy now", runId);
+  const brokenOutcome = await approveConfirmation(broken, { resume: false });
+  check("a refuser that throws at approval refuses too", [brokenOutcome.ok, ran, state(broken)], [false, 1, "rejected"]);
+  registry.browser.refuse = realRefuse;
+  registry.browser.run = real;
+}
+fs.rmSync(process.env.POLICY_PATH, { force: true });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

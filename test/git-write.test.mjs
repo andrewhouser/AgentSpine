@@ -131,6 +131,19 @@ const bad = await gitWrite.run({ branch: `${AGENT_BRANCH_PREFIX}nope`, repo, ver
 check("a missing branch is a readable failure", /ERROR: git switch/.test(bad), true);
 check("git's own wording survives", /invalid reference|match any file|did not match/.test(bad), true);
 
+console.log("\nTHE CHECKOUT THE SERVICE RUNS FROM KEEPS ITS BRANCH");
+{
+  // This repository is what the suite runs from, which is what "served" means to the tool.
+  const { BASE } = await import("../src/config.ts");
+  const here = { build: { enabled: true, repos: { [BASE]: { defaultBranch: "main", gitWrite: true } } } };
+  check("a new branch there is refused", gate({ branch: "agentspine/x", repo: BASE, verb: "branch" }, here).allowed, false);
+  check("so is switching", gate({ branch: "main", repo: BASE, verb: "switch" }, here).allowed, false);
+  check("under another spelling of the path too", gate({ branch: "main", repo: BASE.toUpperCase(), verb: "switch" }, { build: { enabled: true, repos: { [BASE.toUpperCase()]: { gitWrite: true } } } }).allowed, false);
+  check("the refusal says to use a second clone", /second clone/.test(gate({ branch: "main", repo: BASE, verb: "switch" }, here).reason), true);
+  check("reading the diff there is still allowed", gate({ repo: BASE, verb: "diff" }, here).allowed, true);
+  check("control: another repo may still branch", gate({ branch: "agentspine/x", repo, verb: "branch" }).allowed, true);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 fs.rmSync(root, { force: true, recursive: true });
 process.exit(failed ? 1 : 0);

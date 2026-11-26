@@ -97,8 +97,16 @@ console.log("\nREADING A PROPOSAL");
 console.log("\nWHICH CHECKOUT");
 {
   const both = policyWith({ [clone]: { gitWrite: true }, [served]: { gitWrite: true } });
-  check("a separate clone is chosen over the served one", chooseRepo(both, served), { repo: clone, served: false });
-  check("the served one, said so, when it is the only one", chooseRepo(policyWith({ [served]: { gitWrite: true } }), served), { repo: served, served: true });
+  check("a separate clone is chosen, not the served one", chooseRepo(both, served), { repo: clone });
+  // Decided 2026-11-26: a crash or a reboot while the builder was on its branch in the served checkout would
+  // restart the service on code nobody has read, so that checkout is never the builder's.
+  const onlyServed = policyWith({ [served]: { gitWrite: true } });
+  check("the served checkout is never chosen, even when it is the only one", chooseRepo(onlyServed, served), null);
+  check("nor under another spelling of its path", chooseRepo(policyWith({ [served.toUpperCase()]: { gitWrite: true } }), served), null);
+  // Through the tool, "served" is this repository itself, which is what the suite is running from.
+  const { BASE } = await import("../src/config.ts");
+  const onlyThis = tool.checkPolicy(policyWith({ [BASE]: { gitWrite: true } }), good);
+  check("and the tool is then unavailable, saying what to declare", [onlyThis.allowed, /second AgentSpine clone/.test(onlyThis.reason)], [false, true]);
   check("a repo that is not AgentSpine is never chosen", chooseRepo(policyWith({ [stranger]: { gitWrite: true } }), served), null);
   check("nor one without gitWrite", chooseRepo(policyWith({ [clone]: { gitWrite: false } }), served), null);
 }
@@ -112,6 +120,24 @@ console.log("\nTHE CARD");
   }
   check("refused without a declared AgentSpine checkout", tool.checkPolicy(policyWith({}), good).allowed, false);
   check("refused when build is off", tool.checkPolicy({ ...policyWith({ [clone]: { gitWrite: true } }), build: { enabled: false, repos: { [clone]: { gitWrite: true } } } }, good).allowed, false);
+}
+
+console.log("\nWHO MAY PROPOSE: A LIVE CHAT AND THE WEEKLY REVIEW, NOTHING UNWATCHED");
+{
+  // The card's words become the builder's task once approved, so they must not come from a run nobody was
+  // reading, which may have taken them from a page. Decided 2026-11-26.
+  const p = policyWith({ [clone]: { gitWrite: true } });
+  const pendingBefore = store.listConfirmations("pending").length;
+  const from = async (run, kind) => {
+    const runId = store.startRun({ kind, task: "probe" });
+    return (await executeCall({ args: good, tool: "propose_change" }, p, runId, runId, run)).status;
+  };
+  check("a scheduled run is refused", await from({ conversational: false, goal: "nightly", preApproved: true }, "schedule"), "denied");
+  check("a helper (subagent) is refused", await from({ conversational: false, goal: "a brief the model wrote" }, "do"), "denied");
+  check("and nothing was queued by either", store.listConfirmations("pending").length, pendingBefore);
+  check("a live chat queues the card", await from({ conversational: true, goal: "the plan card label is wrong, fix it" }, "chat"), "queued");
+  check("the weekly review's own yes passes (no run rides along)", tool.checkPolicy(p, good).allowed, true);
+  check("the refusal says where a proposal may come from", /live chat or the weekly review/.test(tool.checkPolicy(p, good, { conversational: false, goal: "" }).reason), true);
 }
 
 console.log("\nTHROUGH THE BROKER: TRUST CANNOT SKIP IT");

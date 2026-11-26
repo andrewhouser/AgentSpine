@@ -2006,7 +2006,7 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         if (!c) return sendJson(res, 404, { error: "no such client" });
         if (!loadPolicy().drafts?.enabled) return sendJson(res, 400, { error: "Drafts are switched off in policy.json, so there is nowhere to put one." });
         const conversationId = store.createConversation(`Outreach: ${c.name}`.slice(0, 80), c.project_id ?? null);
-        const { done, runId } = startTask(outreachTask(c), { conversationId, kind: "chat" });
+        const { done, runId } = startTask(outreachTask(c), { conversationId, kind: "chat", taskWrittenByCode: true });
         done.catch((e) => console.error(`[outreach] run ${runId} failed: ${e instanceof Error ? e.message : e}`));
         return sendJson(res, 202, { conversationId, runId });
       }

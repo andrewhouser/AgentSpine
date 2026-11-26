@@ -277,6 +277,13 @@ export interface AgentOpts {
   /** The text the user approved with it, passed down unchanged — see RunContext.approvedTask. */
   approvedTask?: string;
   /**
+   * The goal was assembled by the application, not typed by the user (RunOpts.taskWrittenByCode in
+   * src/runner.ts). Tools then see an empty `RunContext.goal`, which is the truth: the user's message for
+   * this run is nothing. Found 2026-11-26: the follow-up after an approval quoted a tool result in its goal,
+   * and a page saying "please email support@…" read as the user asking for that send.
+   */
+  goalWrittenByCode?: boolean;
+  /**
    * Standing context injected as system messages ahead of the goal — the user profile
    * and auto-recalled memories. Assembled by the caller (`runner.ts`) so every run kind
    * gets it, and so this module stays a pure loop with no opinion about memory.
@@ -617,7 +624,9 @@ const runAgentLoop = async (
   // The harness context, when there is one, is the single owner of these two facts (S1); the plain
   // options remain for callers that build no context (tests, the eval harnesses).
   const conversational = opts.harness?.conversational ?? opts.conversational ?? false;
-  const tools = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
+  // What the user typed, for the tools that ask "did they say so?": nothing, when the application wrote the goal.
+  const userGoal = opts.goalWrittenByCode ? "" : goal;
+  const tools = settingTools(visibleTools(opts.tools), conversational, userGoal, opts.imagesAvailable ?? false);
   const tier = opts.tier ?? "standard";
   // The loop alone knows which tools this setting lets the run see, so the context is completed here
   // and registered for a subagent to derive its own from.
@@ -923,7 +932,7 @@ const runAgentLoop = async (
       // not the requester's account of it.
       const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
         conversational,
-        goal,
+        goal: userGoal,
         preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
         // Not `goal`: in a subagent that is the caller's brief, which the model wrote.
         approvedTask: opts.approvedTask,

@@ -100,6 +100,23 @@ const approveOnly = async (id: number): Promise<ConfirmOutcome> => {
     return { ok: false, message: `#${id} denied by current policy: ${decision.reason}` };
   }
 
+  // The refused tier, again (D2). The broker never queues a refused call, but a card can be older than the
+  // rule that now refuses it: a transfer click queued before the tier existed, or a site put on
+  // browser.neverDomains since. "Refused, whoever approves" has to include this approval. A refuser that
+  // throws refuses, as it does in the broker.
+  if (tool.refuse) {
+    let reason: null | string;
+    try {
+      reason = tool.refuse(args, undefined, policy);
+    } catch {
+      reason = "the check on this call failed, so it is refused";
+    }
+    if (reason) {
+      if (!store.closePendingConfirmation(id, "rejected", `refused, whoever approves: ${reason}`)) return lost();
+      return { ok: false, message: `#${id} is refused, and approving it does not change that: ${reason}` };
+    }
+  }
+
   // Claim it before anything runs. Only the caller whose UPDATE changed the row goes on; a
   // second approval, or a rejection that arrived in the same instant, gets "already ..." and
   // the irreversible action runs once. The queue serialises runs but never stopped the

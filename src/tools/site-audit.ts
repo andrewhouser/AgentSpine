@@ -54,11 +54,11 @@ const available = (policy: Policy): PolicyDecision => {
   return { allowed: true, reason: "site audit permitted" };
 };
 
-/** Why policy will not let this host be opened, or null. Asked for the address given and again for where it ended up. */
 /** The same test the browser and web_read apply to `policy.browser.neverDomains`: the host or any subdomain of it. */
 const isNever = (policy: Policy, host: string): boolean =>
   !!host && (policy.browser?.neverDomains ?? []).some((d) => host === d.toLowerCase() || host.endsWith(`.${d.toLowerCase()}`));
 
+/** Why policy will not let this host be opened, or null. Asked for the address given and again for where it ended up. */
 export const hostRefusal =
   (policy: Policy) =>
   (host: string): null | string => {
@@ -89,17 +89,17 @@ export const reportFileName = (url: string, at: Date): string => {
 /**
  * Audit one address under `policy` and save the report. The one entry point: the tool, the
  * command line and the prospect list all come through here, so none of them can skip the gate.
- * `opts.allow` and `opts.launch` are test seams and `dir` is where a test writes.
+ * `opts.allow`, `opts.launch` and `opts.resolve` are test seams and `dir` is where a test writes.
  */
 export const runSiteAudit = async (
   rawUrl: string,
   policy: Policy,
-  opts: Pick<CollectOpts, "allow" | "launch"> & { dir?: string; now?: Date; runId?: null | number } = {},
+  opts: Pick<CollectOpts, "allow" | "launch" | "resolve"> & { dir?: string; now?: Date; runId?: null | number } = {},
 ): Promise<AuditOutcome> => {
   const url = normalUrl(rawUrl);
   const gate = checkPolicy(policy, { url });
   if (!gate.allowed) return { ok: false, reason: gate.reason };
-  const got = await collect(url, { allow: opts.allow, hostRefusal: hostRefusal(policy), launch: opts.launch });
+  const got = await collect(url, { allow: opts.allow, hostRefusal: hostRefusal(policy), launch: opts.launch, resolve: opts.resolve });
   if (!got.ok) return got;
   const at = opts.now ?? new Date();
   const report = reportFor(got.measure, at);

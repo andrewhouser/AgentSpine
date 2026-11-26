@@ -201,22 +201,36 @@ console.log("\nSC6: THE FILES THAT ENFORCE THE GATES ARE PROTECTED");
 // shown (src/protected-paths.ts). The list is pinned here, so shortening it means editing this file, which is itself on it.
 {
   const { PROTECTED_PATHS } = await import("../src/protected-paths.ts");
+  // Widened 2026-11-26 from the gates themselves to the code around them: what reads the policy, what carries a
+  // model's call to the broker, and the tools that can change a checkout (the write tools enforce this very list).
   const PINNED = [
+    "src/agent.ts",
     "src/broker.ts",
+    "src/config.ts",
     "src/confirmations.ts",
+    "src/fs-scope.ts",
     "src/google/write.ts",
+    "src/harness.ts",
     "src/instagram/api.ts",
     "src/instagram/token.ts",
     "src/learn/promote.ts",
     "src/outgoing.ts",
+    "src/projects/narrow-policy.ts",
     "src/protected-paths.ts",
+    "src/runner.ts",
     "src/sensitivity.ts",
     "src/tools/browser.ts",
+    "src/tools/git-write.ts",
+    "src/tools/index.ts",
+    "src/tools/propose-change.ts",
+    "src/tools/run-command.ts",
+    "src/tools/write-file.ts",
     "test/architecture.test.mjs",
   ];
   check("the protected list is exactly the pinned one", [...PROTECTED_PATHS], PINNED);
   check("every protected path exists, so a rename cannot quietly unprotect it", PINNED.filter((p) => !fs.existsSync(path.join(ROOT, p))), []);
   check("the write tools consult it", /protectedPathOf/.test(sources["src/tools/write-file.ts"]), true);
+  check("a declared command runs inside keepingProtected, so code it runs cannot change one unseen", /\bkeepingProtected\s*\(/.test(sources["src/tools/run-command.ts"]), true);
 }
 
 console.log("\nTHE CODE MAP: READ BY ONE MODULE, WRITTEN BY NONE");

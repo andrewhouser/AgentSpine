@@ -3,22 +3,28 @@
  * SC5, built 2026-11-25).
  *
  * The card says what would change and why, which files are expected to move, how the change will be shown to work,
- * and which runs prompted it. Nothing happens until a person approves it, from a chat, a schedule or the weekly
- * review alike: the classification always shows the card (`alwaysConfirm`), so no chat trust or auto-approval can
- * wave a code change through. Approving starts the builder unit as a run of its own, which branches to
+ * and which runs prompted it. Nothing happens until a person approves it: the classification always shows the card
+ * (`alwaysConfirm`), so no chat trust or auto-approval can wave a code change through.
+ *
+ * Who may propose (decided 2026-11-26): a live chat, and the weekly review when you say yes to one of its ideas
+ * (`src/learn/retro.ts`, which queues the card itself). A scheduled run, a watcher, the heartbeat and a subagent are
+ * refused at `checkPolicy`, as `recipe_save` is. The card's words become the builder's task once approved, so they
+ * must not be words an unwatched run picked up from a page it read. Approving starts the builder unit as a run of its own, which branches to
  * `agentspine/<slug>` before it edits, runs the declared checks, and commits on that branch. It can still not push
  * unasked (a push always queues), an edit to a gate file still shows its own card (SC6), and merging, pushing,
  * `update.sh` and the restart stay with the person, so the service never restarts onto code nobody has read.
  *
- * Which checkout: an AgentSpine repo declared in `policy.build.repos` with `gitWrite`. A separate clone is preferred
- * over the one the service runs from (SC7), and the card says so plainly when the only choice is the served one,
- * because a restart before the merge would then load a half-made branch.
+ * Which checkout: an AgentSpine repo declared in `policy.build.repos` with `gitWrite` that is NOT the one the service
+ * runs from (SC7, decided 2026-11-26). The served checkout is never used: a crash or a reboot while the builder was
+ * on its branch there would restart the service on code nobody has read. With no second clone declared the tool is
+ * unavailable and says what to declare.
  */
+import fs from "node:fs";
 import path from "node:path";
 
 import { BASE } from "../config.ts";
 import { isCheckout } from "../protected-paths.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, RunContext, Tool } from "../types.ts";
 
 const MAX_TITLE = 120;
 const MAX_WHY = 1200;
@@ -43,14 +49,27 @@ export const agentspineRepos = (policy: Policy): string[] =>
     .map(([dir]) => path.resolve(expand(dir)))
     .filter((dir) => isCheckout(dir));
 
-/** The one to use: a separate clone first, the served checkout only when it is the only one. */
-export const chooseRepo = (policy: Policy, served: string = BASE): { repo: string; served: boolean } | null => {
-  const repos = agentspineRepos(policy);
-  const servedReal = path.resolve(served);
-  const other = repos.find((r) => r !== servedReal);
-  if (other) return { repo: other, served: false };
-  return repos.length ? { repo: repos[0], served: true } : null;
+/** The same folder, whatever the spelling: symlinks followed, and case ignored because the Mac's disk ignores it. */
+const sameDir = (a: string, b: string): boolean => {
+  const real = (d: string): string => {
+    try {
+      return fs.realpathSync(d);
+    } catch {
+      return path.resolve(d);
+    }
+  };
+  return real(a).toLowerCase() === real(b).toLowerCase();
 };
+
+/** The clone the builder works in: a declared AgentSpine checkout that is not the one the service runs from, or null. */
+export const chooseRepo = (policy: Policy, served: string = BASE): { repo: string } | null => {
+  const other = agentspineRepos(policy).find((r) => !sameDir(r, served));
+  return other ? { repo: other } : null;
+};
+
+const NO_CLONE =
+  "no second AgentSpine clone is declared. The builder never works in the checkout the service runs from, so clone the " +
+  "repository somewhere else and declare that folder in policy.build.repos with gitWrite";
 
 interface Proposal {
   files: string[];
@@ -81,16 +100,14 @@ export const readProposal = (a: Args): { error: string } | { proposal: Proposal 
 };
 
 /** The card a person reads before anything happens. Built by code from the cleaned proposal. */
-export const proposalCard = (p: Proposal, where: { repo: string; served: boolean } | null): string =>
+export const proposalCard = (p: Proposal): string =>
   [
     `Proposed change to AgentSpine: ${p.title}`,
     `Why: ${p.why}`,
     `Files expected to change: ${p.files.length ? p.files.join(", ") : "to be found by the builder"}`,
     `How it will be shown to work: ${p.testPlan}`,
     `Prompted by: ${p.runIds.length ? p.runIds.map((id) => `run #${id}`).join(", ") : "no particular run"}`,
-    where
-      ? `Approving starts the builder in ${where.repo} on a new agentspine/ branch.${where.served ? " That is the checkout the service runs from, so do not restart the service until you have merged or discarded the branch." : ""}`
-      : "No AgentSpine checkout is declared with gitWrite in policy.build, so approving cannot start anything.",
+    "Approving starts the builder on a new agentspine/ branch in the second clone declared in policy.build. The checkout the service runs from is not touched.",
     "Merging, pushing, update.sh and the restart stay yours.",
   ].join("\n");
 
@@ -120,17 +137,26 @@ export const proposeChange: Tool = {
       // A code change to the assistant itself is always seen first, whatever trust is set (SC5).
       alwaysConfirm: true,
       reversibility: "irreversible",
-      summary: "proposal" in read ? proposalCard(read.proposal, null) : `Proposed change to AgentSpine (incomplete: ${read.error})`,
+      summary: "proposal" in read ? proposalCard(read.proposal) : `Proposed change to AgentSpine (incomplete: ${read.error})`,
       target: "agentspine",
     };
   },
   available: (policy: Policy): PolicyDecision =>
-    policy.build?.enabled && agentspineRepos(policy).length
-      ? { allowed: true, reason: "an AgentSpine checkout is declared with gitWrite" }
-      : { allowed: false, reason: "no AgentSpine checkout is declared with gitWrite in policy.build (deny by default)" },
-  checkPolicy: (policy: Policy, a: Args): PolicyDecision => {
+    policy.build?.enabled && chooseRepo(policy)
+      ? { allowed: true, reason: "a second AgentSpine clone is declared with gitWrite" }
+      : { allowed: false, reason: `${NO_CLONE} (deny by default)` },
+  checkPolicy: (policy: Policy, a: Args, run?: RunContext): PolicyDecision => {
     const on = proposeChange.available!(policy);
     if (!on.allowed) return on;
+    // `run` absent is a person's own yes: the approval-time re-check in confirmations.ts, or the weekly review
+    // queueing an idea you accepted (src/learn/retro.ts). A present run that is not a live chat is refused.
+    if (run && !run.conversational)
+      return {
+        allowed: false,
+        reason:
+          "a change to AgentSpine's own code is proposed only from a live chat or the weekly review, where the user reads " +
+          "it as it is written. An unattended run or a helper can't propose one. Say what you found in your answer instead.",
+      };
     const read = readProposal(a);
     return "error" in read ? { allowed: false, reason: read.error } : { allowed: true, reason: "a complete proposal" };
   },
@@ -138,11 +164,12 @@ export const proposeChange: Tool = {
     const read = readProposal(a);
     if ("error" in read) return `ERROR: ${read.error}`;
     const where = chooseRepo(ctx.policy);
-    if (!where) return "ERROR: no AgentSpine checkout is declared with gitWrite in policy.build, so the builder was not started.";
+    if (!where) return `ERROR: ${NO_CLONE}. The builder was not started.`;
     // Imported here, not at the top: the runner imports the agent loop, which imports the tool registry, which
     // imports this file. Not awaited: the builder takes the model in its own turn, and the approval returns now.
     const { startTask } = await import("../runner.ts");
-    const { runId } = startTask(builderTask(read.proposal, where.repo), { kind: "build", unit: "builder" });
+    // Nobody watches a build as it runs, so it is told about when it ends, failed or finished.
+    const { runId } = startTask(builderTask(read.proposal, where.repo), { kind: "build", notifyOnFinish: true, unit: "builder" });
     return `Started the builder as run #${runId} in ${where.repo}. It will branch before editing and will not push.`;
   },
 };

@@ -88,6 +88,8 @@ export interface GetOpts {
   accept?: (contentType: string) => boolean;
   /** Test seam: which addresses may be connected to. Default `isPublicAddress`. Never set in production code. */
   allow?: (ip: string) => boolean;
+  /** Test seam: the resolver. Default `dns.lookup`. Never set in production code. */
+  resolve?: typeof dns.lookup;
   /** Longest body kept, in bytes. */
   maxBytes?: number;
   maxRedirects?: number;
@@ -102,11 +104,14 @@ export type GetResult =
 
 const UA = "Mozilla/5.0 (compatible; AgentSpine/1.0; personal assistant)";
 
-/** A `lookup` for http(s).request that only ever yields addresses `allow` approves. */
-const guardedLookup =
-  (allow: (ip: string) => boolean): net.LookupFunction =>
+/**
+ * A `lookup` for a socket that only ever yields addresses `allow` approves. Because it IS the socket's own lookup,
+ * the address that was judged is the address connected to: there is no second resolution for a name to change in.
+ */
+export const guardedLookup =
+  (allow: (ip: string) => boolean, resolve: typeof dns.lookup = dns.lookup): net.LookupFunction =>
   (hostname, options, callback) => {
-    dns.lookup(hostname, { ...options, all: true }, (err, addrs) => {
+    (resolve as any)(hostname, { ...options, all: true }, (err: Error | null, addrs: dns.LookupAddress[]) => {
       if (err) return (callback as any)(err);
       const ok = (addrs as dns.LookupAddress[]).filter((a) => allow(a.address));
       if (!ok.length) return (callback as any)(new Error(`refused: ${hostname} resolves to a non-public address`));
@@ -137,7 +142,7 @@ const once = (opts: GetOpts, url: URL, redirectsLeft: number): Promise<GetResult
       url,
       {
         headers: { Accept: "text/html,image/*;q=0.8,*/*;q=0.5", "Accept-Encoding": "gzip, deflate, br", "Accept-Language": "en-US,en;q=0.9", "User-Agent": UA },
-        lookup: guardedLookup(allow),
+        lookup: guardedLookup(allow, opts.resolve),
         method: "GET",
         timeout: opts.timeoutMs ?? 12_000,
       },

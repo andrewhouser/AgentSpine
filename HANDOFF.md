@@ -200,6 +200,11 @@ Xcode target, which needs Andrew's OK). Needs a browser and a simulator, and all
 - The systems map for a client (section 14, "Proposed, not yet agreed").
 - Moving the bundle ids into a gitignored `Local.xcconfig` (needs a `.pbxproj` edit).
 - Every switch in the snippet above is off or log-only until he has measured or read the log.
+- From the security review (2026-11-26): Andrew decided all five the same day and they are built. `propose_change`
+  is chat and weekly review only; the protected list covers the code around the gates and a declared command
+  cannot change one unseen; the builder never works in the served checkout, is watched and is told about; the
+  site audit connects through a checking proxy. The plan doc has each under SC5, SC6, SC7 and U3.
+- Still his: make the second clone on the Mini and declare it in `policy.json`, or `propose_change` stays unavailable.
 
 ## 5. When it is done
 
@@ -218,4 +223,16 @@ He runs `update.sh` on the Mini himself after he pushes; nothing server-side is 
   making `readToday` async, or reading a cached check-in list: a design choice. `src/today.ts` and
   `test/today.test.mjs` were left untouched. The plan doc's U1 paragraph says so.
 - Steps 1, 2.1, 2.3 (nothing unused), 3, 4, 5 and 6 done on 2026-11-26 by Sonnet; nothing escalated from them.
-  Step 7 (Fable security read) is not started.
+  Step 7 was done 2026-11-26 by Fable, on the merged tree. Found and fixed, each with a test that fails without it:
+  1. `conversation_detail` and `recall_output` handed a private run's text to an unpinned run, and so to the
+     cloud. They now pin the caller (`store.runIsPrivate`; `test/private-output.test.mjs`).
+  2. `policy.userDirected` read a task this application wrote as the user's own words: the follow-up after an
+     approval (its task quotes the tool's result) and "Draft outreach". A send named there ran with no card.
+     Those runs now give tools an empty goal (`taskWrittenByCode`; `test/harness-behaviour.test.mjs`).
+  3. Approving an old card did not re-check the refused tier (`src/confirmations.ts`; `test/refused-tier.test.mjs`).
+  4. The site audit's private-address guard did not see WebSockets or service workers (`test/site-audit.test.mjs`).
+  5. The test that catches a new irreversible tool with no unattended rule was lost in the merge; it is back in
+     `test/unattended-asks.test.mjs`.
+  Checked and left as they are: the broker's order; the write tools' protected-file cards; inbox buckets (the
+  label is two enum values, the reply's recipient and subject are code's, labels reach no prompt); Today's
+  Approve (only inside the full card, and not on the saved offline copy); the queue's `abandon`.

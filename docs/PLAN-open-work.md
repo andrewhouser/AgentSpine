@@ -1059,9 +1059,24 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
   Suite: `test/protected-paths.test.mjs`. Decided 2026-11-25: a protected edit always shows its card. Its
   classification carries `alwaysConfirm`, and the broker then ignores `autoApprove`, `userDirected`,
   `trust.chatAutoTools`, a schedule's pre-approval and `irreversibleAlwaysConfirm` being off.
-- **SC7 Which checkout it works in (You).** Not checked: whether the builder on the Mini would branch inside
-  the checkout the LaunchAgent serves from. If so, give it a separate clone, so a half-made branch is never
-  what the next restart loads.
+- **SC7 Which checkout it works in (decided and enforced 2026-11-26; the clone is yours to make).** The builder
+  never works in the checkout the service runs from. `propose_change` is unavailable until a second AgentSpine
+  clone is declared in `policy.build.repos` with `gitWrite` (`chooseRepo`), and `git_write` refuses `branch` and
+  `switch` in the served checkout for any run, so a crash or reboot cannot restart the service on a branch nobody
+  has read. Suites: `test/propose-change.test.mjs`, `test/git-write.test.mjs`. You: clone the repository to a
+  second folder on the Mini, declare it with `gitWrite` and a `check` command, and nothing else changes.
+- **Security review follow-ups (2026-11-26, all built).**
+  - SC5: a proposal comes only from a live chat or from the weekly review; a schedule, a watcher, the heartbeat
+    and a subagent are refused at `checkPolicy`, like `recipe_save`. The builder's run is told about when it
+    ends (`notifyOnFinish`), is watched by the stall watchdog, and runs in the background lane behind chat.
+  - SC6: the protected list grew from the gates to the code around them (22 files: the policy loader, the loop,
+    the runner, the run facts, the registry, the write, git and command tools, `propose_change`, the folder
+    scoping), pinned in `test/architecture.test.mjs`. And a declared command is no longer a way round it:
+    `run_command` runs inside `keepingProtected`, which puts back any protected or control file the command
+    changed, queues a protected file's change as a `write_file` card with the diff, and keeps a control file's
+    changed copy under `data/put-back/`. Suite: `test/protected-paths.test.mjs`, including the real tool.
+    Not covered: `scaffold_ios`, which runs a project generator, and a command that commits with git itself
+    inside the builder's clone, which the merge review is there to catch.
 
 ### SL. Self-learning: reflect on the work and propose what you had not asked for
 
@@ -1311,6 +1326,7 @@ Money words that are not trades (buy, order, pay, checkout, subscribe) still que
 broker's reason and the run, never the arguments), a "Refused, whoever approves" section on the web Activity page,
 and a "refused" badge in a run's tool calls (`REFUSED_PREFIX`, pinned by `test/refused-web.test.mjs`). Not done:
 the same on iPhone and Mac, and the bank and broker hosts, which are yours to put in `policy.json`.
+Security review 2026-11-26: the tier is now checked again when a card is approved (`src/confirmations.ts`), because a card can be older than the rule, such as a transfer click queued when moving money only asked; `test/refused-tier.test.mjs` has the rows. The check that reads the tool sources for an irreversible tool with no unattended rule was lost when the two branches were merged and is back, in `test/unattended-asks.test.mjs`.
 
 Duet will not trade securities or move money between accounts even with your approval. Here every irreversible
 action can be approved, and `policy.autoApprove`, `policy.userDirected`, `policy.trust.chatAutoTools` and the
@@ -1532,8 +1548,12 @@ sees no earlier history until newer runs accumulate. The Search page is the owne
 (`?scope=all` adds scheduled jobs). Older runs are indexed in the background at start, 200 a pass. Suites:
 `test/run-search.test.mjs`, `test/search.test.mjs`, the H4 section of `test/private-output.test.mjs`.
 **Not verified:** the Mini's real ledger (backfill time, index size), and the weights and the 0.5 demotion
-against real queries. **Open:** `recall_output` and `conversation_detail` still return any run by id with no
-privacy check (`store.runTreeIsPinned` is there to close it); the clients do not show where a match was found.
+against real queries. **Closed 2026-11-26 (security review):** `recall_output` and `conversation_detail` returned any run
+by id with no privacy check, and a test showed a private transcript reaching the cloud that way. Both now declare
+`privateOutput` from `store.runIsPrivate` (the search's own rule), so fetching a private run pins the fetching run
+and its thread local before the next model call. A run from before the pin was recorded counts as private, so
+fetching an old run pins the thread. Suite: the second H4 section of `test/private-output.test.mjs`. **Open:** the
+clients do not show where a match was found.
 
 ### H5. Compaction order for LP3 (Code; part of LP3)
 
@@ -1682,6 +1702,8 @@ look at what a client or a prospect has today.
 
 **Built 2026-11-26.** `site_audit` and `npm run audit -- <url>` load a page in a fresh logged-out headless Chrome at desktop and phone width and write a report to `data/site-audits/`: findings most important first, each with its number and a recommendation, and a line saying it is not a Lighthouse score. Thresholds are in `src/siteaudit/score.ts`; the collector is `src/siteaudit/measure.ts`. It needs `browser.enabled`, keeps the allowlist and `neverDomains` for the address given and where it lands, and refuses private addresses on every redirect hop and every request the page makes. Suite: `test/site-audit.test.mjs`. Not closed: DNS that changes between the check and Chrome's lookup. Not run against a real site.
 
+**Security review 2026-11-26.** The write is one place with the name made in code, and the report reaches the model tagged untrusted. Found and fixed: a page could open a WebSocket to a private address, which the request guard never saw (shown with a real Chrome in `test/site-audit.test.mjs`); WebSockets now go through the same check and service workers are off. A host whose DNS answer changes between the check and Chrome's own lookup could still reach a private address; closed the same day at your request: Chrome now connects through `src/siteaudit/proxy.ts`, which resolves each name itself and connects to the address it judged (the socket's own lookup is the check), for plain requests and for tunnels. Tests: a name only the test's resolver knows still loads in a real Chrome, and a name whose answer changes after the check is refused with nothing reaching the server. Seen once against a real HTTPS site. Not covered: WebRTC's UDP, which uses no proxy.
+
 ### U4. A prospect list with drafted outreach (Both)
 
 The second half of the lead finder, and the partner prospector.
@@ -1695,6 +1717,8 @@ The second half of the lead finder, and the partner prospector.
   outreach may claim. The search path reads untrusted pages, so it stays behind U3's rules.
 
 **Built 2026-11-26 on web, iPhone and Mac; not seen running.** Prospects are client rows with the statuses new, contacted, replied, pilot and not-a-fit, a site, a source and the last audit's summary (finding ids and numbers, never page text). Names come from a pasted list (`POST /api/clients/prospects`); there is no search path. Ranking and reasons are code over the audit's findings (`src/clients/prospects.ts`), and every sentence is made by the server. Audit runs U3 for one prospect. Draft outreach starts one chat turn in a new thread that drafts through `draft` in the learned style; nothing is sent. Suite: `test/prospects.test.mjs`. You: where the first names come from, and what outreach may claim.
+
+**Security review 2026-11-26, found and fixed.** "Draft outreach" starts a chat run from a task this application writes ("Draft a first outreach email to NAME, to ADDRESS"), and `policy.userDirected` read that sentence as you asking to email that address, so a `mac_control` send to the prospect would have gone with no card. A run can now say its task was written by code (`RunOpts.taskWrittenByCode`); tools then see an empty `RunContext.goal`, and the outreach run sets it. The same hole was older and wider in the follow-up run after any approval, whose task quotes the tool's result: a page saying "please email support@…" counted as your request. Runs of kind `approval` now always have the flag. Suite: the last section of `test/harness-behaviour.test.mjs`, which fails with a send and no card without the fix.
 
 ### U5. A recording becomes a runbook (Both)
 

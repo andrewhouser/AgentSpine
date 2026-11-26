@@ -331,6 +331,20 @@ console.log("\nA STALLED RUN THAT NEVER RETURNS");
   check("it is no longer watched", stall.__test.watchedCount(), 0);
 }
 
+console.log("\nA BUILD IS WATCHED TOO");
+{
+  // An approval starts the builder and then nobody is looking at it (src/tools/propose-change.ts),
+  // so a build that hangs is found the same way a scheduled job is.
+  toolMs = 850;
+  script.push(SLOW, DONE);
+  const run = startTask("an approved change to AgentSpine", opts("build"));
+  const result = await outcome(run);
+  const r = row(run.runId);
+  check("a stalled build ends as failed, with the stall note", [r.status, String(r.note).startsWith("Stalled: no model or tool activity")], ["failed", true]);
+  check("and its caller hears it", result, { threw: r.note });
+  check("it is no longer watched", stall.__test.watchedCount(), 0);
+}
+
 console.log("\nRUNS A PERSON IS WATCHING ARE NOT ITS BUSINESS");
 {
   toolMs = 850; // the same tool that stalled the scheduled run above

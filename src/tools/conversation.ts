@@ -65,6 +65,9 @@ export const conversationDetail: Tool = {
   // Reads the agent's own local ledger and touches nothing else — always allowed, same
   // reasoning as memory_recall.
   checkPolicy: (_p: Policy): PolicyDecision => ({ allowed: true, reason: "local conversation history access" }),
+  // The record of a run that read private material holds that material (its tool results). Reading
+  // one pins the caller local before its next model call, like reading the mail itself would (H4).
+  privateOutput: (a: Args) => store.runIsPrivate(runIdOf(a)),
   run: async (a: Args) => {
     const id = runIdOf(a);
     if (!Number.isFinite(id) || id <= 0) {
@@ -147,6 +150,8 @@ export const recallOutput: Tool = {
     summary: `Recall the full output of run #${runIdOf(a as Args) || "?"}`,
   }),
   checkPolicy: (_p: Policy): PolicyDecision => ({ allowed: true, reason: "local conversation history access" }),
+  // A private run's answer is a report on what it read, which is the same material (src/sensitivity.ts).
+  privateOutput: (a: RecallArgs) => store.runIsPrivate(runIdOf(a as Args)),
   run: async (a: RecallArgs) => {
     const id = runIdOf(a as Args);
     if (!Number.isFinite(id) || id <= 0) {

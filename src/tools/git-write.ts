@@ -58,6 +58,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { BASE } from "../config.ts";
 import { expand, real } from "../fs-scope.ts";
 import { clip } from "../stash.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
@@ -200,6 +201,17 @@ export const gitWrite: Tool = {
       return {
         allowed: false,
         reason: `${found.root} does not have "gitWrite": true in policy.build.repos (deny by default). git_status still works.`,
+      };
+
+    // The checkout the service runs from keeps the branch it is on (SC7, decided 2026-11-26). A crash or a reboot
+    // restarts the service from whatever is checked out, so a branch the builder left it on would be run before
+    // anyone had read it. Case is ignored because the Mac's disk ignores it.
+    if ((verb === "branch" || verb === "switch") && real(found.root).toLowerCase() === real(BASE).toLowerCase())
+      return {
+        allowed: false,
+        reason:
+          `${found.root} is the checkout the AgentSpine service runs from, and its branch is not changed from here: a restart ` +
+          `would run whatever it was left on. Work in a second clone of the repository, declared in policy.build.repos.`,
       };
 
     // A new branch may only be created under the prefix, which is also what makes the

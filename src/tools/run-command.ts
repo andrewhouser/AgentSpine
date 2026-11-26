@@ -50,6 +50,8 @@ import path from "node:path";
 
 import { COMMAND_MAX_TIMEOUT_MS, COMMAND_OUTPUT_CHARS, COMMAND_OUTPUT_PASS_CHARS, COMMAND_TIMEOUT_MS } from "../config.ts";
 import { expand, real } from "../fs-scope.ts";
+import * as store from "../memory/store.ts";
+import { keepingProtected, putBackNote } from "../protected-paths.ts";
 import { clip } from "../stash.ts";
 import { writeDefaultDir } from "./write-file.ts";
 import type { BuildRepo, ClassifiedAction, DeclaredCommand, Policy, PolicyDecision, Tool } from "../types.ts";
@@ -278,8 +280,16 @@ export const runCommand: Tool = {
 
     const started = Date.now();
     let r: RawResult;
+    let putBack = "";
     try {
-      r = await runDeclared(cmd, found.root, timeoutMs);
+      // A command runs code, and code can write anywhere: a test file written a minute ago is run by `npm test`.
+      // Inside an AgentSpine checkout the gate files and control files are put back if it changed them, and the
+      // change is queued for the user (src/protected-paths.ts). Any other repo runs exactly as before.
+      const kept = await keepingProtected(found.root, () => runDeclared(cmd, found.root, timeoutMs), (call, summary) =>
+        store.queueConfirmation(call, summary, ctx?.runId ?? null),
+      );
+      r = kept.value;
+      putBack = putBackNote(kept.putBack);
     } catch (err) {
       // A missing binary lands here (ENOENT), which is a configuration fact worth stating
       // plainly rather than as a stack trace: the fix is in policy.json or in PATH.
@@ -305,7 +315,7 @@ export const runCommand: Tool = {
       return clip(
         { max: COMMAND_OUTPUT_PASS_CHARS, runId: ctx?.runId ?? null, source: `command ${name} in ${found.root}`, tool: "run_command" },
         `${head}\n\n${raw}`,
-      );
+      ) + putBack;
     }
 
     const body = [head, summary ? `\n${summary}` : "", raw ? `\n--- output ---\n${raw}` : ""].join("\n");
@@ -314,7 +324,7 @@ export const runCommand: Tool = {
     return clip(
       { max: COMMAND_OUTPUT_CHARS, runId: ctx?.runId ?? null, source: `command ${name} in ${found.root}`, tool: "run_command" },
       body,
-    );
+    ) + putBack;
   },
 };
 

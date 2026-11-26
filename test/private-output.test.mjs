@@ -272,6 +272,39 @@ console.log("\nH4. SEARCHING PAST RUNS DOES NOT CARRY A PRIVATE RUN'S TEXT TO TH
   check("and was shown the private run's text", localLog.some((b) => b.includes("UNTRUSTED CONTENT from past runs") && b.includes(CANARY)), true);
 }
 
+console.log("\nH4. A PRIVATE RUN FETCHED BY ITS ID PINS THE RUN THAT FETCHED IT");
+{
+  // conversation_detail and recall_output return one run by id, with no search in between to hold
+  // anything back. A run id is a small number, so a page a run read could name one. The record of a
+  // run that read a transcript holds that transcript, so reading it is reading the transcript.
+  const privateRun = store.searchPastRuns("zebra quarterly workplace").hits.find((h) => store.getRun(h.id).private === 1).id;
+  check("the store calls that run private", store.runIsPrivate(privateRun), true);
+  check("and a run that does not exist is not", store.runIsPrivate(999999), false);
+
+  for (const tool of ["conversation_detail", "recall_output"]) {
+    const thread = store.createConversation(`fetches a private run with ${tool}`, null);
+    reset();
+    nextCall = { action: "tool", args: { run_id: privateRun }, tool };
+    const r = await runTask("what happened in that run", { conversationId: thread, tier: "deep" });
+    check(`${tool}: none of the private text reached the cloud`, has(cloudLog), 0);
+    check(`${tool}: the fetching run is recorded as pinned`, store.getRun(r.runId).private, 1);
+    check(`${tool}: and its thread is local-only from here on`, store.getConversation(thread).local_only, 1);
+  }
+
+  // Control: a run that touched nothing private can be fetched without pinning anyone.
+  const plainThread = store.createConversation("plain, to be fetched", null);
+  reset();
+  nextCall = null;
+  const plainRun = await runTask("what is two plus two", { conversationId: plainThread, tier: "deep" });
+  check("control: the store calls a clean run not private", store.runIsPrivate(plainRun.runId), false);
+  const asker = store.createConversation("fetches a clean run", null);
+  reset();
+  nextCall = { action: "tool", args: { run_id: plainRun.runId }, tool: "recall_output" };
+  const fetched = await runTask("what was the answer", { conversationId: asker, tier: "deep" });
+  check("control: fetching it leaves the run unpinned", store.getRun(fetched.runId).private, 0);
+  check("control: and it used the cloud", cloudLog.length >= 2, true);
+}
+
 for (const s of [localServer, cloudServer]) s.close();
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

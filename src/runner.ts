@@ -118,6 +118,14 @@ export interface RunOpts {
    * both look like an open socket, or no socket, depending on the roaming of a phone.
    */
   notifyOnFinish?: boolean;
+  /**
+   * The task was written by this application (a button on a screen), not typed by the user. The model is
+   * given it as usual, but tools are told the user said nothing, so no sentence in it can count as the user
+   * asking for an action (`policy.userDirected`): its sends and events queue like anyone else's. A task
+   * built from a client's name, a pasted list or a tool's result must set this. A run of kind "approval"
+   * always has it, because its task quotes what was approved and what the tool returned.
+   */
+  taskWrittenByCode?: boolean;
   policy?: Policy;
   /** Run inside a project — its instructions, documents, and narrowed policy apply. */
   projectId?: number | null;
@@ -389,7 +397,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   // A date the user states in a chat message ("Garrett's birthday is March 4") becomes a
   // proposal in the confirmation queue. Only kind "chat": a schedule's task text, an approval's
   // synthetic message and a heartbeat are not the user's own words. Regex only, no model.
-  if (kind === "chat") proposeDatesFromChat(task);
+  if (kind === "chat" && !opts.taskWrittenByCode) proposeDatesFromChat(task);
 
   // Claim the uploads this message was sent with, before anything is queued, so a browser
   // that reloads the thread a second later already sees the images under the turn. The
@@ -403,7 +411,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   // Agent cycles take turns on the model, so this run may genuinely be waiting. Saying so beats a spinner that looks
   // identical to a hang. A person's run goes ahead of background work, and a background run already going hands the
   // model over at its next step (src/queue.ts, LP5), so the wait is one step of a job, not the whole job.
-  const lane = isUnattendedKind(kind) ? "background" : "person";
+  // A build is started by an approval and then nobody watches it, so it waits its turn behind a person like a
+  // scheduled job does, and hands the model over between steps.
+  const lane = isUnattendedKind(kind) || kind === "build" ? "background" : "person";
   const { depth } = queueStatus();
   if (depth > 0) publish(runId, { depth, type: "queue_wait" });
 
@@ -433,7 +443,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     // Watched from here and not from enqueue: time in the queue is waiting, not stalling.
     // If it is interrupted and still does not end (a tool that never returns), the watchdog
     // closes it out and lets the queue go on without it.
-    if (isUnattended(kind)) {
+    if (isUnattended(kind) || kind === "build") {
       watchRun(runId, (note) => {
         closeStalled(runId, note, pushStalled);
         abandon(runId, new Error(note));
@@ -641,6 +651,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         // user wrote. A tool that must know whether the user asked for something in particular,
         // such as a send to a named person, reads this and nothing the model wrote (F9).
         approvedTask: harness.preApproved ? task : undefined,
+        // Pressing Approve is not saying "email this person": the follow-up's task is ours, and it quotes
+        // tool results, which can be a web page's words (see RunOpts.taskWrittenByCode).
+        goalWrittenByCode: opts.taskWrittenByCode === true || kind === "approval",
         context,
         history,
         // Only a thread that actually holds an image is shown look_at_image — see

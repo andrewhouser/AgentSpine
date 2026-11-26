@@ -215,6 +215,42 @@ console.log("\nWHAT F9 LEAVES ALONE");
 check("a scheduled job still writes a note unasked", await macWouldBe({ action: "create_note", body: "x", title: "Daily" }, job("Save a daily note.")), "EXECUTED");
 check("a send nobody pre-approved queues, as before", await macWouldBe(mail("sam@example.com"), { conversational: false, goal: digestJob }), "QUEUED");
 
+console.log("\nTHE REGISTRY — an irreversible tool asks when unattended, or says why not");
+{
+  // CLAUDE.md: a tool whose calls a scheduled run would otherwise make unasked sets confirmWhenUnattended,
+  // refuses any run that is not a live chat, or always shows its card. This reads the tool sources, so a
+  // new irreversible tool fails here until it does one of the three or is listed below with the reason.
+  const src = path.join(import.meta.dirname, "..", "src");
+  const reviewed = {
+    // The inbox cleanup's own job, and a schedule is how it runs. Its limits are code: inbox mail only,
+    // never anyone you have emailed, never starred or sent mail, a cap per run, and Gmail keeps trash 30 days.
+    "tools/gmail-triage.ts": "trash and spam are the inbox cleanup's job, bounded in code",
+    // The same refusals as gmail_triage, and the request is a bare POST to the mail's own one-click link.
+    "tools/gmail-unsubscribe.ts": "one-click unsubscribe is the inbox cleanup's job, with gmail_triage's refusals",
+  };
+  const files = [...fs.readdirSync(path.join(src, "tools")).map((f) => `tools/${f}`), "mcp/register.ts"].filter((f) => f.endsWith(".ts"));
+  const unanswered = [];
+  const stale = new Set(Object.keys(reviewed));
+  let irreversible = 0;
+  for (const rel of files) {
+    const text = fs.readFileSync(path.join(src, rel), "utf8");
+    if (!/"irreversible"/.test(text)) continue;
+    irreversible++;
+    const asks = /confirmWhenUnattended\s*[:,]/.test(text);
+    const chatOnly = /!run\??\.conversational/.test(text);
+    const alwaysShown = /alwaysConfirm:\s*true/.test(text);
+    if (asks || chatOnly || alwaysShown) continue;
+    if (reviewed[rel]) {
+      stale.delete(rel);
+      continue;
+    }
+    unanswered.push(rel);
+  }
+  check("the scan found the irreversible tools", irreversible >= 10, true);
+  check("no irreversible tool is unanswered", unanswered, []);
+  check("the reviewed list holds nothing that no longer needs it", [...stale], []);
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 fs.rmSync(probe, { force: true, recursive: true });
 process.exit(failed ? 1 : 0);

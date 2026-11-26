@@ -12,8 +12,11 @@
  *     must never run there, so this launches a fresh logged-out browser and closes it.
  *  2. No private addresses. The redirect chain is walked first by `safeGet`, which checks the
  *     address behind every hop, and every request the page then makes is checked by host
- *     before it leaves. What this does not close: a host whose DNS answer changes between
- *     that check and Chrome's own lookup. Closing that needs a proxy, which is not built.
+ *     before it leaves, WebSockets included, and service workers are off because their requests
+ *     would not be seen. Chrome then connects through a proxy of ours (proxy.ts) that resolves
+ *     each name itself and connects to the address it judged, so a host whose DNS answer changes
+ *     after the check gets nowhere: Chrome never looks a name up. Not covered: WebRTC's UDP,
+ *     which uses no proxy and carries no answer back to the page's server.
  *  3. Nothing on the page is followed. No link is clicked and no form is filled. The page's
  *     own words come back only as a title and a description, for the caller to tag untrusted.
  */
@@ -24,6 +27,8 @@ import type { Browser, BrowserContext } from "playwright-core";
 
 import { isPublicAddress, safeGet } from "../headsup/research/net.ts";
 import { launchHeadless } from "../tools/browser.ts";
+import { startGuardProxy } from "./proxy.ts";
+import type { GuardProxy } from "./proxy.ts";
 import { contactFrom } from "./score.ts";
 import type { ImageMeasure, PageLink, SiteMeasure } from "./score.ts";
 
@@ -44,6 +49,8 @@ export interface CollectOpts {
   hostRefusal?: (host: string) => null | string;
   /** Test seam: the browser to use. Default is a fresh headless Chrome. */
   launch?: () => Promise<Browser>;
+  /** Test seam: the resolver, for the check and for the proxy that connects. Default `dns.lookup`. Never set in production code. */
+  resolve?: typeof dns.lookup;
 }
 
 export type CollectResult = { measure: SiteMeasure; ok: true } | { ok: false; reason: string };
@@ -57,11 +64,13 @@ const hostOf = (url: string): string => {
 };
 
 /** Whether every address a host resolves to is one we may reach. A host that does not resolve is not. */
-const hostReachable = async (host: string, allow: (ip: string) => boolean): Promise<boolean> => {
+const hostReachable = async (host: string, allow: (ip: string) => boolean, resolve: typeof dns.lookup = dns.lookup): Promise<boolean> => {
   if (!host) return false;
   if (net.isIP(host)) return allow(host);
   try {
-    const addrs = await dns.promises.lookup(host, { all: true });
+    const addrs = await new Promise<dns.LookupAddress[]>((ok, fail) =>
+      (resolve as any)(host, { all: true }, (err: Error | null, found: dns.LookupAddress[]) => (err ? fail(err) : ok(found))),
+    );
     return addrs.length > 0 && addrs.every((a) => allow(a.address));
   } catch {
     return false;
@@ -69,14 +78,22 @@ const hostReachable = async (host: string, allow: (ip: string) => boolean): Prom
 };
 
 /** Refuse, before it leaves, any request the page makes to a host on a private network. */
-const guardRequests = async (context: BrowserContext, allow: (ip: string) => boolean): Promise<void> => {
+const guardRequests = async (context: BrowserContext, allow: (ip: string) => boolean, resolve?: typeof dns.lookup): Promise<void> => {
   const known = new Map<string, Promise<boolean>>();
   await context.route("**/*", async (route) => {
     const url = route.request().url();
     if (!/^https?:/i.test(url)) return route.continue();
     const host = hostOf(url);
-    if (!known.has(host)) known.set(host, hostReachable(host, allow));
+    if (!known.has(host)) known.set(host, hostReachable(host, allow, resolve));
     return (await known.get(host)) ? route.continue() : route.abort("blockedbyclient");
+  });
+  // A WebSocket is not a request `route` sees, so it is checked here by the same rule. Found
+  // 2026-11-26: a page could open one to a private address and the guard above never heard of it.
+  await context.routeWebSocket(/.*/, async (ws) => {
+    const host = hostOf(ws.url().replace(/^ws/i, "http"));
+    if (!known.has(host)) known.set(host, hostReachable(host, allow, resolve));
+    if (await known.get(host)) ws.connectToServer();
+    else await ws.close({ code: 1008, reason: "blocked" });
   });
 };
 
@@ -143,10 +160,28 @@ interface Loaded {
 }
 
 /** One load of the page in its own context, at one screen size. */
-const load = async (browser: Browser, url: string, viewport: { height: number; width: number }, phone: boolean, allow: (ip: string) => boolean): Promise<Loaded> => {
-  const context = await browser.newContext({ deviceScaleFactor: phone ? 3 : 1, hasTouch: phone, isMobile: phone, viewport });
+const load = async (
+  browser: Browser,
+  url: string,
+  viewport: { height: number; width: number },
+  phone: boolean,
+  allow: (ip: string) => boolean,
+  via: { proxy: string; resolve?: typeof dns.lookup },
+): Promise<Loaded> => {
+  // Service workers are blocked: a request one makes is not seen by `context.route`, so it would pass the
+  // private-address guard below unchecked.
+  // Everything goes through the checking proxy (src/siteaudit/proxy.ts), so the address that was judged is the
+  // address connected to. `<-loopback>` takes away Chrome's habit of reaching localhost without a proxy.
+  const context = await browser.newContext({
+    deviceScaleFactor: phone ? 3 : 1,
+    hasTouch: phone,
+    isMobile: phone,
+    proxy: { bypass: "<-loopback>", server: via.proxy },
+    serviceWorkers: "block",
+    viewport,
+  });
   try {
-    await guardRequests(context, allow);
+    await guardRequests(context, allow, via.resolve);
     await context.addInitScript(LCP_PROBE);
     const page = await context.newPage();
     const sizes = new Map<string, number>();
@@ -191,21 +226,24 @@ export const collect = async (rawUrl: string, opts: CollectOpts = {}): Promise<C
 
   // Walk the redirects with the guarded client first, so the browser is only ever pointed at
   // an address whose every hop was checked. A few kilobytes is enough: only the route matters.
-  const first = await safeGet(start.toString(), { allow, maxBytes: 4096, maxRedirects: 5, onOverflow: "truncate", timeoutMs: 15_000 });
+  const first = await safeGet(start.toString(), { allow, maxBytes: 4096, maxRedirects: 5, onOverflow: "truncate", resolve: opts.resolve, timeoutMs: 15_000 });
   if (!first.ok) return { ok: false, reason: `could not reach ${hostOf(start.toString())}: ${first.reason}` };
   const landedRefused = refusal(hostOf(first.url));
   if (landedRefused) return { ok: false, reason: landedRefused };
 
   let browser: Browser | null = null;
+  let proxy: GuardProxy | null = null;
   try {
+    proxy = await startGuardProxy(allow, opts.resolve);
+    const via = { proxy: proxy.url, resolve: opts.resolve };
     browser = await (opts.launch ?? launchHeadless)();
-    const desktop = await load(browser, first.url, DESKTOP, false, allow);
+    const desktop = await load(browser, first.url, DESKTOP, false, allow, via);
     // The page's own scripts can still move it. Judge where it actually is before reading anything from it.
     const endHost = hostOf(desktop.finalUrl);
     const endRefused = refusal(endHost);
     if (endRefused) return { ok: false, reason: endRefused };
-    if (!(await hostReachable(endHost, allow))) return { ok: false, reason: `refused: the page moved to ${endHost}, which is not a public address` };
-    const phone = await load(browser, desktop.finalUrl, PHONE, true, allow);
+    if (!(await hostReachable(endHost, allow, opts.resolve))) return { ok: false, reason: `refused: the page moved to ${endHost}, which is not a public address` };
+    const phone = await load(browser, desktop.finalUrl, PHONE, true, allow, via);
 
     const images: ImageMeasure[] = desktop.facts.images
       .filter((i) => /^https?:/i.test(i.url))
@@ -235,5 +273,6 @@ export const collect = async (rawUrl: string, opts: CollectOpts = {}): Promise<C
     return { ok: false, reason: `could not load the page: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}` };
   } finally {
     if (browser) await browser.close().catch(() => {});
+    if (proxy) await proxy.close().catch(() => {});
   }
 };

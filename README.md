@@ -1017,7 +1017,7 @@ src/                 the agent — no build step, two runtime dependencies
   judge.ts         cloud-preferring yes/no for the rare real judgment call
   spine.ts         heartbeat (once | loop)
   confirm.ts       human approval CLI for queued actions
-  protected-paths.ts  the gate files: an edit to one always waits for you, with its diff
+  protected-paths.ts  the gate files and the code around them: an edit to one always waits for you, with its diff
   area-map.md      the map of this codebase, trusted context for a run working in this repo
   area-map.ts      reads that map; no tool may write it
   tools/
@@ -1038,7 +1038,7 @@ src/                 the agent — no build step, two runtime dependencies
     weather-alerts.ts  weather_alerts — thresholds applied in code, not by the model
     git-status.ts  git_status — read-only branch/dirty/recent-commits
     git-write.ts   git_write — branch/add/commit/diff on its own branch; closed verb list
-    propose-change.ts  propose_change — ask to change AgentSpine's own code; chat only, starts on approval
+    propose-change.ts  propose_change — ask to change AgentSpine's own code; chat or weekly review only, starts on approval
     run-command.ts run_command / commands_list — run a command YOU declared, read the output
     command-output.ts  reduces a build log to the verdict and the first failure
     look-at-file.ts look_at_file — point the vision tier at an image on disk, e.g. a screenshot
@@ -1682,8 +1682,9 @@ It is stricter than the other page tools in two ways. It always launches its own
 headless Chrome, whatever `BROWSER_MODE` says, so a stranger's site is never opened in a
 signed-in browser. And it refuses an address on a private network: the redirect chain is walked
 first with every hop's address checked, and every request the page then makes is checked by
-host before it leaves. Not closed: a host whose DNS answer changes between that check and
-Chrome's own lookup. It still needs `browser.enabled`, and it keeps `navigateAllowlist` and
+host before it leaves, WebSockets included. Chrome then connects through a small proxy of
+AgentSpine's own (`src/siteaudit/proxy.ts`) that looks each name up itself and connects to the
+address it judged, so a host whose DNS answer changes after the check gets nowhere. It still needs `browser.enabled`, and it keeps `navigateAllowlist` and
 `neverDomains`, for the address given and for where the page ends up.
 
 ## The build loop — running what it wrote
@@ -1898,16 +1899,33 @@ only narrow — a project holding client code can pin itself local and accept a 
 When AgentSpine finds something in its own code worth fixing, it does not edit the files. It calls
 `propose_change`, and a card arrives in the confirmation queue: what would change, why, the files it
 expects to touch, how the change will be shown to work, and the runs that prompted it. Accepting a
-"Code change" card in the weekly review queues one of these too. The card always waits for you,
-whatever chat trust or auto-approval you have set.
+"Code change" card in the weekly review queues one of these too. Those are the only two places a
+proposal can come from: a scheduled job, a watcher or a helper cannot make one, because the card's
+words become the builder's instructions and must not be words an unwatched run took from a page. The
+card always waits for you, whatever chat trust or auto-approval you have set.
 
-Approving it starts the builder as a run of its own, in an AgentSpine checkout declared in
-`policy.build.repos` with `gitWrite`. A separate clone is used over the one the service runs from,
-and the card warns you when the served checkout is the only choice, because a restart before you
-merge would load the branch. The builder branches to `agentspine/<slug>` before it edits, runs the
-declared checks, and commits on the branch. It cannot push without asking, and an edit to one of the
-files that enforce the safety gates (the broker, confirmations, the local-only pin and a few more,
-listed in `src/protected-paths.ts`) shows you its own card with the change. Merging, pushing,
+Approving it starts the builder as a run of its own, in a **second clone** of AgentSpine declared in
+`policy.build.repos` with `gitWrite`. It never works in the checkout the service runs from: a crash
+or a reboot while it was on its branch there would restart the service on code you had not read. So
+until you declare a second clone the tool is unavailable and says so, and `git_write` will not create
+or switch a branch in the served checkout for anyone. To set one up:
+
+```bash
+git clone https://github.com/<you>/AgentSpine.git ~/Developer/AgentSpine-builder
+```
+
+and add that folder to `policy.build.repos` in `policy.json` with `"gitWrite": true` and the
+commands the builder may run (`check`).
+
+The builder branches to `agentspine/<slug>` before it edits, runs the declared checks, and commits
+on the branch. It waits its turn behind your chat like a scheduled job, the stall watchdog watches
+it, and you get a notification when it ends, finished or failed. It cannot push without asking. An
+edit to one of the files that enforce the safety gates shows you its own card with the change: the
+broker, confirmations and the local-only pin, and also the code around them (the policy loader, the
+loop and runner, the write, git and command tools; the list is in `src/protected-paths.ts`). A
+declared command is not a way round that: if `npm test` or any other command changes one of those
+files, or `policy.json`, `profile.md`, `goals.md` or a unit file, it is put back and the change is
+queued as a card (a control file's changed copy is kept under `data/put-back/`). Merging, pushing,
 `update.sh` and the restart stay yours.
 
 ### Reviewing it — the Builds page

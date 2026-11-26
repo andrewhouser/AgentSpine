@@ -817,6 +817,26 @@ export const markRunPrivate = (id: number): void => {
 export const runTreeIsPinned = (id: number): boolean =>
   (db.prepare("SELECT private FROM runs WHERE id = ?").get(rootRunId(id)) as { private: null | number } | undefined)?.private === 1;
 
+/**
+ * Whether a past run's text is private, by the rule the search over past runs uses: the top of its tree
+ * was pinned (or is older than the record of pins, so nothing shows it was clean), its thread is marked
+ * local-only, or its thread is in a project. For the tools that return one run by id
+ * (`conversation_detail`, `recall_output`), which declare `privateOutput` from this: the caller that
+ * reads such a run is pinned local before its next model call. A run that does not exist returns
+ * nothing, so it is not private.
+ */
+export const runIsPrivate = (id: number): boolean => {
+  if (!Number.isFinite(id) || id <= 0) return false;
+  const r = db
+    .prepare(
+      "SELECT r.private, c.local_only AS localOnly, c.project_id AS projectId FROM runs r " +
+        "LEFT JOIN conversations c ON c.id = r.conversation_id WHERE r.id = ?",
+    )
+    .get(rootRunId(id)) as { localOnly: null | number; private: null | number; projectId: null | number } | undefined;
+  if (!r) return false;
+  return r.private !== 0 || r.localOnly === 1 || r.projectId != null;
+};
+
 const MARK_OPEN = "\u0002";
 const MARK_CLOSE = "\u0003";
 const unmark = (s: string): string => s.replaceAll(MARK_OPEN, "").replaceAll(MARK_CLOSE, "").replace(/\s+/g, " ").trim();
