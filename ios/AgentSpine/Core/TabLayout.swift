@@ -5,14 +5,17 @@ import Foundation
 /// Raw values are what gets saved in `UserDefaults`, so they are stable identifiers: renaming a
 /// case here would silently reset everyone's tab order.
 enum AppTab: String, CaseIterable, Codable, Hashable {
-    // Today leads (PLAN-open-work section 14, U1). Heads-up sits after the first four, so on a
-    // fresh install it is under More: its open offers are answered on Today.
-    case today, threads, tasks, study, headsup, checkin, schedules, projects, files, inbox, knowledge, clients, search, meetings, builds, activity, settings
+    // Today leads (PLAN-open-work section 14, U1). Since section 15, R1 the default is the spine's
+    // places: Today, Ask (the threads), Meetings and People in the bar, then Projects, Memory and
+    // Settings first under More. Heads-up, check-in, tasks and schedules are moments on Today.
+    case today, threads, meetings, people, projects, memory, settings, headsup, checkin, tasks, schedules, knowledge, search, inbox, files, study, clients, builds, activity
 
     var title: String {
         switch self {
         case .today: return "Today"
-        case .threads: return "Threads"
+        case .threads: return "Ask"
+        case .people: return "People"
+        case .memory: return "Memory"
         case .headsup: return "Heads-up"
         case .tasks: return "Tasks"
         case .study: return "Study"
@@ -35,6 +38,8 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
         switch self {
         case .today: return "sun.max"
         case .threads: return "bubble.left.and.text.bubble.right"
+        case .people: return "person.2"
+        case .memory: return "brain"
         case .headsup: return "sparkles"
         case .tasks: return "checklist"
         case .study: return "brain.head.profile"

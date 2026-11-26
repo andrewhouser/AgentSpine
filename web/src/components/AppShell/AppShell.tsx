@@ -12,6 +12,7 @@ import { api } from "../../lib/api.ts";
 import { isWaiting, needsYou } from "../../lib/attention.ts";
 import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
+import { AskBar } from "../AskBar/AskBar.tsx";
 import { BuildsView } from "../BuildsView/BuildsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { CheckinView } from "../CheckinView/CheckinView.tsx";
@@ -23,6 +24,8 @@ import { InstagramView } from "../InstagramView/InstagramView.tsx";
 import { KnowledgeView } from "../KnowledgeView/KnowledgeView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { OverviewView } from "../OverviewView/OverviewView.tsx";
+import { PeopleView } from "../PeopleView/PeopleView.tsx";
+import { ProjectsView } from "../ProjectsView/ProjectsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
@@ -38,6 +41,7 @@ const NO_PROJECTS: Project[] = [];
 
 const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
+  ask: "Ask",
   checkin: "Check-in",
   clients: "Clients",
   files: "Files",
@@ -45,7 +49,10 @@ const VIEW_TITLES: Record<string, string> = {
   inbox: "Drop zone",
   knowledge: "Knowledge",
   meetings: "Meetings",
+  memory: "Memory",
   overview: "Overview",
+  people: "People",
+  projects: "Projects",
   schedules: "Schedules",
   search: "Search",
   settings: "Settings",
@@ -171,6 +178,16 @@ export const AppShell = () => {
     go({ conversationId: created.id, view: "chat" });
   };
 
+  /**
+   * The ask bar (section 15, R1): a new conversation, in the project when there is one, and the
+   * typed text as its first message. The scope is the conversation's project and nothing else.
+   */
+  const ask = async (text: string, projectId?: number): Promise<void> => {
+    const created = await create(projectId);
+    await api.sendMessage(created.id, text);
+    go({ conversationId: created.id, view: "chat" });
+  };
+
   const newProject = async (name: string): Promise<void> => {
     const created = await api.createProject(name);
     reloadProjects();
@@ -265,9 +282,23 @@ export const AppShell = () => {
         {route.view === "instagram" && <InstagramView />}
         {route.view === "knowledge" && <KnowledgeView projects={projects} />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
+        {route.view === "ask" && (
+          <SearchView
+            lead={<AskBar onAsk={(text) => ask(text)} placeholder="Ask anything…" />}
+            onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}
+            subtitle="Ask starts a conversation. Below it, find what was said before in any conversation."
+            title="Ask"
+          />
+        )}
+        {route.view === "people" && <PeopleView />}
+        {route.view === "projects" && (
+          <ProjectsView onNewProject={() => setNamingProject(true)} onOpenProject={(id) => go({ projectId: id, view: "project" })} projects={projects} />
+        )}
+        {route.view === "memory" && <SettingsView only="memory" onOpenRun={(id) => go({ runId: id, view: "activity" })} />}
         {route.view === "project" && route.projectId !== null && (
           <ProjectView
             key={route.projectId}
+            onAsk={(text) => ask(text, route.projectId ?? undefined)}
             onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}
             onProjectsChanged={() => {
               reloadProjects();
@@ -288,6 +319,7 @@ export const AppShell = () => {
             />
           ) : (
             <TodayView
+              onAsk={(text) => ask(text)}
               onChanged={onTurnComplete}
               onNewChat={() => void newChat()}
               onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}

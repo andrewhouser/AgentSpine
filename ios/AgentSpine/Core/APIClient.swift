@@ -488,8 +488,9 @@ final class APIClient {
     /// Everything waiting, on one screen (PLAN-open-work section 14, U1). Keeps a copy, so the
     /// screen the app opens on still shows something with the server out of reach; an approval
     /// from that copy cannot be answered (the same rule as a saved thread).
+    /// Since section 15, R1 this reads `/api/spine`: Today, field for field, plus what is ahead.
     func today() async throws -> Loaded<TodayScreen> {
-        try await sendKeepingCopy(request("/api/today"), as: TodayScreen.self, key: "today")
+        try await sendKeepingCopy(request("/api/spine"), as: TodayScreen.self, key: "today")
     }
 
     /// Hide one item ("approval:12", "task:5", "headsup:3", "thread:7") until the next morning,

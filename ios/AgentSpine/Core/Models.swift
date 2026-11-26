@@ -2485,6 +2485,25 @@ struct TodayScreen: Codable {
     let sinceFrom: String
     let tasks: [TodayTask]
     let threads: [TodayThread]
+    /// The spine's Ahead (section 15, R1). Present from `/api/spine`; absent from the Later and
+    /// Seen answers, which are Today alone, so the store keeps the last list it had.
+    let ahead: [SpineAhead]?
+    let calendarAsOf: String?
+}
+
+/// One row of the spine's Ahead: a schedule's next run today, or a calendar event as it was last
+/// read. An event's title is someone else's text, so it is shown and never sent anywhere.
+struct SpineAhead: Codable, Hashable, Identifiable {
+    let allDay: Bool
+    let at: String
+    let detail: String
+    let key: String
+    let kind: String
+    let scheduleId: Int?
+    let title: String
+    let untrusted: Bool
+
+    var id: String { key }
 }
 
 extension TodayApproval {

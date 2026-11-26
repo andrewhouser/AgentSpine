@@ -12,6 +12,7 @@ import styles from "./Sidebar.module.css";
 
 export type View =
   | "activity"
+  | "ask"
   | "builds"
   | "chat"
   | "checkin"
@@ -22,8 +23,11 @@ export type View =
   | "instagram"
   | "knowledge"
   | "meetings"
+  | "memory"
   | "overview"
+  | "people"
   | "project"
+  | "projects"
   | "schedules"
   | "search"
   | "settings"

@@ -142,6 +142,8 @@ struct RootView: View {
         case .files: stacked(tab) { FilesView() }
         case .inbox: stacked(tab) { InboxView() }
         case .knowledge: stacked(tab) { KnowledgeView() }
+        case .people: stacked(tab) { PeopleView() }
+        case .memory: stacked(tab) { MemoryView() }
         case .clients: stacked(tab) { ClientsView() }
         case .search:
             stacked(tab) {

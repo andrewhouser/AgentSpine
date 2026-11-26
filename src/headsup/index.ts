@@ -5,6 +5,7 @@
  * wiring, which is why it has no test of its own: there is nothing in it to get wrong that
  * the pieces' tests would not catch, and a test would need a live Google account.
  */
+import { keepCalendar } from "../calendar-cache.ts";
 import { loadPolicy } from "../config.ts";
 import { eventsBetween, listCalendars } from "../google/client.ts";
 import type { CalendarEvent } from "../google/client.ts";
@@ -44,6 +45,18 @@ export const fetchScanEvents = async (
   }
   // The planner and scanner assume soonest-first so a series collapses to its next instance.
   events.sort((a, b) => a.start.localeCompare(b.start));
+  // A clean read of every allowed calendar is also what the spine's "Ahead" shows (calendar-cache.ts).
+  // Only unscoped and complete: a narrowed or part-failed read would erase events it never looked at.
+  if (!scope && !errors.length)
+    keepCalendar(
+      "headsup",
+      events
+        .filter((e) => e.status !== "cancelled")
+        .map((e) => ({ allDay: e.allDay, calendar: e.calendarName, key: `${e.calendarId}|${e.id || `${e.start}|${e.title}`}`, start: e.start, title: e.title })),
+      from,
+      to,
+      now,
+    );
   return { errors, events };
 };
 

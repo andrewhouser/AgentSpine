@@ -106,3 +106,59 @@
   gap: 10px;
   margin-top: 18px;
 }
+
+/*
+ * The spine (section 15, R1): three bands on one line. The line is the app's own mark, the
+ * `--spine` token; Now is drawn heavier because it is the part that needs you.
+ */
+.band {
+  border-left: 3px solid var(--spine);
+  margin: 22px 0 0 6px;
+  padding: 0 0 4px 18px;
+  position: relative;
+}
+
+.band::before {
+  background: var(--bg);
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  content: "";
+  height: 9px;
+  left: -8px;
+  position: absolute;
+  top: 2px;
+  width: 9px;
+}
+
+.now {
+  border-left-color: var(--attention);
+}
+
+.now::before {
+  background: var(--attention);
+  border-color: var(--attention);
+}
+
+.ahead::before {
+  border-style: dashed;
+}
+
+.bandLabel {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quiet {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  padding: 8px 0;
+}
+
+.asOf {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-top: 6px;
+}

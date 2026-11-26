@@ -17,6 +17,7 @@ export interface Route {
 
 const VIEW_PATHS: Record<Exclude<View, "chat" | "project">, string> = {
   activity: "/activity",
+  ask: "/ask",
   builds: "/builds",
   checkin: "/checkin",
   clients: "/clients",
@@ -26,7 +27,10 @@ const VIEW_PATHS: Record<Exclude<View, "chat" | "project">, string> = {
   instagram: "/instagram",
   knowledge: "/knowledge",
   meetings: "/meetings",
+  memory: "/memory",
   overview: "/overview",
+  people: "/people",
+  projects: "/projects",
   schedules: "/schedules",
   search: "/search",
   settings: "/settings",

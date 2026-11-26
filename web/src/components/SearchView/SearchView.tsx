@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useEffect, useState } from "react";
 
 import type { SearchHit } from "../../lib/types.ts";
@@ -7,11 +9,15 @@ import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 
 interface SearchViewProps {
+  /** Shown under the header: the Ask place puts its ask bar here (section 15, R1). */
+  lead?: ReactNode;
   onOpenConversation: (id: number) => void;
+  subtitle?: string;
+  title?: string;
 }
 
 /** Search every conversation — what you asked and what it answered. */
-export const SearchView = ({ onOpenConversation }: SearchViewProps) => {
+export const SearchView = ({ lead, onOpenConversation, subtitle, title }: SearchViewProps) => {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [starred, setStarred] = useState<{ conversationId: number; conversationTitle: null | string; id: number; note: null | string; task: null | string }[]>([]);
@@ -42,7 +48,8 @@ export const SearchView = ({ onOpenConversation }: SearchViewProps) => {
 
   return (
     <div className={styles.page}>
-      <PageHeader subtitle="Across every conversation — your questions and its answers." title="Search" />
+      <PageHeader subtitle={subtitle ?? "Across every conversation — your questions and its answers."} title={title ?? "Search"} />
+      {lead}
       <div className={styles.form}>
         <input
           aria-label="Search conversations"

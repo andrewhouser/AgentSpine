@@ -163,9 +163,61 @@ struct TodaySections: View {
                 .accessibilityLabel("Brief")
             }
 
-            if store.isEmpty {
-                EmptyNotice(symbol: "sun.max", title: "Nothing needs you right now", detail: "Approvals, tasks due, heads-ups and what your scheduled jobs did will show here.")
-                    .listRowBackground(Color.clear)
+            if !screen.since.isEmpty {
+                Section {
+                    ForEach(screen.since) { s in
+                        Button {
+                            open(s.runId.map { .run($0) } ?? .schedules)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+                                    Text(s.title)
+                                        .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
+                                        .foregroundStyle(Spine.Palette.text)
+                                    Text(TodayWords.sinceLabel(s.kind))
+                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
+                                        .foregroundStyle(s.kind == "ok" ? Spine.Palette.textDim : Spine.Palette.warn)
+                                    Spacer(minLength: 0)
+                                    Text(SpineDate.relative(s.at))
+                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                        .foregroundStyle(Spine.Palette.textFaint)
+                                }
+                                if !s.detail.isEmpty {
+                                    Text(s.detail)
+                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                        .foregroundStyle(Spine.Palette.textDim)
+                                        .lineLimit(3)
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    HStack {
+                        Text("Behind · ran since you last looked (\(screen.since.count))")
+                        Spacer()
+                        Button("Seen") { Task { await store.seen() } }
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
+                            .accessibilityHint("Clears this list")
+                    }
+                }
+            }
+            if screen.since.isEmpty {
+                Section("Behind") {
+                    line("Nothing has run since you last looked.")
+                }
+            }
+
+            // Now (section 15, R1): what needs you, in Today's order. The header stands alone as the band's label.
+            Section {
+                if store.isEmpty {
+                    line("Nothing needs you right now.")
+                }
+            } header: {
+                Text("Now").foregroundStyle(Spine.Palette.attention)
             }
 
             if !screen.approvals.isEmpty {
@@ -223,49 +275,6 @@ struct TodaySections: View {
                 }
             }
 
-            if !screen.since.isEmpty {
-                Section {
-                    ForEach(screen.since) { s in
-                        Button {
-                            open(s.runId.map { .run($0) } ?? .schedules)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
-                                    Text(s.title)
-                                        .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
-                                        .foregroundStyle(Spine.Palette.text)
-                                    Text(TodayWords.sinceLabel(s.kind))
-                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
-                                        .foregroundStyle(s.kind == "ok" ? Spine.Palette.textDim : Spine.Palette.warn)
-                                    Spacer(minLength: 0)
-                                    Text(SpineDate.relative(s.at))
-                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                                        .foregroundStyle(Spine.Palette.textFaint)
-                                }
-                                if !s.detail.isEmpty {
-                                    Text(s.detail)
-                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                                        .foregroundStyle(Spine.Palette.textDim)
-                                        .lineLimit(3)
-                                        .multilineTextAlignment(.leading)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } header: {
-                    HStack {
-                        Text("Since you last looked (\(screen.since.count))")
-                        Spacer()
-                        Button("Seen") { Task { await store.seen() } }
-                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
-                            .accessibilityHint("Clears this list")
-                    }
-                }
-            }
-
             if screen.later > 0 {
                 Section {
                     HStack {
@@ -276,6 +285,35 @@ struct TodaySections: View {
                             .buttonStyle(.bordered)
                     }
                 }
+            }
+
+            // Ahead (section 15, R1): today's remaining schedule runs and calendar, as last read.
+            Section {
+                if store.ahead.isEmpty {
+                    line(store.calendarAsOf == nil
+                         ? "Nothing scheduled today. The calendar shows here once Heads-up or the check-in has read it."
+                         : "Nothing else on the calendar or the schedules today.")
+                }
+                ForEach(store.ahead) { a in
+                    Button {
+                        if a.kind == "schedule" { open(.schedules) }
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+                            Text(a.allDay ? "all day" : SpineDate.timeOfDay(a.at))
+                                .font(SpineFont.mono(Spine.TypeSize.caption))
+                                .foregroundStyle(Spine.Palette.textFaint)
+                            label(title: a.title, detail: a.kind == "schedule" ? "runs: \(a.detail)" : a.detail, urgent: false)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(a.kind != "schedule")
+                }
+            } header: {
+                Text("Ahead")
+            } footer: {
+                if let asOf = store.calendarAsOf { Text("Calendar as of \(SpineDate.relative(asOf))") }
             }
         }
     }
@@ -344,5 +382,69 @@ struct TodaySections: View {
         #else
         Button(title, action: run).controlSize(.small)
         #endif
+    }
+}
+
+/// The ask bar (PLAN-open-work section 15, R1), shared by the iPhone and the Mac. It starts an
+/// ordinary chat turn in a new conversation through `TodayStore.ask`. The scope is a project id
+/// passed by the screen, never words added to the text; nothing on the screen is copied in.
+struct AskBar: View {
+    let placeholder: String
+    var projectID: Int?
+    var scopeLabel: String?
+    /// Open the conversation the question started.
+    let opened: (Int) -> Void
+
+    @State private var text = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.xs) {
+            HStack(spacing: Spine.Space.sm) {
+                if let scopeLabel {
+                    Text(scopeLabel)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.accent)
+                        .padding(.horizontal, Spine.Space.sm)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: Spine.Radius.sm).fill(Spine.Palette.accentSoft))
+                }
+                TextField(placeholder, text: $text)
+                    .textFieldStyle(.plain)
+                    .disabled(busy)
+                    .onSubmit { Task { await send() } }
+                Button(busy ? "Asking…" : "Ask") { Task { await send() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Spine.Palette.accent)
+                    .disabled(busy || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.leading, Spine.Space.md)
+            .padding([.vertical, .trailing], Spine.Space.xs + 2)
+            .background(RoundedRectangle(cornerRadius: Spine.Radius.lg).fill(Spine.Palette.bgElevated))
+            .overlay(RoundedRectangle(cornerRadius: Spine.Radius.lg).stroke(Spine.Palette.borderStrong, lineWidth: 1))
+            if let error {
+                Text(error)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.danger)
+            }
+        }
+        .padding(.horizontal, Spine.Space.md)
+        .padding(.vertical, Spine.Space.sm)
+    }
+
+    private func send() async {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !busy else { return }
+        busy = true
+        error = nil
+        defer { busy = false }
+        do {
+            let id = try await TodayStore.shared.ask(t, projectID: projectID)
+            text = ""
+            opened(id)
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }

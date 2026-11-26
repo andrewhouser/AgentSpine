@@ -4,6 +4,7 @@ import type { Conversation, Project, ProjectSource, RetentionRule } from "../../
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
+import { AskBar } from "../AskBar/AskBar.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { TasksView } from "../TasksView/TasksView.tsx";
 import styles from "./ProjectView.module.css";
@@ -18,6 +19,8 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 interface ProjectViewProps {
+  /** The ask bar, scoped to this project: the conversation it starts belongs to the project (section 15, R1). */
+  onAsk: (text: string) => Promise<void>;
   onOpenConversation: (id: number) => void;
   onProjectsChanged: () => void;
   onStartConversation: (projectId: number) => void;
@@ -32,6 +35,7 @@ interface Detail {
 }
 
 export const ProjectView = ({
+  onAsk,
   onOpenConversation,
   onProjectsChanged,
   onStartConversation,
@@ -84,6 +88,8 @@ export const ProjectView = ({
           New conversation
         </button>
       </PageHeader>
+
+      <AskBar onAsk={onAsk} placeholder="Ask about this project…" scopeLabel={detail.project.name} />
 
       <div aria-label="Project sections" className={styles.tabs} role="tablist">
         {TABS.map((t) => (

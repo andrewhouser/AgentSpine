@@ -47,6 +47,11 @@ struct TodayView: View {
                 TodaySections(store: store, open: open, readAloud: { reader.toggle($0) }, speaking: reader.speaking)
             }
             .navigationTitle("Today")
+            // The ask bar (section 15, R1): what you type, and nothing from the rows above, starts a thread.
+            .safeAreaInset(edge: .bottom) {
+                AskBar(placeholder: "Ask about your day…") { id in path.append(.thread(id)) }
+                    .background(Spine.Palette.bg)
+            }
             .navigationDestination(for: TodayTarget.self) { target in
                 switch target {
                 case .thread(let id): ThreadView(conversationID: id)

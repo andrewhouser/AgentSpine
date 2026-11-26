@@ -86,6 +86,7 @@ import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./c
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { clearLater, markLooked, readToday, setLater } from "./today.ts";
+import { readSpine } from "./day-line.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
@@ -2134,6 +2135,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/today: everything waiting, on one screen (PLAN-open-work section 14, U1 and U2).
     // Read-only apart from two things only the owner's own screen does: putting an item off
     // until the morning, and saying "I have seen these". No tool reaches either.
+    // GET /api/spine: Today plus "Ahead" (src/day-line.ts, section 15 R1). Read-only, and it never calls
+    // Google: the calendar part is the copy Heads-up and the check-in keep. Seen and Later stay on /api/today.
+    if (m === "GET" && seg[1] === "spine" && seg.length === 2) return sendJson(res, 200, readSpine());
     if (seg[1] === "today") {
       if (m === "GET" && seg.length === 2) return sendJson(res, 200, readToday());
       if (m === "POST" && seg.length === 3 && seg[2] === "seen") {

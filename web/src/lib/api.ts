@@ -73,6 +73,7 @@ import type {
   Schedule,
   ScheduleVersion,
   SearchHit,
+  Spine,
   StudyDueCard,
   StudyOverview,
   StudyReview,
@@ -605,6 +606,8 @@ export const api = {
     return res.blob();
   },
 
+  /** Today plus what is ahead (section 15, R1). Seen and Later stay on the Today routes. */
+  spine: () => request<Spine>("/api/spine"),
   starRun: (runId: number, starred: boolean) => post<{ ok: boolean }>(`/api/runs/${runId}/star`, { starred }),
 
   startDictation: () => post<{ device: string }>("/api/dictate/start"),

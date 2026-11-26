@@ -204,6 +204,9 @@ final class TodayStore {
     static let shared = TodayStore()
 
     private(set) var screen: TodayScreen?
+    /// The spine's Ahead, kept apart because Later and Seen answer with Today alone.
+    private(set) var ahead: [SpineAhead] = []
+    private(set) var calendarAsOf: String?
     /// Set while `screen` is the saved copy because the server is unreachable. An approval shown
     /// from it cannot be answered: it may already have been, or have changed.
     private(set) var cachedAt: Date?
@@ -227,6 +230,8 @@ final class TodayStore {
         do {
             let fresh = try await api.today()
             screen = fresh.value
+            ahead = fresh.value.ahead ?? []
+            calendarAsOf = fresh.value.calendarAsOf
             cachedAt = fresh.cachedAt
             error = nil
             // A saved copy's count may be stale, and a stale badge is worse than yesterday's.
@@ -235,6 +240,15 @@ final class TodayStore {
             if screen == nil { self.error = error.localizedDescription }
         }
         loaded = true
+    }
+
+    /// The ask bar (section 15, R1): a new conversation, in the project when there is one, with
+    /// the typed text as its first message. The scope is the conversation's project and nothing
+    /// else, and the text sent is exactly what was typed. Returns the conversation to open.
+    func ask(_ text: String, projectID: Int? = nil) async throws -> Int {
+        let conversation = try await api.createConversation(projectID: projectID)
+        _ = try await api.send(message: text, to: conversation.id)
+        return conversation.id
     }
 
     /// Hide one item until the next morning. The server answers with the whole screen.

@@ -13,26 +13,34 @@ export const PINNED_SLOTS = 6;
 
 /** In the order a fresh browser shows them. `hint` is the hover tooltip: what the page is for, in a line. */
 export const NAV_ITEMS: { hint: string; key: View; label: string }[] = [
+  // The places (section 15, R0 and R1). Today, the spine, is the button above the menu.
+  { hint: "Ask anything, or find something said before", key: "ask", label: "Ask" },
+  { hint: "Recorded meetings, transcripts and summaries", key: "meetings", label: "Meetings" },
+  { hint: "The people your meetings name", key: "people", label: "People" },
+  { hint: "Each project's conversations, sources and meetings", key: "projects", label: "Projects" },
+  { hint: "What it has learned, and where each fact came from", key: "memory", label: "Memory" },
+  { hint: "What it may do, appearance, recipes and policy", key: "settings", label: "Settings" },
+  // More. Heads-up, check-in, tasks and schedules are moments on Today's line; their own screens stay here.
   { hint: "Birthdays, bills and trips it spotted", key: "headsup", label: "Heads-up" },
   { hint: "New mail from people, and what else is waiting", key: "checkin", label: "Check-in" },
   { hint: "To-dos and follow-ups", key: "tasks", label: "Tasks" },
-  { hint: "Recorded meetings, transcripts and summaries", key: "meetings", label: "Meetings" },
-  { hint: "Drop in files, scans or notes for it to remember", key: "inbox", label: "Drop zone" },
-  { hint: "Decisions and commitments to review", key: "knowledge", label: "Knowledge" },
   { hint: "Recurring jobs and watchers", key: "schedules", label: "Schedules" },
-  { hint: "Search every conversation and document", key: "search", label: "Search" },
+  { hint: "Decisions and commitments to review", key: "knowledge", label: "Knowledge" },
+  { hint: "Drop in files, scans or notes for it to remember", key: "inbox", label: "Drop zone" },
   { hint: "Files the assistant wrote for you", key: "files", label: "Files" },
   { hint: "Commands and diffs from coding runs", key: "builds", label: "Builds" },
   { hint: "Flash cards and learning topics", key: "study", label: "Study" },
-  { hint: "Clients and time tracking", key: "clients", label: "Clients" },
   { hint: "Posts waiting for their slot, to read and approve", key: "instagram", label: "Instagram" },
   { hint: "Every run, with its full trace", key: "activity", label: "Activity" },
+  { hint: "Clients and time tracking", key: "clients", label: "Clients" },
   { hint: "Health summary and what is worth a look", key: "overview", label: "Overview" },
-  { hint: "Appearance, memory, recipes and policy", key: "settings", label: "Settings" },
+  { hint: "Search every conversation by its words", key: "search", label: "Search" },
 ];
 
-const KEY = "sidebar-nav-order";
-const CHANGED = "sidebar-nav-order-changed";
+// "-v2" since the menu became the spine's places (section 15, R1): an order saved for the old menu
+// would keep Heads-up and Check-in pinned and hide the new places under More, so it starts again once.
+const KEY = "sidebar-nav-order-v2";
+const CHANGED = "sidebar-nav-order-changed-v2";
 
 /**
  * Unknown names dropped (an item a later version removed), repeats dropped, and anything the saved

@@ -112,6 +112,18 @@ carries it, stacks by where it came from (approvals, heads-ups, check-ins, finis
 it has no thread to stack under, and names that source in its subtitle, which is the line the
 Watch shows under the title.
 
+**Today is one line through the day** (section 15 of the plan). Below the three lines, **Behind**
+is what ran since you last looked, **Now** is what is waiting, and **Ahead** is the rest of today:
+each schedule's next run before midnight and today's calendar as it was last read. The spine never
+calls Google to draw that: Heads-up's morning pass and the check-in keep a copy of what they read
+(`src/calendar-cache.ts`), and the line says when that copy is from. `GET /api/spine` is Today plus
+that list (`src/day-line.ts`). At the foot of Today, and at the top of a project's screen, an
+**ask bar** starts a new conversation with exactly what you typed; on a project it belongs to that
+project, so it stays on the local model. The menu is the places: **Ask**, **Meetings**, **People**,
+**Projects**, **Memory** and **Settings**, with the older screens (Heads-up, Check-in, Tasks,
+Schedules and the rest) under More. On the iPhone the bar is Today, Ask (the threads), Meetings and
+People.
+
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the
 composer **for you to read and edit** — nothing is ever sent automatically, because the text is

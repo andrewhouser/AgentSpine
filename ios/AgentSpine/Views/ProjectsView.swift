@@ -236,6 +236,8 @@ struct ProjectDetailView: View {
     @State private var newPath = ""
     @State private var addingSource = false
     @State private var tab: ProjectTab = .conversations
+    /// A thread the ask bar just started, opened over this screen.
+    @State private var askedThread: Int?
     @State private var retentionDays = ""
     @State private var retentionSeeded = false
     @State private var retentionSaving = false
@@ -426,6 +428,19 @@ struct ProjectDetailView: View {
         }
         .navigationTitle(detail?.project.name ?? "Project")
         .spineInlineTitle()
+        // The ask bar, scoped to this project (section 15, R1): the thread it starts belongs to the
+        // project, so the run stays local like every run in a project. The scope is the id, not words.
+        .safeAreaInset(edge: .bottom) {
+            AskBar(placeholder: "Ask about this project…", projectID: projectID, scopeLabel: detail?.project.name) { askedThread = $0 }
+                .background(Spine.Palette.bg)
+        }
+        .navigationDestination(item: $askedThread) { id in
+            #if os(macOS)
+            MacThreadDetail(conversationID: id)
+            #else
+            ThreadView(conversationID: id)
+            #endif
+        }
         .refreshable { await load() }
         .task { await load() }
         .task { rules = (try? await APIClient.shared.retentionRules()) ?? [] }

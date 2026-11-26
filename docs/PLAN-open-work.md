@@ -1893,6 +1893,21 @@ leaves the machine stops and writes down what it found.
   the pattern of `test/today-screen.test.mjs` (web words and Swift words from the same fixtures).
 - [Fable] Calendar titles and mail subjects on the line are other people's text: confirm none reaches a
   prompt, and that the scoped ask bar cannot be used to put a title into a run's goal.
+- **Built 2026-11-26**, with the menu as drawn in R0 (your choice). `GET /api/spine` is Today field for field
+  plus `ahead` and `calendarAsOf` (`src/day-line.ts`; `src/spine.ts` is the old heartbeat). Nothing stored the
+  calendar before, so `src/calendar-cache.ts` keeps a copy written by the two readers that already read it:
+  Heads-up's morning pass (every allowed calendar, only on a clean and unscoped read) and the check-in (the
+  primary calendar, each time it runs). Each replaces only its own rows in the window it read. "Prep" is not
+  shown: nothing in the code defines it yet, so it waits for R7's counts. The ask bar is on Today and on a
+  project's screen on all three clients, not yet on every screen; it creates a conversation (with the
+  project's id as the only scope) and sends exactly the typed text. Person and meeting scopes wait for R7
+  and R4. Menu: web pins Ask, Meetings, People, Projects, Memory, Settings; Mac pins Meetings, People,
+  Projects, Memory, Heads-up, Check-in (the threads above are Ask); iPhone's bar is Today, Ask (the
+  Threads tab, renamed), Meetings, People. Saved orders start again once (new storage keys). People is the
+  knowledge store's people for now; Memory is Settings → Memory as a place. On the Fable question: event
+  titles are read only by `day-line.ts` for `/api/spine`; no prompt-building code imports the cache, and the
+  ask bar's goal is the box's text. Not done: a Swift decode test of `/api/spine` (the Today section of
+  Models.swift does not compile alone), the security read, and nothing has been seen on the Mini.
 
 ### R2. The decision card says why (Code; all three clients)
 

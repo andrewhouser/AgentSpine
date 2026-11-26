@@ -30,6 +30,11 @@ struct MacTodayView: View {
         }
         .scrollContentBackground(.hidden)
         .background(Spine.Palette.bg)
+        // The ask bar (section 15, R1): what you type, and nothing from the rows above, starts a thread.
+        .safeAreaInset(edge: .bottom) {
+            AskBar(placeholder: "Ask about your day…") { id in open(.thread(id)) }
+                .background(Spine.Palette.bg)
+        }
         .navigationTitle("Today")
         .toolbar {
             ToolbarItem {

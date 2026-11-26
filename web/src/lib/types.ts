@@ -1425,6 +1425,24 @@ export interface TodayBrief {
   waiting: { approvals: number; headsups: number; tasks: number; threads: number };
 }
 
+/** One row of the spine's Ahead (src/day-line.ts). An event's title is someone else's text: show it, nothing more. */
+export interface SpineAhead {
+  allDay: boolean;
+  at: string;
+  detail: string;
+  key: string;
+  kind: "event" | "schedule";
+  scheduleId: null | number;
+  title: string;
+  untrusted: boolean;
+}
+
+/** `GET /api/spine`: Today, field for field, plus what is ahead (section 15, R1). */
+export interface Spine extends Today {
+  ahead: SpineAhead[];
+  calendarAsOf: null | string;
+}
+
 export interface Today {
   approvals: TodayApproval[];
   brief: TodayBrief;

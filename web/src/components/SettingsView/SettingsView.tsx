@@ -69,11 +69,16 @@ const tabFromUrl = (): TabId => {
   return TABS.find((x) => x.id === t)?.id ?? "dials";
 };
 
-export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void }) => {
+/**
+ * `only` shows one tab as a place of its own, with no tab strip: Memory is a menu place
+ * (section 15, R1) and is the same screen as Settings → Memory.
+ */
+export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id: number) => void; }) => {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [policy, setPolicy] = useState<null | Record<string, unknown>>(null);
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<TabId>(tabFromUrl);
+  const [picked, setTab] = useState<TabId>(tabFromUrl);
+  const tab = only ?? picked;
 
   const pickTab = (t: TabId): void => {
     setTab(t);
@@ -179,8 +184,9 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
 
   return (
     <div className={styles.page}>
-      <PageHeader title="Settings" />
+      <PageHeader title={only ? (TABS.find((t) => t.id === only)?.label ?? "Settings") : "Settings"} />
 
+      {!only && (
       <div aria-label="Settings sections" className={styles.tabs} role="tablist">
         {TABS.map((t) => (
           <button
@@ -195,6 +201,7 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
           </button>
         ))}
       </div>
+      )}
 
       <div className={styles.panel} role="tabpanel">
       {tab === "general" && (

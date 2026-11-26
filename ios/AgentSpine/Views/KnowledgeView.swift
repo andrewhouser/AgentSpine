@@ -441,3 +441,55 @@ struct ClientCommitmentsView: View {
         } catch { self.error = error.localizedDescription }
     }
 }
+
+/// People (PLAN-open-work section 15), shared by the iPhone and the Mac. For now, the people the
+/// knowledge store already names, from meetings and claims you reviewed. A page for each person,
+/// with what is open between you, is R7; until then this says so. Nothing here collects anything.
+struct PeopleView: View {
+    @State private var people: [KnowledgeEntity] = []
+    @State private var loaded = false
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            if let error {
+                ErrorNotice(message: error) { Task { await load() } }
+                    .listRowBackground(Color.clear)
+            }
+            if loaded && people.isEmpty && error == nil {
+                EmptyNotice(symbol: "person.2", title: "No one yet", detail: "People appear here as meetings are reviewed.")
+                    .listRowBackground(Color.clear)
+            }
+            Section {
+                ForEach(people) { person in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(person.name).fontWeight(.semibold)
+                        if !person.aliases.isEmpty {
+                            Text("also \(person.aliases.joined(separator: ", "))")
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.textDim)
+                        }
+                    }
+                }
+            } footer: {
+                Text("A page for each person, with what is open between you, comes next (section 15, R7).")
+            }
+        }
+        .navigationTitle("People")
+        .spineInlineTitle()
+        .refreshable { await load() }
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            people = try await APIClient.shared.knowledgeEntities()
+                .filter { $0.kind == "person" }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loaded = true
+    }
+}

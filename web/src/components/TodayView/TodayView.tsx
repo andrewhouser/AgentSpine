@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { Headsup, Today } from "../../lib/types.ts";
+import type { Headsup, Spine, Today } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
@@ -16,11 +16,12 @@ import {
   todayWaitingLine,
 } from "../../lib/today.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
+import { AskBar } from "../AskBar/AskBar.tsx";
 import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import own from "./TodayView.module.css";
 
-const NOTHING: null | Today = null;
+const NOTHING: null | Spine = null;
 /** How often the screen reads again while it is open. It costs no model time, only a few queries. */
 const REFRESH_MS = 60_000;
 
@@ -28,6 +29,8 @@ const when = (iso: string): string => new Date(iso).toLocaleString([], { dateSty
 const timeOf = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 interface TodayViewProps {
+  /** The ask bar: start an ordinary chat turn with this text, scoped to nothing (section 15, R1). */
+  onAsk: (text: string) => Promise<void>;
   /** Something here was answered, so the sidebar's dots and the tab title should be read again. */
   onChanged: () => void;
   onNewChat: () => void;
@@ -44,11 +47,11 @@ interface TodayViewProps {
  * same card a thread uses, and the buttons are there. A one-line preview with Approve beside
  * it would make approving a rubber stamp.
  */
-export const TodayView = ({ onChanged, onNewChat, onOpenConversation, onOpenRun, onOpenView }: TodayViewProps) => {
+export const TodayView = ({ onAsk, onChanged, onNewChat, onOpenConversation, onOpenRun, onOpenView }: TodayViewProps) => {
   const [error, setError] = useState("");
   const [today, refresh, setToday] = useResource(
     () =>
-      api.today().catch((err: unknown) => {
+      api.spine().catch((err: unknown) => {
         setError(err instanceof Error ? err.message : String(err));
         return NOTHING;
       }),
@@ -71,8 +74,9 @@ export const TodayView = ({ onChanged, onNewChat, onOpenConversation, onOpenRun,
   const act = async (fn: () => Promise<Today>): Promise<void> => {
     setError("");
     try {
-      // "Later" and "Seen" answer with the whole screen, so it is shown without a second read.
-      setToday(await fn());
+      // "Later" and "Seen" answer with Today, so it is shown without a second read; Ahead is kept as it was.
+      const next = await fn();
+      setToday(today ? { ...today, ...next } : null);
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -112,7 +116,7 @@ export const TodayView = ({ onChanged, onNewChat, onOpenConversation, onOpenRun,
 
   return (
     <div className={styles.page}>
-      <PageHeader subtitle="What is waiting on you, what is due, and what ran while you were away. Nothing here asks the model anything." title="Today" />
+      <PageHeader subtitle="One line through the day: what ran, what needs you now, and what is ahead. Nothing here asks the model anything." title="Today" />
 
       <div className={styles.toolbar}>
         <button className={`${styles.button} ${styles.primary}`} onClick={onNewChat} type="button">
@@ -138,7 +142,41 @@ export const TodayView = ({ onChanged, onNewChat, onOpenConversation, onOpenRun,
         </div>
       )}
 
-      {nothing && <div className={styles.empty}>Nothing needs you right now.</div>}
+      {today && (
+        <div className={own.band}>
+          <div className={own.bandLabel}>Behind</div>
+          {today.since.length === 0 && <div className={own.quiet}>Nothing has run since you last looked.</div>}
+      {today && today.since.length > 0 && (
+        <section>
+          <div className={own.sectionHead}>
+            <div className={own.section}>Ran since you last looked ({today.since.length})</div>
+            <button className={styles.button} onClick={() => void act(api.todaySeen)} title="Clears this list. New results will appear here as they finish." type="button">
+              Seen
+            </button>
+          </div>
+          {today.since.map((s) => (
+            <div className={own.row} key={s.key}>
+              <button
+                className={own.rowMain}
+                onClick={() => (s.runId !== null ? onOpenRun(s.runId) : onOpenView("schedules"))}
+                type="button"
+              >
+                <span className={own.who}>{s.title}</span>
+                <span className={s.kind === "ok" ? own.detail : own.urgent}>{todaySinceLabel(s.kind)}</span>
+                <span className={own.detail}>{s.detail}</span>
+              </button>
+              <span className={own.when}>{when(s.at)}</span>
+            </div>
+          ))}
+        </section>
+      )}
+        </div>
+      )}
+
+      {today && (
+        <div className={`${own.band} ${own.now}`}>
+          <div className={own.bandLabel}>Now</div>
+      {nothing && <div className={own.quiet}>Nothing needs you right now.</div>}
 
       {today && today.approvals.length > 0 && (
         <section>
@@ -245,31 +283,6 @@ export const TodayView = ({ onChanged, onNewChat, onOpenConversation, onOpenRun,
         </section>
       )}
 
-      {today && today.since.length > 0 && (
-        <section>
-          <div className={own.sectionHead}>
-            <div className={own.section}>Since you last looked ({today.since.length})</div>
-            <button className={styles.button} onClick={() => void act(api.todaySeen)} title="Clears this list. New results will appear here as they finish." type="button">
-              Seen
-            </button>
-          </div>
-          {today.since.map((s) => (
-            <div className={own.row} key={s.key}>
-              <button
-                className={own.rowMain}
-                onClick={() => (s.runId !== null ? onOpenRun(s.runId) : onOpenView("schedules"))}
-                type="button"
-              >
-                <span className={own.who}>{s.title}</span>
-                <span className={s.kind === "ok" ? own.detail : own.urgent}>{todaySinceLabel(s.kind)}</span>
-                <span className={own.detail}>{s.detail}</span>
-              </button>
-              <span className={own.when}>{when(s.at)}</span>
-            </div>
-          ))}
-        </section>
-      )}
-
       {today && today.later > 0 && (
         <div className={own.laterLine}>
           <span>{todayLaterLine(today.later)}</span>
@@ -278,6 +291,36 @@ export const TodayView = ({ onChanged, onNewChat, onOpenConversation, onOpenRun,
           </button>
         </div>
       )}
+        </div>
+      )}
+
+      {today && (
+        <div className={`${own.band} ${own.ahead}`}>
+          <div className={own.bandLabel}>Ahead</div>
+          {today.ahead.length === 0 && (
+            <div className={own.quiet}>
+              {today.calendarAsOf ? "Nothing else on the calendar or the schedules today." : "Nothing scheduled today. The calendar shows here once Heads-up or the check-in has read it."}
+            </div>
+          )}
+          {today.ahead.map((a) => (
+            <div className={own.row} key={a.key}>
+              <button
+                className={own.rowMain}
+                disabled={a.kind !== "schedule"}
+                onClick={() => a.kind === "schedule" && onOpenView("schedules")}
+                type="button"
+              >
+                <span className={own.when}>{a.allDay ? "all day" : timeOf(a.at)}</span>
+                <span className={own.who}>{a.title}</span>
+                <span className={own.detail}>{a.kind === "schedule" ? `runs: ${a.detail}` : a.detail}</span>
+              </button>
+            </div>
+          ))}
+          {today.calendarAsOf && <div className={own.asOf}>Calendar as of {when(today.calendarAsOf)}</div>}
+        </div>
+      )}
+
+      <AskBar onAsk={onAsk} placeholder="Ask about your day…" />
     </div>
   );
 };

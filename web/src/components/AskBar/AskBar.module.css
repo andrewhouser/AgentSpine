@@ -1,0 +1,51 @@
+/* The ask bar (section 15, R1): one line, at the foot of the screen it is scoped to. */
+.bar {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 28px 0 8px;
+  padding: 6px 6px 6px 12px;
+}
+
+.scope {
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 0.8125rem;
+  padding: 1px 8px;
+}
+
+.input {
+  background: none;
+  border: 0;
+  color: var(--text);
+  flex: 1;
+  font: inherit;
+  min-width: 0;
+  outline: none;
+  padding: 6px 0;
+}
+
+.send {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--on-accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 6px 14px;
+}
+
+.send:disabled {
+  opacity: 0.5;
+}
+
+.error {
+  color: var(--danger);
+  flex-basis: 100%;
+  font-size: 0.8125rem;
+}

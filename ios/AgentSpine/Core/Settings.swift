@@ -16,7 +16,9 @@ final class Settings {
         static let baseURL = "baseURL"
         static let deviceName = "deviceName"
         static let token = "dashboardToken"
-        static let tabOrder = "tabOrder"
+        // "2" since the tabs became the spine's places (section 15, R1): an order saved for the old
+        // tabs would keep Tasks and Study in the bar and the new places under More, so it starts again once.
+        static let tabOrder = "tabOrder2"
     }
 
     /// e.g. `http://mini.tail1234.ts.net:8787`, or `https://mini.tail1234.ts.net` behind

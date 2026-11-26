@@ -5,18 +5,23 @@ import SwiftUI
 /// from anywhere, and Settings is the ⌘, scene.
 enum MacSection: String, CaseIterable, Hashable {
     case today, threads, headsup, checkin, tasks, study, schedules, projects, files, inbox, knowledge, clients, meetings
-    case builds, activity, memory, proposals, agents
+    case builds, activity, memory, proposals, agents, people
 
     /// The menu order on a fresh install: the first six are pinned, the rest fold under More.
     /// Threads is not here: the threads are listed above the menu, so `.threads` is the state of
     /// having a thread (or the new-thread screen) open rather than a row. Today is not here
     /// either: it has a fixed row at the top of the sidebar, because it is where the window opens.
+    ///
+    /// Since section 15, R1 the pinned six are the spine's places; the threads above the menu are
+    /// Ask. Heads-up, check-in, tasks and schedules are moments on Today and keep their screens.
     static let defaultOrder: [MacSection] = [
-        .headsup, .checkin, .tasks, .meetings, .inbox, .knowledge, .schedules,
-        .projects, .files, .builds, .study, .clients, .activity, .memory, .proposals, .agents,
+        .meetings, .people, .projects, .memory, .headsup, .checkin,
+        .tasks, .schedules, .knowledge, .inbox, .files, .builds, .study, .clients, .activity, .proposals, .agents,
     ]
 
-    static let orderKey = "sidebarMenuOrder"
+    /// "2" since the menu became the spine's places: an order saved for the old menu would keep
+    /// the new places under More, so it starts again once.
+    static let orderKey = "sidebarMenuOrder2"
 
     /// The saved order, repaired. An empty string is the default order.
     static func ordered(_ stored: String) -> [MacSection] {
@@ -42,6 +47,7 @@ enum MacSection: String, CaseIterable, Hashable {
         case .builds: return "Builds"
         case .activity: return "Activity"
         case .memory: return "Memory"
+        case .people: return "People"
         case .proposals: return "Auto-approvals"
         case .agents: return "Agents"
         }
@@ -64,6 +70,7 @@ enum MacSection: String, CaseIterable, Hashable {
         case .builds: return "Commands and diffs from coding runs"
         case .activity: return "Every run, with its full trace"
         case .memory: return "What it has learned about you"
+        case .people: return "The people your meetings name"
         case .proposals: return "Suggested rules to skip repeat approvals"
         case .agents: return "Sub-agents and the model tier each uses"
         case .threads: return "Your conversations"
@@ -89,6 +96,7 @@ enum MacSection: String, CaseIterable, Hashable {
         case .builds: return "hammer"
         case .activity: return "list.bullet.rectangle"
         case .memory: return "brain"
+        case .people: return "person.2"
         case .proposals: return "checkmark.shield"
         case .agents: return "person.crop.square"
         }
@@ -117,6 +125,7 @@ struct MacSectionContent: View {
             case .builds: MacBuildsView()
             case .activity: MacActivityView()
             case .memory: MemoryView()
+            case .people: PeopleView()
             case .proposals: ProposalsView()
             case .agents: AgentsView()
             }

@@ -18,6 +18,7 @@
  * the next check. That is why the check-in enforces both itself and not through the outbox.
  */
 import { CHECKIN_PUSH_DETAIL, DASHBOARD_PUBLIC_URL } from "../config.ts";
+import { keepCalendar } from "../calendar-cache.ts";
 import { checkinMode } from "../modes.ts";
 import { searchMessages, upcomingEvents } from "../google/client.ts";
 import { googleEnabled } from "../headsup/index.ts";
@@ -49,7 +50,19 @@ export interface CheckinDeps extends SourceDeps {
 export const realDeps: CheckinDeps = {
   approvals: () => listConfirmations("pending"),
   detail: () => CHECKIN_PUSH_DETAIL,
-  events: (hours) => upcomingEvents(hours),
+  // What it reads is also kept for the spine's "Ahead" (calendar-cache.ts), so the spine never calls Google.
+  events: async (hours) => {
+    const from = new Date();
+    const events = await upcomingEvents(hours);
+    keepCalendar(
+      "checkin",
+      events.map((e) => ({ allDay: /^\d{4}-\d{2}-\d{2}$/.test(e.start), calendar: "", key: `${e.start}|${e.title}`, start: e.start, title: e.title })),
+      from,
+      new Date(from.getTime() + hours * 3_600_000),
+      from,
+    );
+    return events;
+  },
   googleEnabled,
   headsups: () => ledger.listForClient("open"),
   mail: () => searchMessages(MAIL_QUERY, MAIL_MAX),

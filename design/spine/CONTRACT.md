@@ -47,39 +47,33 @@ type Where = "local" | "cloud";                       // [exists] runs.private /
 `GET /api/meetings/:id/around?atMs=` **[new R4]** returns the transcript segments within a minute of
 `atMs` (from `meeting_segments`, which are timed **[exists]**), for when `audio` is false.
 
-## 1. The spine — `GET /api/spine` **[new R1]**
+## 1. The spine — `GET /api/spine` **[built R1]**
 
-Beside `readToday`, not instead of it, until all three clients have moved. No model call, and it
-never waits on Gmail or Calendar.
+As built: Today, field for field, plus two fields, so every client keeps the Today words it has.
+`Later` and `Seen` stay on `/api/today` and answer with Today alone; a client keeps the last `ahead`.
+No model call, and it never waits on Gmail or Calendar.
 
 ```ts
-interface Spine {
-  now: string;
-  lookedAt: string;            // [exists] Today's "today:looked"
-  count: number;               // [exists] Today.count, the one number for badge, Dock and menu bar
-  behind: SpineMoment[];       // [exists] Today.since, newest first, same cap
-  needs: SpineMoment[];        // [exists] Today's approvals, tasks, headsups, mail, in Today's order
-  ahead: SpineMoment[];        // [new R1] next run of each schedule + today's stored calendar events
+interface Spine extends Today {           // Today as src/today.ts builds it [exists]
+  ahead: SpineAhead[];                    // src/day-line.ts
+  calendarAsOf: null | string;            // the last clean read stored by Heads-up or the check-in
 }
 
-interface SpineMoment {
-  key: string;                 // stable across refreshes, for Later and Seen
-  at: null | string;
-  kind: "run" | "approval" | "task" | "headsup" | "mail" | "schedule" | "event" | "meeting" | "build";
-  title: string;               // untrusted when kind is mail, event or meeting
-  detail: string;              // code-written: "expires 11:00", "2 days late", "Watch mode"
-  state: "ok" | "failed" | "stalled" | "skipped" | "needs-you" | "ahead";
-  where: null | Where;
-  /** What a tap opens. Approval rows open the card, never approve. */
-  open: { confirmationId?: number; meetingId?: number; personId?: number; projectId?: number; runId?: number; taskId?: number };
-  /** Only on calendar events: whether a prep note exists, and the counts behind "2 you owe, 1 they owe". */
-  prep?: { ready: boolean; youOwe: number; theyOwe: number; lastOneToOneDays: null | number }; // [new R1, counts R7]
+interface SpineAhead {
+  allDay: boolean;
+  at: string;                             // ISO, or a bare date for an all-day event
+  detail: string;                         // a schedule's spec, or a calendar's name
+  key: string;                            // "schedule:<id>" or "event:<start>|<title>"
+  kind: "event" | "schedule";
+  scheduleId: null | number;
+  title: string;                          // untrusted when kind is "event"
+  untrusted: boolean;
 }
 ```
 
-`ahead` reads schedules' next run from `src/scheduler.ts` **[exists]**. Today's calendar events
-must come from what the check-in or Heads-up already stored **[check R1]**: if neither stores
-today's events, R1 adds a stored copy written by the check-in, not a live call from this route.
+Ahead is each enabled schedule's next run before midnight and today's events from
+`src/calendar-cache.ts` that have not started, all-day first, at most 30. "Prep" from the R0 drawing
+is not in it: nothing defines prep yet, and its counts are R7's.
 
 ## 2. The decision card — `GET /api/confirmations/:id` **[new R2]**
 
@@ -164,10 +158,10 @@ tasks, memory or RAG **[exists]**. This is a new screen over that path, not a ne
 The ask bar starts an ordinary chat turn. Scope travels as a field, never as text in the goal:
 
 ```ts
-// POST /api/conversations/:id/messages {task, attachmentIds}            [exists]
-//   + scope?: {projectId?: number; personId?: number; meetingId?: number}  [new R1]
-// A project scope uses the conversation's project (POST /api/conversations {projectId} [exists]);
-// a person or meeting scope is a retrieval filter, never words added to `task`.
+// As built in R1: POST /api/conversations {projectId?} then
+// POST /api/conversations/:id/messages {task, attachmentIds}, with `task` exactly the typed text.
+// A project scope is the conversation's project and nothing else. Person and meeting scopes
+// (a retrieval filter, never words added to `task`) wait for R7 and R4.
 interface AnswerSources {                 // attached to the assistant turn [new R5]
   status: "supported" | "insufficient" | "conflicting"; // knowledge/answer.ts [exists]
   supported: { claimId: number; text: string; moment: null | Moment }[];

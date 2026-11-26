@@ -34,7 +34,8 @@ if (!swiftc) {
   process.exit(0);
 }
 
-const all = ["today", "threads", "tasks", "study", "headsup", "checkin", "schedules", "projects", "files", "inbox", "knowledge", "clients", "search", "meetings", "builds", "activity", "settings"];
+// The spine's places first since section 15, R1: Today, Ask (the threads), Meetings and People in the bar.
+const all = ["today", "threads", "meetings", "people", "projects", "memory", "settings", "headsup", "checkin", "tasks", "schedules", "knowledge", "search", "inbox", "files", "study", "clients", "builds", "activity"];
 
 // Each case: what was saved, and the order that must come out.
 const rest = (...first) => [...first, ...all.filter((t) => !first.includes(t))];
@@ -42,7 +43,7 @@ const rest = (...first) => [...first, ...all.filter((t) => !first.includes(t))];
 // Each case: what was saved, and the order that must come out.
 const cases = [
   { name: "nothing saved gives the default order", saved: [], expect: all },
-  { name: "a fresh install has Today, Threads, Tasks and Study in the bar", saved: [], expect: rest("today", "threads", "tasks", "study") },
+  { name: "a fresh install has Today, Ask, Meetings and People in the bar", saved: [], expect: rest("today", "threads", "meetings", "people") },
   { name: "a saved order is kept, behind Today and Threads", saved: ["threads", "study", "tasks"], expect: rest("today", "threads", "study", "tasks") },
   { name: "Today and Threads are forced first even if saved elsewhere", saved: ["tasks", "threads", "today"], expect: rest("today", "threads", "tasks") },
   {
@@ -91,10 +92,10 @@ try {
     }
   });
   const split = lines[cases.length];
-  if (split === "4 13") console.log("  PASS  four tabs in the bar, the other thirteen under More");
+  if (split === "4 15") console.log("  PASS  four tabs in the bar, the other fifteen under More");
   else {
     failed++;
-    console.log(`  FAIL  bar/more split: want "4 13", got "${split}"`);
+    console.log(`  FAIL  bar/more split: want "4 15", got "${split}"`);
   }
 } catch (error) {
   failed++;
