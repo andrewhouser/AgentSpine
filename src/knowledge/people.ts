@@ -89,7 +89,8 @@ const meetingRow = (id: number): undefined | { started: string; title: null | st
   }
 };
 
-const momentOf = (c: k.Claim): Moment | null => {
+/** Where in a meeting a claim was said, or null when it did not come from a meeting. Also used for answer sources (R5). */
+export const momentOf = (c: k.Claim): Moment | null => {
   const id = meetingId(c);
   if (id == null) return null;
   const m = meetingRow(id);

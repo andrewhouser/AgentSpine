@@ -359,6 +359,7 @@ struct MeetingDetailView: View {
                     }
                 }
                 #endif
+                if recording { Section { LiveMomentsView(meetingID: meetingID) } }
                 if recording { coachSection }
                 if recording, let cards { contextSection(cards) }
                 if let extraction = detail.extraction { summarySection(extraction) }
@@ -941,6 +942,8 @@ struct MeetingCloseoutView: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
     @State private var closeout: CloseoutState?
+    /// Which waiting item is on screen: one at a time (section 15, R4).
+    @State private var step = 0
     @State private var names: [Int: String] = [:]
     @State private var projectID: Int?
     @State private var keepTranscript = true
@@ -1024,17 +1027,31 @@ struct MeetingCloseoutView: View {
     }
 
     private func claimsSection(_ closeout: CloseoutState) -> some View {
-        Section("Waiting for review (\(closeout.claims.count))") {
+        // One item at a time (section 15, R4): extracted items are mostly false positives, so each gets its own look.
+        let index = min(step, max(0, closeout.claims.count - 1))
+        return Section(closeout.claims.isEmpty ? "Waiting for review (0)" : "Waiting for review: \(index + 1) of \(closeout.claims.count)") {
             if closeout.claims.isEmpty { Text("Nothing from this meeting is waiting for review.") }
-            ForEach(closeout.claims) { claim in
+            if closeout.claims.count > 1 {
+                HStack {
+                    Button("Previous") { step = max(0, index - 1) }.disabled(index == 0)
+                    Spacer()
+                    Button("Next") { step = min(closeout.claims.count - 1, index + 1) }.disabled(index >= closeout.claims.count - 1)
+                }
+                .buttonStyle(.borderless)
+            }
+            ForEach(closeout.claims.isEmpty ? [] : [closeout.claims[index]]) { claim in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(claim.kind.capitalized)
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
                     TextField("Text", text: draftBinding(claim, \.text), axis: .vertical)
-                    Text("“\(claim.passage)”")
-                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
-                        .foregroundStyle(Spine.Palette.textDim)
+                    if let atMs = claim.atMs {
+                        MomentLinkView(moment: MomentRef(at: nil, atMs: atMs, audio: false, meetingId: meetingID, meetingTitle: "This meeting", quote: claim.passage, speaker: nil))
+                    } else {
+                        Text("“\(claim.passage)”")
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
                     TextField("Topic", text: draftBinding(claim, \.topic))
                     if claim.kind == "commitment" {
                         TextField("Owner", text: draftBinding(claim, \.owner))

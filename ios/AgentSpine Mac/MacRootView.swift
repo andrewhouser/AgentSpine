@@ -147,6 +147,7 @@ struct MacRootView: View {
         case .tasks: section = .tasks
         case .headsup: section = .headsup
         case .schedules: section = .schedules
+        case .meetings: section = .meetings
         }
     }
 

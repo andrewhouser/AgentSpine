@@ -121,6 +121,14 @@ often enough the card offers **Always allow**, which is the existing auto-approv
 for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
 returns the card (`src/decision-card.ts`).
 
+**Meetings sit on the line, and answers point at the moment** (section 15, R4 and R5). A meeting being
+recorded shows on Today; open it to **Mark this moment** (a timestamp, nothing more) and to see what you
+still owe the people named in the room. The closeout goes through what was extracted one item at a time,
+each with its quote and the transcript around it. When an answer in a thread comes from your reviewed
+meeting notes, the claims it rests on are listed under it with the meeting, the speaker and the time, a
+**Transcript around it** link, and **Play from here** while the recording is still kept; the part of the
+question nothing recorded is said plainly ("Not recorded anywhere: backfill").
+
 **People are pages built from your meetings** (section 15, R7). **People** lists everyone your reviewed
 meeting notes name, your team first (add someone from their page). A person's page shows what is open
 between you both ways, with the words and the moment each promise was made, what you have heard from

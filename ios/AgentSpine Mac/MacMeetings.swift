@@ -327,6 +327,8 @@ struct MacLiveMeeting: View {
                         }
                     }
                     if recording {
+                        LiveMomentsView(meetingID: meetingID)
+                            .padding(.leading, 76 + Spine.Space.lg)
                         HStack(spacing: Spine.Space.sm) {
                             ProgressView().controlSize(.small)
                             Text("Listening")

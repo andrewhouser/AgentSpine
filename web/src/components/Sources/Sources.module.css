@@ -1,0 +1,85 @@
+/* Sources and moments (section 15, R4 and R5). */
+.sources {
+  border-left: 3px solid var(--spine);
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 4px;
+  padding-left: 12px;
+}
+
+.notFound {
+  background: var(--warn-soft);
+  border: 1px dashed var(--warn-line);
+  border-radius: var(--radius-sm);
+  color: var(--warn);
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+
+.claim {
+  font-size: 0.875rem;
+}
+
+.text {
+  font-weight: 500;
+}
+
+.lead {
+  color: var(--warn);
+  font-size: 0.75rem;
+  margin-left: 8px;
+}
+
+.moment {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.quote {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+.where {
+  align-items: baseline;
+  color: var(--text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 10px;
+}
+
+.link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+  padding: 0;
+}
+
+.around {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+
+.around p {
+  margin: 4px 0;
+}
+
+.here {
+  background: var(--accent-soft);
+  border-radius: 4px;
+}
+
+.who {
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.dim {
+  color: var(--text-dim);
+}

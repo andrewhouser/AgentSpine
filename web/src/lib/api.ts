@@ -1,5 +1,6 @@
 import type { DecisionCard } from "./decision.ts";
 import type { Dial, DialAgreement, DialLevel, WouldHave } from "./dials.ts";
+import type { AroundLine, HistoryLine, MeetingMark } from "./moments.ts";
 import type { Person, PersonRow } from "./people.ts";
 import type { FinishedRun } from "./spokenAlerts.ts";
 /**
@@ -147,6 +148,12 @@ export const runStreamUrl = (runId: number, after: number): string => {
  * the same-origin hop every other API call makes. It is still worth knowing about before
  * copying an image URL out of the page and sending it to someone.
  */
+/** A meeting's kept recording, for an <audio> element, which cannot send the token header either (section 15, R4). */
+export const meetingAudioUrl = (id: number): string => {
+  const token = getToken();
+  return token ? `/api/meetings/${id}/audio?token=${encodeURIComponent(token)}` : `/api/meetings/${id}/audio`;
+};
+
 export const attachmentUrl = (id: number): string => {
   const token = getToken();
   return token ? `/api/attachments/${id}?token=${encodeURIComponent(token)}` : `/api/attachments/${id}`;
@@ -171,6 +178,8 @@ export const api = {
   acceptMeetingQuestion: (id: number, edits: { answer?: string; question?: string }) =>
     post<{ cardId: null | number; topic: string }>(`/api/study/questions/${id}/accept`, edits),
   acceptStyleProposal: (name: string) => request<{ ok: WritingStyle; replaced: boolean }>(`/api/style-proposals/${encodeURIComponent(name)}/accept`, { method: "POST" }),
+  /** "Mark this moment": a time and nothing else (section 15, R4). */
+  addMeetingMark: (id: number, atMs: number) => post<MeetingMark>(`/api/meetings/${id}/marks`, { atMs }),
   addProjectSource: (projectId: number, path: string) =>
     post<{ result: IngestResult; source: ProjectSource }>(
       `/api/projects/${projectId}/sources`,
@@ -436,6 +445,7 @@ export const api = {
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
 
+  meetingAround: (id: number, atMs: number) => request<AroundLine[]>(`/api/meetings/${id}/around?atMs=${Math.max(0, Math.floor(atMs))}`),
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
 
@@ -443,8 +453,11 @@ export const api = {
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
+  /** What you still owe the people in this meeting, from reviewed claims. Code, not the coach. */
+  meetingHistory: (id: number) => request<HistoryLine[]>(`/api/meetings/${id}/history`),
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
 
+  meetingMarks: (id: number) => request<MeetingMark[]>(`/api/meetings/${id}/marks`),
   /**
    * Look (again) for questions put to you in a meeting. A 409 carries the reason it can't
    * (no project, nobody named "me"), worth showing as is.

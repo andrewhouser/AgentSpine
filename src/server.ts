@@ -23,7 +23,7 @@ import { capsProblem, cloudUsage } from "./cloud-cap.ts";
 import { loadPolicy } from "./config.ts";
 import { syncMcpTools } from "./mcp/register.ts";
 import { probeModelHost } from "./model-probe.ts";
-import { deleteAudio, pruneAudio } from "./meetings/audio.ts";
+import { audioPath, deleteAudio, pruneAudio } from "./meetings/audio.ts";
 import { fileQueuedItems } from "./meetings/extract.ts";
 import { cardsFor } from "./meetings/context.ts";
 import * as meetings from "./meetings/session.ts";
@@ -89,6 +89,8 @@ import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { readSpine } from "./day-line.ts";
 import { decisionCard } from "./decision-card.ts";
 import { listPeople, readPerson } from "./knowledge/people.ts";
+import { sourcesForRuns } from "./knowledge/sources.ts";
+import { addMark, around, deleteMark, historyFor, listMarks } from "./meetings/moments.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
@@ -650,6 +652,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
             }
           })(),
           starred: !!r.starred,
+          // What a knowledge answer rested on (section 15, R5): claims with their moments, and what was not found.
+          sources: sourcesForRuns([r.id, ...store.childRuns(r.id).map((c: any) => c.id)]),
           // Model calls and tokens for this turn and the child runs it started (the thread inspector).
           usage: store.usageForRuns([r.id, ...store.childRuns(r.id).map((c: any) => c.id)]),
           // Still-open approvals belong with the turn that raised them, so they survive a
@@ -1733,6 +1737,50 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
        * five seconds later. Holding the response open would tie the hotkey's feedback to a
        * fetch that outlives the moment it was pressed in.
        */
+      /*
+       * Moments (section 15, R4; src/meetings/moments.ts). Code only, no model.
+       *   GET/POST /api/meetings/:id/marks {atMs}   a timestamp and nothing else; DELETE .../marks/:markId
+       *   GET /api/meetings/:id/around?atMs=        the transcript a minute either side
+       *   GET /api/meetings/:id/history             what you still owe the people in the room
+       *   GET /api/meetings/:id/audio               the kept recording, with Range, while it is kept
+       */
+      if (seg.length >= 4 && ["marks", "around", "history", "audio"].includes(seg[3])) {
+        const id = Number(seg[2]);
+        if (!meetingStore.getMeeting(id)) return sendJson(res, 404, { error: "no such meeting" });
+        if (seg[3] === "marks") {
+          if (m === "GET" && seg.length === 4) return sendJson(res, 200, listMarks(id));
+          if (m === "POST" && seg.length === 4) {
+            const mark = addMark(id, (await readBody(req))?.atMs);
+            return mark ? sendJson(res, 200, mark) : sendJson(res, 400, { error: "atMs must be a time in the meeting, and a meeting keeps at most 200 marks" });
+          }
+          if (m === "DELETE" && seg.length === 5) return sendJson(res, deleteMark(id, Number(seg[4])) ? 200 : 404, { deleted: true });
+        }
+        if (m === "GET" && seg[3] === "around" && seg.length === 4) return sendJson(res, 200, around(id, Number(url.searchParams.get("atMs") ?? 0)));
+        if (m === "GET" && seg[3] === "history" && seg.length === 4) return sendJson(res, 200, historyFor(id));
+        if (m === "GET" && seg[3] === "audio" && seg.length === 4) {
+          // Only while it is kept (MEETING_KEEP_AUDIO_HOURS); after that the transcript around a moment is the answer.
+          const file = audioPath(id);
+          if (!fs.existsSync(file)) return sendJson(res, 404, { error: "the recording is not kept" });
+          const size = fs.statSync(file).size;
+          const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ""));
+          if (range) {
+            const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+            const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
+            if (!(start >= 0 && start <= end && end < size)) {
+              res.writeHead(416, { "Content-Range": `bytes */${size}` });
+              res.end();
+              return;
+            }
+            res.writeHead(206, { "Accept-Ranges": "bytes", "Content-Length": end - start + 1, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Type": "audio/flac" });
+            fs.createReadStream(file, { end, start }).pipe(res);
+            return;
+          }
+          res.writeHead(200, { "Accept-Ranges": "bytes", "Content-Length": size, "Content-Type": "audio/flac" });
+          fs.createReadStream(file).pipe(res);
+          return;
+        }
+      }
+
       // GET /api/meetings/:id/coach — the pollable half of the coach, for clients that cannot
       // hold the event stream. { thinking, answer } where answer is null until one arrives.
       if (m === "GET" && seg.length === 4 && seg[3] === "coach") {
@@ -2168,7 +2216,15 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // until the morning, and saying "I have seen these". No tool reaches either.
     // GET /api/spine: Today plus "Ahead" (src/day-line.ts, section 15 R1). Read-only, and it never calls
     // Google: the calendar part is the copy Heads-up and the check-in keep. Seen and Later stay on /api/today.
-    if (m === "GET" && seg[1] === "spine" && seg.length === 2) return sendJson(res, 200, readSpine());
+    // A meeting recording now is a moment on the line too (R4): the client opens it from there.
+    if (m === "GET" && seg[1] === "spine" && seg.length === 2) {
+      const live = meetings.liveStatus();
+      const meeting = live.recording && live.meetingId != null ? meetingStore.getMeeting(live.meetingId) : undefined;
+      return sendJson(res, 200, {
+        ...readSpine(),
+        live: meeting ? { elapsedMs: live.elapsedMs, meetingId: meeting.id, title: meeting.title?.trim() || `Meeting #${meeting.id}` } : null,
+      });
+    }
     if (seg[1] === "today") {
       if (m === "GET" && seg.length === 2) return sendJson(res, 200, readToday());
       if (m === "POST" && seg.length === 3 && seg[2] === "seen") {

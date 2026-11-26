@@ -26,6 +26,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { HistoryLine, MeetingMark } from "../../lib/moments.ts";
 import type {
   AudioDevices,
   ChatMessage,
@@ -52,6 +53,7 @@ import { MeetingCloseout, MeetingRunbook } from "../MeetingCloseout/MeetingClose
 import { MeetingQuestions } from "../MeetingQuestions/MeetingQuestions.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
+import { MomentLink } from "../Sources/Sources.tsx";
 import { TagDialog } from "../TagDialog/TagDialog.tsx";
 import styles from "./MeetingsView.module.css";
 
@@ -770,6 +772,7 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
               )}
               <div ref={tail} />
             </div>
+            {recording && live.meetingId !== null && <LiveMoments meetingId={live.meetingId} />}
             {recording && (
               <Sidecar
                 answer={live.answer}
@@ -997,6 +1000,43 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
               </div>
             </>
           )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/**
+ * While recording (section 15, R4): "Mark this moment", which stores the server's own clock reading and
+ * nothing else, and what you still owe the people named in the room, from reviewed claims. Code, not the
+ * coach; when nothing is open it says nothing.
+ */
+const LiveMoments = ({ meetingId }: { meetingId: number }) => {
+  const [history] = useResource(() => api.meetingHistory(meetingId).catch(() => [] as HistoryLine[]), [] as HistoryLine[]);
+  const [marks, setMarks] = useState<MeetingMark[]>([]);
+  const [error, setError] = useState("");
+  const mark = async (): Promise<void> => {
+    setError("");
+    try {
+      const status = await api.meetingLive();
+      const added = await api.addMeetingMark(meetingId, status.elapsedMs);
+      setMarks((m) => [...m, added]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+  return (
+    <div className={styles.moments}>
+      <button className={styles.markButton} onClick={() => void mark()} type="button">
+        Mark this moment
+      </button>
+      {marks.length > 0 && <span className={styles.marked}>Marked at {marks.map((m) => clock(m.atMs)).join(", ")}</span>}
+      {error && <span className={styles.problem}>{error}</span>}
+      {history.map((h) => (
+        <div className={styles.history} key={h.claimId}>
+          <strong>From your history</strong> {h.line}
+          {h.late && " (late)"}
+          {h.moment && <MomentLink moment={h.moment} />}
         </div>
       ))}
     </div>

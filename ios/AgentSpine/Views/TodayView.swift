@@ -103,6 +103,7 @@ struct TodayView: View {
         case .tasks: openTab(.tasks)
         case .headsup: openTab(.headsup)
         case .schedules: openTab(.schedules)
+        case .meetings: openTab(.meetings)
         }
     }
 }

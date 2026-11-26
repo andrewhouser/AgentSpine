@@ -745,6 +745,9 @@ struct TurnView: View {
                 DelegationRow(child: child)
             }
 
+            // What a knowledge answer rested on (section 15, R5), above the reply it supports.
+            if let sources = turn.sources { TurnSourcesView(sources: sources) }
+
             if let summary = turn.summary, !summary.isEmpty {
                 if let card = WeatherCard.of(calls: turn.actions.map { ($0.tool, $0.output, $0.status == .executed) }) {
                     WeatherCardView(card: card)

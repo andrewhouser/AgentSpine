@@ -1439,6 +1439,31 @@ final class APIClient {
         return try await send(request("/api/meetings", query: query), as: [Meeting].self)
     }
 
+    /// "Mark this moment": a time and nothing else (section 15, R4).
+    func addMeetingMark(_ id: Int, atMs: Int) async throws -> MeetingMark {
+        try await send(jsonRequest("/api/meetings/\(id)/marks", method: "POST", body: ["atMs": atMs]), as: MeetingMark.self)
+    }
+
+    func meetingAround(_ id: Int, atMs: Int) async throws -> [AroundLine] {
+        try await send(request("/api/meetings/\(id)/around", query: ["atMs": String(max(0, atMs))]), as: [AroundLine].self)
+    }
+
+    /// What you still owe the people in this meeting, from reviewed claims.
+    func meetingHistory(_ id: Int) async throws -> [HistoryLine] {
+        try await send(request("/api/meetings/\(id)/history"), as: [HistoryLine].self)
+    }
+
+    /// The kept recording, fetched with the token in a header (never `?token=`) into a temporary file to play.
+    func meetingAudioFile(_ id: Int) async throws -> URL {
+        let req = try request("/api/meetings/\(id)/audio")
+        let (data, response) = try await longSession.data(for: req)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200 else { throw APIError.server(code, "the recording is not kept") }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("meeting-\(id).flac")
+        try data.write(to: file, options: .atomic)
+        return file
+    }
+
     func meetingLive() async throws -> MeetingLiveStatus {
         try await send(request("/api/meetings/live"), as: MeetingLiveStatus.self)
     }

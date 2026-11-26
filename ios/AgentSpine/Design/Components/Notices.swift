@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// An error that says what to go and check, rather than a toast that vanishes.
@@ -122,6 +123,7 @@ enum TodayTarget: Hashable {
     case tasks
     case headsup
     case schedules
+    case meetings
 }
 
 /// The sections of the Today screen, for a `List` (PLAN-open-work section 14, U1 and U2).
@@ -213,6 +215,15 @@ struct TodaySections: View {
 
             // Now (section 15, R1): what needs you, in Today's order. The header stands alone as the band's label.
             Section {
+                // A meeting recording now opens from its moment on the line (R4).
+                if let live = screen.live {
+                    Button { open(.meetings) } label: {
+                        label(title: live.title, detail: MomentWords.liveLine(live.elapsedMs), urgent: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 if store.isEmpty {
                     line("Nothing needs you right now.")
                 }
@@ -558,5 +569,165 @@ struct AlwaysAllowRow: View {
         }
         .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
         .foregroundStyle(Spine.Palette.textDim)
+    }
+}
+
+/// Where a moment was said, with the way back to it (section 15, R4 and R5), shared by the iPhone and
+/// the Mac: the transcript a minute either side, always, and playback from that second while the
+/// recording is kept. The quote and transcript are someone's words: shown, never sent anywhere.
+struct MomentLinkView: View {
+    let moment: MomentRef
+
+    @State private var lines: [AroundLine]?
+    @State private var player: AVAudioPlayer?
+    @State private var loadingAudio = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\u{201C}\(moment.quote)\u{201D}")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).italic())
+                .foregroundStyle(Spine.Palette.textDim)
+            HStack(spacing: Spine.Space.md) {
+                Text([moment.meetingTitle, moment.speaker ?? "", MomentWords.atLine(moment.atMs)].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .foregroundStyle(Spine.Palette.textFaint)
+                if moment.atMs != nil {
+                    Button(lines == nil ? "Transcript around it" : "Hide transcript") { Task { await toggleTranscript() } }
+                        .buttonStyle(.borderless)
+                }
+                if moment.audio, moment.atMs != nil {
+                    Button(player?.isPlaying == true ? "Stop" : loadingAudio ? "Loading…" : "Play from here") { Task { await togglePlay() } }
+                        .buttonStyle(.borderless)
+                        .disabled(loadingAudio)
+                }
+            }
+            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+            if let error {
+                Text(error).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.danger)
+            }
+            if let lines {
+                VStack(alignment: .leading, spacing: 4) {
+                    if lines.isEmpty { Text("No transcript is kept for this moment.").foregroundStyle(Spine.Palette.textDim) }
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
+                        (Text("\(l.speaker ?? "?") ").bold().foregroundColor(Spine.Palette.textFaint) + Text(l.text))
+                            .padding(.horizontal, 4)
+                            .background(l.here ? Spine.Palette.accentSoft : Color.clear, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .padding(Spine.Space.sm)
+                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm))
+            }
+        }
+        .onDisappear { player?.stop() }
+    }
+
+    private func toggleTranscript() async {
+        if lines != nil {
+            lines = nil
+            return
+        }
+        lines = (try? await APIClient.shared.meetingAround(moment.meetingId, atMs: moment.atMs ?? 0)) ?? []
+    }
+
+    private func togglePlay() async {
+        if let player, player.isPlaying {
+            player.stop()
+            self.player = nil
+            return
+        }
+        loadingAudio = true
+        defer { loadingAudio = false }
+        do {
+            let file = try await APIClient.shared.meetingAudioFile(moment.meetingId)
+            let p = try AVAudioPlayer(contentsOf: file)
+            p.currentTime = Double(moment.atMs ?? 0) / 1000
+            p.play()
+            player = p
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+/// A turn's sources (section 15, R5): each claim with its moment, and the part nothing recorded.
+struct TurnSourcesView: View {
+    let sources: TurnSources
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.sm) {
+            if !sources.notFound.isEmpty {
+                Text(MomentWords.notFoundLine(sources.notFound))
+                    .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    .foregroundStyle(Spine.Palette.warn)
+                    .padding(Spine.Space.sm)
+                    .background(Spine.Palette.warnSoft, in: RoundedRectangle(cornerRadius: Spine.Radius.sm))
+            }
+            ForEach(sources.claims) { c in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: Spine.Space.sm) {
+                        Text(c.text).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                        if !c.reviewed {
+                            Text("lead, not reviewed")
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.warn)
+                        }
+                    }
+                    if let m = c.moment { MomentLinkView(moment: m) }
+                }
+            }
+        }
+        .padding(.leading, Spine.Space.md)
+        .overlay(alignment: .leading) { Rectangle().fill(Spine.Palette.spine).frame(width: 3) }
+    }
+}
+
+/// While a meeting records (section 15, R4), shared by the iPhone and the Mac: "Mark this moment",
+/// which stores the server's own clock reading and nothing else, and what you still owe the people
+/// named in the room, from reviewed claims. Code, not the coach; when nothing is open it says nothing.
+struct LiveMomentsView: View {
+    let meetingID: Int
+
+    @State private var history: [HistoryLine] = []
+    @State private var marks: [MeetingMark] = []
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.sm) {
+            HStack(spacing: Spine.Space.md) {
+                Button("Mark this moment") { Task { await mark() } }
+                    .buttonStyle(.bordered)
+                    .tint(Color.attention)
+                if !marks.isEmpty {
+                    Text("Marked at \(marks.map { MomentWords.atLine($0.atMs).replacingOccurrences(of: " into the meeting", with: "") }.joined(separator: ", "))")
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
+            }
+            if let error {
+                Text(error).font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.danger)
+            }
+            ForEach(history) { h in
+                VStack(alignment: .leading, spacing: 2) {
+                    (Text("From your history ").bold() + Text(h.line + (h.late ? " (late)" : "")))
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                    if let m = h.moment { MomentLinkView(moment: m) }
+                }
+                .padding(Spine.Space.sm)
+                .background(Spine.Palette.accentSoft, in: RoundedRectangle(cornerRadius: Spine.Radius.sm))
+            }
+        }
+        .task(id: meetingID) { history = (try? await APIClient.shared.meetingHistory(meetingID)) ?? [] }
+    }
+
+    private func mark() async {
+        do {
+            let live = try await APIClient.shared.meetingLive()
+            marks.append(try await APIClient.shared.addMeetingMark(meetingID, atMs: live.elapsedMs))
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }

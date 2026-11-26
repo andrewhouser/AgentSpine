@@ -4,6 +4,7 @@ import type { CloseoutClaim, CloseoutPreview, CloseoutState, CommitmentTask, Mee
 
 import { api } from "../../lib/api.ts";
 import { runbookSavedLine } from "../../lib/runbook.ts";
+import { MomentLink } from "../Sources/Sources.tsx";
 import styles from "./MeetingCloseout.module.css";
 
 interface MeetingCloseoutProps {
@@ -58,6 +59,8 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
+  // One item at a time (section 15, R4): extracted items are mostly false positives, so each gets its own look.
+  const [step, setStep] = useState(0);
 
   const load = useCallback(
     async (project: null | number) => {
@@ -200,15 +203,34 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
         </label>
       )}
 
-      <h3 className={styles.heading}>Waiting for review ({state?.claims.length ?? 0})</h3>
+      <h3 className={styles.heading}>
+        Waiting for review{state && state.claims.length > 0 ? `: ${Math.min(step, state.claims.length - 1) + 1} of ${state.claims.length}` : " (0)"}
+      </h3>
       {state?.claims.length === 0 && <p className={styles.note}>Nothing from this meeting is waiting for review.</p>}
-      {state?.claims.map((c) => {
+      {state && state.claims.length > 1 && (
+        <div className={styles.row}>
+          <button className={styles.button} disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))} type="button">
+            Previous
+          </button>
+          <button className={styles.button} disabled={step >= state.claims.length - 1} onClick={() => setStep((s) => Math.min(state.claims.length - 1, s + 1))} type="button">
+            Next
+          </button>
+          <span className={styles.note}>
+            {state.claims.filter((c) => (drafts[c.id] ?? draftOf(c)).answer !== "skip").length} answered, the rest stay for later
+          </span>
+        </div>
+      )}
+      {(state ? [state.claims[Math.min(step, state.claims.length - 1)]].filter(Boolean) : []).map((c) => {
         const d = drafts[c.id] ?? draftOf(c);
         return (
           <div className={styles.claim} key={c.id}>
             <div className={styles.label}>{c.kind}</div>
             <input aria-label={`Text of claim ${c.id}`} className={styles.input} onChange={(e) => edit(c.id, { text: e.target.value })} value={d.text} />
-            <p className={styles.quote}>“{c.passage}”</p>
+            {c.atMs === null || c.atMs === undefined ? (
+              <p className={styles.quote}>“{c.passage}”</p>
+            ) : (
+              <MomentLink moment={{ at: null, atMs: c.atMs, audio: false, meetingId: meeting.id, meetingTitle: meeting.title ?? "This meeting", quote: c.passage, speaker: null }} />
+            )}
             <div className={styles.row}>
               <input aria-label={`Topic of claim ${c.id}`} className={styles.input} onChange={(e) => edit(c.id, { topic: e.target.value })} placeholder="Topic" value={d.topic} />
               {c.kind === "commitment" && (
@@ -221,7 +243,11 @@ export const MeetingCloseout = ({ meeting, onSaved, projects }: MeetingCloseoutP
                   aria-pressed={d.answer === a.key}
                   className={`${styles.button} ${d.answer === a.key ? styles.chosen : ""}`}
                   key={a.key}
-                  onClick={() => edit(c.id, { answer: a.key })}
+                  onClick={() => {
+                    edit(c.id, { answer: a.key });
+                    // Answering moves on, except when accepting may need a task or a replacement chosen first.
+                    if (a.key !== "accept" || (!c.canTask && c.canReplace.length === 0)) setStep((s) => Math.min((state?.claims.length ?? 1) - 1, s + 1));
+                  }}
                   type="button"
                 >
                   {a.label}

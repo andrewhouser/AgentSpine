@@ -979,6 +979,8 @@ export interface Turn {
   /** The finished step checklist, folded server-side from `actions` (src/plan.ts). */
   plan?: PlanStep[];
   served?: null | ServedModel;
+  /** What a knowledge answer rested on, with its moments, and what was not found (section 15, R5). */
+  sources?: null | TurnSources;
   starred?: boolean;
   started: string;
   status: string;
@@ -1425,6 +1427,8 @@ export interface TodayBrief {
   waiting: { approvals: number; headsups: number; tasks: number; threads: number };
 }
 
+import type { TurnSources } from "./moments.ts";
+
 /** One row of the spine's Ahead (src/day-line.ts). An event's title is someone else's text: show it, nothing more. */
 export interface SpineAhead {
   allDay: boolean;
@@ -1441,6 +1445,8 @@ export interface SpineAhead {
 export interface Spine extends Today {
   ahead: SpineAhead[];
   calendarAsOf: null | string;
+  /** A meeting recording now, which the line opens (section 15, R4). */
+  live?: { elapsedMs: number; meetingId: number; title: string } | null;
 }
 
 export interface Today {

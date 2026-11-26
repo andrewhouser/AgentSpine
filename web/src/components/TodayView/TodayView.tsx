@@ -4,6 +4,7 @@ import type { Headsup, Spine, Today } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
+import { liveLine } from "../../lib/moments.ts";
 import {
   hoursUntil,
   todayBriefText,
@@ -36,7 +37,7 @@ interface TodayViewProps {
   onNewChat: () => void;
   onOpenConversation: (id: number) => void;
   onOpenRun: (id: number) => void;
-  onOpenView: (view: "headsup" | "schedules" | "tasks") => void;
+  onOpenView: (view: "headsup" | "meetings" | "schedules" | "tasks") => void;
 }
 
 /**
@@ -176,6 +177,14 @@ export const TodayView = ({ onAsk, onChanged, onNewChat, onOpenConversation, onO
       {today && (
         <div className={`${own.band} ${own.now}`}>
           <div className={own.bandLabel}>Now</div>
+          {today.live && (
+            <div className={own.row}>
+              <button className={own.rowMain} onClick={() => onOpenView("meetings")} type="button">
+                <span className={own.urgent}>{liveLine(today.live.elapsedMs)}</span>
+                <span className={own.who}>{today.live.title}</span>
+              </button>
+            </div>
+          )}
       {nothing && <div className={own.quiet}>Nothing needs you right now.</div>}
 
       {today && today.approvals.length > 0 && (

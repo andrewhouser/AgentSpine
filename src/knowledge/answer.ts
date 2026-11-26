@@ -27,6 +27,11 @@ export interface AnswerEvidence {
   conflicts: Conflict[];
   /** Matching claims nobody has reviewed. Leads, never the answer. */
   leads: Claim[];
+  /**
+   * The question's own words that no supporting claim contains (section 15, R5): the part the store does
+   * not answer, said rather than filled. Words only, worked out in code; empty unless something was found.
+   */
+  notFound: string[];
   question: string;
   reviewed: Claim[];
   status: AnswerStatus;
@@ -94,7 +99,17 @@ export const gatherEvidence = (question: string, opts: EvidenceOptions = {}): An
     .findConflicts()
     .filter((g) => g.claims.some((c) => ids.has(c.id)))
     .map((g) => ({ claims: g.claims, topic: g.topic }));
-  return { conflicts, leads, question, reviewed, status: conflicts.length ? "conflicting" : reviewed.length ? "supported" : "insufficient" };
+  const status: AnswerStatus = conflicts.length ? "conflicting" : reviewed.length ? "supported" : "insufficient";
+  return { conflicts, leads, notFound: status === "insufficient" ? [] : notFoundWords(q, [...reviewed, ...conflicts.flatMap((g) => g.claims)]), question, reviewed, status };
+};
+
+/** Words too general to be "a part of the question": asking words, not subjects. */
+const ASKING = new Set(["decide", "decided", "doing", "done", "going", "know", "need", "needs", "tell", "about", "anyone", "someone", "should", "could", "will", "make"]);
+
+/** Which of the question's words no supporting claim contains, in the question's order. */
+export const notFoundWords = (q: string[], support: Claim[]): string[] => {
+  const have = new Set(support.flatMap((c) => words(`${c.text} ${c.topic ?? ""} ${c.topicName ?? ""} ${c.passage}`)));
+  return q.filter((w) => w.length >= 4 && !RESTATES.has(w) && !ASKING.has(w) && !have.has(w));
 };
 
 const clock = (ms: null | number): string => {
@@ -120,6 +135,8 @@ export const renderEvidence = (e: AnswerEvidence): string => {
     out.push(`CONFLICT on "${g.topic}": reviewed claims disagree. Report both sides and their sources; do not choose one.`);
     for (const c of g.claims) out.push(`  - ${cite(c)}`);
   }
+  if (e.notFound.length)
+    out.push(`NOT FOUND in the store: nothing recorded mentions ${e.notFound.join(", ")}. Say that part is not recorded; do not fill it in.`);
   if (e.leads.length) {
     out.push(`Unreviewed leads (NOT facts; call them leads and say nobody has reviewed them): ${e.leads.length}`);
     for (const c of e.leads.slice(0, 3)) out.push(`- #${c.id} ${c.text} (machine-extracted, source ${c.source_kind} ${c.source_ref}${clock(c.at_ms)})`);

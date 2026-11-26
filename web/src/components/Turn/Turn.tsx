@@ -1,3 +1,4 @@
+import type { TurnSources } from "../../lib/moments.ts";
 import type { RunNoteLike } from "../../lib/runNotes.ts";
 import type { Attachment, LiveToolCall, PlanStep, VisionPass } from "../../lib/types.ts";
 
@@ -10,6 +11,7 @@ import { DecisionNote } from "../DecisionNote/DecisionNote.tsx";
 import { DelegationCard } from "../DelegationCard/DelegationCard.tsx";
 import { PlanCard } from "../PlanCard/PlanCard.tsx";
 import { ReplyActions } from "../ReplyActions/ReplyActions.tsx";
+import { Sources } from "../Sources/Sources.tsx";
 import { ThinkingIndicator } from "../ThinkingIndicator/ThinkingIndicator.tsx";
 import { TierBadge } from "../TierBadge/TierBadge.tsx";
 import { UserMessage } from "../UserMessage/UserMessage.tsx";
@@ -40,6 +42,8 @@ interface TurnProps {
   plan?: PlanStep[];
   projectId?: null | number;
   runId?: number;
+  /** Persisted turns only: what a knowledge answer rested on (section 15, R5). */
+  sources?: null | TurnSources;
   starred?: boolean;
   /** When the message was sent. */
   startedAt?: string;
@@ -79,6 +83,7 @@ export const Turn = ({
   plan = [],
   projectId = null,
   runId,
+  sources,
   starred = false,
   startedAt,
   step,
@@ -147,6 +152,7 @@ export const Turn = ({
       <>
         {weather && <WeatherCard card={weather} />}
         <AssistantMessage text={summary} />
+        {sources && <Sources sources={sources} />}
         {runId !== undefined && !live && !error && (
           <ReplyActions contextUsed={contextUsed} projectId={projectId} runId={runId} starred={starred} />
         )}

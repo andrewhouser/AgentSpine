@@ -1973,6 +1973,18 @@ leaves the machine stops and writes down what it found.
   are mostly false positives) with a better screen, not a new path into memory or RAG.
 - [Opus] Playback from a quote while the audio is still kept, and the transcript around it when it is not.
 - [Sonnet] The screens on three clients and the screen tests.
+- **Built 2026-11-26** (`src/meetings/moments.ts`). A meeting recording now is a row in Today's Now band that
+  opens Meetings. While recording: "Mark this moment" stores the server's elapsed time and nothing else
+  (`meeting_marks`, at most 200 a meeting, deleted with it), and "From your history" lists what you still
+  owe the people named in the room, from reviewed claims, late first, nothing when nothing is open. It is
+  code, beside the model-written coach, which is unchanged. The closeout shows one waiting item at a time
+  with its quote and the transcript around it, and moves on after Reject or Later; Accept stays put when a
+  task or a replacement may need choosing. It still saves through the same preview and save, so the review
+  rule is unchanged. Playback: `GET /api/meetings/:id/audio` serves the kept recording with Range, only
+  while `MEETING_KEEP_AUDIO_HOURS` keeps it; otherwise `GET .../around?atMs=` gives the transcript a minute
+  either side, which is the normal path. Not done: marks are not yet shown on a finished meeting's
+  transcript or in the closeout, and the closeout's "worth remembering?" is the existing accept of a
+  non-commitment claim rather than a separate question.
 
 ### R5. Answers that point at the moment (Code)
 
@@ -1980,6 +1992,13 @@ leaves the machine stops and writes down what it found.
   meeting, speaker and `start_ms` of each supporting item to the client, and add the "not found" line for the
   part of a question nothing supports.
 - [Sonnet] Render sources with playback on three clients; tests that an unsupported part is said, not filled.
+- **Built 2026-11-26.** `gatherEvidence` adds `notFound`: the question's own words that no supporting claim
+  contains (asking words and filter words left out), and `knowledge_claims` tells the model that part is not
+  recorded. Each thread turn carries `sources` (`src/knowledge/sources.ts`): the claim ids the tool printed
+  (never ids from the model's prose), each with its meeting, speaker and time, reviewed or a lead, minus any
+  since marked sensitive or retracted, and the not-found words. All three clients show them under the turn
+  with "Transcript around it" and, while the recording is kept, "Play from here". The words-match is
+  crude: a synonym counts as not found.
 
 ### R6. Memory you can read (Code; all three clients)
 

@@ -489,6 +489,9 @@ private struct TurnBlock: View {
                 }
             }
 
+            // What a knowledge answer rested on (section 15, R5), above the reply it supports.
+            if let sources = turn.sources { TurnSourcesView(sources: sources) }
+
             MacTurnSpine(
                 calls: turn.actions.map { MacTurnSpine.Call($0) },
                 plan: turn.plan ?? [],

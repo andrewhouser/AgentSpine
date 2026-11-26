@@ -648,3 +648,33 @@ button.tag {
   flex-wrap: wrap;
   gap: 12px;
 }
+
+/* Marks and the line from your history, while recording (section 15, R4). */
+.moments {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.markButton {
+  background: var(--attention-soft);
+  border: 1px solid var(--attention-line);
+  border-radius: var(--radius-sm);
+  color: var(--attention);
+  font-weight: 600;
+  justify-self: start;
+  padding: 6px 14px;
+}
+
+.marked {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
+.history {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  padding: 8px 10px;
+}

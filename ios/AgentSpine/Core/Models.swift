@@ -179,6 +179,8 @@ struct Turn: Codable, Identifiable, Hashable {
     /// What the assistant had in front of it for this turn; absent from older servers.
     let contextUsed: [String]?
     let starred: Bool?
+    /// What a knowledge answer rested on, with its moments, and what was not found (section 15, R5).
+    let sources: TurnSources?
     /// Model calls and tokens for this turn and the child runs it started; absent from older servers.
     let usage: RunUsage?
     /// The finished step checklist, folded server-side from `actions` (src/plan.ts); absent
@@ -2061,6 +2063,8 @@ struct CloseoutOption: Codable, Identifiable, Hashable {
 
 /// One extracted item waiting for review in a meeting close-out.
 struct CloseoutClaim: Codable, Identifiable, Hashable {
+    /// Where in the meeting it was said, for the transcript around it (section 15, R4).
+    let atMs: Int?
     let canReplace: [CloseoutOption]
     /// A commitment that has no task yet, so "Add as a task" can be offered. Absent from an older server.
     let canTask: Bool?
@@ -2489,6 +2493,14 @@ struct TodayScreen: Codable {
     /// Seen answers, which are Today alone, so the store keeps the last list it had.
     let ahead: [SpineAhead]?
     let calendarAsOf: String?
+    /// A meeting recording now, which the line opens (section 15, R4).
+    let live: SpineLive?
+}
+
+struct SpineLive: Codable, Hashable {
+    let elapsedMs: Int
+    let meetingId: Int
+    let title: String
 }
 
 /// One row of the spine's Ahead: a schedule's next run today, or a calendar event as it was last
@@ -2736,6 +2748,85 @@ enum PeopleWords {
         youOwe + theyOwe == 0 ? "Nothing open" : "You owe \(youOwe) · they owe \(theyOwe)"
     }
 
+    static func atLine(_ atMs: Int?) -> String {
+        guard let atMs, atMs >= 0 else { return "" }
+        let s = atMs / 1000
+        let h = s / 3600
+        let m = (s % 3600) / 60
+        let sec = String(format: "%02d", s % 60)
+        return "\(h > 0 ? "\(h):\(String(format: "%02d", m))" : "\(m)"):\(sec) into the meeting"
+    }
+}
+
+// MARK: - Meeting moments
+
+/// A mark: a time in a meeting and nothing else (section 15, R4).
+struct MeetingMark: Codable, Hashable, Identifiable {
+    let atMs: Int
+    let created: String
+    let id: Int
+}
+
+/// The transcript a minute either side of a moment. Someone's words: shown, never sent anywhere.
+struct AroundLine: Codable, Hashable {
+    let endMs: Int
+    let here: Bool
+    let speaker: String?
+    let startMs: Int
+    let text: String
+}
+
+/// What you still owe someone in the room, from reviewed claims. Code, not the coach.
+struct HistoryLine: Codable, Hashable, Identifiable {
+    let claimId: Int
+    let late: Bool
+    let line: String
+    let moment: MomentRef?
+    let personId: Int
+    let personName: String
+
+    var id: Int { claimId }
+}
+
+/// Where in a meeting something was said. The same shape as `PersonMoment`, kept apart so this section
+/// compiles alone in test/moments-screen.test.mjs.
+struct MomentRef: Codable, Hashable {
+    let at: String?
+    let atMs: Int?
+    let audio: Bool
+    let meetingId: Int
+    let meetingTitle: String
+    let quote: String
+    let speaker: String?
+}
+
+struct SourceClaim: Codable, Hashable, Identifiable {
+    let claimId: Int
+    let kind: String
+    let moment: MomentRef?
+    let reviewed: Bool
+    let text: String
+
+    var id: Int { claimId }
+}
+
+struct TurnSources: Codable, Hashable {
+    let claims: [SourceClaim]
+    let notFound: [String]
+}
+
+/// Mirrors `web/src/lib/moments.ts`; test/moments-screen.test.mjs holds the two equal.
+enum MomentWords {
+    static func notFoundLine(_ words: [String]) -> String {
+        words.isEmpty ? "" : "Not recorded anywhere: \(words.joined(separator: ", "))."
+    }
+
+    static func liveLine(_ elapsedMs: Int) -> String {
+        let min = max(0, elapsedMs) / 60_000
+        return min < 1 ? "Recording now · just started" : "Recording now · \(min) min"
+    }
+
+    /// "14:22 into the meeting", the same as `PeopleWords.atLine`, here so this section stands alone.
     static func atLine(_ atMs: Int?) -> String {
         guard let atMs, atMs >= 0 else { return "" }
         let s = atMs / 1000

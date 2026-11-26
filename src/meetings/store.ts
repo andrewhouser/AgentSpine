@@ -894,6 +894,12 @@ export const deleteMeeting = (id: number): boolean => {
       rawDb.prepare(`DELETE FROM ${table} WHERE meeting_id = ?`).run(id);
     }
     try {
+      // Marks (src/meetings/moments.ts) go with their meeting.
+      rawDb.prepare("DELETE FROM meeting_marks WHERE meeting_id = ?").run(id);
+    } catch {
+      /* no marks table yet */
+    }
+    try {
       rawDb.prepare("DELETE FROM study_meeting_questions WHERE meeting_id = ?").run(id);
     } catch {
       /* the study module's table does not exist yet: nothing to delete */
