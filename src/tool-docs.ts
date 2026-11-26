@@ -1,74 +1,46 @@
 /**
- * Tool descriptions on demand (PLAN-open-work section 10, LP6).
+ * How a tool is described to the model (PLAN-open-work section 10, LP6, built 2026-11-25).
  *
- * Every visible tool's description and argument shape sits in the prompt prefix: about 35,000
- * characters for the full registry, most of it for tools a given turn never calls. Prefill is
- * the slow part on the model host, and every server added through MCP would grow it further.
+ * Every visible tool's description used to sit in the system prompt: about 9,900 of a chat run's 11,500 prompt
+ * tokens (85 tools, measured 2026-11-25). The model host keeps the prefix cached between steps, so the cost lands on
+ * each run's first request and whenever the prefix changes, and prefill is the expensive part on this hardware.
  *
- * With `TOOL_DOCS_ON_DEMAND` on, a run that can see many tools gets:
- *   - a short CORE set in full, listed below in code;
- *   - every other tool as its name and one line;
- *   - `tool_docs`, which returns the full entry for the names it is given.
- *
- * ## What this does NOT change
- *
- * Loading a description is not a permission. A call to a tool whose entry was never loaded goes
- * to the broker exactly as before, and is allowed, queued or refused on the same rules. The
- * model may guess the arguments; if the tool rejects them, the loop appends that tool's entry
- * to the error, so the guess costs one step and not two.
- *
- * ## Why `tool_docs` is answered by the loop and is not in the registry
- *
- * It describes the tools THIS run can see, which only the loop knows: a subagent's set is a
- * subset, and a chat turn's set depends on the message (`settingTools`). A registry tool would
- * have to be told that, and would also be listed in every prompt with the switch off, which
- * would move the prefix this change exists to protect. It changes nothing outside the prompt, so
- * there is nothing for the broker's gates to decide; the call is still written to the audit log
- * and announced on the event bus like any other, so a trace shows every lookup and the number
- * of them can be counted. That count is the measurement this switch is waiting on.
+ * With TOOL_DOCS_MODE=core, a small core set keeps its full description and the rest are one line each, name and
+ * first sentence; the model reads a tool's full instructions with `tool_help`, whose answer is appended to the
+ * history so the cached prefix is untouched. A run that sees few tools (a unit) gets them all in full. Off by
+ * default: whether a local model reliably asks before guessing is what has to be measured on the host first.
  */
-import { publish } from "./events.ts";
 import { frictionDocs } from "./learn/friction.ts";
-import * as store from "./memory/store.ts";
-import type { BrokerResult, ClassifiedAction, Tool, ToolCall } from "./types.ts";
+import type { Tool } from "./types.ts";
 
-export const TOOL_DOCS = "tool_docs";
+/** "all" (every description in full, as before) or "core". Read live, so a test can switch it. */
+export const toolDocsMode = (): "all" | "core" => (process.env.TOOL_DOCS_MODE === "core" ? "core" : "all");
 
-/**
- * Tools whose full entry stays in the prefix. Two reasons put a name here: the stable prompt
- * tells the model to use it by name (the memory, web, recall, notify, draft and schedule rules in
- * `agent.ts`, and the `read_more` footers), or nearly every chat reaches for it. A name that is
- * not visible to a run is simply skipped.
- */
-export const CORE_TOOLS: readonly string[] = [
+/** The tools that keep their full description in core mode: the everyday ones, and the way to read the rest. */
+export const CORE_TOOLS = new Set([
+  "calendar_upcoming",
+  "gmail_search",
+  "knowledge_claims",
+  "knowledge_search",
+  "list_dir",
   "memory_recall",
   "memory_save",
-  "web_search",
-  "web_read",
+  "read_file",
   "read_more",
-  "recall_output",
-  "notify",
-  "draft",
-  "schedule_create",
-  "weather",
+  "search_files",
   "task_add",
   "task_list",
-  "subagent",
-];
+  "tool_help",
+  "weather",
+  "web_read",
+  "web_search",
+]);
 
-/**
- * At or under this many visible tools, everything is listed in full. On-demand loading costs a
- * step per lookup, and a subagent with eight tools has no prefix worth saving.
- */
-export const TOOL_DOCS_INLINE_MAX = 16;
-/** Entries one lookup may return. The largest entries are about 1,500 characters each. */
-export const TOOL_DOCS_MAX_NAMES = 6;
-const ONE_LINE_MAX = 110;
+/** A run that sees this many tools or fewer gets every one in full: the index would save little and cost a step. */
+export const SHOW_ALL_UNDER = 20;
 
-/** One tool's full entry, exactly as the prompt has always listed it. */
-export const fullEntry = (t: Tool): string => {
-  // Recent failures with this tool, appended to its own description (LEARNING Phase 1.2).
-  // Synchronous SQL, inference-free; never throws, so a lookup failure just omits the line.
+/** One tool's full description, with its recent failures (LEARNING Phase 1.2), as the prompt has always shown it. */
+export const fullDoc = (t: Tool): string => {
   let friction = "";
   try {
     friction = frictionDocs(t.name);
@@ -78,129 +50,26 @@ export const fullEntry = (t: Tool): string => {
   return `- ${t.name}: ${t.description}${friction ? `\n    ${friction}` : ""}\n    args: ${t.argsSchema}`;
 };
 
-/**
- * The first sentence of a description, for the name-only list. Some descriptions open with a
- * one-word role ("INTERVIEWER."), which says nothing by itself, so a very short first
- * sentence takes the next one with it.
- */
-export const oneLine = (description: string): string => {
-  const sentences = String(description ?? "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
-  let line = sentences[0] ?? "";
-  if (line.length < 25 && sentences[1]) line = `${line} ${sentences[1]}`;
-  return line.length > ONE_LINE_MAX ? `${line.slice(0, ONE_LINE_MAX - 1).trimEnd()}…` : line;
+/** The first sentence of a description, at most 100 characters: enough to know when to ask for the rest. */
+export const briefDoc = (t: Tool): string => {
+  const first = t.description.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s/)[0] ?? "";
+  return `- ${t.name}: ${first.length > 100 ? `${first.slice(0, 99)}…` : first}`;
 };
 
-const names = (args: any): string[] => {
-  const raw = args?.names ?? args?.name ?? args?.tools ?? args?.tool;
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[\s,]+/) : [];
-  return [...new Set(list.map((n) => String(n).trim()).filter(Boolean))];
+/** Which tools are shown in full for this set, in this mode. */
+export const fullyShown = (tools: Record<string, Tool>, mode = toolDocsMode()): Set<string> => {
+  const names = Object.keys(tools);
+  return mode !== "core" || names.length <= SHOW_ALL_UNDER ? new Set(names) : new Set(names.filter((n) => CORE_TOOLS.has(n)));
 };
 
-const classify = (args: any): ClassifiedAction => ({
-  reversibility: "reversible",
-  summary: `Look up how to use ${names(args).join(", ") || "a tool"}`,
-  target: "agentspine",
-});
-
-/** The entry the model sees for the lookup itself. Never run through the broker: see the header. */
-export const toolDocsTool: Tool = {
-  argsSchema: '{ "names": string[] }',
-  checkPolicy: () => ({ allowed: true, reason: "reading a tool's own description" }),
-  classify,
-  description:
-    `Load the full description and argument shape of tools that are listed by name only under "More tools". ` +
-    `Do this before the first call to one of them, up to ${TOOL_DOCS_MAX_NAMES} names at a time. It changes nothing.`,
-  name: TOOL_DOCS,
-  run: async () => {
-    throw new Error("tool_docs is answered by the agent loop");
-  },
-};
-
-/**
- * Which tools start with their full entry loaded, or null when on-demand loading does not apply
- * to this run (few enough tools that everything is listed in full).
- */
-export const loadedAtStart = (tools: Record<string, Tool>): null | Set<string> => {
-  const visible = Object.keys(tools).filter((n) => n !== TOOL_DOCS);
-  if (visible.length <= TOOL_DOCS_INLINE_MAX) return null;
-  return new Set([TOOL_DOCS, ...CORE_TOOLS.filter((n) => n in tools)]);
-};
-
-/** The tool list for a run that loads on demand: core entries in full, the rest by name. */
-export const renderOnDemand = (tools: Record<string, Tool>, loaded: ReadonlySet<string>): string => {
-  const all = Object.values(tools);
-  const full = all.filter((t) => loaded.has(t.name)).map(fullEntry);
-  const rest = all.filter((t) => !loaded.has(t.name)).map((t) => `- ${t.name}: ${oneLine(t.description)}`);
+/** The "Available tools" block of the system prompt. Registry order throughout, so the prefix is the same each time. */
+export const toolDocs = (tools: Record<string, Tool>, mode = toolDocsMode()): string => {
+  const full = fullyShown(tools, mode);
+  const shown = Object.values(tools).filter((t) => full.has(t.name)).map(fullDoc);
+  const rest = Object.values(tools).filter((t) => !full.has(t.name));
+  if (!rest.length) return shown.join("\n");
   return (
-    `${full.join("\n")}\n\n` +
-    `More tools. These are listed by name with one line each. Their full description and argument shape are\n` +
-    `not loaded yet. Before the first call to one of them, load it:\n` +
-    `{"action":"tool","tool":"${TOOL_DOCS}","args":{"names":["<name>"]}}\n` +
-    rest.join("\n")
+    `${shown.join("\n")}\n\nMore tools you can use, one line each. Before calling one for the first time, read how with ` +
+    `{"action":"tool","tool":"tool_help","args":{"names":["<name>"]}}:\n${rest.map(briefDoc).join("\n")}`
   );
-};
-
-/**
- * Event ids for lookups. The broker numbers its calls from 1 in a counter this module cannot
- * see, and a client pairs a call with its result by id, so these start far above anything the
- * broker will reach in one process.
- */
-let lookupSeq = 1_000_000_000;
-
-/**
- * Answer a `tool_docs` call from the run's own tool set, mark what it returned as loaded, and
- * leave the same record a broker call leaves: an audit row, then the two events.
- */
-export const lookUp = (runId: null | number, call: ToolCall, tools: Record<string, Tool>, loaded: Set<string>): BrokerResult => {
-  const callId = ++lookupSeq;
-  const asked = names(call.args);
-  const classified = classify(call.args);
-  publish(runId, { args: call.args ?? null, callId, tool: call.tool, type: "tool_call" });
-
-  let status: BrokerResult["status"] = "executed";
-  let output: string;
-  if (!asked.length) {
-    status = "error";
-    output = `ERROR: ${TOOL_DOCS} needs "names", for example {"names":["gmail_search"]}.`;
-  } else {
-    const taken = asked.slice(0, TOOL_DOCS_MAX_NAMES);
-    const entries = taken.map((name) => {
-      const tool = name === TOOL_DOCS ? undefined : tools[name];
-      if (!tool) return `- ${name}: not a tool available to you.`;
-      loaded.add(name);
-      return fullEntry(tool);
-    });
-    const left = asked.length - taken.length;
-    output = entries.join("\n") + (left > 0 ? `\n\n${left} more name(s) were not loaded: ask for at most ${TOOL_DOCS_MAX_NAMES} at a time.` : "");
-  }
-
-  // The log is the record and the event is a view of it, in that order, as in the broker.
-  try {
-    store.logAction(runId, call, classified, status, output);
-  } catch (err) {
-    console.warn(`[tool-docs] could not log a lookup: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  publish(runId, {
-    callId,
-    output: output.slice(0, 4000),
-    reversibility: classified.reversibility,
-    status,
-    summary: classified.summary,
-    target: classified.target,
-    tool: call.tool,
-    type: "tool_result",
-  });
-  return { output, status };
-};
-
-/**
- * Appended to an error from a tool whose entry the model never loaded: it guessed the arguments
- * and the tool refused them, so the next thing it needs is the entry. Marks the tool loaded so
- * this is said once.
- */
-export const entryAfterError = (name: string, tools: Record<string, Tool>, loaded: Set<string>): string => {
-  const tool = tools[name];
-  if (!tool || loaded.has(name)) return "";
-  loaded.add(name);
-  return `\n\nYou called ${name} without loading its description. Here it is:\n${fullEntry(tool)}`;
 };

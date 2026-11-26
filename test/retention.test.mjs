@@ -8,7 +8,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-retention-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-retention-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 process.env.INDEXED_TRANSCRIPT_RETENTION_DAYS = "45";
 process.env.TRANSCRIPT_RETENTION_DAYS = "30";

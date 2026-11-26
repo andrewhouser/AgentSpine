@@ -80,7 +80,6 @@ docs/*
 # Python venv for the speaker-diarization helper (services/diarize).
 services/diarize/.venv/
 
-# Python bytecode. Each machine's own interpreter writes it when it runs services/*, so it
-# is never committed (PLAN-open-work section 11).
+# Python bytecode (the MFLUX and TTS services). Generated on each machine, never committed.
 __pycache__/
 *.pyc

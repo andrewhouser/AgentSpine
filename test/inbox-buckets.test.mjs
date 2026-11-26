@@ -230,7 +230,7 @@ console.log("\nTHE TIMER — the check-in's interval, and labels are kept 30 day
 console.log("\nTHE CHECK-IN DOES NOT KNOW THE BUCKETS EXIST");
 {
   const src = (f) => fs.readFileSync(path.join(import.meta.dirname, "..", "src", "checkin", f), "utf8");
-  for (const f of ["run.ts", "sources.ts", "store.ts", "rules.ts", "prefs.ts"]) {
+  for (const f of ["run.ts", "sources.ts", "store.ts", "rules.ts"]) {
     check(`${f} imports nothing from buckets`, /from "\.\/buckets(-deps)?\.ts"/.test(src(f)), false);
   }
   check("run.ts makes no model call", /router\.ts|llm\.ts/.test(src("run.ts")), false);

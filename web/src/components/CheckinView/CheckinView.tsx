@@ -1,11 +1,10 @@
 import { useState } from "react";
 
-import type { CheckinItem, CheckinPreview, CheckinStatus } from "../../lib/types.ts";
+import type { CheckinPreview, CheckinSource, CheckinStatus } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import {
-  CHECKIN_SOURCES,
   checkinBucketLine,
   checkinGroups,
   checkinMailOrder,
@@ -37,6 +36,15 @@ const when = (iso: string): string => new Date(iso).toLocaleString([], { dateSty
  * Subjects are shown here whatever the push is set to say. That setting is about what leaves
  * the machine in a notification; this page is yours.
  */
+/** The sources in the order the screen lists them, with the words it uses. */
+const SOURCE_LABELS: [CheckinSource, string][] = [
+  ["mail", "Mail from people"],
+  ["calendar", "Calendar"],
+  ["task", "Tasks"],
+  ["approval", "Approvals"],
+  ["headsup", "Heads-up"],
+];
+
 export const CheckinView = () => {
   const [status, refreshStatus] = useResource(() => api.checkinStatus().catch(() => NO_STATUS), NO_STATUS);
   const [error, setError] = useState("");
@@ -66,11 +74,8 @@ export const CheckinView = () => {
     }
   };
 
-  /**
-   * Switch one source on or off. Saved on the server, so it holds for the timer and for every
-   * device, and the list is read again because a source that is off is not read at all.
-   */
-  const setSource = async (kind: CheckinItem["kind"], on: boolean): Promise<void> => {
+  // Each source on or off (D1). Off means it is not read at all, by the check-in or by this preview.
+  const toggleSource = async (kind: CheckinSource, on: boolean): Promise<void> => {
     setError("");
     try {
       await api.setCheckinSources({ [kind]: on });
@@ -149,7 +154,7 @@ export const CheckinView = () => {
       {preview && (
         <>
           <div className={own.section}>If it checked now</div>
-          <div className={styles.snippet}>{checkinSendLine(preview)}</div>
+          <div className={styles.snippet}>{checkinSendLine({ ...preview, off: checkinOffKinds(status?.sources) })}</div>
           {preview.wouldSend && (
             <div className={own.push}>
               <div className={own.pushTitle}>{preview.title}</div>
@@ -190,6 +195,24 @@ export const CheckinView = () => {
         </section>
       ))}
 
+      {status?.sources && (
+        <section>
+          <div className={own.section}>What a check-in reads</div>
+          <div className={own.sources}>
+            {SOURCE_LABELS.map(([kind, label]) => (
+              <label className={own.source} key={kind}>
+                <input
+                  checked={status.sources?.[kind] !== false}
+                  onChange={(e) => void toggleSource(kind, e.target.checked)}
+                  type="checkbox"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </section>
+      )}
+
       {status && status.runs.length > 0 && (
         <section>
           <div className={own.section}>Past checks</div>
@@ -203,18 +226,6 @@ export const CheckinView = () => {
         </section>
       )}
 
-      {status && (
-        <section>
-          <div className={own.section}>What it looks at</div>
-          {CHECKIN_SOURCES.map((src) => (
-            <label className={own.source} key={src.kind}>
-              <input checked={status.sources?.[src.kind] !== false} onChange={(e) => void setSource(src.kind, e.target.checked)} type="checkbox" />
-              <span className={own.who}>{src.label}</span>
-              <span className={own.detail}>{src.hint}</span>
-            </label>
-          ))}
-        </section>
-      )}
     </div>
   );
 };

@@ -7,11 +7,12 @@
  * email, "it's birthday", or your own birthday, because each false positive is a question in
  * your queue.
  */
+import "./helpers/example-policy.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-headsup-dates-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-headsup-dates-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.EMBEDDINGS_URL = ""; // no network: memories fall back to keywords
 

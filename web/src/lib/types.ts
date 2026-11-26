@@ -824,9 +824,11 @@ export interface CheckinStatus {
   runs: CheckinRun[];
   /** Whether mail is sorted into buckets. Absent from a server that predates them, which reads as off. */
   sortMode?: "log" | "off" | "on";
-  /** Absent from a server that predates the setting, which reads as everything on. */
-  sources?: CheckinSources;
+  /** Which sources a check-in reads. Absent from an older server, which reads them all. */
+  sources?: Record<CheckinSource, boolean>;
 }
+
+export type CheckinSource = "approval" | "calendar" | "headsup" | "mail" | "task";
 
 /** What "Check now" reports. */
 export interface CheckinResult {
@@ -1033,9 +1035,12 @@ export interface RunEvent {
   ts: string;
   type:
     | "answer"
+    | "budget"
+    | "compacted"
     | "confirmation"
     | "error"
     | "final"
+    | "paused_for_person"
     | "plan"
     | "queue_wait"
     | "run_end"
@@ -1087,6 +1092,46 @@ export interface PlanStep {
 }
 
 /** What a turn looks like while it is still running. */
+/** One post in the Instagram queue, as GET /api/instagram/queue gives it (src/instagram/queue.ts rowForClient). */
+export interface InstagramQueueRow {
+  approved: boolean;
+  /** Approved once, but the content changed since, so the approval no longer counts. */
+  approvedChanged: boolean;
+  blockers: string[];
+  /** The post exactly as it will go out: the approval card's text. */
+  card: string;
+  /** The content digest an approval must name. */
+  hash: string;
+  id: string;
+  kind: string;
+  permalink: null | string;
+  publishAt: string;
+  status: string;
+  surface: string;
+}
+
+export interface InstagramQueue {
+  enabled: boolean;
+  live: boolean;
+  rows: InstagramQueueRow[];
+}
+
+/** A call refused whoever approves (GET /api/refusals, D2). No arguments: they can carry the refused text. */
+export interface Refusal {
+  id: number;
+  reason: string;
+  runId: null | number;
+  tool: string;
+  ts: string;
+}
+
+/** What happened to a run along the way that is not a tool call (GET /api/runs/:id `notes`; LP3, LP5). */
+export interface RunNote {
+  detail: Record<string, unknown>;
+  kind: "budget" | "compacted" | "paused_for_person";
+  ts: string;
+}
+
 export interface LiveTurn {
   /** The answer as it is being written. A preview: `summary` replaces it when the run finishes. */
   answer: string;
@@ -1096,6 +1141,8 @@ export interface LiveTurn {
   /** Units delegated to during this turn, as they start and finish. */
   delegations: { agent: string; childRunId: number; status: null | string; summary: null | string; tier: string }[];
   error: null | string;
+  /** Paused, compacted or stopped at a budget, as it happens (LP3, LP5). */
+  notes: { detail: Record<string, unknown>; kind: string }[];
   /** The plan card's newest snapshot; empty until the turn's first tool call. */
   plan: PlanStep[];
   runId: number;
@@ -1164,6 +1211,8 @@ export interface InboxStatus {
 
 /** One hit from searching everything that has been indexed. `via` says which paths found it. */
 export interface KnowledgeHit {
+  /** What the passage's source is backed by (src/knowledge/retrieval.ts). The server always sends it. */
+  evidence?: { claims: number; level: "conflicting" | "inferred" | "machine-extracted" | "none" | "reviewed"; reviewed: number; unreviewed: number };
   id: number;
   kind: string;
   mtime: null | string;
@@ -1172,6 +1221,17 @@ export interface KnowledgeHit {
   score: number;
   text: string;
   via: string[];
+}
+
+/** Narrowing for GET /api/knowledge/search. Every field is optional; an empty one is left off the request. */
+export interface KnowledgeSearchFilters {
+  /** What backs the source: `reviewed` claims, `extracted` ones nobody has reviewed, or `none` analysed. */
+  evidence?: "" | "extracted" | "none" | "reviewed";
+  person?: number;
+  project?: number;
+  since?: string;
+  team?: number;
+  until?: string;
 }
 
 /** One extracted item in a meeting close-out, with the earlier claims it could replace. */

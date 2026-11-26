@@ -32,7 +32,6 @@ const { registry } = await import("../src/tools/index.ts");
 const { executeCall } = await import("../src/broker.ts");
 const { launchHeadless } = await import("../src/tools/browser.ts");
 const store = await import("../src/memory/store.ts");
-const { outboundTexts } = await import("../src/outbound.ts");
 
 let passed = 0;
 let failed = 0;
@@ -190,7 +189,8 @@ console.log("\nTHE GATE — the same policy as the other page tools, and no skip
   check("the reason for where a page ended up", hostRefusal({ browser: { enabled: true, navigateAllowlist: [], neverDomains: ["bank.example"] } })("login.bank.example") !== null, true);
   check("it is the reversible tier", siteAudit.classify({ url: "example.com" }), { reversibility: "reversible", summary: "Audit the page https://example.com", target: "example.com" });
   check("it is in the registry", registry.site_audit === siteAudit, true);
-  check("the address is declared as outgoing, and opaque", outboundTexts(siteAudit, { url: "example.com" }), [{ arg: "url", opaque: true, text: "https://example.com" }]);
+  check("a query string in the address is checked as outgoing text", siteAudit.outgoingText({ url: "example.com/?q=hello" }), ["hello"]);
+  check("a bare address carries nothing out", siteAudit.outgoingText({ url: "example.com" }), []);
 
   const runId = store.startRun({ kind: "chat", task: "probe" });
   const off = await executeCall({ args: { url: "https://example.com/" }, tool: "site_audit" }, { autoExecute: { irreversibleAlwaysConfirm: true, reversible: true }, browser: { enabled: false, navigateAllowlist: [] } }, runId, runId, { conversational: true, goal: "audit it" });

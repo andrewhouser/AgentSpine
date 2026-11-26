@@ -12,7 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-rejection-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-rejection-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.REJECT_PROMOTE_AFTER = "3";
 // No embeddings endpoint in the test — force the keyword fallback so `remember` never

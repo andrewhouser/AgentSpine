@@ -41,7 +41,6 @@ import { converterStatus } from "./projects/extract.ts";
 import { indexProject, indexSource } from "./projects/ingest.ts";
 import * as projects from "./projects/store.ts";
 import { checkWorkspaceFile } from "./projects/workspace.ts";
-import { searchKnowledge } from "./projects/search.ts";
 import { deleteItem as deleteInboxItem, fileItem as fileInboxItem, ingestFile, ingestPaste, pasteVia, reprocess as reprocessInboxItem, scanWatchDir } from "./inbox/intake.ts";
 import * as inboxStore from "./inbox/store.ts";
 import * as briefs from "./knowledge/briefs.ts";
@@ -49,7 +48,8 @@ import { clientCommitments, closeMeeting, closeoutState, parsePlan, previewClose
 import { saveRunbook } from "./knowledge/runbook.ts";
 import * as knowledge from "./knowledge/store.ts";
 import { retentionRules } from "./knowledge/retention.ts";
-import { annotateHits } from "./knowledge/retrieval.ts";
+import { EVIDENCE_FILTERS, searchFiltered } from "./knowledge/retrieval.ts";
+import type { EvidenceFilter } from "./knowledge/retrieval.ts";
 import { extractClaims, inboxItemText, normalizeMeeting } from "./knowledge/extract.ts";
 import { ocrAvailable } from "./inbox/ocr.ts";
 import {
@@ -85,7 +85,6 @@ import { queueStatus } from "./queue.ts";
 import { approveConfirmation, rejectConfirmation, sweepConfirmations } from "./confirmations.ts";
 import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
-import { pruneOutbound } from "./outbound.ts";
 import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
@@ -94,8 +93,8 @@ import { answerLesson, openLessons } from "./learn/lessons.ts";
 import { answerRetro, openRetroProposals, runRetro } from "./learn/retro.ts";
 import { answerAfterCheck, openAfterChecks, queueRestore, scheduleHistory } from "./learn/versions.ts";
 import { tick as instagramTick } from "./instagram/index.ts";
+import * as igQueue from "./instagram/queue.ts";
 import { INTERVAL_HOURS as CHECKIN_INTERVAL_HOURS } from "./checkin/rules.ts";
-import { setSourceSwitches, sourceSwitches } from "./checkin/prefs.ts";
 import { shownLabels, sortInbox, sweepInboxSort } from "./checkin/buckets.ts";
 import { queueReply, realSortDeps } from "./checkin/buckets-deps.ts";
 import { previewCheckin, runCheckin, sweepCheckin } from "./checkin/run.ts";
@@ -119,7 +118,7 @@ import { readImage } from "./headsup/research/cards.ts";
 import { RESEARCH_KINDS, researchHeadsup, startResearch } from "./headsup/research/run.ts";
 import { runMorningHeadsup, sweepHeadsup } from "./headsup/morning.ts";
 import { sweepWatches } from "./headsup/watch/loop.ts";
-import { updatePrefs } from "./headsup/prefs.ts";
+import { isQuietNow, updatePrefs } from "./headsup/prefs.ts";
 import { prefsForClient } from "./headsup/prefs-view.ts";
 import { enableWatch } from "./headsup/watch/enable.ts";
 import { withdrawReminders } from "./headsup/reminders-store.ts";
@@ -529,6 +528,17 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
         // local. The model name is not a secret; the key never leaves config.
         cloud: cloudStatus(),
         schedules: store.listSchedules().length,
+        // The newest finished run someone waits on (a chat turn, the builder): id, kind, seconds and thread only, for
+        // the dashboard's optional spoken alert (A8). Never its task or answer.
+        lastRun: store.lastFinishedRun(),
+        // Whether it is quiet hours now (the outbox's and Heads-up's preference), so the spoken alert stays silent too.
+        quiet: (() => {
+          try {
+            return isQuietNow(new Date());
+          } catch {
+            return false;
+          }
+        })(),
         // Open tasks, for the Mac sidebar's badge. Same cap as GET /api/tasks, so a count of 300
         // means "at least 300"; nobody needs that precision on a badge.
         tasks: listTasks({ limit: 300, status: "open" }).length,
@@ -543,7 +553,8 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       if (seg.length === 4 && seg[3] === "stream") return streamRun(req, res, id, Number(url.searchParams.get("after") ?? -1));
       const run = store.getRun(id);
       if (!run) return sendJson(res, 404, { error: "no such run" });
-      return sendJson(res, 200, { run, trace: store.getTrace(id), actions: store.listActions(id) });
+      // `notes`: what happened along the way that is not a tool call (paused, compacted, budget; LP3 and LP5).
+      return sendJson(res, 200, { run, trace: store.getTrace(id), actions: store.listActions(id), notes: store.runNotes(id) });
     }
 
     // /api/builds , /api/builds/:runId/diff — a view over the actions log, not a table of
@@ -1206,22 +1217,62 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/retention: what is kept, and for how long, per kind of thing. Read-only; the numbers are config.
     if (m === "GET" && seg[1] === "retention" && seg.length === 2) return sendJson(res, 200, retentionRules());
 
-    // /api/knowledge/search?q=&project=&kind=&since=&until=&k= — hybrid full-text and vector search over every
-    // indexed document and filed meeting (src/projects/search.ts). Omit project to search the whole base.
+    // /api/knowledge/search?q=&project=&kind=&since=&until=&asOf=&person=&team=&evidence=&k= — hybrid full-text and
+    // vector search over every indexed document and filed meeting (src/projects/search.ts). Omit project to search the
+    // whole base. asOf is until by another name (a passage is as of the day it is dated). person or team keeps passages
+    // that name them; evidence (reviewed, extracted, none, comma-separated) keeps sources by what backs them. An
+    // unknown person or team, or a bad evidence value, is a 400 so a screen never shows "no results" for a typo.
     if (m === "GET" && seg[1] === "knowledge" && seg[2] === "search" && seg.length === 3) {
       const query = (url.searchParams.get("q") ?? "").trim();
       if (!query) return sendJson(res, 400, { error: "q is required" });
       const project = url.searchParams.get("project");
       const kinds = (url.searchParams.get("kind") ?? "").split(",").filter(Boolean);
-      const hits = await searchKnowledge(query, {
+      const evidence = (url.searchParams.get("evidence") ?? "").split(",").filter(Boolean);
+      if (evidence.some((e) => !(EVIDENCE_FILTERS as readonly string[]).includes(e))) return sendJson(res, 400, { error: `evidence must be any of ${EVIDENCE_FILTERS.join(", ")}` });
+      const person = url.searchParams.get("person") || undefined;
+      const team = url.searchParams.get("team") || undefined;
+      if (person && team) return sendJson(res, 400, { error: "give person or team, not both" });
+      const found = await searchFiltered(query, {
+        evidence: evidence.length ? (evidence as EvidenceFilter[]) : undefined,
         k: Math.min(50, Math.max(1, Number(url.searchParams.get("k") ?? 10) || 10)),
         kinds: kinds.length ? kinds : undefined,
+        person,
         projectId: project ? Number(project) : undefined,
         since: url.searchParams.get("since") ?? undefined,
-        until: url.searchParams.get("until") ?? undefined,
+        team,
+        until: url.searchParams.get("until") ?? url.searchParams.get("asOf") ?? undefined,
       });
-      // Each hit says what its source is backed by (src/knowledge/retrieval.ts); ranking is unchanged.
-      return sendJson(res, 200, annotateHits(hits));
+      if ((person || team) && !found.who) return sendJson(res, 400, { error: found.note });
+      // Each hit says what its source is backed by (src/knowledge/retrieval.ts); ranking is unchanged. Still a plain
+      // array, which every client reads; a note about a filter goes in a header so the shape does not change.
+      if (found.note) res.setHeader("X-Search-Note", found.note);
+      return sendJson(res, 200, found.hits);
+    }
+
+    // /api/instagram/queue — the posting queue, for the dashboard screen (docs/INSTAGRAM.md). Approval is of the exact
+    // content: the screen sends the content hash it showed, and a row that changed since is refused. Row ids contain
+    // slashes, so the client encodes them and they are decoded here.
+    if (seg[1] === "instagram" && seg[2] === "queue") {
+      if (m === "GET" && seg.length === 3) {
+        const rows = igQueue.listRows({ limit: Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 100)) });
+        const policy = loadPolicy();
+        return sendJson(res, 200, {
+          enabled: policy.instagram?.enabled === true,
+          live: policy.instagram?.enabled === true && policy.instagram.publish === true,
+          rows: rows.map(igQueue.rowForClient),
+        });
+      }
+      if (m === "POST" && seg.length === 5 && (seg[4] === "approve" || seg[4] === "revoke")) {
+        const id = decodeURIComponent(seg[3]);
+        const b = seg[4] === "approve" ? await readBody(req) : {};
+        const r = seg[4] === "approve" ? igQueue.approveIfUnchanged(id, String(b?.hash ?? ""), "dashboard") : igQueue.revoke(id);
+        return r.ok ? sendJson(res, 200, igQueue.rowForClient(r.row)) : sendJson(res, 409, { error: r.reason });
+      }
+    }
+
+    // /api/refusals — calls refused whoever approves (D2), newest first, without their arguments.
+    if (m === "GET" && seg[1] === "refusals" && seg.length === 2) {
+      return sendJson(res, 200, store.listRefusals(Number(url.searchParams.get("limit") ?? 50) || 50));
     }
 
     // /api/data-events — the deletion and retention audit trail (ids, names and counts, never content).
@@ -2104,15 +2155,12 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           lastRun: checkinStore.lastRun(),
           mode: CHECKIN_MODE,
           pushDetail: CHECKIN_PUSH_DETAIL,
+          // Which sources a check-in reads; each can be switched off from the screen (POST /api/checkin/sources).
+          sources: checkinStore.sourcePrefs(),
           runs: checkinStore.listRuns(Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))),
           sortMode: INBOX_SORT_MODE,
-          sources: sourceSwitches(),
         });
-      // Which sources it reads. The owner's own setting, written only from their screens.
-      if (m === "POST" && seg.length === 3 && seg[2] === "sources") {
-        const r = setSourceSwitches(await readBody(req));
-        return r.ok ? sendJson(res, 200, { sources: r.sources }) : sendJson(res, 400, { error: r.error });
-      }
+      if (m === "POST" && seg.length === 3 && seg[2] === "sources") return sendJson(res, 200, checkinStore.setSourcePrefs(await readBody(req)));
       // The preview itself stays model-free: `buckets` are labels a sorting pass already stored
       // (section 14, U7), joined by item key, and empty unless INBOX_SORT_MODE is "on".
       if (m === "GET" && seg.length === 3 && seg[2] === "preview")
@@ -2371,8 +2419,6 @@ const prune = async (): Promise<void> => {
       console.log(`pruned: heads-up ${hu.cardSets} card sets, ${hu.watches} watches, ${hu.ledger} ledger rows, ${hu.orphanFiles + hu.orphanImageRows} orphan images`);
     const outbox = pruneOutbox();
     if (outbox) console.log(`pruned: ${outbox} outbox rows`);
-    const outbound = pruneOutbound();
-    if (outbound) console.log(`pruned: ${outbound} outgoing-text matches`);
     // Transcripts run on their own, shorter window — see TRANSCRIPT_RETENTION_DAYS.
     const dropped = pruneSources(60);
     if (dropped) console.log(`pruned: ${dropped} fetched sources older than 60 days`);

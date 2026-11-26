@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-recipes-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-recipes-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 const rs = await import("../src/recipes/store.ts");
 const { recipeSave, recipeUse, recipeList } = await import("../src/tools/recipes.ts");

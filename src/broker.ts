@@ -12,12 +12,8 @@
  *      when policy.autoExecute.irreversibleAlwaysConfirm is set — even if the
  *      target is allowlisted. That is the "tiered by reversibility" default.
  *
- * Above both gates sits the refusal tier (2026-11-26): a call classified `forbidden` is
- * denied whoever approves and whatever policy says. The members are listed in the tools.
- *
- * Between the gates, a check on text leaving the machine (src/outbound.ts): a card number,
- * a Social Security number or a credential in an argument a tool declares as outgoing.
- * Log-only until OUTBOUND_ENFORCE is on.
+ * A third tier sits beside those two: `Tool.refuse` names calls that never happen, whoever
+ * approves (PLAN-open-work section 12 D2). It is checked right after the allowlist.
  *
  * Two further rails sit between those gates, both opt-in via policy.json:
  *
@@ -37,9 +33,15 @@ import { registry } from "./tools/index.ts";
 import * as store from "./memory/store.ts";
 import { publish } from "./events.ts";
 import { notify, confirmationActions, confirmationPush } from "./notify.ts";
-import { NOTIFY_ON_CONFIRMATION, OUTBOUND_ENFORCE } from "./config.ts";
+import { NOTIFY_ON_CONFIRMATION, OUTGOING_ENFORCE } from "./config.ts";
+import { describeFindings, scanOutgoing } from "./outgoing.ts";
 import { recordFriction } from "./learn/friction.ts";
-import { checkOutbound, outboundDenial, recordOutbound } from "./outbound.ts";
+
+/**
+ * How a refused call's audit row begins (D2): an ordinary denial to the loop, but one that no approval could have
+ * changed. The store's refusal list and the web's "refused" badge read this exact text.
+ */
+export const REFUSED_PREFIX = "DENIED (refused, whoever approves):";
 
 const startOfToday = (): string => {
   const d = new Date();
@@ -102,6 +104,9 @@ export const executeCall = async (
 ): Promise<BrokerResult> => {
   const tool = registry[call.tool];
   const callId = ++callSeq;
+  // Set by the outgoing-text check below, and appended to whatever this call's row says, so a
+  // log-only finding is on the row whichever way the call ends.
+  let outgoingNote = "";
 
   /**
    * Log the decision and tell any watcher about it, in that order — the audit log is the
@@ -113,6 +118,7 @@ export const executeCall = async (
     status: BrokerResult["status"],
     output: string,
   ): BrokerResult => {
+    if (outgoingNote) output = `${output}\n${outgoingNote}`;
     store.logAction(runId, call, classified, status, output);
     publish(runId, {
       callId,
@@ -140,35 +146,40 @@ export const executeCall = async (
     return record(null, "error", `ERROR: could not classify args: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // The refusal tier (PLAN-open-work section 12, D2). Checked before either gate, so nothing
-  // below can soften it: not `policy.autoApprove`, not a user-directed request, not a tool
-  // trusted in chat, not a schedule's pre-approval, and not a dry run reporting what "would"
-  // have happened. It never queues either, because a card for it is a card someone can tap.
-  // Recorded and shown as an ordinary denial with its reason.
-  if (classified.reversibility === "forbidden") {
-    return record(
-      classified,
-      "denied",
-      `DENIED: ${classified.summary} is refused because ${classified.reason ?? "this tool never does it"}. ` +
-        `No approval or setting allows it: AgentSpine does not do this for anyone. ` +
-        `Do not look for another way to do it. Tell the user it is theirs to do by hand.`,
-    );
-  }
-
   // Gate 1: allowlist. `run` rides along so a tool can refuse on the setting the call is
   // being made from as well as on its target — still a code decision in the tool, still
   // recorded and rendered as an ordinary denial.
   const decision = tool.checkPolicy(policy, call.args, run);
   if (!decision.allowed) return record(classified, "denied", `DENIED: ${decision.reason}`);
 
-  // Text leaving the machine (PLAN-open-work section 12, D3). After the allowlist, so a call
-  // that was never going to run is not counted, and before the budget, the queue and the
-  // run, so text that matches is neither sent nor left sitting on an approval card. Log-only
-  // unless OUTBOUND_ENFORCE is on: a match is recorded and the call goes on untouched.
-  const leaving = checkOutbound(tool, call.args);
-  if (leaving.length) {
-    recordOutbound(runId, call.tool, leaving, OUTBOUND_ENFORCE);
-    if (OUTBOUND_ENFORCE) return record(classified, "denied", `DENIED: ${outboundDenial(leaving)}`);
+  // The refused tier (D2). Before budgets and before every way past the queue below, so no
+  // approval, standing grant, trust setting or scheduled pre-approval can reach it, and it is
+  // never queued: there is nothing to approve. A refuser that throws refuses the call.
+  if (tool.refuse) {
+    let reason: null | string;
+    try {
+      reason = tool.refuse(call.args, run, policy);
+    } catch {
+      reason = "the check on this call failed, so it is refused";
+    }
+    if (reason) return record(classified, "denied", `${REFUSED_PREFIX} ${reason}`);
+  }
+
+  // The outgoing-text check (D3). Log-only unless OUTGOING_ENFORCE: the note rides on the audit
+  // row and nothing else changes. A tool whose declaration throws is skipped, because the
+  // check is a net under the tool's own gates and must not turn a bug into a refused call.
+  if (tool.outgoingText) {
+    try {
+      const found = scanOutgoing(tool.outgoingText(call.args));
+      if (found.length) {
+        const what = describeFindings(found);
+        if (OUTGOING_ENFORCE)
+          return record(classified, "denied", `DENIED: the text this would send contains a ${what}. Take it out and try again, or ask the user to do this one themselves.`);
+        outgoingNote = `[outgoing check, log only: contains a ${what}]`;
+      }
+    } catch {
+      /* see above */
+    }
   }
 
   // Budget rail. After the allowlist (a denied call shouldn't consume allowance) and
@@ -181,7 +192,10 @@ export const executeCall = async (
   // (LEARNING Phase 2) — the narrowest possible grant, one (tool, target) pair, written to
   // policy.json only by a human clicking a proposal. It lets exactly this shape skip the
   // queue; every other irreversible action still confirms.
+  // A call that must always show its card (an edit to a gate file, SC6) takes none of the skips below.
+  const pinned = classified.reversibility === "irreversible" && classified.alwaysConfirm === true;
   const preApproved =
+    !pinned &&
     classified.reversibility === "irreversible" &&
     (policy.autoApprove ?? []).some((s) => s.tool === call.tool && s.target === classified.target);
   // The user asked for exactly this, in their own words, in this chat turn — "email Jeff
@@ -190,13 +204,14 @@ export const executeCall = async (
   // never the model's), and policy.userDirected must list the action. A schedule, a watcher,
   // a subagent and a later approval carry no conversational goal, so they never qualify.
   const directed =
-    classified.reversibility === "irreversible" && run?.conversational && policy.userDirected?.enabled && tool.directed
+    !pinned && classified.reversibility === "irreversible" && run?.conversational && policy.userDirected?.enabled && tool.directed
       ? tool.directed(call.args, run)
       : null;
   const userDirected = !!directed && (policy.userDirected?.actions ?? []).includes(`${call.tool}.${directed.action}`);
   // Standing trust for a named tool, honoured only while a person is in the chat (see
   // Policy.trust). `run.conversational` is set by the runner for chat turns alone.
   const chatTrusted =
+    !pinned &&
     classified.reversibility === "irreversible" &&
     !!run?.conversational &&
     (policy.trust?.chatAutoTools ?? []).includes(call.tool);
@@ -219,13 +234,15 @@ export const executeCall = async (
       return true;
     }
   };
-  const scheduled = classified.reversibility === "irreversible" && !!run?.preApproved && !asksWhenUnattended();
-  // `alwaysConfirm` is the tool saying no skip may apply: an edit to one of AgentSpine's own
-  // gates, or a proposal to change its code (section 10, SC5 and SC6).
+  const scheduled = !pinned && classified.reversibility === "irreversible" && !!run?.preApproved && !asksWhenUnattended();
   const mustConfirm =
-    classified.reversibility === "irreversible" &&
-    (classified.alwaysConfirm === true ||
-      (policy.autoExecute.irreversibleAlwaysConfirm && !preApproved && !userDirected && !chatTrusted && !scheduled));
+    pinned ||
+    (classified.reversibility === "irreversible" &&
+    policy.autoExecute.irreversibleAlwaysConfirm &&
+    !preApproved &&
+    !userDirected &&
+    !chatTrusted &&
+    !scheduled);
   const canAutoRun =
     classified.reversibility === "reversible" ? policy.autoExecute.reversible : !mustConfirm;
 

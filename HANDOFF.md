@@ -14,6 +14,23 @@ delete a test assertion, add a skip path, or touch `src/broker.ts`, stop. Write 
 "Escalations" at the bottom of this file, leave the tree as it is, and tell Andrew which model it needs.
 A red check that is honestly reported is a good outcome. A green check reached by loosening a gate is not.
 
+## 0. Merged with GitHub's main (2026-11-26, read this first)
+
+The work below was committed as `d5fb7f8` and merged with 28 commits from GitHub that had built several of the
+same items separately (LP3, LP5, LP6, SC5, SC6, D1's source switches, D2, D3, the `.pyc` cleanup). Andrew chose
+"GitHub wins": for each of those, GitHub's version is the one in the tree, and the local versions are gone
+(`src/outbound.ts`, `src/loop-budget.ts`, `src/turn-gate.ts`, `src/change-proposals.ts`, `src/checkin/prefs.ts`
+and their suites). Ported onto GitHub's code: LP2 (`agent.ts`), H6's stall watchdog (`queue.ts` gained
+`abandon` and `onPauseChange`, `runner.ts` the watch), SC3's code map (`runner.ts`, `write-file.ts`), the MCP
+plan-card labels (`mcp/register.ts`), section 14 (server routes, check-in buckets on GitHub's `sourcePrefs`),
+and the iPhone and Mac source switches (now decoding GitHub's reply). `src/tools/browser.ts` changed only to
+export `launchHeadless` for the site audit. `src/broker.ts` is GitHub's, untouched.
+
+So in step 7 below: read `src/outgoing.ts` where it says `src/outbound.ts`; GitHub's refused tier is
+`Tool.refuse` (suite `test/refused-tier.test.mjs`), not `forbidden`; and item 6 is GitHub's `propose_change`
+(suite `test/propose-change.test.mjs`). Add `src/queue.ts` and `src/runner.ts` to the files to read: the
+watchdog's `abandon` lets a hung run's code keep going beside the next job.
+
 ## 1. Where things stand
 
 - Branch `main`, **nothing committed**, about 186 changed or new files. Do not commit or push unless Andrew asks.

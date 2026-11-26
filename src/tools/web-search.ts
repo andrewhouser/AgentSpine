@@ -234,13 +234,12 @@ export const searchHits = async (query: string, max = 8): Promise<SearchHit[]> =
 
 export const webSearch: Tool = {
   name: "web_search",
-  // The query goes to a search provider (src/outbound.ts).
-  outboundText: (a) => [{ arg: "query", text: String(a?.query ?? "") }],
   description:
     "Search the web (Tavily, headless-browser fallback). Returns untrusted snippets, each with its " +
     "publish date when known. Set recency to only get results published within that window — use it " +
     "whenever the question is about a recent period (today, this week, latest news).",
   argsSchema: '{ "query": string, "recency"?: "day" | "week" | "month" | "year" }',
+  outgoingText: (a: { query?: unknown }) => [String(a?.query ?? "")],
   classify,
   available,
   checkPolicy,

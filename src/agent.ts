@@ -7,11 +7,14 @@
  * step, which is where small-model tool-calling unreliability gets absorbed.
  */
 import { answerPublisher, PROMISE_MAX_CHARS, PROMISE_ONLY } from "./answer-stream.ts";
-import { AGENT_STEP_MAX_TOKENS, LOCAL_DEEP_MAX_TOKENS, LOCAL_DEEP_THINKING, LOOP_BUDGET, MAX_PARSE_FAILURES, MAX_STEPS, TOOL_DOCS_ON_DEMAND } from "./config.ts";
+import { AGENT_STEP_MAX_TOKENS, COMPACT_AT_TOKENS, COMPACT_KEEP_RECENT, COMPACT_TO, LOCAL_DEEP_MAX_TOKENS, LOCAL_DEEP_THINKING, MAX_PARSE_FAILURES, MAX_STEPS, RUN_BUDGET_WARN_AT, RUN_MS_PER_STEP, RUN_TOKENS_PER_STEP } from "./config.ts";
+import { compactMessages, estimateTokens } from "./compact.ts";
+import { addRunNote, usageForRuns } from "./memory/store.ts";
+import { holdText } from "./stash.ts";
 import { route } from "./router.ts";
 import type { RouteOpts, RouteResult } from "./router.ts";
-import { resolveTier } from "./tiers.ts";
 import type { Tier } from "./tiers.ts";
+import { resolveTier } from "./tiers.ts";
 import { extractJson, LLMError } from "./llm.ts";
 import type { Msg } from "./llm.ts";
 import { executeCall } from "./broker.ts";
@@ -21,12 +24,9 @@ import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts"
 import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
-import { activeMsOf, budgetFor, contextTokens, estimateTokens, exhausted, exhaustedNote, shouldCompact, stubbable, stubText, STUB_WINDOW_CHARS } from "./loop-budget.ts";
-import type { ResultNote } from "./loop-budget.ts";
-import { hold } from "./stash.ts";
+import { fullyShown, toolDocs, toolDocsMode } from "./tool-docs.ts";
+import { yieldToPerson } from "./queue.ts";
 import { linkRun, throwIfStopped } from "./stop.ts";
-import { entryAfterError, fullEntry, loadedAtStart, lookUp, renderOnDemand, TOOL_DOCS, toolDocsTool } from "./tool-docs.ts";
-import { pausedMs, yieldToChat } from "./turn-gate.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
 
 /** The tools this loop may see. A subagent's registry is a subset of its parent's. */
@@ -55,6 +55,11 @@ const settingTools = (
   imagesAvailable = false,
 ): Record<string, Tool> => {
   let out = tools;
+  // `tool_help` exists for the one-line index (LP6). With every description in full there is nothing to look up.
+  if (out.tool_help && toolDocsMode() !== "core") {
+    const { tool_help: _help, ...rest } = out;
+    out = rest;
+  }
   // `look_at_image` is listed only when this conversation actually holds an image. The same
   // reasoning as `notify` above, arrived at from the other direction: a tool the model can
   // see is a tool it will reach for, and offering one whose every invocation must answer
@@ -69,12 +74,7 @@ const settingTools = (
   return rest;
 };
 
-/**
- * The tool list. Every visible tool in full, unless this run loads descriptions on demand
- * (`loaded` is then the set that starts in full; see src/tool-docs.ts, LP6).
- */
-const toolDocs = (tools: Record<string, Tool>, loaded?: ReadonlySet<string>): string =>
-  loaded ? renderOnDemand(tools, loaded) : Object.values(tools).map(fullEntry).join("\n");
+// The tool descriptions in the prompt: src/tool-docs.ts (LP6), in full or core-and-index by TOOL_DOCS_MODE.
 
 /**
  * What the model knows about the application it is running inside.
@@ -219,7 +219,7 @@ const recencyDocs = (tools: Record<string, Tool>): string =>
   the window, say so plainly rather than filling the answer with older material.`
     : "";
 
-const system = (tools: Record<string, Tool>, conversational: boolean, loaded?: ReadonlySet<string>): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
+const system = (tools: Record<string, Tool>, conversational: boolean): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
 ${clock()}
 
@@ -232,7 +232,7 @@ To finish:
 ${finalDocs(conversational)}
 
 Available tools:
-${toolDocs(tools, loaded)}
+${toolDocs(tools)}
 ${appDocs(tools)}${conversational ? chatDocs(tools) : jobDocs(tools)}
 ${harnessContract(Object.keys(tools), conversational)}
 
@@ -312,8 +312,12 @@ export interface AgentOpts {
    * watcher and the CLI never carry the tool.
    */
   imagesAvailable?: boolean;
-  /** Step cap for this loop. Subagents get a tighter one than the top-level run. */
+  /** Step ceiling for this loop. Subagents get a tighter one than the top-level run. */
   maxSteps?: number;
+  /** Tokens this loop may spend (LP3). Defaults to the ceiling times RUN_TOKENS_PER_STEP. */
+  tokenBudget?: number;
+  /** Wall-clock milliseconds this loop may take, not counting time paused for a person. Defaults to the ceiling times RUN_MS_PER_STEP. */
+  timeBudgetMs?: number;
   /**
    * Which model tier drives this loop. The broker gates every call identically whatever
    * this says — a cheaper tier buys a worse plan, never a wider permission.
@@ -382,7 +386,6 @@ const parseOr = async (messages: Msg[], opts: RouteOpts, read: (text: string, tr
     parsed: read(result.text, result.truncated, result.looped),
     text: result.text,
     truncated: result.truncated,
-    usage: result.usage,
     via: result.via,
   };
 };
@@ -587,19 +590,6 @@ const readReply = (
   return { action: "final", reply: truncated ? `${body}${CUT_OFF_NOTE}` : body };
 };
 
-/** A tool result in the history, with what compaction needs to replace it and keep its meaning (LP3). */
-interface StubNote extends ResultNote {
-  /** `tool result [status]:` and the newline, kept in front of the stub. */
-  head: string;
-  /** The tool's output as shown. Emptied once it has been set aside. */
-  output: string;
-  /** The result line and any pin notice that followed the output. The stub keeps both. */
-  tail: string;
-}
-
-/** Roughly what a stub costs, so the saving from a compaction is counted net of it. */
-const STUB_OVERHEAD_CHARS = 350;
-
 /**
  * Run the loop, then drop this run's private pin if it is the root of its tree. A subagent
  * shares its parent's `budgetRunId`, so it neither owns the pin nor releases it.
@@ -627,12 +617,7 @@ const runAgentLoop = async (
   // The harness context, when there is one, is the single owner of these two facts (S1); the plain
   // options remain for callers that build no context (tests, the eval harnesses).
   const conversational = opts.harness?.conversational ?? opts.conversational ?? false;
-  const settled = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
-  // LP6: with the switch on, and enough tools for it to be worth a lookup step, most tools are
-  // listed by name and `tool_docs` loads the rest. `loaded` is null whenever every tool is in full,
-  // which is always with the switch off, and the prompt is then exactly what it was.
-  const loaded = TOOL_DOCS_ON_DEMAND ? loadedAtStart(settled) : null;
-  const tools = loaded ? { ...settled, [TOOL_DOCS]: toolDocsTool } : settled;
+  const tools = settingTools(visibleTools(opts.tools), conversational, goal, opts.imagesAvailable ?? false);
   const tier = opts.tier ?? "standard";
   // The loop alone knows which tools this setting lets the run see, so the context is completed here
   // and registered for a subagent to derive its own from.
@@ -650,7 +635,7 @@ const runAgentLoop = async (
   if (harness) registerHarness(harness);
 
   const messages: Msg[] = [
-    { role: "system", content: system(tools, conversational, loaded ?? undefined) },
+    { role: "system", content: system(tools, conversational) },
     // The envelope leads the extra context: it is the one place the run states what it is, so it
     // comes straight after the stable prompt and shows up in the trace like any other message.
     ...(harness ? [{ role: "system", content: renderEnvelope(harness, opts.startPrivate ?? false) } as Msg] : []),
@@ -663,54 +648,23 @@ const runAgentLoop = async (
   ];
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
-  // LP3: under LOOP_BUDGET=tokens the cap is spent as generated tokens and working time, with a
-  // step ceiling behind them (src/loop-budget.ts). Null is the plain step cap, as always.
-  const budget = LOOP_BUDGET === "tokens" ? budgetFor(maxSteps) : null;
-  const stepLimit = budget ? budget.stepCeiling : maxSteps;
+  // LP3: the step count is a ceiling; tokens and time are the budget. Scaled from the ceiling, so a unit whose file
+  // asks for more steps gets proportionally more of both (see RUN_TOKENS_PER_STEP in config.ts).
+  const budget = { ms: opts.timeBudgetMs ?? maxSteps * RUN_MS_PER_STEP, tokens: opts.tokenBudget ?? maxSteps * RUN_TOKENS_PER_STEP };
   const startedAt = Date.now();
-  const pausedAtStart = pausedMs(runId);
-  /** Time this loop has spent working. Parked time is someone else's turn, not this run's. */
-  const activeMs = (): number => activeMsOf({ now: Date.now(), pausedAtStart, pausedNow: pausedMs(runId), startedAt });
-  let tokensSpent = 0;
-  // What compaction needs to know: how big the context was when the server last counted it, and
-  // which messages are tool results that could be set aside.
-  let measuredTokens: null | number = null;
-  let charsAtMeasure = 0;
-  let lastCompactStep: null | number = null;
-  const results: StubNote[] = [];
-  const totalChars = (): number => messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0);
-  /** Count one reply against the budget, and keep the server's reading of the context it was sent. */
-  const spend = (reply: { text: string; usage?: RouteResult["usage"] }, sentChars: number): void => {
-    if (!budget) return;
-    tokensSpent += reply.usage?.completionTokens ?? estimateTokens(reply.text.length);
-    if (reply.usage?.promptTokens != null) {
-      measuredTokens = reply.usage.promptTokens;
-      charsAtMeasure = sentChars;
-    }
+  let pausedMs = 0;
+  let estimatedSpend = 0;
+  let warned = false;
+  /** Tokens spent so far: the host's own counts when it reported every call, else the running estimate. */
+  const spent = (): number => {
+    if (runId == null) return estimatedSpend;
+    const u = usageForRuns([runId]);
+    return u.calls > 0 && u.unreported === 0 ? u.promptTokens + u.completionTokens : estimatedSpend;
   };
-  /**
-   * Set old tool results aside once the context is past its threshold (the rules, and why this
-   * must be rare, are in src/loop-budget.ts). Only where the run can get the text back: it needs
-   * a run id for the stash and `read_more` among its tools, and without both nothing is touched.
-   * The pin for private output lives on the run, not in the message, so it cannot be dropped
-   * here; the sentence that announced it rides in `tail`, which the stub keeps.
-   */
-  const compact = (step: number): void => {
-    if (!budget || runId == null || !tools.read_more) return;
-    const candidates = stubbable(results) as StubNote[];
-    const freeableChars = candidates.reduce((n, c) => n + c.chars - STUB_OVERHEAD_CHARS, 0);
-    const context = contextTokens({ charsAtMeasure, measuredTokens, totalChars: totalChars() });
-    if (!shouldCompact({ contextTokens: context, freeableChars, lastCompactStep, step })) return;
-    for (const note of candidates) {
-      const ref = hold({ runId, source: `the ${note.tool} result from earlier in this run`, tool: note.tool, window: STUB_WINDOW_CHARS }, note.output);
-      if (!ref) continue;
-      messages[note.index] = { role: "user", content: `${note.head}${stubText({ chars: note.chars, ref, tool: note.tool })}${note.tail}` };
-      note.stubbed = true;
-      note.output = "";
-    }
-    lastCompactStep = step;
-    console.log(`[loop] run ${runId}: context at ~${context} tokens, set ${candidates.length} old tool result(s) aside (read_more brings them back)`);
-  };
+  /** Where the run's own messages start: everything before is the prefix that compaction leaves alone. */
+  const prefixEnd = messages.length;
+  // LP6: the tools whose instructions the model has: those shown in full, and those it read with tool_help.
+  const docsRead = fullyShown(tools);
 
   // The pin is per root run: a subagent reading a transcript pins its parent, and one started
   // after the parent read a transcript starts pinned. See src/sensitivity.ts.
@@ -759,24 +713,62 @@ const runAgentLoop = async (
   const answer = conversational ? answerPublisher((text) => publish(runId, { text, type: "answer" })) : null;
   const streaming = answer ? { onDelta: answer.update } : {};
 
-  for (let step = 0; step < stepLimit; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     // The user pressed stop. Checked here, between steps, so a tool that was already running
     // finished cleanly rather than being cut off halfway (see src/stop.ts).
     throwIfStopped(rootId);
-    // The one point where this run holds nothing, so a background run steps aside here when a
-    // chat turn is waiting for the model (LP5, src/turn-gate.ts). Resolves at once otherwise.
-    await yieldToChat(runId);
-    if (budget) {
-      const why = exhausted(budget, { activeMs: activeMs(), steps: step, tokens: tokensSpent });
-      if (why) return concludeStuck(step, exhaustedNote(why));
-      compact(step);
+    // A person is waiting (LP5): a background run hands the model over here, at the same boundary, and carries on
+    // once they are done. Nothing about this run changes while it waits. A stop asked for meanwhile lands on resume.
+    const waitedFrom = Date.now();
+    if (await yieldToPerson()) {
+      const waitedMs = Date.now() - waitedFrom;
+      pausedMs += waitedMs;
+      publish(runId, { type: "paused_for_person", waitedMs });
+      addRunNote(runId, "paused_for_person", { waitedMs });
+      throwIfStopped(rootId);
     }
+
+    // The budget (LP3). Over it, the run is closed out with what it gathered, as the step ceiling always did. Near
+    // it, the model is told once, on the end of the message it is about to read, so the prefix stays as it was.
+    const used = spent();
+    const elapsed = Date.now() - startedAt - pausedMs;
+    if (used >= budget.tokens || elapsed >= budget.ms) {
+      const over = { elapsedMs: elapsed, reason: used >= budget.tokens ? "tokens" : "time", tokens: used };
+      publish(runId, { ...over, type: "budget" });
+      addRunNote(runId, "budget", over);
+      return concludeStuck(step, used >= budget.tokens ? "Used its whole token budget without concluding." : "Ran out of time without concluding.");
+    }
+    if (!warned && step > 0 && (used >= budget.tokens * RUN_BUDGET_WARN_AT || elapsed >= budget.ms * RUN_BUDGET_WARN_AT)) {
+      warned = true;
+      const nudge =
+        "You have used most of this run's budget. Do not start anything new: finish now with what you have" +
+        (conversational ? ", answering the user in plain prose." : ', with {"action":"final","summary":"..."}.');
+      const last = messages[messages.length - 1];
+      if (last.role === "user" && typeof last.content === "string") last.content = `${last.content}\n\n${nudge}`;
+      else messages.push({ content: nudge, role: "user" });
+    }
+
+    // Compaction (LP3, src/compact.ts): only when a held result can be read back, so nothing is dropped for good.
+    if (tools.read_more && runId != null) {
+      const c = compactMessages(messages, {
+        atTokens: COMPACT_AT_TOKENS,
+        from: prefixEnd,
+        hold: (text) => holdText(runId, "an earlier tool result in this run", text),
+        keepRecent: COMPACT_KEEP_RECENT,
+        toFraction: COMPACT_TO,
+      });
+      if (c.stubs) {
+        publish(runId, { after: c.after, before: c.before, stubs: c.stubs, type: "compacted" });
+        addRunNote(runId, "compacted", { after: c.after, before: c.before, stubs: c.stubs });
+      }
+    }
+
+    estimatedSpend += estimateTokens(messages);
     publish(runId, { step: step + 1, type: "step_start" });
 
     const thinkFirst = thinkNow({ afterError, localDeep: localDeep(), reask: false, step });
     afterError = false;
-    const sentChars = budget ? totalChars() : 0;
-    let { text, parsed, actualTier, via, truncated, looped, usage } = await parseOr(messages, {
+    let { text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
       purpose: "step",
       runId,
       step: step + 1,
@@ -785,7 +777,6 @@ const runAgentLoop = async (
       ...streaming,
       ...sens(),
     }, read);
-    spend({ text, usage }, sentChars);
 
     // A malformed reply gets one retry a tier up. This is where small-model unreliability
     // is absorbed: a 3B that fumbles the JSON protocol costs one extra call rather than
@@ -802,7 +793,9 @@ const runAgentLoop = async (
       // Attributed as its own purpose, not folded into the step: a model that fumbles the
       // JSON protocol costs a whole extra round-trip, and the point of timing is to find
       // out how often that is actually happening rather than to assume.
-      ({ text, parsed, actualTier, via, truncated, looped, usage } = await parseOr(messages, {
+      // The re-ask sends the whole prompt again, so it is spent again.
+      estimatedSpend += estimateTokens(messages) + estimateTokens([{ content: text, role: "assistant" }]);
+      ({ text, parsed, actualTier, via, truncated, looped } = await parseOr(messages, {
         purpose: "step-reask",
         runId,
         step: step + 1,
@@ -813,8 +806,9 @@ const runAgentLoop = async (
         ...streaming,
         ...sens(),
       }, read));
-      spend({ text, usage }, sentChars);
     }
+
+    estimatedSpend += estimateTokens([{ content: text, role: "assistant" }]);
 
     // Whatever this step showed was not the answer after all, so it comes back off the screen.
     if (!(parsed?.action === "final" && finalText(parsed))) answer?.retract();
@@ -927,21 +921,15 @@ const runAgentLoop = async (
       // The goal passed here is the user's own message, not anything the model has since
       // written about it — a tool gating on "did they ask for this?" must read the request,
       // not the requester's account of it.
-      // A description lookup is answered here, from this run's own tool set (src/tool-docs.ts).
-      // Every other call, loaded or not, goes to the broker as it always has.
-      const lookup = loaded != null && call.tool === TOOL_DOCS;
-      const result = lookup
-        ? lookUp(runId, call, tools, loaded)
-        : await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
-            conversational,
-            goal,
-            preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
-            // Not `goal`: in a subagent that is the caller's brief, which the model wrote.
-            approvedTask: opts.approvedTask,
-            projectId: opts.projectId ?? null,
-          });
-      // A description is not something the run found out about the world, so it is not answer material.
-      if (result.status === "executed" && !lookup) gathered.push(`${call.tool} -> ${result.output}`);
+      const result = await executeCall(call, policy, runId, opts.budgetRunId ?? runId, {
+        conversational,
+        goal,
+        preApproved: opts.harness?.preApproved ?? opts.preApproved ?? false,
+        // Not `goal`: in a subagent that is the caller's brief, which the model wrote.
+        approvedTask: opts.approvedTask,
+        projectId: opts.projectId ?? null,
+      });
+      if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
       afterError = result.status === "error";
       const seen = nextRepeat(callCounts.get(key), result.output);
       callCounts.set(key, seen);
@@ -1001,20 +989,21 @@ const runAgentLoop = async (
         return concludeStuck(step + 1, "Kept repeating the same tool call without concluding.");
       }
 
-      const head = `tool result [${result.status}]:\n`;
-      const tail =
-        (lookup && result.status === "executed"
-          ? renderResultEnvelope({ effect: "observed", nextStep: "now call the tool you need", retryable: false, status: result.status, tool: call.tool })
-          : renderResultEnvelope(describeResult(call.tool, result.status, result.output, result.confirmationId))) +
-        pinMessage +
-        // It guessed at a tool it had not loaded and the tool refused the guess: hand it the entry.
-        (loaded && result.status === "error" ? entryAfterError(call.tool, tools, loaded) : "");
+      if (call.tool === "tool_help" && result.status === "executed") {
+        for (const n of Array.isArray(call.args?.names) ? call.args.names : [call.args?.names]) if (n) docsRead.add(String(n));
+      }
+      // A failed call to a tool listed in one line, whose instructions it never read, says how to read them.
+      const unread =
+        result.status !== "executed" && result.status !== "queued" && result.status !== "dry-run" && !docsRead.has(call.tool) && tools.tool_help
+          ? `\n\nYou called ${call.tool} without reading its instructions. Read them first: {"action":"tool","tool":"tool_help","args":{"names":["${call.tool}"]}}`
+          : "";
       messages.push({
         role: "user",
         content:
-          head +
-          result.output +
-          tail +
+          `tool result [${result.status}]:\n${result.output}` +
+          renderResultEnvelope(describeResult(call.tool, result.status, result.output, result.confirmationId)) +
+          pinMessage +
+          unread +
           // One warning first, on the second identical call, so a model that can take the
           // hint gets to finish properly rather than being cut off.
           (repeats > 1
@@ -1023,11 +1012,6 @@ const runAgentLoop = async (
               (conversational ? "in plain prose." : `with {"action":"final","summary":"..."}.`)
             : ""),
       });
-      // Remembered so compaction can set it aside later. Not a description lookup: stubbing that
-      // would take back the very entry the model asked for.
-      if (budget && !lookup) {
-        results.push({ chars: result.output.length, head, index: messages.length - 1, output: result.output, status: result.status, stubbed: false, tail, tool: call.tool });
-      }
       continue;
     }
 
@@ -1042,7 +1026,9 @@ const runAgentLoop = async (
   // Out of steps, and the same reasoning applies: a run that gathered the answer and then
   // failed to say it should still say it. `maxSteps`, not MAX_STEPS — a subagent has its own
   // tighter cap, and reporting the top-level one here was simply wrong.
-  return concludeStuck(stepLimit, "Reached the step cap without concluding.");
+  publish(runId, { reason: "steps", type: "budget" });
+  addRunNote(runId, "budget", { reason: "steps", steps: maxSteps });
+  return concludeStuck(maxSteps, "Reached the step cap without concluding.");
 };
 
 /**
@@ -1051,6 +1037,9 @@ const runAgentLoop = async (
  * directly rather than only through a live model that may paper over a bad instruction.
  */
 export const __test = {
+  thinkNow,
+  // The system prompt as a run would send it, for test/prompt-snapshot.test.mjs (H1).
+  systemFor: (tools: Record<string, Tool>, conversational: boolean) => system(tools, conversational),
   callKey,
   CALL_CEILING,
   finalText,
@@ -1061,8 +1050,5 @@ export const __test = {
   refusedNotifyText,
   REPEAT_LIMIT,
   settingTools,
-  thinkNow,
-  /** The prompt for a given tool set: what test/prompt-snapshot.test.mjs pins (PLAN section 13, H1). */
-  systemFor: (tools: Record<string, Tool>, conversational: boolean) => system(tools, conversational),
   systemPrompt: (conversational: boolean) => system(registry, conversational),
 };

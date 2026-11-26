@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-import type { InboxItem, KnowledgeHit, Project } from "../../lib/types.ts";
+import type { InboxItem, KnowledgeEntity, KnowledgeHit, KnowledgeSearchFilters, Project } from "../../lib/types.ts";
 
 import { useDictation } from "../../hooks/useDictation.ts";
 import { useResource } from "../../hooks/useResource.ts";
@@ -21,6 +21,18 @@ const STATUS: Record<InboxItem["status"], string> = {
   ready: "Read and searchable",
 };
 
+/** What a hit's source is backed by, in the words the Knowledge screen uses. */
+const BACKED: Record<NonNullable<KnowledgeHit["evidence"]>["level"], string> = {
+  conflicting: "reviewed claims that disagree",
+  inferred: "reviewed, inferred claims",
+  "machine-extracted": "extracted claims nobody has reviewed",
+  none: "nothing analysed from it yet",
+  reviewed: "reviewed claims",
+};
+
+/** "person:3", "team:7" or "": one picker for both, because a search narrows to one or the other. */
+type Who = "" | `person:${number}` | `team:${number}`;
+
 const when = (iso: string): string => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 
 /**
@@ -28,6 +40,9 @@ const when = (iso: string): string => new Date(iso).toLocaleString([], { dateSty
  * source before it has a project, is searchable at once, and is filed under a project only when you say so. A
  * suggested project is shown, never applied.
  */
+const whoOf = (who: Who): { person?: number; team?: number } =>
+  who.startsWith("person:") ? { person: Number(who.slice(7)) } : who.startsWith("team:") ? { team: Number(who.slice(5)) } : {};
+
 export const InboxView = ({ projects }: InboxViewProps) => {
   const load = useCallback(() => api.inboxList(), []);
   const [items, reload] = useResource<InboxItem[]>(load, []);
@@ -41,6 +56,19 @@ export const InboxView = ({ projects }: InboxViewProps) => {
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<KnowledgeHit[] | null>(null);
+  const [searchNote, setSearchNote] = useState("");
+  const [scope, setScope] = useState<null | number>(null);
+  const [who, setWho] = useState<Who>("");
+  const [backed, setBacked] = useState<NonNullable<KnowledgeSearchFilters["evidence"]>>("");
+  const [since, setSince] = useState("");
+  const [until, setUntil] = useState("");
+  const [entities] = useResource<KnowledgeEntity[]>(
+    useCallback(() => api.knowledgeEntities(), []),
+    [],
+  );
+  const people = entities.filter((e) => e.kind === "person");
+  const teams = entities.filter((e) => e.kind === "team");
+  const filtered = scope !== null || who !== "" || backed !== "" || since !== "" || until !== "";
   const [extractNotes, setExtractNotes] = useState<Record<number, string>>({});
   const picker = useRef<HTMLInputElement>(null);
   // The transcript lands in the box and waits for Add: Whisper mishears names, and this becomes a searchable source.
@@ -83,14 +111,32 @@ export const InboxView = ({ projects }: InboxViewProps) => {
     });
   };
 
-  const search = async (): Promise<void> => {
+  // Each filter is passed in, not read from state, so a change can re-run the search with the value just picked.
+  const search = async (f: KnowledgeSearchFilters = { evidence: backed, project: scope ?? undefined, since, until, ...whoOf(who) }): Promise<void> => {
     if (q.trim().length < 2) return setHits(null);
+    setError("");
     try {
-      setHits(await api.searchKnowledge(q.trim()));
+      const found = await api.searchKnowledge(q.trim(), f);
+      setHits(found.hits);
+      setSearchNote(found.note);
     } catch (err) {
+      setHits(null);
+      setSearchNote("");
       setError(err instanceof Error ? err.message : String(err));
     }
   };
+
+  /** Change one filter and, when there is a search on screen, run it again with the new value. */
+  const refine = (change: Partial<{ backed: typeof backed; scope: null | number; since: string; until: string; who: Who }>): void => {
+    const next = { backed, scope, since, until, who, ...change };
+    setBacked(next.backed);
+    setScope(next.scope);
+    setSince(next.since);
+    setUntil(next.until);
+    setWho(next.who);
+    if (hits !== null) void search({ evidence: next.backed, project: next.scope ?? undefined, since: next.since, until: next.until, ...whoOf(next.who) });
+  };
+  const projectName = (id: number): string => projects.find((p) => p.id === id)?.name ?? "";
 
   return (
     <div className={styles.page}>
@@ -198,11 +244,81 @@ export const InboxView = ({ projects }: InboxViewProps) => {
             Search
           </button>
         </div>
-        {hits && hits.length === 0 && <p className={styles.meta}>Nothing found.</p>}
+        <div className={styles.form}>
+          <select
+            aria-label="Which project"
+            className={styles.input}
+            onChange={(e) => refine({ scope: e.target.value === "" ? null : Number(e.target.value) })}
+            value={scope ?? ""}
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Naming a person or team" className={styles.input} onChange={(e) => refine({ who: e.target.value as Who })} value={who}>
+            <option value="">Anyone</option>
+            {people.length > 0 && (
+              <optgroup label="People">
+                {people.map((e) => (
+                  <option key={e.id} value={`person:${e.id}`}>
+                    {e.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {teams.length > 0 && (
+              <optgroup label="Teams">
+                {teams.map((e) => (
+                  <option key={e.id} value={`team:${e.id}`}>
+                    {e.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <select
+            aria-label="What backs the source"
+            className={styles.input}
+            onChange={(e) => refine({ backed: e.target.value as typeof backed })}
+            value={backed}
+          >
+            <option value="">Any source</option>
+            <option value="reviewed">Backed by reviewed claims</option>
+            <option value="extracted">Extracted, not reviewed</option>
+            <option value="none">Nothing analysed yet</option>
+          </select>
+          <label className={styles.meta}>
+            From{" "}
+            <input aria-label="Dated from" className={styles.input} onChange={(e) => refine({ since: e.target.value })} type="date" value={since} />
+          </label>
+          <label className={styles.meta}>
+            As of{" "}
+            <input aria-label="Dated up to" className={styles.input} onChange={(e) => refine({ until: e.target.value })} type="date" value={until} />
+          </label>
+          {filtered && (
+            <button className={styles.button} onClick={() => refine({ backed: "", scope: null, since: "", until: "", who: "" })} type="button">
+              Clear filters
+            </button>
+          )}
+        </div>
+        {who !== "" && (
+          <p className={styles.meta}>
+            Only passages that name {entities.find((e) => `${e.kind}:${e.id}` === who)?.name ?? "them"}
+            {who.startsWith("team:") ? " or one of its recorded members" : ""}, by a recorded name or alias.
+          </p>
+        )}
+        {searchNote && <p className={styles.meta}>{searchNote.charAt(0).toUpperCase() + searchNote.slice(1)}</p>}
+        {hits && hits.length === 0 && <p className={styles.meta}>Nothing found{filtered ? " with these filters" : ""}.</p>}
         {hits?.map((h) => (
           <div className={styles.cardStack} key={h.id}>
             <p className={styles.meta}>
-              {h.path} · found by {h.via.join(" and ")}
+              {h.path}
+              {projectName(h.projectId) && ` · ${projectName(h.projectId)}`}
+              {h.mtime && ` · ${h.mtime.slice(0, 10)}`} · found by {h.via.join(" and ")}
+              {h.evidence && ` · ${BACKED[h.evidence.level]}`}
             </p>
             <p className={styles.snippet}>{h.text.slice(0, 280)}</p>
           </div>

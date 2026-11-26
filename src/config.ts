@@ -182,6 +182,20 @@ export const EMBEDDINGS_API_KEY = env.EMBEDDINGS_API_KEY ?? "";
 // --- Loop ---
 export const HEARTBEAT_MS = Number(env.HEARTBEAT_MINUTES ?? "30") * 60_000;
 export const MAX_STEPS = Number(env.MAX_STEPS ?? "10");
+// LP3 (PLAN-open-work section 10, 2026-11-25). The step count is now a ceiling, and each run also has a token and a
+// wall-clock budget scaled from it, so a run whose steps are cheap is not cut short by a count and one whose context
+// has ballooned stops before it grinds on (an eighteen-minute runaway was observed). First guesses: a chat step on
+// the model host is about 14,000 prompt tokens, so 22,000 a step leaves room; 72 seconds a step is a long step at
+// 28 tok/s plus prefill. Time paused for a person (LP5) does not count. Set both from a week of runs on the Mini.
+export const RUN_TOKENS_PER_STEP = Number(env.RUN_TOKENS_PER_STEP ?? "22000");
+export const RUN_MS_PER_STEP = Number(env.RUN_MS_PER_STEP ?? "72000");
+// The run is warned once, at this share of either budget, to finish with what it has.
+export const RUN_BUDGET_WARN_AT = 0.8;
+// Compaction (src/compact.ts): once the loop's messages reach about this many tokens, older tool results become
+// stubs that read_more can open, down to COMPACT_TO of it, keeping the newest COMPACT_KEEP_RECENT whole.
+export const COMPACT_AT_TOKENS = Number(env.COMPACT_AT_TOKENS ?? "30000");
+export const COMPACT_TO = 0.6;
+export const COMPACT_KEEP_RECENT = 2;
 // Completion cap for each agent-loop step. Sent explicitly because leaving it unset does
 // not mean "unlimited": mlx-lm applies its own default of 512, which is plenty for a tool
 // call and nowhere near enough for a research answer written inside {"action":"final"}.
@@ -193,10 +207,10 @@ export const AGENT_STEP_MAX_TOKENS = Number(env.AGENT_STEP_MAX_TOKENS ?? "4096")
 // model is overwhelmingly likely to reproduce the same failure.
 export const MAX_PARSE_FAILURES = Number(env.MAX_PARSE_FAILURES ?? "2");
 
-// --- Loop changes that wait on a measurement (PLAN-open-work section 10, LP2, LP3 and LP6) ---
-// Each is off until someone has timed it on the model host, because each changes what a 28 tok/s
-// model is asked to do on every step. Off means the loop and its prompt are byte-for-byte what
-// they were (test/prompt-snapshot.test.mjs holds the prompt to that).
+// --- Local deep thinking (PLAN-open-work section 10, LP2), off until measured ---
+// It changes what a 28 tok/s model is asked to do on a step, so it waits for a timing on the model
+// host. Off means the loop and its prompt are byte-for-byte what they were
+// (test/prompt-snapshot.test.mjs holds the prompt to that).
 //
 // LP2, "local deep". A task sized `deep` whose run must stay on the local model (it read mail, a
 // file, a project) gets the standard model with thinking off, the same effort as an easy one.
@@ -207,27 +221,6 @@ export const LOCAL_DEEP_THINKING = (env.LOCAL_DEEP_THINKING ?? "false") === "tru
 // is spent from the same cap as the answer: at 4,096 a long thought leaves no room to reply. At
 // LLM_BUDGET_TOK_PER_S this allows 576s, inside LLM_TIMEOUT_MAX_MS. A guess until measured.
 export const LOCAL_DEEP_MAX_TOKENS = Number(env.LOCAL_DEEP_MAX_TOKENS ?? "8192");
-// LP6. Every visible tool's description and schema sits in the prompt prefix (about 35,000
-// characters for the full registry). With this on, a run that can see many tools gets a short core
-// set in full and the rest as one line each, and asks for a tool's full entry by name
-// (src/tool-docs.ts). A small local model is the least reliable at extra protocol, which is why
-// this is a switch and not the default.
-export const TOOL_DOCS_ON_DEMAND = (env.TOOL_DOCS_ON_DEMAND ?? "false") === "true";
-// LP3. "steps" is the cap as it has always been: MAX_STEPS, or a unit's own. "tokens" spends the
-// same allowance as tokens generated and active wall-clock time instead (src/loop-budget.ts), so
-// ten cheap lookups cost less than ten long writes, and sets old tool results aside as stubs once
-// the context passes half the window below. Anything else reads as "steps".
-export const LOOP_BUDGET: "steps" | "tokens" = env.LOOP_BUDGET === "tokens" ? "tokens" : "steps";
-// What one step of the old cap is worth under LOOP_BUDGET=tokens. A run capped at 10 steps may
-// generate 12,000 tokens and work for 15 minutes; a subagent capped at 6 gets 7,200 and 9. Both
-// are starting points: 1,200 tokens is a long answer or a dozen tool calls, 90s is one slow step.
-export const RUN_TOKENS_PER_STEP = Number(env.RUN_TOKENS_PER_STEP ?? "1200");
-export const RUN_MS_PER_STEP = Number(env.RUN_MS_PER_STEP ?? "90000");
-// The context the loop plans around, in tokens. NOT the model's advertised window (Qwen3.6 claims
-// far more): it is what this host can prefill and attend over without a step turning into
-// minutes. Compaction starts at half of it, Hermes Agent's threshold (section 13, H5), and both
-// numbers are guesses to set from the model host.
-export const LOCAL_CONTEXT_TOKENS = Number(env.LOCAL_CONTEXT_TOKENS ?? "65536");
 
 // --- Active memory ---
 // How many stored memories are auto-recalled and injected before every run. Keep small;
@@ -636,12 +629,12 @@ export const NOTIFY_ON_SCHEDULE = (env.NOTIFY_ON_SCHEDULE ?? "false") === "true"
 // The outbox (docs/archive/PLAN-outbox.md) always RECORDS every notification. With this off, the default,
 // it only records what it would have done (quiet hours, repeats, the daily cap) and delivers
 // everything as before. Turn it on after a week of `npm run digest` shows the numbers are right.
+// The outgoing-text check (src/outgoing.ts) always RECORDS a card number, Social Security number
+// or secret in text a tool is about to send out, on the audit row. With this off, the default, it
+// only records. Card numbers are matched by the Luhn check, which one number in ten passes by
+// chance, so turn it on after a fortnight of `npm run outgoing` shows what the false positives are.
+export const OUTGOING_ENFORCE = (env.OUTGOING_ENFORCE ?? "false") === "true";
 export const OUTBOX_ENFORCE = (env.OUTBOX_ENFORCE ?? "false") === "true";
-// The check on text leaving the machine (src/outbound.ts, PLAN-open-work section 12, D3) always
-// RECORDS a match: a card number, a Social Security number, a credential. With this off, the
-// default, that is all it does. Turn it on after a fortnight of `npm run digest 336` shows the
-// false positives are ones you can live with; from then on a match denies the call.
-export const OUTBOUND_ENFORCE = (env.OUTBOUND_ENFORCE ?? "false") === "true";
 
 /**
  * The confirmation watchdog — the clock on the approval queue.
@@ -1186,16 +1179,6 @@ export const COMMAND_OUTPUT_CHARS = Number(env.COMMAND_OUTPUT_CHARS ?? "12000");
 // stop a clean `npm test` costing 12,000 characters, not to withhold a report. The rest is
 // kept behind a read_more ref either way.
 export const COMMAND_OUTPUT_PASS_CHARS = Number(env.COMMAND_OUTPUT_PASS_CHARS ?? "2000");
-
-// --- Chat goes ahead of background work (PLAN-open-work section 10, LP5) ---
-// Runs are serialized because the model host answers one request at a time, so a chat turn
-// that arrives during a scheduled job waits for the whole job. With this on, work a person is
-// waiting for (a chat turn, an approved action, `npm run do`) goes ahead of queued unattended
-// runs, and a running one parks at its next step boundary and resumes afterwards. Off by
-// default: parking costs the background run its cached prompt prefix, so it pays prefill again
-// when it resumes, and whether that trade is worth it has to be measured on the model host.
-// Only the exact string "true" turns it on. See src/queue.ts and src/turn-gate.ts.
-export const CHAT_FIRST = env.CHAT_FIRST === "true";
 
 // --- Stall watchdog for unattended runs (PLAN-open-work section 13, H6) ---
 // Runs are serialized, so a scheduled run that hangs holds up everything behind it. A run

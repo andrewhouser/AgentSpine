@@ -12,7 +12,6 @@
  *   - **No tool may write it.** `src/area-map.md` is on the control-file list in
  *     tools/write-file.ts beside `profile.md`, and for the same reason: it reaches the model as
  *     ours, so a line a tool could put there would outrank everything the model reads later.
- *     `keepingProtected` puts it back if a declared command changes it.
  *   - **It is not a document.** It is never indexed, searched or retrieved, so nothing a run
  *     read can stand in for it, and a file of the same name in a project's sources is only text.
  *   - **Only runs in this checkout get it.** Every other run's prompt is byte for byte what it

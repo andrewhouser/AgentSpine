@@ -27,7 +27,6 @@ import {
 } from "./config.ts";
 import { dedupeMemories, pruneFriction, pruneMemories } from "./memory/rag.ts";
 import { pruneLedger, vacuum } from "./memory/store.ts";
-import { pruneOutbound } from "./outbound.ts";
 import { pruneOutbox } from "./outbox.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 
@@ -87,7 +86,6 @@ console.log(`  ${String((hu?.watches ?? 0) + (hu?.ledger ?? 0)).padStart(6)} hea
 console.log(`  ${String((hu?.orphanFiles ?? 0) + (hu?.orphanImageRows ?? 0)).padStart(6)} orphan heads-up images`);
 const outboxRows = dryRun ? 0 : pruneOutbox();
 console.log(`  ${String(outboxRows).padStart(6)} outbox rows past their retention`);
-console.log(`  ${String(dryRun ? 0 : pruneOutbound()).padStart(6)} outgoing-text matches past their retention`);
 console.log(`  ${String(duplicates).padStart(6)} duplicate memories`);
 console.log(`  ${String(notes).padStart(6)} note memories past the ${NOTE_MEMORY_MAX} ceiling`);
 console.log(`  ${String(friction).padStart(6)} friction memories past the ${FRICTION_MEMORY_MAX}/tool ceiling`);

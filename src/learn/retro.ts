@@ -8,19 +8,19 @@
  * a kind, or attach itself to different runs.
  *
  * Nothing here applies anything. A card is shown in the weekly review. Accepting a routine queues the same
- * disabled-job confirmation the proposer uses, which you then approve. Accepting a `code_change` queues a
- * proposed change (SC5, src/change-proposals.ts): a second card, showing the whole task the builder would be
- * handed, and only approving that one starts work. Every other kind only records your answer.
+ * disabled-job confirmation the proposer uses, which you then approve. Accepting a `code_change` queues a change
+ * proposal (SC5, src/tools/propose-change.ts), which you then approve to start the builder on a branch. Every other
+ * kind only records your answer.
  *
  * Off unless `RETRO_ENABLED` is exactly "true", because N2's live eval has to come before any learner that
  * reads a trace is switched on. It lives apart from `outbox-review.ts` so that file's "no model" rule holds.
  */
 import { loadPolicy, MAX_STEPS, RETRO_ENABLED } from "../config.ts";
 import { tagUntrusted } from "../audit.ts";
-import { DEFAULT_TEST_PLAN, queueChangeProposal } from "../change-proposals.ts";
 import { isQuietNow } from "../headsup/prefs.ts";
 import { extractJson } from "../llm.ts";
-import { kvGet, kvSet, listSchedules, rawDb } from "../memory/store.ts";
+import { kvGet, kvSet, listSchedules, queueConfirmation, rawDb } from "../memory/store.ts";
+import { proposeChange } from "../tools/propose-change.ts";
 import type { NotifyOpts } from "../notify.ts";
 import { REVIEW_DAYS, REVIEW_HOUR, REVIEW_WEEKDAY } from "../outbox-rules.ts";
 import { route } from "../router.ts";
@@ -472,7 +472,8 @@ export interface RetroAnswerResult {
 
 const ACCEPTED: Record<RetroKind, string> = {
   auto_approval: "Noted. Nothing was changed. You can apply it under Auto-approval proposals.",
-  code_change: "Noted. Nothing was changed, and no work has started.", // replaced below when a proposal is queued
+  // Not shown: an accepted code change is answered by answerRetro, which queues a change proposal (SC5).
+  code_change: "Noted.",
   memory_correction: "Noted. Nothing was changed.",
   missing_capability: "Noted. Nothing was changed.",
   recipe: "Noted. Nothing was changed. Next time you ask for it, you can tell me to save it as a recipe.",
@@ -499,38 +500,34 @@ export const answerRetro = (id: number, answer: RetroAnswer, now: Date = new Dat
     const count = (JSON.parse(row.run_ids) as number[]).length;
     queued = queueIntentProposal({ count, key: taskKey(row.task), sample: row.task });
   }
-  // A code change becomes a proposal in the approval queue and nothing more (SC5). Saying yes
-  // here is yes to the idea; the card it queues shows the builder's whole task, and only
-  // approving that card starts any work.
-  let change: null | { id: number } | { problem: string } = null;
+  // SC5: a code change you agree with becomes a change proposal, the card that would start the builder. It is a
+  // second, separate approval, because this card says what is wrong and that one says what will be done about it.
+  let codeChangeNote = "";
   if (row.kind === "code_change") {
+    const args = { runIds: JSON.parse(row.run_ids) as number[], title: row.title, why: row.why };
+    let policy;
     try {
-      change = queueChangeProposal(
-        { run_ids: JSON.parse(row.run_ids) as number[], test_plan: DEFAULT_TEST_PLAN, what: row.title, why: row.why.length >= 10 ? row.why : row.title },
-        loadPolicy(),
-      );
-    } catch (err) {
-      change = { problem: err instanceof Error ? err.message : String(err) };
+      policy = loadPolicy();
+    } catch {
+      policy = undefined;
     }
-    if ("id" in change) queued = change.id;
+    const allowed = policy ? proposeChange.checkPolicy(policy, args) : { allowed: false, reason: "no policy.json" };
+    if (allowed.allowed) {
+      queued = queueConfirmation({ args, tool: "propose_change" }, proposeChange.classify(args).summary, null);
+      codeChangeNote = "Queued as a change proposal. Approve it to start the builder on a branch; merging stays yours.";
+    } else {
+      codeChangeNote = `Noted. Nothing was started: ${allowed.reason}.`;
+    }
   }
   if (Number(close.run("accepted", now.toISOString(), id).changes) !== 1) return null;
   recordProposalOutcome(-id, "accepted", now);
-  if (change) {
-    return {
-      message:
-        "id" in change
-          ? "Queued as a proposed change. Approving that card starts the builder on its own branch; merging stays yours."
-          : `Noted. No work has started, because ${change.problem}`,
-      queued,
-    };
-  }
   if (row.kind === "routine") {
     return {
       message: queued == null ? "Noted. A card for this job is already waiting, or you turned it down before." : "Queued as a disabled job. Approve it to create it.",
       queued,
     };
   }
+  if (row.kind === "code_change") return { message: codeChangeNote, queued };
   return { message: ACCEPTED[row.kind], queued: null };
 };
 

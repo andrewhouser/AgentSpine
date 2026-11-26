@@ -7,6 +7,7 @@
  *
  * Run with `node test/answer-key.test.mjs`.
  */
+import "./helpers/example-policy.mjs";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";

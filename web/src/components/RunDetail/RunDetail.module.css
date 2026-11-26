@@ -41,6 +41,12 @@
   margin: 8px 0 2px;
 }
 
+/* One thing that happened to the run that is not a tool call: paused, set aside results, a budget (LP3, LP5). */
+.alongTheWay {
+  font-size: 0.8125rem;
+  margin: 4px 0;
+}
+
 .meta {
   color: var(--text-faint);
   font-family: var(--font-mono);

@@ -22,7 +22,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-meetings-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-meetings-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.MEETING_CORRECTIONS = "PLOD=Claude,Vardant=Guardant,chat GPT=ChatGPT";
 

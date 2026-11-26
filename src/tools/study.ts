@@ -103,10 +103,6 @@ const topicStatus = (t: TopicRow): string => {
 };
 export const studyTopic: Tool = {
   name: "study_topic",
-  // Registry pass, 2026-11-26 (PLAN-open-work section 12, D2). Deleting a topic destroys its
-  // cards and history and is the one irreversible call here. No scheduled job has a reason to
-  // do it, so a pre-approved run asks like a chat does.
-  confirmWhenUnattended: true,
   description:
     "The user's study topics. action \"list\" shows them with cards due; \"get\" shows one topic's goal, level, " +
     "map, cards and how much they have READ versus PRODUCED lately; \"set\" changes goal, level (0-5) or links " +
@@ -118,6 +114,9 @@ export const studyTopic: Tool = {
     a?.action === "delete"
       ? { reversibility: "irreversible", summary: `Delete study topic "${String(a?.topic ?? "")}" and all its cards`, target: "study" }
       : { reversibility: "reversible", summary: "Study topics", target: "study" },
+  // Registry pass (2026-11-25): delete is the only irreversible action, and it takes a topic's
+  // cards and history with it. A scheduled run asks first, like any other standing change.
+  confirmWhenUnattended: true,
   checkPolicy: allow,
   run: guard(async (a, ctx) => {
     const action = String(a?.action ?? "list");

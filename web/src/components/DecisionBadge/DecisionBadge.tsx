@@ -5,6 +5,8 @@ import styles from "./DecisionBadge.module.css";
 interface DecisionBadgeProps {
   /** An `error` the turn went on to get past (see lib/recovery.ts): shown muted, not red. */
   recovered?: boolean;
+  /** A denial no approval could have changed (D2, lib/refusals.ts): labelled "refused", not "denied". */
+  refused?: boolean;
   status: BrokerStatus | null;
 }
 
@@ -23,8 +25,14 @@ const LABELS: Record<BrokerStatus, string> = {
   queued: "needs approval",
 };
 
-export const DecisionBadge = ({ recovered = false, status }: DecisionBadgeProps) => {
+export const DecisionBadge = ({ recovered = false, refused = false, status }: DecisionBadgeProps) => {
   if (!status) return <span className={`${styles.badge} ${styles.pending}`}>running…</span>;
+  if (refused && status === "denied")
+    return (
+      <span className={`${styles.badge} ${styles.denied}`} title="Refused whoever approves: no approval could have let this through.">
+        refused
+      </span>
+    );
   if (recovered && status === "error")
     return (
       <span className={`${styles.badge} ${styles.recovered}`} title="This call failed, but a later call in the turn ran.">

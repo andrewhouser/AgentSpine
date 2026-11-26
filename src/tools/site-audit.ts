@@ -23,8 +23,8 @@ import { collect } from "../siteaudit/measure.ts";
 import type { CollectOpts } from "../siteaudit/measure.ts";
 import { reportFor, summaryOf } from "../siteaudit/score.ts";
 import type { AuditSummary, SiteMeasure } from "../siteaudit/score.ts";
+import { urlOutgoingParts } from "../outgoing.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
-import { neverDomain, neverDomainReason } from "./browser.ts";
 
 /** Where reports are kept. Under `data/`, which is gitignored: a report is about someone else's site. */
 export const SITE_AUDIT_DIR = path.join(BASE, "data", "site-audits");
@@ -55,10 +55,14 @@ const available = (policy: Policy): PolicyDecision => {
 };
 
 /** Why policy will not let this host be opened, or null. Asked for the address given and again for where it ended up. */
+/** The same test the browser and web_read apply to `policy.browser.neverDomains`: the host or any subdomain of it. */
+const isNever = (policy: Policy, host: string): boolean =>
+  !!host && (policy.browser?.neverDomains ?? []).some((d) => host === d.toLowerCase() || host.endsWith(`.${d.toLowerCase()}`));
+
 export const hostRefusal =
   (policy: Policy) =>
   (host: string): null | string => {
-    if (neverDomain(policy, host)) return neverDomainReason(host);
+    if (isNever(policy, host)) return `${host} is on browser.neverDomains`;
     const allow = policy.browser?.navigateAllowlist ?? [];
     if (allow.length && !allow.some((d) => host === d || host.endsWith(`.${d}`))) return `${host} is not on browser.navigateAllowlist`;
     return null;
@@ -115,8 +119,8 @@ const classify = (args: Args): ClassifiedAction => ({
 
 export const siteAudit: Tool = {
   name: "site_audit",
-  // The address reaches whoever runs the site. Opaque: a long id in a URL is not a credential.
-  outboundText: (a) => [{ arg: "url", opaque: true, text: normalUrl(a?.url) }],
+  // The address leaves the machine, so it is checked like any outgoing text (src/outgoing.ts).
+  outgoingText: (a: { url?: unknown }) => urlOutgoingParts(normalUrl(a?.url)),
   description:
     "Audit one public web page: how fast it loads, how heavy it is, oversized images, how it behaves on a phone, HTTPS, " +
     "its title and description, and whether a visitor can book or get in touch. Loads the page once in a logged-out headless " +

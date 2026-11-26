@@ -315,6 +315,32 @@ export const relationsOf = (entityId: number): RelationRow[] =>
     .map((r) => ({ from: getEntity(r.from_entity) as Entity, rel: r.rel as Relation, to: getEntity(r.to_entity) as Entity }))
     .filter((r) => r.from && r.to);
 
+/** The person or team with this name or alias, case-insensitively, without creating one. A number is taken as an id. */
+export const findEntity = (nameOrId: number | string, kinds: EntityKind[] = ["person", "team"]): Entity | undefined => {
+  const asId = typeof nameOrId === "number" ? nameOrId : /^\d+$/.test(nameOrId.trim()) ? Number(nameOrId) : null;
+  if (asId != null) {
+    const e = getEntity(asId);
+    return e && kinds.includes(e.kind) ? e : undefined;
+  }
+  const lower = String(nameOrId).trim().replace(/\s+/g, " ").toLowerCase();
+  if (!lower) return undefined;
+  for (const kind of kinds) {
+    const e = listEntities(kind).find((x) => x.name.toLowerCase() === lower || x.aliases.some((a) => a.toLowerCase() === lower));
+    if (e) return e;
+  }
+  return undefined;
+};
+
+/** The people an entity stands for: a person is themselves, a team is everyone recorded as `member_of` it. */
+export const peopleOf = (e: Entity): Entity[] =>
+  e.kind === "person" ? [e] : e.kind === "team" ? relationsOf(e.id).filter((r) => r.rel === "member_of" && r.to.id === e.id).map((r) => r.from) : [];
+
+/** Every name a passage could use for this entity: its own and its aliases, and for a team its members' as well. */
+export const namesOf = (e: Entity): string[] => {
+  const all = [e, ...(e.kind === "team" ? peopleOf(e) : [])].flatMap((x) => [x.name, ...x.aliases]);
+  return [...new Map(all.map((n) => [n.toLowerCase(), n])).values()];
+};
+
 // --- claims ---
 export interface NewClaim {
   atMs?: null | number;

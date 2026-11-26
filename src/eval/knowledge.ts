@@ -4,8 +4,8 @@
  * "Better retrieval" needs a number before it is a claim. This takes a set of questions, each with the
  * sources that ought to answer it, runs them through one retrieval mode, and reports whether those
  * sources came back and how high. It measures RETRIEVAL only, which is the part that needs no model
- * beyond the local embedder; citation correctness and stale-answer rate need K4's records and K6's answers
- * and are added then. It writes nothing and logs question ids, never question text or passages, because
+ * beyond the local embedder; citation correctness, stale answers and extraction acceptance are in
+ * src/eval/answers.ts (2026-11-25). It writes nothing and logs question ids, never question text or passages, because
  * the question set is workplace material and lives outside the repository.
  *
  * Question format (JSON, kept outside git):

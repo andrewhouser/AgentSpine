@@ -180,7 +180,7 @@ console.log("\nSAYING YES — reminders for you, a draft for them");
   const file = path.join(drafts, `booking-${row.id}-discovery-call-with-acme.md`);
   check("one draft file, named by the heads-up", [r.draft, fs.existsSync(file)], [file, true]);
   const text = fs.readFileSync(file, "utf8");
-  check("it opens by saying nothing was sent", text.startsWith("DRAFT (text) — nothing has been sent"), true);
+  check("it opens by saying nothing was sent", text.startsWith("DRAFT (text) — nothing is sent to anyone"), true);
   check("it holds the confirmation and the three messages", ["Confirmation, to send now", "Two days before", "That morning", "An hour before"].map((h) => text.includes(`## ${h}`)), [true, true, true, true]);
   check("with the day, the time and the place from the calendar", [text.includes("Thursday, December 10"), text.includes("3:00 PM"), text.includes("12 Harbor St")], [true, true, true]);
   const view = ledger.toView(ledger.getById(row.id));

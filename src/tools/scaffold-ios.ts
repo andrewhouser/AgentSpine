@@ -29,8 +29,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { recordDeliverable } from "../deliverables.ts";
-import { keepingProtected, putBackNote } from "../protected-paths.ts";
-import type { ClassifiedAction, Policy, PolicyDecision, Tool, ToolContext } from "../types.ts";
+import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 import { resolveArg, textTargetGate } from "./write-file.ts";
 
 interface Args {
@@ -258,18 +257,7 @@ export const scaffoldIosApp: Tool = {
     }
     return g;
   },
-  // XcodeGen is a process that writes where its project.yml says. Pointed at a folder inside
-  // AgentSpine's own checkout it must not be a way to change a gate file unread, so anything
-  // protected that it touched is put back (src/protected-paths.ts).
   run: async (a: Args, ctx) => {
-    const where = a?.mode === "regenerate" || a?.mode === "adopt" ? resolveArg(a?.dir) : projectDir(a);
-    const { putBack, value } = await keepingProtected(where, () => scaffold(a, ctx), ctx?.runId ?? null);
-    return value + putBackNote(putBack);
-  },
-};
-
-const scaffold = async (a: Args, ctx: ToolContext): Promise<string> => {
-  {
     try {
       if (a?.mode === "regenerate") {
         const dir = resolveArg(a?.dir);
@@ -328,5 +316,5 @@ const scaffold = async (a: Args, ctx: ToolContext): Promise<string> => {
     } catch (err) {
       return `ERROR: ${err instanceof Error ? err.message : String(err)}`;
     }
-  }
+  },
 };

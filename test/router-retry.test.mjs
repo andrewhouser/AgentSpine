@@ -16,7 +16,7 @@ import path from "node:path";
 // This test drives real completions through llm.chat, which now records their timing via
 // src/timing.ts. Without this the rows — and the ledger's tables — would land in the real
 // spine.db, so a test run would write into the user's data.
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-router-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-router-${process.pid}-${Date.now()}.db`);
 
 // --- a stand-in OpenAI-spec server whose failure mode each test controls ---
 // `behavior` is a queue of what to do per incoming request: "econnreset" hard-closes the

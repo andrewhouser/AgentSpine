@@ -369,6 +369,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               error={live.error}
               kind={persistedKind(turns, live.runId)}
               live={live.status === "queued" || live.status === "running"}
+              notes={live.notes}
               onConfirmationResolved={onDecided}
               plan={live.plan}
               startedAt={turns.find((t) => t.id === live.runId)?.started ?? sentAt[live.runId]}

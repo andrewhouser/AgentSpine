@@ -206,6 +206,9 @@ addColumn("runs", "tier", "TEXT");
 addColumn("runs", "served", "TEXT");
 addColumn("runs", "parent_run_id", "INTEGER");
 addColumn("runs", "agent", "TEXT");
+// 1 when the run started with work-private context: inside a project, or with recalled memories not marked
+// cloud_safe. Read by the draft tool (CP2) to keep such text out of Gmail, at the time it runs and on a later approval.
+addColumn("runs", "work_private", "INTEGER NOT NULL DEFAULT 0");
 addColumn("conversations", "tier", "TEXT");
 // Cross-conversation memory: the ISO time this thread was last summarised into a
 // `conversation` memory, or null if never. Lets the summariser skip threads it has already
@@ -1845,6 +1848,7 @@ export const pruneLedger = (opts: PruneOpts): PruneResult => {
       db.exec(`DELETE FROM confirmations WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM stash WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM llm_calls WHERE run_id IN (${list})`);
+      db.exec(`DELETE FROM run_notes WHERE run_id IN (${list})`);
       db.exec(`DELETE FROM runs WHERE id IN (${list})`);
     }
 
@@ -2513,3 +2517,145 @@ export const namespaceWatcherState = (): void => {
   }
 };
 namespaceWatcherState();
+
+// --- work-private runs (CP2) ---
+
+export const markRunWorkPrivate = (runId: number): void => {
+  db.prepare("UPDATE runs SET work_private = 1 WHERE id = ?").run(runId);
+};
+
+/**
+ * Every run that shares this one's context: its root's conversation (all its turns) or, without one, the root alone,
+ * plus each of their subagents. What a draft could have drawn on.
+ */
+export const contextRunIds = (runId: number): number[] => {
+  let root = db.prepare("SELECT id, parent_run_id, conversation_id FROM runs WHERE id = ?").get(runId) as undefined | { conversation_id: null | number; id: number; parent_run_id: null | number };
+  for (let i = 0; root?.parent_run_id != null && i < 10; i++) {
+    root = db.prepare("SELECT id, parent_run_id, conversation_id FROM runs WHERE id = ?").get(root.parent_run_id) as typeof root;
+  }
+  if (!root) return [];
+  const ids = new Set<number>(
+    root.conversation_id != null
+      ? (db.prepare("SELECT id FROM runs WHERE conversation_id = ?").all(root.conversation_id) as { id: number }[]).map((r) => r.id)
+      : [root.id],
+  );
+  for (let added = true, depth = 0; added && depth < 10; depth++) {
+    added = false;
+    const list = [...ids];
+    const kids = db.prepare(`SELECT id FROM runs WHERE parent_run_id IN (${list.map(() => "?").join(",")})`).all(...list) as { id: number }[];
+    for (const k of kids) if (!ids.has(k.id)) (ids.add(k.id), (added = true));
+  }
+  return [...ids];
+};
+
+/** For a set of runs: whether any started work-private, whether their conversation is in a project, and the tools they ran. */
+export const contextFacts = (ids: number[]): { inProject: boolean; tools: string[]; workPrivate: boolean } => {
+  if (!ids.length) return { inProject: false, tools: [], workPrivate: false };
+  const q = ids.map(() => "?").join(",");
+  const workPrivate = Boolean(db.prepare(`SELECT 1 FROM runs WHERE id IN (${q}) AND work_private = 1 LIMIT 1`).get(...ids));
+  const inProject = Boolean(
+    db.prepare(`SELECT 1 FROM runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.id IN (${q}) AND c.project_id IS NOT NULL LIMIT 1`).get(...ids),
+  );
+  const tools = (db.prepare(`SELECT DISTINCT tool FROM actions WHERE run_id IN (${q}) AND decision = 'executed'`).all(...ids) as { tool: string }[]).map((r) => r.tool);
+  return { inProject, tools, workPrivate };
+};
+
+// --- run notes (LP3, LP5) ---
+// What happened to a run along the way that is not a tool call: it paused so a person could go first, it set aside
+// earlier results to make room, or it stopped at its budget. The live event stream keeps a finished run's events for
+// five minutes only, and a background job is usually looked at later, so these few are kept with the run.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS run_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    detail TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_run_notes_run ON run_notes (run_id, id);
+`);
+
+export type RunNoteKind = "budget" | "compacted" | "paused_for_person";
+
+export interface RunNote {
+  detail: Record<string, unknown>;
+  kind: RunNoteKind;
+  ts: string;
+}
+
+/** Keep one note with its run. Never throws: a note is an account of the run, not part of it. */
+export const addRunNote = (runId: null | number, kind: RunNoteKind, detail: Record<string, unknown>): void => {
+  if (runId == null) return;
+  try {
+    db.prepare("INSERT INTO run_notes (run_id, ts, kind, detail) VALUES (?,?,?,?)").run(runId, now(), kind, JSON.stringify(detail));
+  } catch (err) {
+    console.warn(`[run-notes] could not keep a note: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+export const runNotes = (runId: number): RunNote[] =>
+  (db.prepare("SELECT ts, kind, detail FROM run_notes WHERE run_id = ? ORDER BY id").all(runId) as { detail: string; kind: RunNoteKind; ts: string }[]).map((r) => ({
+    detail: (() => {
+      try {
+        return JSON.parse(r.detail) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    })(),
+    kind: r.kind,
+    ts: r.ts,
+  }));
+
+// --- the last finished run a person waits on (A8) ---
+
+/** Run kinds a person is waiting on when they finish: a chat turn, an approval carried out, the builder, the CLI. */
+const WAITED_ON_KINDS = ["approval", "build", "chat", "do"];
+
+export interface FinishedRun {
+  conversationId: null | number;
+  id: number;
+  kind: string;
+  seconds: number;
+}
+
+/**
+ * The newest finished top-level run of a kind someone waits on, with how long it took. Read by the dashboard's spoken
+ * alert (PLAN-open-work section 6, A8): only the id, kind, duration and thread, never its task or answer.
+ */
+export const lastFinishedRun = (): FinishedRun | null => {
+  const r = db
+    .prepare(
+      `SELECT id, kind, started, finished, conversation_id FROM runs
+        WHERE finished IS NOT NULL AND parent_run_id IS NULL AND kind IN (${WAITED_ON_KINDS.map(() => "?").join(",")})
+        ORDER BY id DESC LIMIT 1`,
+    )
+    .get(...WAITED_ON_KINDS) as undefined | { conversation_id: null | number; finished: string; id: number; kind: string; started: string };
+  if (!r) return null;
+  const seconds = Math.max(0, Math.round((Date.parse(r.finished) - Date.parse(r.started)) / 1000));
+  return { conversationId: r.conversation_id, id: r.id, kind: r.kind, seconds: Number.isFinite(seconds) ? seconds : 0 };
+};
+
+// --- refusals (D2) ---
+
+export interface Refusal {
+  id: number;
+  reason: string;
+  runId: null | number;
+  tool: string;
+  ts: string;
+}
+
+/**
+ * Calls refused whoever approves, newest first, apart from ordinary denials. The reason is the broker's own sentence;
+ * the arguments are left out, because they can carry the very text that was refused.
+ */
+export const listRefusals = (limit = 50): Refusal[] =>
+  (db
+    .prepare("SELECT id, ts, run_id, tool, output FROM actions WHERE decision = 'denied' AND output LIKE 'DENIED (refused, whoever approves):%' ORDER BY id DESC LIMIT ?")
+    .all(Math.min(500, Math.max(1, limit))) as { id: number; output: string; run_id: null | number; tool: string; ts: string }[]).map((r) => ({
+    id: r.id,
+    reason: String(r.output).replace(/^DENIED \(refused, whoever approves\):\s*/, "").split("\n")[0],
+    runId: r.run_id,
+    tool: r.tool,
+    ts: r.ts,
+  }));

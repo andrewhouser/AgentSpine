@@ -130,9 +130,10 @@ export const narrowPolicy = (base: Policy, overlay?: null | PolicyOverlay): Poli
         ...(nav.denyAll || base.browser?.denyAll ? { denyAll: true } : {}),
         enabled: and(base.browser?.enabled, overlay.browser?.enabled),
         navigateAllowlist: nav.list,
-        // The one browser list that grows under an overlay: it refuses, so a project may add
-        // a site it must never touch and can never take one of yours away (section 12, D2).
-        ...(never.length ? { neverDomains: never } : {}),
+        // A union: a project may add hosts it never touches, and cannot drop the base's.
+        ...(base.browser?.neverDomains?.length || overlay.browser?.neverDomains?.length
+          ? { neverDomains: [...new Set([...(base.browser?.neverDomains ?? []), ...(overlay.browser?.neverDomains ?? [])])] }
+          : {}),
       };
     })(),
     budgets: {

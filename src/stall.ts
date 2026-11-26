@@ -15,7 +15,7 @@
  *     `LLM_TIMEOUT_MAX_MS`, which is itself ten minutes, and a declared command up to thirty.
  *     Only when the idle threshold has passed AND nothing in flight is still inside its own
  *     limit is the run called stalled.
- * Time parked so a chat turn could go first (src/turn-gate.ts) is not idle time, and neither
+ * Time parked so a chat turn could go first (`yieldToPerson` in src/queue.ts) is not idle time, and neither
  * is time in the queue, because a run is only watched from the moment it begins.
  *
  * **What happens to a stalled run.** It is asked to stop through src/stop.ts, exactly as the
@@ -32,7 +32,7 @@
 import { STALL_GRACE_MS, STALL_IDLE_MS, STALL_MODEL_MARGIN_MS, STALL_SWEEP_MS, STALL_TOOL_MS } from "./config.ts";
 import { tapEvents } from "./events.ts";
 import { isStopRequested, requestStop, rootOf } from "./stop.ts";
-import { onParkChange } from "./turn-gate.ts";
+import { onPauseChange } from "./queue.ts";
 
 interface Watch {
   abandoned: boolean;
@@ -153,7 +153,7 @@ tapEvents((runId, event) => {
 });
 
 // A parked turn is waiting its turn, not hanging. Its clock restarts when it gets the model back.
-onParkChange((root, parked) => {
+onPauseChange((root, parked) => {
   const w = watched.get(root);
   if (!w) return;
   w.parked = parked;

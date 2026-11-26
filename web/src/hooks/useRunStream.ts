@@ -22,6 +22,7 @@ const blank = (runId: number, task: string, attachments: Attachment[]): LiveTurn
   confirmations: [],
   delegations: [],
   error: null,
+  notes: [],
   plan: [],
   runId,
   status: "queued",
@@ -88,6 +89,15 @@ const fold = (turn: LiveTurn, event: RunEvent): LiveTurn => {
 
     case "queue_wait":
       return { ...turn, waitingBehind: event.depth ?? 0 };
+
+    // Things that happened to the run that are not tool calls (LP3, LP5), said in words by src/lib/runNotes.ts.
+    case "budget":
+    case "compacted":
+    case "paused_for_person": {
+      // The note is the event less its envelope (type, seq, ts).
+      const detail = Object.fromEntries(Object.entries(event).filter(([k]) => k !== "type" && k !== "seq" && k !== "ts"));
+      return { ...turn, notes: [...turn.notes, { detail, kind: event.type }] };
+    }
 
     case "run_end":
       return { ...turn, status: event.status === "ok" || event.status === "stopped" ? event.status : "failed" };

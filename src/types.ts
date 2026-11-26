@@ -2,14 +2,7 @@
  * Shared types. Kept dependency-free so every module can import them.
  */
 
-/**
- * The broker's tiers. `reversible` may run unasked, `irreversible` waits for a person unless
- * one of the four recorded skips applies, and `forbidden` is refused whoever approves: no
- * policy field, no trusted tool, no schedule and no click on a card can let it through
- * (PLAN-open-work section 12, D2). The members are listed in code, in the tool that
- * classifies them, because a refusal nobody can lift must not be something a file can grow.
- */
-export type Reversibility = "reversible" | "irreversible" | "forbidden";
+export type Reversibility = "reversible" | "irreversible";
 
 /** A specific invocation of a tool, classified for the broker. */
 export interface ClassifiedAction {
@@ -18,23 +11,12 @@ export interface ClassifiedAction {
   target: string;
   /** Human-readable one-liner shown in the confirmation queue. */
   summary: string;
-  /** For `forbidden` only: why, in words the person will read in the denial. */
-  reason?: string;
   /**
-   * For `irreversible` only: this call asks a person every time. None of the broker's four
-   * skips applies (autoApprove, user-directed, trusted in chat, a schedule's pre-approval),
-   * and neither does switching `irreversibleAlwaysConfirm` off. Set by the tools that edit
-   * AgentSpine's own gates (src/protected-paths.ts, section 10 SC6) and by `propose_change`.
+   * Queue this call whatever would otherwise let it through: `autoApprove`, `userDirected`, `trust.chatAutoTools`, a
+   * scheduled run's pre-approval, and `irreversibleAlwaysConfirm` being off. Set only with `irreversible`. Today only
+   * an edit to a file that enforces the gates sets it (src/protected-paths.ts, SC6, decided 2026-11-25).
    */
-  alwaysConfirm?: boolean;
-}
-
-/** One piece of text a call would send off this machine, and the argument it came from. */
-export interface OutboundText {
-  arg: string;
-  /** A URL or an id, where a long opaque string is ordinary: only the number checks run on it. */
-  opaque?: boolean;
-  text: string;
+  alwaysConfirm?: true;
 }
 
 export interface PolicyDecision {
@@ -74,10 +56,26 @@ export interface BuildRepo {
   gitWrite?: boolean;
 }
 
-/** One remote MCP server (Streamable HTTP), as declared in policy.json. */
+/**
+ * One MCP server, as declared in policy.json: remote over Streamable HTTP (`url`), or a local program over stdio
+ * (`command`, CP1). Exactly one of the two.
+ */
 export interface McpServerPolicy {
+  /** A local server: the program and its arguments, spawned directly (never through a shell). */
+  command?: string[];
+  /** Working folder for a local server. */
+  cwd?: string;
   /** Set false to switch one server off without deleting its entry. */
   enabled?: boolean;
+  /** Plain values a local server is given. Not for secrets; name those in `envFrom`. */
+  env?: Record<string, string>;
+  /** Names of this process's environment variables a local server is given (a token in .env, say). Nothing else is passed. */
+  envFrom?: string[];
+  /**
+   * Whether what this server's tools return must stay off the cloud tier, as calendar and file reads do. Defaults to
+   * true for a local server (they usually read your files or repos) and false for a remote one.
+   */
+  privateOutput?: boolean;
   /** Name of the environment variable holding a bearer token. The token itself never lives in policy.json. */
   tokenEnv?: string;
   /**
@@ -85,7 +83,8 @@ export interface McpServerPolicy {
    * exposed tool's description is part of the prompt, and prefill is the expensive part here.
    */
   tools?: string[];
-  url: string;
+  /** A remote server's endpoint. */
+  url?: string;
 }
 
 export interface Policy {
@@ -111,12 +110,11 @@ export interface Policy {
     enabled: boolean;
     navigateAllowlist: string[];
     /**
-     * Sites the browser and `web_read` never touch, whoever approves: your bank, your broker.
-     * A domain covers its subdomains. This is the answer to a button a word list cannot read
-     * (a bank that labels its transfer button "Continue"): the refusal is by where the page
-     * is, not by what the model says the button does. Tested at gate 1, which none of the
-     * confirmation skips reach, and again on the page a click or redirect landed on. A project
-     * overlay can add to it and never remove from it. Absent or empty means none.
+     * Hosts the browser never touches, whoever approves (PLAN-open-work section 12 D2). Your bank
+     * and broker go here: a button labelled "Continue" passes any word list, a host does not.
+     * Matches the host and its subdomains. Navigation to one is denied, and so is a read, type,
+     * click or submit on a page that has ended up on one (a redirect, a link). Absent or empty
+     * means none, and a project overlay can only add to it.
      */
     neverDomains?: string[];
   };
@@ -153,7 +151,14 @@ export interface Policy {
    * drafts are proposed text reviewed in the confirmation queue, and approving one writes
    * a file. The Google token remains read-only by construction.
    */
-  drafts?: { enabled: boolean; dir?: string };
+  drafts?: {
+    enabled: boolean;
+    dir?: string;
+    /** CP2: save email drafts in Gmail Drafts (needs google.write). Off unless exactly true. */
+    gmail?: boolean;
+    /** CP2: put event drafts with an exact start on this calendar, which must be in google.write.calendars. */
+    calendar?: string;
+  };
   /**
    * Call caps, counted from the audit log. `default` applies to any tool without its own
    * entry; `tools` overrides per tool. Absent or 0 means no limit — budgets are a rail you
@@ -341,6 +346,8 @@ export interface RunContext extends RunFacts {
 
 export interface ToolContext {
   policy: Policy;
+  /** On an approval, the run that queued the call (CP2). Absent when the call runs inside its own run. */
+  queuedByRunId?: number | null;
   run?: RunContext;
   /**
    * The run this call belongs to. A tool needs it only to reach run-scoped storage — today
@@ -379,6 +386,22 @@ export interface Tool {
    */
   available?(policy: Policy): PolicyDecision;
   /**
+   * The third tier, "refused, whoever approves" (D2). Returns the reason when this call must
+   * not happen at all, or null. Checked in the broker right after the allowlist and before every
+   * way of skipping the queue: `policy.autoApprove`, `userDirected`, `trust.chatAutoTools` and a
+   * scheduled run's pre-approval cannot reach it, and nothing is queued, so there is nothing
+   * to approve. Recorded and shown as an ordinary denial. Plain code over the arguments; a
+   * function that throws refuses the call, because a bug there must not open a way through.
+   */
+  refuse?(args: any, run?: RunContext, policy?: Policy): null | string;
+  /**
+   * The argument strings of a call that leave the machine: a message body, a notification, a
+   * search query. The broker scans them for card numbers, Social Security numbers and secrets
+   * (src/outgoing.ts) and records what it finds; with `OUTGOING_ENFORCE` on it refuses the call.
+   * Declare only text that goes out, as `privateOutput` declares only what comes back.
+   */
+  outgoingText?(args: any): string[];
+  /**
    * Whether the user's own message, in a live chat turn, asked for exactly this call — and
    * if so, which named action it is and why. Optional; a tool without it never skips
    * confirmation this way. Read only off `run.goal`, never off the model's arguments alone,
@@ -410,16 +433,6 @@ export interface Tool {
    * sits in the message history that the next model request carries.
    */
   privateOutput?: boolean | ((args: any, ctx: { projectId: null | number }) => boolean);
-  /**
-   * The text arguments of this call that leave the machine: a mail body, a push, a search
-   * query, what is typed into a web page, a caption. Declared by the tool, as `privateOutput`
-   * is, so the broker's check on outgoing text (src/outbound.ts, PLAN-open-work section 12,
-   * D3) reads the same arguments the tool will send and nothing else. A call that sends
-   * nothing returns an empty list. A tool without it is not checked, so one whose arguments
-   * reach another party must declare it. Plain code; if it throws, the broker checks every
-   * string in the arguments instead, because a bug here must not become a way through.
-   */
-  outboundText?(args: any): OutboundText[];
   run(args: any, ctx: ToolContext): Promise<string>;
 }
 

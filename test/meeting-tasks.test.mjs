@@ -2,7 +2,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-mtasks-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-mtasks-${process.pid}-${Date.now()}.db`);
 const store = await import("../src/meetings/store.ts");
 const { fileQueuedItems } = await import("../src/meetings/extract.ts");
 const memory = await import("../src/memory/store.ts");

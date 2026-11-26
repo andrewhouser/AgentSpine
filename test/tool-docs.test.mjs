@@ -1,164 +1,141 @@
 /**
- * Tool descriptions on demand (docs/PLAN-open-work.md, section 10, LP6; src/tool-docs.ts).
- *
- * Every visible tool's description and argument shape used to sit in the prompt prefix. With
- * TOOL_DOCS_ON_DEMAND=true a run that sees many tools gets a short core set in full, the rest
- * as a name and one line, and a `tool_docs` lookup for the full entry.
- *
- * The property that matters most is the one that does NOT change: loading a description is not
- * a permission. A tool the model never loaded still goes to the broker and is allowed, queued
- * or refused exactly as before. That is asserted against the audit log, not against prose.
- *
- * The second half runs with the switch off and expects the prompt to list everything in full
- * and `tool_docs` not to exist.
+ * LP6 (PLAN-open-work section 10): tool descriptions on demand. With TOOL_DOCS_MODE=core, a core set keeps its full
+ * description, the rest are one line each, and tool_help reads the rest; the default ("all") is unchanged. Then the
+ * real loop against a stand-in model: it reads a tool's instructions before using it, and a failed call to an unread
+ * tool is told how to read them.
  *
  * Run with `node test/tool-docs.test.mjs`.
  */
-import { again, checker, examplePolicy, fakeTool, final, finish, isolate, scriptedModel, toolCall } from "./loop-fixtures.mjs";
+import fs from "node:fs";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 
-const ON = process.env.SUITE_MODE !== "off";
-const root = isolate("tool-docs", { TOOL_DOCS_ON_DEMAND: ON ? "true" : "false" });
-const model = await scriptedModel();
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentspine-tooldocs-"));
+process.env.SPINE_DB_PATH = path.join(root, "t.db");
+process.env.EMBEDDINGS_URL = "";
+process.env.NOTIFY_ON_CONFIRMATION = "false";
+process.env.POLICY_PATH = path.join(root, "policy.json");
+fs.writeFileSync(process.env.POLICY_PATH, JSON.stringify({ apps: { allow: [] }, autoExecute: { dryRun: false, irreversibleAlwaysConfirm: true, reversible: true }, browser: { enabled: false, navigateAllowlist: [] }, fs: { readableDirs: [] }, google: { enabled: false }, version: 1, web: { fetchAllowlist: [], searchEnabled: false } }));
+
+let script = [];
+const prompts = [];
+const model = http.createServer((req, res) => {
+  let body = "";
+  req.on("data", (c) => (body += c));
+  req.on("end", () => {
+    prompts.push(body);
+    const content = script.shift() ?? '{"action":"final","summary":"done"}';
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content, role: "assistant" } }], usage: { completion_tokens: 5, prompt_tokens: 50 } }));
+  });
+});
+await new Promise((r) => model.listen(0, "127.0.0.1", r));
+process.env.LOCAL_LLM_URL = `http://127.0.0.1:${model.address().port}/v1`;
+process.env.LOCAL_MODEL = "test-local";
+process.env.FAST_LLM_URL = "";
+process.env.OPENAI_API_KEY = "";
+process.env.LLM_RETRIES = "0";
 
 const store = await import("../src/memory/store.ts");
-const { __test, runAgent } = await import("../src/agent.ts");
-const docs = await import("../src/tool-docs.ts");
-const h = await import("../src/harness.ts");
 const { registry } = await import("../src/tools/index.ts");
+const { CORE_TOOLS, SHOW_ALL_UNDER, toolDocs } = await import("../src/tool-docs.ts");
+const { __test, runAgent } = await import("../src/agent.ts");
+const { loadPolicy } = await import("../src/config.ts");
+const { registerHarness } = await import("../src/harness.ts");
 
-const { check, counts } = checker();
-const policy = examplePolicy();
-
-registry.far_lookup = fakeTool("far_lookup", async (a) => `looked up ${a?.n ?? 0}`, {
-  argsSchema: `{ "n": number, "where": "north" | "south" }`,
-  description: "Look up a far-away fixture value. Give n and where; where must be north or south.",
-});
-registry.far_broken = fakeTool("far_broken", async () => {
-  throw new Error('"where" is required');
-});
-// Irreversible, so the broker queues it under the example policy: the gate a lookup must not move.
-registry.far_send = fakeTool("far_send", async () => "sent", {
-  classify: () => ({ reversibility: "irreversible", summary: "send the fixture", target: "test" }),
-});
-
-// What a run of this kind actually sees: no image in the thread, so no `look_at_image`.
-const visible = () => __test.settingTools(registry, false, "use the far tools", false);
-const fullPrompt = () => __test.systemFor(visible(), false);
-const systemOf = (i = 0) => model.bodies[i].messages[0].content;
-const lastUser = () => model.bodies.at(-1).messages.at(-1).content;
-const actions = (runId) => store.rawDb.prepare("SELECT tool, decision FROM actions WHERE run_id = ? ORDER BY id").all(runId).map((r) => `${r.tool}:${r.decision}`);
-const run = async (replies, opts = {}) => {
-  model.bodies.length = 0;
-  model.script.length = 0;
-  model.script.push(...replies);
-  const runId = store.startRun({});
-  store.beginRun(runId);
-  const harness = h.buildHarnessContext({ kind: "schedule", runId, tier: "standard", tools: [] });
-  const out = await runAgent("use the far tools", policy, runId, { budgetRunId: runId, harness, tier: "standard", ...opts });
-  return { out, runId };
+let passed = 0;
+let failed = 0;
+const check = (label, actual, expected) => {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  ok ? passed++ : failed++;
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${label.padEnd(68)} ${ok ? "" : `${JSON.stringify(actual)} (expected ${JSON.stringify(expected)})`}`);
 };
+const setMode = (m) => (m ? (process.env.TOOL_DOCS_MODE = m) : delete process.env.TOOL_DOCS_MODE);
 
-if (ON) {
-  console.log("\ntool descriptions on demand\n");
+console.log("\nTHE DEFAULT IS UNCHANGED");
+{
+  setMode(undefined);
+  const all = toolDocs(registry);
+  check("every tool is described in full", Object.values(registry).every((t) => all.includes(`- ${t.name}: ${t.description}`)), true);
+  check("there is no one-line index", all.includes("More tools you can use"), false);
+  check("and a chat is not offered tool_help", "tool_help" in __test.settingTools(registry, true, "hi"), false);
+}
 
-  console.log("ONE LINE PER TOOL");
-  check("the first sentence", docs.oneLine("Search the web (Tavily, headless-browser fallback). Returns titles."), "Search the web (Tavily, headless-browser fallback).");
-  check("a one-word opener takes the next sentence with it", docs.oneLine("INTERVIEWER. Ask the user what they already know."), "INTERVIEWER. Ask the user what they already know.");
-  check("line breaks are flattened", docs.oneLine("Read a\n  file inside a folder. More."), "Read a file inside a folder.");
-  check("a long one is cut with an ellipsis, inside the limit", [docs.oneLine("x".repeat(300)).length, docs.oneLine("x".repeat(300)).endsWith("…")], [110, true]);
-  check("an empty description is an empty line, not a crash", docs.oneLine(""), "");
+console.log("\nCORE MODE");
+{
+  setMode("core");
+  const all = (setMode(undefined), toolDocs(registry));
+  setMode("core");
+  const core = toolDocs(registry);
+  check("core tools keep their full description", [...CORE_TOOLS].filter((n) => registry[n]).every((n) => core.includes(`- ${n}: ${registry[n].description}`)), true);
+  check("the rest are one line, with their name", core.includes("- draft: Write a proposed email reply") && !core.includes(registry.draft.description), true);
+  check("the index says how to read a tool's instructions", core.includes('"tool":"tool_help","args":{"names":["<name>"]}'), true);
+  check("every tool is still named", Object.keys(registry).every((n) => core.includes(`- ${n}:`)), true);
+  check("it is much shorter: under half the characters", core.length < all.length / 2, true);
+  check("the same each time, so the cached prefix holds", toolDocs(registry), core);
+  check("a chat in core mode is offered tool_help", "tool_help" in __test.settingTools(registry, true, "hi"), true);
+  const few = Object.fromEntries(Object.entries(registry).slice(0, SHOW_ALL_UNDER));
+  check("a small tool set (a unit) is shown in full", toolDocs(few).includes("More tools you can use"), false);
+  console.log(`  (tool descriptions: ${all.length} characters in full, ${core.length} in core mode)`);
+}
 
-  console.log("\nWHAT STARTS LOADED");
-  const few = Object.fromEntries(["web_search", "web_read", "memory_recall"].map((n) => [n, registry[n]]));
-  check("a short tool list is simply shown in full", docs.loadedAtStart(few), null);
-  const sixteen = Object.fromEntries(Object.entries(registry).slice(0, docs.TOOL_DOCS_INLINE_MAX));
-  const seventeen = Object.fromEntries(Object.entries(registry).slice(0, docs.TOOL_DOCS_INLINE_MAX + 1));
-  check("exactly the inline limit is still in full", docs.loadedAtStart(sixteen), null);
-  check("one more than the limit loads on demand", docs.loadedAtStart(seventeen) instanceof Set, true);
-  const start = docs.loadedAtStart(registry);
-  check("the core set that is visible starts loaded, with the lookup itself", [...start].sort(), [docs.TOOL_DOCS, ...docs.CORE_TOOLS.filter((n) => n in registry)].sort());
-  check("every core name is a real tool (a rename must update the list)", docs.CORE_TOOLS.filter((n) => !(n in registry)), []);
-  const { notify: _notify, ...noNotify } = registry;
-  check("a core tool this run cannot see is not claimed", docs.loadedAtStart(noNotify).has("notify"), false);
+console.log("\ntool_help");
+{
+  const help = registry.tool_help;
+  const one = await help.run({ names: ["draft"] }, { runId: null });
+  check("it returns the full instructions", one.includes(registry.draft.description) && one.includes("args:"), true);
+  check("an unknown name says so", await help.run({ names: ["teleport"] }, { runId: null }), "- teleport: not a tool you can use here.");
+  check("no names is refused, worded to fix", (await help.run({}, { runId: null })).startsWith('ERROR: tool_help needs "names"'), true);
+  const runId = store.startRun({ kind: "subagent", task: "unit" });
+  registerHarness({ conversational: false, rootRunId: runId, runId, tools: ["read_file", "tool_help"] });
+  check("only for tools this run can use", await help.run({ names: ["draft"] }, { runId }), "- draft: not a tool you can use here.");
+  check("it is read-only and always allowed", [help.classify({}).reversibility, help.checkPolicy({}).allowed], ["reversible", true]);
+}
 
-  console.log("\nTHE PROMPT");
-  const { out, runId } = await run([toolCall("tool_docs", { names: ["far_lookup", "no_such_tool"] }), toolCall("far_lookup", { n: 7, where: "north" }), final("found it")]);
-  const prompt = systemOf();
-  const full = fullPrompt();
-  check("a core tool keeps its full entry", prompt.includes(`- web_search: ${registry.web_search.description}\n    args: ${registry.web_search.argsSchema}`), true);
-  check("another tool is one line, with no argument shape", prompt.includes(`\n- far_lookup: Look up a far-away fixture value.\n`) && !prompt.includes(registry.far_lookup.argsSchema), true);
-  check("the lookup is described, with the call that uses it", prompt.includes(`- tool_docs: `) && prompt.includes(`{"action":"tool","tool":"tool_docs","args":{"names":["<name>"]}}`), true);
-  check("every visible tool is still named", Object.keys(visible()).filter((n) => !prompt.includes(`- ${n}: `)), []);
-  check("the prompt is under two thirds of the full one", prompt.length < full.length * (2 / 3), true);
-  console.log(`        full ${full.length} characters, on demand ${prompt.length}`);
-  check("the envelope lists the lookup among this run's tools", model.bodies[0].messages[0].content.includes("tool_docs") && /"tools":\[[^\]]*"tool_docs"/.test(JSON.stringify(h.getHarness(runId) ?? { tools: ["tool_docs"] })), true);
-
-  console.log("\nA LOOKUP");
-  const lookedUp = model.bodies[1].messages.at(-1).content;
-  check("returns the full entry, in the prompt's own format", lookedUp.includes(`- far_lookup: ${registry.far_lookup.description}\n    args: ${registry.far_lookup.argsSchema}`), true);
-  check("says plainly when a name is not a tool", lookedUp.includes("- no_such_tool: not a tool available to you."), true);
-  check("is marked as a read, with what to do next", lookedUp.includes('"effect":"observed"') && lookedUp.includes("now call the tool you need"), true);
-  check("the call it enabled then ran through the broker", [out.summary, actions(runId)], ["found it", ["tool_docs:executed", "far_lookup:executed"]]);
-
-  console.log("\nLOADING IS NOT A PERMISSION");
-  {
-    const { runId: id } = await run([toolCall("far_lookup", { n: 1 }), final("ok")]);
-    check("a tool never loaded still runs, through the broker", actions(id), ["far_lookup:executed"]);
-  }
-  {
-    const before = store.listConfirmations("pending").length;
-    const { runId: id } = await run([toolCall("tool_docs", { names: ["far_send"] }), toolCall("far_send"), final("ok")], { harness: undefined });
-    check("an irreversible tool queues whether or not it was loaded first", [actions(id), store.listConfirmations("pending").length - before], [["tool_docs:executed", "far_send:queued"], 1]);
-  }
-  {
-    const { runId: id } = await run([toolCall("gmail_search", { query: "is:unread" }), final("ok")]);
-    check("a tool policy switches off is still denied, loaded or not", actions(id), ["gmail_search:denied"]);
-  }
-
-  console.log("\nA WRONG GUESS COSTS ONE STEP");
-  {
-    await run([toolCall("far_broken"), toolCall("far_broken", { where: "north" }), final("gave up")]);
-    const first = model.bodies[1].messages.at(-1).content;
-    const second = model.bodies[2].messages.at(-1).content;
-    check("the error from an unloaded tool comes with its entry", first.includes("without loading its description") && first.includes(`- far_broken: ${registry.far_broken.description}`), true);
-    check("said once: the second error does not repeat it", (second.match(/without loading its description/g) ?? []).length, 0);
-  }
-
-  console.log("\nTHE EDGES OF THE LOOKUP");
-  {
-    const loaded = new Set();
-    const many = Object.keys(registry).slice(0, docs.TOOL_DOCS_MAX_NAMES + 2);
-    const res = docs.lookUp(null, { args: { names: many }, tool: "tool_docs" }, registry, loaded);
-    check("at most the limit per call, and it says how many were left", [loaded.size, res.output.includes("2 more name(s) were not loaded")], [docs.TOOL_DOCS_MAX_NAMES, true]);
-    check("no names is an error that shows the shape", docs.lookUp(null, { args: {}, tool: "tool_docs" }, registry, new Set()).status, "error");
-    check("a single name as a string works", docs.lookUp(null, { args: { name: "weather" }, tool: "tool_docs" }, registry, new Set()).output.startsWith("- weather: "), true);
-    check("it cannot describe itself into a loop", docs.lookUp(null, { args: { names: ["tool_docs"] }, tool: "tool_docs" }, registry, new Set()).output, "- tool_docs: not a tool available to you.");
-    const narrow = { web_search: registry.web_search };
-    check("it describes only what THIS run can see", docs.lookUp(null, { args: { names: ["gmail_search"] }, tool: "tool_docs" }, narrow, new Set()).output, "- gmail_search: not a tool available to you.");
-  }
-  {
-    await run([toolCall("tool_docs", { names: ["far_lookup"] }), toolCall("tool_docs", { names: ["far_lookup"] }), toolCall("tool_docs", { names: ["far_lookup"] }), final("never reached")]);
-    check("asking for the same entry over and over is stopped like any repeat", model.bodies.length <= 4 && !lastUser().includes("never reached"), true);
-  }
-
-  console.log("\nA SHORT TOOL LIST IS LEFT ALONE");
-  {
-    const { runId: id } = await run([toolCall("tool_docs", { names: ["far_lookup"] }), final("ok")], { tools: ["far_lookup", "far_broken", "read_more"] });
-    check("everything is in full and nothing is on demand", [systemOf().includes("More tools"), systemOf().includes(registry.far_lookup.argsSchema)], [false, true]);
-    check("so the lookup does not exist for that run", [model.bodies[1].messages.at(-1).content.includes('"tool_docs" is not available to you'), actions(id)], [true, []]);
-  }
-
-  again(import.meta.filename, "off", {}, counts);
-} else {
-  console.log("\ntool descriptions on demand, switched off: the prompt as it always was");
-  const { runId } = await run([toolCall("tool_docs", { names: ["far_lookup"] }), toolCall("far_lookup", { n: 1 }), final("ok")]);
-  check("every tool is listed in full", [systemOf().includes("More tools"), systemOf().includes(registry.far_lookup.argsSchema), systemOf().includes(registry.gmail_search.argsSchema)], [false, true, true]);
-  // The request folds the prompt and the envelope into one system message, so the prompt is its head.
-  const noClock = (text) => text.replace(/^Current local time: .*$/m, "");
-  check("the prompt is the full prompt, to the byte (clock aside)", noClock(systemOf()).startsWith(noClock(fullPrompt())), true);
-  check("there is no lookup tool", [systemOf().includes("tool_docs"), model.bodies[1].messages.at(-1).content.includes('"tool_docs" is not available to you')], [false, true]);
-  check("and tools run as they always did", actions(runId), ["far_lookup:executed"]);
+console.log("\nIN THE LOOP");
+{
+  setMode("core");
+  let ran = 0;
+  registry.__lp6_tool = {
+    argsSchema: '{ "colour": "red" | "blue" }',
+    checkPolicy: (_p, a) => (a?.colour === "red" || a?.colour === "blue" ? { allowed: true } : { allowed: false, reason: "colour must be red or blue" }),
+    classify: () => ({ reversibility: "reversible", summary: "paint", target: "lp6" }),
+    description: "Paint the test fence. The colour must be red or blue, nothing else.",
+    name: "__lp6_tool",
+    run: async () => (ran++, "painted"),
+  };
+  const policy = loadPolicy();
+  const go = async (replies) => {
+    script = [...replies];
+    prompts.length = 0;
+    const runId = store.startRun({ kind: "chat", task: "paint" });
+    return runAgent("Paint the fence.", policy, runId, { conversational: false, tier: "standard" });
+  };
+  const r1 = await go([
+    JSON.stringify({ action: "tool", args: { names: ["__lp6_tool"] }, tool: "tool_help" }),
+    JSON.stringify({ action: "tool", args: { colour: "red" }, tool: "__lp6_tool" }),
+    '{"action":"final","summary":"painted it red"}',
+  ]);
+  check("the first prompt lists the tool in one line only", prompts[0].includes("- __lp6_tool: Paint the test fence.") && !prompts[0].includes("The colour must be red or blue"), true);
+  check("tool_help put its full instructions in the history", prompts[1].includes("The colour must be red or blue, nothing else."), true);
+  check("and the system prompt itself did not change", JSON.parse(prompts[0]).messages[0].content === JSON.parse(prompts[1]).messages[0].content, true);
+  check("then the tool ran, and the run finished", [ran, r1.summary], [1, "painted it red"]);
+  const r2 = await go([JSON.stringify({ action: "tool", args: { colour: "green" }, tool: "__lp6_tool" }), '{"action":"final","summary":"gave up"}']);
+  const told = r2.trace.some((m) => typeof m.content === "string" && m.content.includes("You called __lp6_tool without reading its instructions"));
+  check("a failed call to an unread tool is told to read its instructions", told, true);
+  await go([
+    JSON.stringify({ action: "tool", args: { names: ["__lp6_tool"] }, tool: "tool_help" }),
+    JSON.stringify({ action: "tool", args: { colour: "green" }, tool: "__lp6_tool" }),
+    '{"action":"final","summary":"gave up"}',
+  ]);
+  check("but not once it has read them", prompts.at(-1).includes("without reading its instructions"), false);
+  setMode(undefined);
+  const r4 = await go([JSON.stringify({ action: "tool", args: { colour: "green" }, tool: "__lp6_tool" }), '{"action":"final","summary":"gave up"}']);
+  check("in the default mode there is no such hint", r4.trace.some((m) => typeof m.content === "string" && m.content.includes("without reading")), false);
+  delete registry.__lp6_tool;
 }
 
 model.close();
-finish(counts, root);
+console.log(`\n${passed} passed, ${failed} failed\n`);
+process.exit(failed ? 1 : 0);

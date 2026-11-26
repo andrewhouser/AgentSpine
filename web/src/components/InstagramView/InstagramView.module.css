@@ -1,0 +1,11 @@
+/* The post exactly as the approval card prints it: the caption's own line breaks kept, wrapped to fit a phone. */
+.card {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}

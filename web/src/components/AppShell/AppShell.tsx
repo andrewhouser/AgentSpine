@@ -6,6 +6,7 @@ import type { View } from "../Sidebar/Sidebar.tsx";
 
 import { useConversations } from "../../hooks/useConversations.ts";
 import { useResource } from "../../hooks/useResource.ts";
+import { useSpokenAlerts } from "../../hooks/useSpokenAlerts.ts";
 import { useStatus } from "../../hooks/useStatus.ts";
 import { api } from "../../lib/api.ts";
 import { isWaiting, needsYou } from "../../lib/attention.ts";
@@ -18,6 +19,7 @@ import { ClientsView } from "../ClientsView/ClientsView.tsx";
 import { FilesView } from "../FilesView/FilesView.tsx";
 import { HeadsupView } from "../HeadsupView/HeadsupView.tsx";
 import { InboxView } from "../InboxView/InboxView.tsx";
+import { InstagramView } from "../InstagramView/InstagramView.tsx";
 import { KnowledgeView } from "../KnowledgeView/KnowledgeView.tsx";
 import { MeetingsView } from "../MeetingsView/MeetingsView.tsx";
 import { OverviewView } from "../OverviewView/OverviewView.tsx";
@@ -107,6 +109,8 @@ export const AppShell = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [setHidden, sidebarHidden]);
   const status = useStatus(statusKey);
+  // A spoken line when you are needed, if this browser has it on (Settings, Voice; A8).
+  useSpokenAlerts(status, route.view === "chat" ? route.conversationId : null);
 
   // The blue dots come with the conversation list, so refetch it whenever the number of open
   // questions anywhere changes — a scheduled job finishing or a background turn asking
@@ -258,6 +262,7 @@ export const AppShell = () => {
         {route.view === "files" && <FilesView />}
         {route.view === "clients" && <ClientsView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
         {route.view === "inbox" && <InboxView projects={projects} />}
+        {route.view === "instagram" && <InstagramView />}
         {route.view === "knowledge" && <KnowledgeView projects={projects} />}
         {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
         {route.view === "project" && route.projectId !== null && (

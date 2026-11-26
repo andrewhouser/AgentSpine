@@ -13,7 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-promote-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-promote-${process.pid}-${Date.now()}.db`);
 const policyPath = path.join(os.tmpdir(), `agentspine-promote-policy-${process.pid}.json`);
 process.env.SPINE_DB_PATH = dbPath;
 process.env.POLICY_PATH = policyPath;

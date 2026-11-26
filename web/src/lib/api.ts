@@ -1,3 +1,4 @@
+import type { FinishedRun } from "./spokenAlerts.ts";
 /**
  * The API client.
  *
@@ -17,7 +18,7 @@ import type {
   CheckinPreview,
   CheckinReply,
   CheckinResult,
-  CheckinSources,
+  CheckinSource,
   CheckinStatus,
   Client,
   ClientCommitments,
@@ -39,11 +40,14 @@ import type {
   InboxItem,
   InboxStatus,
   IngestResult,
+  InstagramQueue,
+  InstagramQueueRow,
   KnowledgeAliasResult,
   KnowledgeClaim,
   KnowledgeConflict,
   KnowledgeEntity,
   KnowledgeHit,
+  KnowledgeSearchFilters,
   LiveStatus,
   Meeting,
   MeetingExtraction,
@@ -59,9 +63,11 @@ import type {
   PromotionProposal,
   ProspectPaste,
   Recipe,
+  Refusal,
   RetentionRule,
   Run,
   RunbookSaved,
+  RunNote,
   SavedFile,
   Schedule,
   ScheduleVersion,
@@ -196,6 +202,8 @@ export const api = {
   applyProposal: (tool: string, target: string) =>
     post<{ message: string; ok: boolean }>("/api/proposals", { target, tool }),
   approveConfirmation: (id: number) => post<{ message: string; ok: boolean }>(`/api/confirmations/${id}/approve`),
+  /** Approve one queued post, naming the content hash that was on screen; a changed post is refused (409). */
+  approveInstagram: (id: string, hash: string) => post<InstagramQueueRow>(`/api/instagram/queue/${encodeURIComponent(id)}/approve`, { hash }),
   archiveConversation: (id: number) =>
     request<Conversation>(`/api/conversations/${id}`, {
       body: JSON.stringify({ archived: true }),
@@ -220,7 +228,6 @@ export const api = {
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
 
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
-
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
   createSchedule: (name: string, schedule: string, task: string) =>
@@ -235,9 +242,11 @@ export const api = {
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
   deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
+
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
+
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -308,6 +317,8 @@ export const api = {
   inboxTags: (id: number, tags: string[]) =>
     request<InboxItem>(`/api/inbox/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
 
+  instagramQueue: () => request<InstagramQueue>("/api/instagram/queue"),
+
   /**
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
@@ -355,7 +366,6 @@ export const api = {
     request<Confirmation[]>(`/api/confirmations${state ? `?state=${encodeURIComponent(state)}` : ""}`),
 
   listConversations: () => request<Conversation[]>("/api/conversations"),
-
   listenForTurn: (audio: Blob, wake: string, aliases: string[], sounds: boolean) =>
     request<{ text: string }>(voiceListenPath("turn", wake, aliases, sounds), {
       body: audio,
@@ -376,10 +386,10 @@ export const api = {
     }),
 
   listFiles: () => request<SavedFile[]>("/api/files"),
-
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
 
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
+
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
 
@@ -392,12 +402,12 @@ export const api = {
   listProspects: () => request<Client[]>("/api/clients/prospects"),
 
   listRecipes: () => request<Recipe[]>("/api/recipes"),
-
+  listRefusals: (limit = 20) => request<Refusal[]>(`/api/refusals?limit=${limit}`),
   listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
   listSchedules: () => request<Schedule[]>("/api/schedules"),
-
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
+
   /** One utterance said to an assistant that is already listening. */
   listStyles: () => request<StylesState>("/api/styles"),
 
@@ -424,7 +434,6 @@ export const api = {
   /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
-
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
   meetingLive: () => request<LiveStatus>("/api/meetings/live"),
 
@@ -468,7 +477,6 @@ export const api = {
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,
     ),
-
   reindexProject: (id: number, force = false) =>
     post<{ result: IngestResult }>(`/api/projects/${id}/sources/reindex`, { force }),
   rejectConfirmation: (id: number, reason: string) =>
@@ -478,7 +486,6 @@ export const api = {
 
   removeProjectSource: (projectId: number, sourceId: number) =>
     request<{ ok: boolean }>(`/api/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
-
   renameConversation: (id: number, title: string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ title }), method: "PATCH" }),
   /** Re-make the final transcript from kept audio; `speakers` pins the head count (omit to detect). */
@@ -490,7 +497,6 @@ export const api = {
   /** Queue a job's earlier text for approval. It changes nothing by itself. */
   restoreScheduleVersion: (id: number, versionId: number) =>
     post<{ confirmationId: number; message: string }>(`/api/schedules/${id}/versions/${versionId}/restore`),
-
   retention: () => request<RetentionRule[]>("/api/retention"),
   /**
    * Grade a recall and reschedule the card, exactly as `study_cards review` does in chat. An
@@ -499,7 +505,8 @@ export const api = {
    */
   reviewStudyCard: (id: number, answer: string) => post<StudyReview>(`/api/study/cards/${id}/review`, { answer }),
 
-  run: (id: number) => request<{ actions: unknown[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
+  revokeInstagram: (id: string) => post<InstagramQueueRow>(`/api/instagram/queue/${encodeURIComponent(id)}/revoke`),
+  run: (id: number) => request<{ actions: unknown[]; notes?: RunNote[]; run: Run; trace: unknown[] }>(`/api/runs/${id}`),
 
   runCheckin: () => post<CheckinResult>("/api/checkin/run"),
   runHeadsups: () => post<HeadsupRun>("/api/headsups/run"),
@@ -509,7 +516,6 @@ export const api = {
   /** Save the close-out, all of it or none. */
   saveMeetingCloseout: (id: number, plan: CloseoutPlan & { keepTranscript: boolean }) =>
     request<CloseoutSaved>(`/api/meetings/${id}/closeout`, { body: JSON.stringify(plan), method: "POST" }),
-
   saveReplyAsFile: (runId: number, name: string, projectId?: null | number) =>
     post<{ message: string; path: string }>("/api/files/save", { name, projectId, runId }),
   saveStyle: (name: string, body: { appliesTo: StyleAppliesTo; note: string }) =>
@@ -520,14 +526,28 @@ export const api = {
 
   search: (q: string) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`),
 
-  /** Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. */
-  searchKnowledge: (q: string, opts: { kind?: string; project?: number } = {}) => {
+  /**
+   * Search everything indexed, by exact words and by meaning. Omit the project to search the whole base. `note` is the
+   * server's word on a filter it could only partly apply (a team with no recorded members), sent as a header so the
+   * body stays the plain list other clients read. An unknown person or team comes back as an error.
+   */
+  searchKnowledge: async (q: string, opts: KnowledgeSearchFilters & { kind?: string } = {}): Promise<{ hits: KnowledgeHit[]; note: string }> => {
     const params = new URLSearchParams({ q });
     if (opts.project) params.set("project", String(opts.project));
     if (opts.kind) params.set("kind", opts.kind);
-    return request<KnowledgeHit[]>(`/api/knowledge/search?${params}`);
+    if (opts.person) params.set("person", String(opts.person));
+    if (opts.team) params.set("team", String(opts.team));
+    if (opts.evidence) params.set("evidence", opts.evidence);
+    if (opts.since) params.set("since", opts.since);
+    // A passage is dated by its day, so "until" a day means through the end of it.
+    if (opts.until) params.set("until", `${opts.until}T23:59:59`);
+    const token = getToken();
+    const res = await fetch(`/api/knowledge/search?${params}`, { headers: token ? { "X-Dashboard-Token": token } : {} });
+    if (res.status === 401) throw new UnauthorizedError("dashboard token required");
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+    return { hits: body as KnowledgeHit[], note: res.headers.get("X-Search-Note") ?? "" };
   },
-
   sendMessage: (conversationId: number, task: string, attachmentIds: number[] = []) =>
     post<{ conversationId: number; runId: number }>(`/api/conversations/${conversationId}/messages`, {
       attachmentIds,
@@ -536,7 +556,8 @@ export const api = {
   /** "Something I wish I'd been told", stored as a preference memory. */
   sendOutboxWish: (text: string) => post<{ remembered: boolean }>("/api/outbox/wish", { text }),
 
-  setCheckinSources: (sources: Partial<CheckinSources>) => post<{ sources: CheckinSources }>("/api/checkin/sources", sources),
+  /** Switch check-in sources on or off; the server keeps the rest as they were and returns all of them. */
+  setCheckinSources: (change: Partial<Record<CheckinSource, boolean>>) => post<Record<CheckinSource, boolean>>("/api/checkin/sources", change),
 
   setConversationTier: (id: number, tier: null | string) =>
     request<Conversation>(`/api/conversations/${id}`, { body: JSON.stringify({ tier }), method: "PATCH" }),
@@ -586,7 +607,7 @@ export const api = {
   startMeeting: (device: string, projectId: null | number, title?: string) =>
     post<{ meetingId: number }>("/api/meetings", { device, projectId, title }),
   status: () =>
-    request<{ cloud?: { configured: boolean; host: null | string; model: null | string }; inbox?: null | number; queue: { depth: number; running: boolean }; schedules: number }>("/api/status"),
+    request<{ cloud?: { configured: boolean; host: null | string; model: null | string }; inbox?: null | number; lastRun?: FinishedRun | null; queue: { depth: number; running: boolean }; quiet?: boolean; schedules: number }>("/api/status"),
 
   stopDictation: () => post<{ text: string }>("/api/dictate/stop"),
 

@@ -58,9 +58,12 @@ const out = await headsupStatus.run({});
 check("an offered one is waiting", out.includes("Garrett's Birthday"), true);
 check("a snoozed one is not (it is waiting on the clock)", out.includes("Water"), false);
 check("an accepted one is not (it is answered)", out.includes("Rent"), false);
-check("so exactly one is counted", out.startsWith("1 heads-up is waiting"), true);
+check("so exactly one is counted", out.includes("\n1 heads-up is waiting"), true);
+// The 2026-11-25 trace: these are calendar titles, written by whoever sent the invite.
+check("the titles come back marked untrusted", out.startsWith("[UNTRUSTED CONTENT from calendar event titles]"), true);
+check("and the tool keeps the run local, like calendar_upcoming", headsupStatus.privateOutput, true);
 dates.proposeDatesFromChat("Mia's birthday is June 9");
-check("a pending date proposal counts too", (await headsupStatus.run({})).startsWith("2 heads-ups are waiting") && (await headsupStatus.run({})).includes("1 date it noticed in chat needs confirming"), true);
+check("a pending date proposal counts too", (await headsupStatus.run({})).includes("\n2 heads-ups are waiting") && (await headsupStatus.run({})).includes("1 date it noticed in chat needs confirming"), true);
 
 console.log("\nthe brief itself\n");
 check("the new text asks for the heads-up line", BRIEF_TASK.includes("call headsup_status"), true);

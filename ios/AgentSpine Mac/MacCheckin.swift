@@ -45,7 +45,7 @@ struct MacCheckinView: View {
 
                 if let preview {
                     heading("If it checked now")
-                    dim(CheckinWords.sendLine(wouldSend: preview.wouldSend, heldBy: preview.heldBy, mode: preview.mode, off: preview.off))
+                    dim(CheckinWords.sendLine(wouldSend: preview.wouldSend, heldBy: preview.heldBy, mode: preview.mode, off: CheckinWords.offKinds(switches ?? status?.sources)))
                     if preview.wouldSend {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(preview.title).font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))

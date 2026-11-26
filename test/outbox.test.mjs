@@ -14,7 +14,7 @@ import os from "node:os";
 import path from "node:path";
 
 const logOnly = process.argv[2] === "logonly";
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-outbox-${logOnly ? "log" : "enf"}-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-outbox-${logOnly ? "log" : "enf"}-${process.pid}-${Date.now()}.db`);
 process.env.OUTBOX_ENFORCE = logOnly ? "false" : "true";
 
 const { admit, complete, judgeMessage, markOutcome, outcomeOf, pruneOutbox, releaseHeld, sentToday, tallyBySource } = await import("../src/outbox.ts");

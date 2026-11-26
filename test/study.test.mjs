@@ -7,7 +7,7 @@
  */
 import os from "node:os";
 import path from "node:path";
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-study-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-study-${process.pid}-${Date.now()}.db`);
 const { schedule, NEW_CARD } = await import("../src/study/schedule.ts");
 const store = await import("../src/study/store.ts");
 const { __setAsker } = await import("../src/study/roles.ts");

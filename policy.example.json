@@ -56,7 +56,7 @@
     ]
   },
   "browser": {
-    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless. Clicks that read as moving money or trading are refused outright. neverDomains lists sites the browser and web_read must never open or act on, whoever approves: put your bank and your broker here (a domain covers its subdomains).",
+    "//": "Chrome control via CDP. enabled gates the whole tool. navigateAllowlist limits which domains it may open — [] means any domain. Risky clicks (buy/submit/send/delete) are queued for confirmation regardless. neverDomains lists hosts the browser never touches, whoever approves: put your bank and broker here, since a button labelled Continue passes any word list and a host does not. It matches the host and its subdomains.",
     "enabled": false,
     "navigateAllowlist": [],
     "neverDomains": []
@@ -80,7 +80,7 @@
     "writableDirs": []
   },
   "mcp": {
-    "//": "Remote MCP servers (Streamable HTTP) whose tools the agent may call; see docs/MCP.md. Off until enabled. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
+    "//": "MCP servers whose tools the agent may call; see docs/MCP.md. Off until enabled. A server is remote (url, Streamable HTTP) or a local program (command, an argument list run without a shell; env for plain values, envFrom for names of .env variables to pass through, nothing else is inherited). A local server's tools keep the run on the local model unless its entry sets privateOutput false. A tool the server marks readOnlyHint runs freely; every other tool queues for your approval. tokenEnv names an env var in .env holding a bearer token. tools (optional) limits which server tools are exposed, which also keeps the prompt short. Example: { \"notes\": { \"url\": \"https://example.com/mcp\", \"tokenEnv\": \"MCP_NOTES_TOKEN\", \"tools\": [\"search\"] } }",
     "enabled": false,
     "servers": {}
   },
@@ -93,7 +93,7 @@
     "enabled": false
   },
   "drafts": {
-    "//": "SPEC §5, preferred path: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. This grants NO new OAuth scope — the Google token stays read-only by construction and still cannot send or modify anything.",
+    "//": "SPEC §5: the agent WRITES, you SEND. A draft is proposed text (email reply, new email, calendar event, note) that lands in the confirmation queue for review; approving it writes a file to dir. Optional (SPEC §5, third amendment): gmail true saves email drafts in your Gmail Drafts instead, and calendar names one of google.write.calendars to put events with an exact start there, with no one invited. Both need google.write. Work-derived drafts always stay files. Nothing is ever sent. To skip the card in a live chat, add \"draft\" to trust.chatAutoTools; scheduled runs still ask.",
     "enabled": true,
     "dir": "./drafts"
   },

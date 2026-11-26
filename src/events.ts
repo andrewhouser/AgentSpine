@@ -27,9 +27,15 @@ import { emptyPlan, foldPlan, type PlanState, planSnapshot } from "./plan.ts";
 
 export type RunEventType =
   | "answer"
+  // A run reached its token, time or step budget (LP3).
+  | "budget"
+  // Older tool results were swapped for stubs read_more can open (LP3, src/compact.ts).
+  | "compacted"
   | "confirmation"
   | "error"
   | "final"
+  // A background run handed the model to a person and is carrying on (LP5, src/queue.ts).
+  | "paused_for_person"
   | "plan"
   | "queue_wait"
   | "run_end"

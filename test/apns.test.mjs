@@ -24,7 +24,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-apns-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-apns-${process.pid}-${Date.now()}.db`);
 
 const { asBundleId, buildPayload, levelFor, topicFor } = await import("../src/push/apns.ts");
 

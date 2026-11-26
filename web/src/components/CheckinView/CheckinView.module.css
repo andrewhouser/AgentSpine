@@ -69,14 +69,19 @@
   width: 9.5rem;
 }
 
-/* One source switch: the box, its name, and what it reads. A whole-row label, so the text toggles it too. */
-.source {
-  align-items: baseline;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
+/* Each source on or off (D1): a wrapping row of checkboxes, so it fits a phone. */
+.sources {
   display: flex;
-  gap: 10px;
-  padding: 7px 2px;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 6px 0 14px;
+}
+
+.source {
+  align-items: center;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 6px;
 }
 
 /* An inbox bucket beside a mail: our words for the label, never the sender's. */

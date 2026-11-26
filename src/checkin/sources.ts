@@ -44,18 +44,8 @@ export interface SourceDeps {
   googleEnabled: () => boolean;
   headsups: () => Pick<HeadsupView, "id" | "kind" | "subject">[];
   mail: () => Promise<MailHeader[]>;
-  /**
-   * Which sources the owner left on (prefs.ts). Absent means all of them, which is what every
-   * caller got before the setting existed. A source that is off is never read.
-   */
-  sources?: () => Record<ItemKind, boolean>;
   tasks: (now: Date) => Pick<TaskRow, "due" | "id" | "kind" | "title">[];
 }
-
-/** Screen order, and the order `off` is reported in: what can start a push first. */
-const SOURCE_ORDER: readonly ItemKind[] = ["mail", "approval", "calendar", "task", "headsup"];
-/** The name each source's failures are reported under, to the kind its switch is keyed on. */
-const KIND_OF: Record<string, ItemKind> = { approvals: "approval", calendar: "calendar", headsup: "headsup", mail: "mail", tasks: "task" };
 
 /** One line, no control characters, clipped. Other people's text never gets to add a line. */
 const oneLine = (s: unknown, max: number): string => {
@@ -95,15 +85,19 @@ const timeOf = (iso: string): string => {
  * Read every source. One failing does not lose the rest: you would rather hear about your
  * tasks than nothing because Gmail returned a 503. Failures come back named by source.
  */
-export const collect = async (now: Date, deps: SourceDeps, calendarHours = CALENDAR_HOURS): Promise<{ errors: string[]; items: Item[]; off: ItemKind[] }> => {
+export const collect = async (
+  now: Date,
+  deps: SourceDeps,
+  calendarHours = CALENDAR_HOURS,
+  // Which sources to read, from the stored preference (store.sourcePrefs). A source that is off is not read at all,
+  // so switching mail off means Gmail is not asked, not that its answer is hidden.
+  on: Partial<Record<ItemKind, boolean>> = {},
+): Promise<{ errors: string[]; items: Item[] }> => {
   const items: Item[] = [];
   const errors: string[] = [];
-  const on = deps.sources?.();
-  const off = SOURCE_ORDER.filter((k) => on?.[k] === false);
+  const kindOf: Record<string, ItemKind> = { approvals: "approval", calendar: "calendar", headsup: "headsup", mail: "mail", tasks: "task" };
   const guard = async (source: string, read: () => Promise<Item[]> | Item[]): Promise<void> => {
-    // The switch is tested here, before the read, so a source that is off costs nothing and
-    // sends nothing: no Gmail request for mail, no calendar request for the calendar.
-    if (off.includes(KIND_OF[source])) return;
+    if (on[kindOf[source]] === false) return;
     try {
       items.push(...(await read()));
     } catch (err) {
@@ -172,5 +166,5 @@ export const collect = async (now: Date, deps: SourceDeps, calendarHours = CALEN
     })),
   );
 
-  return { errors, items, off };
+  return { errors, items };
 };

@@ -10,14 +10,14 @@ import { route } from "../router.ts";
 import { resolveStyle } from "../styles/store.ts";
 import { draftReply } from "./buckets.ts";
 import type { ReplyDeps, SortDeps } from "./buckets.ts";
-import { sourceSwitches } from "./prefs.ts";
+import { sourcePrefs } from "./store.ts";
 import { MAIL_MAX, MAIL_QUERY } from "./rules.ts";
 
 export const realSortDeps: SortDeps & ReplyDeps = {
   googleEnabled,
   // The check-in's own query and cap: this reads nothing the check-in does not.
   mail: () => searchMessages(MAIL_QUERY, MAIL_MAX),
-  mailOn: () => sourceSwitches().mail,
+  mailOn: () => sourcePrefs().mail,
   mode: () => INBOX_SORT_MODE,
   route: (messages, opts) => route(messages, opts),
   style: (to) => resolveStyle(to),

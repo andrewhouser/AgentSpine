@@ -19,7 +19,7 @@ import path from "node:path";
 const PORT = 8800 + (process.pid % 300);
 const TOKEN = "test-token-not-a-real-one";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-devices-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-devices-${process.pid}-${Date.now()}.db`);
 process.env.DASHBOARD_PORT = String(PORT);
 process.env.DASHBOARD_HOST = "127.0.0.1";
 process.env.DASHBOARD_TOKEN = TOKEN;

@@ -14,9 +14,6 @@
  *     refused: those are the files that turn "write a note" into "run something later".
  *     Hidden path segments (`.git`, `.ssh`, `.zshrc`) are refused.
  *   - HOW MUCH: 1 MB.
- *   - THE GATES THEMSELVES: the broker, the pin, the approval code and the few files beside
- *     them (src/protected-paths.ts) always wait for the user with the diff on the card, under
- *     every skip the broker has, and are written only while that approval is carried out.
  *   - UNDO: before a file is replaced or edited, the old version is copied to
  *     `<AgentSpine>/backups/`. Because the change can be taken back, it is classified
  *     REVERSIBLE and runs without a prompt — an approval nobody reads protects less than a
@@ -39,12 +36,12 @@ import path from "node:path";
 
 import { BASE } from "../config.ts";
 import { recordDeliverable } from "../deliverables.ts";
-import { AREA_MAP_PATH } from "../area-map.ts";
 import { expand, insideWritable, real, realForWrite } from "../fs-scope.ts";
 import { listSources } from "../projects/store.ts";
 import * as store from "../memory/store.ts";
-import { asksEveryTime, protectedRel, protectedSummary, protectedWriteProblem, readCurrent, versionOf } from "../protected-paths.ts";
+import { diffPreview, protectedPathOf } from "../protected-paths.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
+import { AREA_MAP_PATH } from "../area-map.ts";
 
 interface Args {
   content?: string;
@@ -342,6 +339,23 @@ export const textTargetGate = (policy: Policy, target: string, { ext = true } = 
 /** An absolute path from an arbitrary argument, relative to the current default folder. */
 export const resolveArg = (raw: unknown): string => resolveTarget({ path: String(raw ?? "") });
 
+const readOr = (target: string): string => {
+  try {
+    return fs.readFileSync(target, "utf8");
+  } catch {
+    return "";
+  }
+};
+
+/** The card for a change to one of AgentSpine's own gate files (SC6): what it is, and the change itself. */
+const protectedCard = (rel: string, target: string, before: string, after: string): ClassifiedAction => ({
+  // Always the card: no chat trust, auto-approval or schedule skips a change to a gate (decided 2026-11-25).
+  alwaysConfirm: true,
+  reversibility: "irreversible",
+  summary: `Change PROTECTED FILE ${rel} (${target}), which enforces AgentSpine's own safety gates. Read the change:\n${diffPreview(before, after)}`,
+  target,
+});
+
 const bodyOf = (a: Args): { error?: string; text?: string } => {
   if (a?.from_run != null && String(a.from_run) !== "") {
     const run = store.getRun(Number(a.from_run));
@@ -353,38 +367,8 @@ const bodyOf = (a: Args): { error?: string; text?: string } => {
   return { error: 'write_file needs "content", or "from_run" with the #id of an earlier output.' };
 };
 
-/** What `mode: "append"` leaves in the file. One function, so the diff on a card is the text that gets written. */
-const appended = (cur: string, text: string): string => `${cur}${cur && !cur.endsWith("\n") ? "\n" : ""}${text}`;
-
-/** What edit_file would leave in the file, or why it would change nothing. */
-const edited = (cur: string, a: EditArgs): { count: number; next?: string; problem?: string } => {
-  const find = String(a?.find ?? "");
-  const count = find ? cur.split(find).length - 1 : 0;
-  if (count === 0) return { count, problem: "the text to replace was not found" };
-  if (count > 1 && !a?.all) return { count, problem: `that text appears ${count} times` };
-  return { count, next: a?.all ? cur.split(find).join(String(a.replace)) : cur.replace(find, () => String(a.replace)) };
-};
-
-/**
- * The second check on a protected file, made by the tool itself at the moment of writing: it
- * goes ahead only while an approval is being carried out, and only against the text the card's
- * diff was made from. Thrown, not returned, so the approval ends as an error and not as "done".
- */
-const notApproved = (...targets: string[]): void => {
-  for (const t of targets) {
-    const problem = protectedWriteProblem(t);
-    if (problem) throw new Error(`NOT WRITTEN: ${problem}`);
-  }
-};
-
 export const writeFile: Tool = {
   name: "write_file",
-  // Registry pass, 2026-11-26 (PLAN-open-work section 12, D2). The only irreversible write is a
-  // build manifest, "the one write a person should see before it happens", and a schedule's
-  // pre-approval skipped the queue for it: a job steered by a page it read could add a
-  // dependency with an install script, which the next `npm install` runs. So it asks even
-  // when nobody is watching. Ordinary files are reversible and never reach this flag.
-  confirmWhenUnattended: true,
   description:
     "Save text to a file. Give a bare filename like \"BUSINESSPLAN.md\" to save in the default " +
     "folder (this project's folder if it has one, otherwise AgentSpine's docs folder), or a full " +
@@ -398,26 +382,24 @@ export const writeFile: Tool = {
     "Shell scripts (.sh .command), server-executed source (.php .pl), macOS automation (.plist .scpt) " +
     "and hidden files are refused. Build manifests (package.json, Cargo.toml, build.rs, Package.swift, " +
     "lockfiles) can be written but WAIT for the user's approval, because they decide what code the " +
-    "build fetches and runs. So do AgentSpine's own gate files (its broker, approval and privacy code), " +
-    "which always wait with the diff shown. AgentSpine's own policy.json, profile.md, goals.md, agents/*.md " +
+    "build fetches and runs. So do changes to the files that enforce AgentSpine's own safety gates (the broker, " +
+    "confirmations, the local-only pin and a few more): the user sees the change first. AgentSpine's own policy.json, profile.md, goals.md, agents/*.md " +
     "and src/area-map.md cannot be written at all. The previous version of a replaced file is backed up automatically, " +
     "so an ordinary file write never needs to ask first.",
   argsSchema: '{ "path": string, "content"?: string, "from_run"?: number, "mode"?: "write" | "append" }',
+  // Registry pass (2026-11-25): the only irreversible call here is a build manifest, which decides
+  // what code the build fetches and runs. A scheduled run that read a hostile page must not write
+  // one unasked, so it queues from a schedule like it does from a chat.
+  confirmWhenUnattended: true,
   classify: (a: Args): ClassifiedAction => {
     const target = resolveTarget(a);
     const exists = !!target && fs.existsSync(target);
     const verb = a?.mode === "append" ? "Append to" : exists ? "Replace (old version backed up)" : "Create";
-    // One of the gates themselves. Asks under every skip, with the diff — see protected-paths.ts.
-    const gate = protectedRel(target);
-    if (gate) {
-      const before = readCurrent(target);
-      const body = bodyOf(a).text ?? null;
-      const after = body == null ? null : a?.mode === "append" && before != null ? appended(before, body) : body;
-      return asksEveryTime({
-        reversibility: "irreversible",
-        summary: protectedSummary(gate, a?.mode === "append" ? "APPEND TO" : exists ? "REPLACE" : "CREATE", before, after),
-        target,
-      });
+    const guarded = protectedPathOf(target);
+    if (guarded) {
+      const before = readOr(target);
+      const text = bodyOf(a).text ?? "";
+      return protectedCard(guarded, target, before, a?.mode === "append" && before ? `${before}${before.endsWith("\n") ? "" : "\n"}${text}` : text);
     }
     // A manifest is the one write that can make the build fetch and run new code, so it is
     // the one write a person should see before it happens. See MANIFEST_BASENAMES.
@@ -452,13 +434,12 @@ export const writeFile: Tool = {
     const target = resolveTarget(a);
     const body = bodyOf(a);
     if (!target || body.text == null) return `ERROR: ${body.error ?? "no path"}`;
-    notApproved(target);
     try {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       const backup = backupFile(target);
       if (a?.mode === "append" && fs.existsSync(target)) {
         const cur = fs.readFileSync(target, "utf8");
-        fs.writeFileSync(target, appended(cur, body.text), "utf8");
+        fs.appendFileSync(target, `${cur && !cur.endsWith("\n") ? "\n" : ""}${body.text}`, "utf8");
         recordDeliverable(target, "append", ctx?.runId);
         return `Appended ${body.text.length} characters to ${target}${backup ? ` (previous version kept at ${backup})` : ""}`;
       }
@@ -481,23 +462,24 @@ interface EditArgs {
 /** Replace text inside an existing document. The old version is backed up first. */
 export const editFile: Tool = {
   name: "edit_file",
-  // As write_file: its one irreversible call is a build manifest, and that asks unattended too.
-  confirmWhenUnattended: true,
   description:
     "Change part of an existing text document: replace the exact text in \"find\" with \"replace\". " +
     "\"find\" must match exactly once (pass \"all\": true to replace every occurrence), so quote enough " +
     "surrounding text to be unambiguous. Use write_file with mode \"append\" to add to the end instead.",
   argsSchema: '{ "path": string, "find": string, "replace": string, "all"?: boolean }',
+  // Registry pass (2026-11-25): the only irreversible call here is a build manifest, which decides
+  // what code the build fetches and runs. A scheduled run that read a hostile page must not write
+  // one unasked, so it queues from a schedule like it does from a chat.
+  confirmWhenUnattended: true,
   classify: (a: EditArgs): ClassifiedAction => {
     const target = resolveArg(a?.path);
-    const gate = protectedRel(target);
-    if (gate) {
-      const before = readCurrent(target);
-      return asksEveryTime({
-        reversibility: "irreversible",
-        summary: protectedSummary(gate, "EDIT", before, before == null ? null : (edited(before, a).next ?? null)),
-        target,
-      });
+    const guarded = protectedPathOf(target);
+    if (guarded) {
+      const before = readOr(target);
+      const find = String(a?.find ?? "");
+      const replace = String(a?.replace ?? "");
+      const after = !find ? before : a?.all ? before.split(find).join(replace) : before.replace(find, () => replace);
+      return protectedCard(guarded, target, before, after);
     }
     if (isManifest(target)) {
       return {
@@ -521,14 +503,15 @@ export const editFile: Tool = {
   },
   run: async (a: EditArgs, ctx) => {
     const target = resolveArg(a?.path);
-    notApproved(target);
     try {
       const cur = fs.readFileSync(target, "utf8");
-      const { count, next } = edited(cur, a);
+      const find = String(a?.find ?? "");
+      const count = cur.split(find).length - 1;
       if (count === 0) return `NOT CHANGED: the text to replace was not found in ${target}. Read the file and quote it exactly.`;
-      if (next == null) {
+      if (count > 1 && !a?.all) {
         return `NOT CHANGED: that text appears ${count} times in ${target}. Quote more surrounding text, or pass "all": true.`;
       }
+      const next = a?.all ? cur.split(find).join(String(a.replace)) : cur.replace(find, () => String(a.replace));
       if (Buffer.byteLength(next, "utf8") > MAX_WRITE_BYTES) return `NOT CHANGED: the result would be over ${MAX_WRITE_BYTES} bytes.`;
       const backup = backupFile(target);
       fs.writeFileSync(target, next, "utf8");
@@ -548,29 +531,28 @@ interface MoveArgs {
 /** Move or rename a document. Refuses to clobber: the destination must be free. */
 export const moveFile: Tool = {
   name: "move_file",
-  // As write_file: moving a file onto or off a build manifest's name asks unattended too.
-  confirmWhenUnattended: true,
   description:
     "Move or rename a text document (both ends must be in a writable folder). The destination must not already exist.",
   argsSchema: '{ "from": string, "to": string }',
   // Either end being a manifest is enough: moving a file ONTO package.json replaces it, and
   // moving package.json away is how you would get a build to fall back to a different one.
+  // Registry pass (2026-11-25): the only irreversible call here is a build manifest, which decides
+  // what code the build fetches and runs. A scheduled run that read a hostile page must not write
+  // one unasked, so it queues from a schedule like it does from a chat.
+  confirmWhenUnattended: true,
   classify: (a: MoveArgs): ClassifiedAction => {
     const from = resolveArg(a?.from);
     const to = resolveArg(a?.to);
-    const manifest = isManifest(from) || isManifest(to);
-    // Moving a gate away removes it, and moving a file into its place supplies a new one.
-    const gate = protectedRel(from) ?? protectedRel(to);
-    if (gate) {
-      return asksEveryTime({
+    const guarded = protectedPathOf(from) ?? protectedPathOf(to);
+    if (guarded) {
+      return {
         reversibility: "irreversible",
-        summary:
-          `MOVE that changes PROTECTED FILE ${gate}: ${from || "?"} to ${to || "?"}. This file is one of AgentSpine's own gates, ` +
-          `so the move waits for you whatever else is trusted.\n\n` +
-          `(file version when proposed: ${versionOf(readCurrent(protectedRel(from) ? from : to))})`,
+        alwaysConfirm: true,
+        summary: `Move ${from || "?"} to ${to || "?"}: this moves or replaces PROTECTED FILE ${guarded}, which enforces AgentSpine's own safety gates`,
         target: to,
-      });
+      };
     }
+    const manifest = isManifest(from) || isManifest(to);
     return {
       reversibility: manifest ? "irreversible" : "reversible",
       summary: `Move ${from || "?"} to ${to || "?"}${manifest ? " — this changes a BUILD MANIFEST" : ""}`,
@@ -591,7 +573,6 @@ export const moveFile: Tool = {
   run: async (a: MoveArgs, ctx) => {
     const from = resolveArg(a?.from);
     const to = resolveArg(a?.to);
-    notApproved(from, to);
     try {
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.renameSync(from, to);

@@ -29,7 +29,7 @@ process.env.SPINE_DB_PATH = path.join(root, "t.db");
 process.env.EMBEDDINGS_URL = "";
 // Every loop switch at its default, set here because config.ts loads .env and a value already in
 // the environment wins: a machine whose .env turns one on must not change what this pins.
-Object.assign(process.env, { LOCAL_DEEP_THINKING: "false", LOOP_BUDGET: "steps", TOOL_DOCS_ON_DEMAND: "false" });
+Object.assign(process.env, { LOCAL_DEEP_THINKING: "false", TOOL_DOCS_MODE: "all" });
 
 const { __test } = await import("../src/agent.ts");
 const { recordFriction } = await import("../src/learn/friction.ts");

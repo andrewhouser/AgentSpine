@@ -14,6 +14,7 @@ import {
   SCALE_MIN,
   SCALE_STEP,
 } from "../../lib/preferences.ts";
+import { loadSpokenAlerts, LONG_RUN_SECONDS, saveSpokenAlerts } from "../../lib/spokenAlerts.ts";
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
 import { CloudUsagePanel } from "../CloudUsagePanel/CloudUsagePanel.tsx";
 import { HeadsupPrefsPanel } from "../HeadsupPrefsPanel/HeadsupPrefsPanel.tsx";
@@ -127,6 +128,22 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
     const merged = { ...voice, ...next };
     setVoice(merged);
     saveVoiceSettings(merged);
+  };
+
+  // The spoken alert (A8): per browser, off until switched on here.
+  const [alerts, setAlerts] = useState(loadSpokenAlerts);
+  const [alertNote, setAlertNote] = useState<null | string>(null);
+  const tryAlert = (): void => {
+    setAlertNote(null);
+    void api
+      .speak("An approval is waiting.")
+      .then(async (blob) => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => URL.revokeObjectURL(url);
+        await audio.play();
+      })
+      .catch((err: Error) => setAlertNote(`It could not speak: ${err.message}`));
   };
 
   const testVoice = (): void => {
@@ -330,6 +347,33 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
                 How long it waits in silence after it finishes speaking before it goes back to waiting for
                 the wake word. It does not run while the assistant is thinking or talking.
               </span>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.checkRow} htmlFor="voice-alerts">
+                <input
+                  checked={alerts}
+                  id="voice-alerts"
+                  onChange={(e) => {
+                    setAlerts(e.target.checked);
+                    saveSpokenAlerts(e.target.checked);
+                  }}
+                  type="checkbox"
+                />
+                <span className={styles.fieldLabel}>Say when I am needed</span>
+              </label>
+              <span className={styles.fieldHint}>
+                While this tab is open, it says one short line when an approval starts waiting, or when a reply
+                that took over {LONG_RUN_SECONDS} seconds finishes while you are looking at something else. It never
+                reads out a thread's title or what the reply says, and it is silent during quiet hours. This browser only;
+                off unless you turn it on.
+              </span>
+              <div className={styles.sliderRow}>
+                <button className={styles.segment} disabled={!voiceStatus.speakReady} onClick={tryAlert} type="button">
+                  Try it
+                </button>
+                {alertNote && <span className={styles.fieldHint}>{alertNote}</span>}
+              </div>
             </div>
 
             <div className={styles.field}>

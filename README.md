@@ -81,35 +81,21 @@ irreversible actions run without asking again. The allowlist, budgets and dry ru
 One exception: a job can't change the standing work itself. `schedule_create`, `_update` and
 `_delete` still queue from a scheduled run, and `recipe_save` is refused there, so a job that
 reads a hostile page can't schedule itself more jobs or write itself new instructions.
-A second exception, for the same reason: a browser click or form submit that reads as buying
-or paying (buy, order, checkout, pay, subscribe) still asks from a scheduled run. A plain
-submit does not, so a job can still use a search box. The test reads the model's own
-description of the button, so one labelled "Continue" gets past it;
-`BROWSER_MODE=headless` keeps scheduled jobs out of a signed-in Chrome altogether.
+A second exception, for the same reason: a browser click or form submit that reads as buying,
+paying or moving money (buy, order, checkout, pay, transfer, withdraw, subscribe), or as
+deleting or removing something, still asks from a scheduled run (transfers, withdrawals, wires
+and trades are refused in every run, see the browser section). A plain submit does not ask, so
+a job can still use a search box. The test reads the model's own description of the button, so
+one labelled "Continue" gets past it. That is why the always-on host runs with
+`BROWSER_MODE=headless`: scheduled jobs then never attach to a signed-in Chrome at all.
 A third: a scheduled job sends mail or a message without asking only to someone its own task
 text tells it to send to ("every Friday, email sam@example.com the numbers"). Any other
 recipient asks, because a job that has read a hostile email could otherwise post what it read
 to anyone. "Text me the brief" names nobody, so name the number or the contact, or have the
 job use `notify`.
-A fourth, from reading every tool with that same question (2026-11-26): `git_write` pushing,
-restoring or committing anywhere but a branch it made, a write to a build manifest
-(`package.json`, a `Podfile`), and deleting a study topic each ask from a scheduled run as
-they do in a chat. A test reads the tool sources, so a new irreversible tool fails until it
-either asks when unattended or is listed with the reason it does not.
-
-**A few things are refused, whoever approves.** The broker has a third tier beside "runs" and
-"asks": `forbidden`. A browser click or submit that reads as moving money between accounts
-(transfer, withdraw, wire, send money, cash out) or as trading (buy or sell shares, place a
-trade) is denied in a chat and in a schedule alike. No setting in `policy.json`, no trusted
-tool and no approval card lets it through, and it is never queued, because a card for
-"Transfer $500" is one tap from done. Buying goods is not on the list: that still asks. The
-test reads the model's description of the button, so it fails both ways: a bank that labels
-the button "Continue" passes it, and a file-sharing site's "Transfer" button is refused and
-is yours to click. For the sites where that matters, list them in
-`policy.json` under `"browser": { "neverDomains": ["yourbank.example", "yourbroker.example"] }`.
-The browser and `web_read` then refuse to open or act on them (subdomains included), by
-where the page is and not by what a button says, and a click or redirect that lands on one
-leaves it for a blank page. A project can add to that list and never remove from it.
+A fourth: a scheduled job's `git_write` (push, restore), a write to a build manifest such as
+`package.json`, and deleting a study topic still ask. A job that has read a hostile page could
+otherwise push code out, change what the build runs, or erase study history.
 
 **It opens on Today.** With no thread selected, the web, the iPhone's first tab and the Mac's
 start pane show one screen of what is waiting: approvals (a row opens the whole proposed action
@@ -182,6 +168,12 @@ for a configurable timeout. Listening reuses the Whisper models above; speaking 
 Kokoro service in `services/tts/`. See [VOICE.md](docs/VOICE.md) for setup, what was measured, and
 the limits — notably that a wake word matched on a transcript trades missed wakes against
 near-homophone false ones, and that the microphone is deaf while it speaks.
+
+**It can say when it needs you.** In **Settings → Voice**, *Say when I am needed* makes an open tab
+speak one short line, in the same local voice, when an approval starts waiting or when a reply that
+took over a minute finishes while you are looking at something else ("An approval is waiting.",
+"A reply is ready.", "The builder has finished."). The lines are fixed in code and never read out a
+thread's title or what a reply says. It is per browser and off until you turn it on.
 
 **Conversations have memory of themselves.** Each turn sees what was asked and concluded in
 earlier turns of the same thread — not the prior tool traces, which would exhaust a local
@@ -282,19 +274,20 @@ remaining use is narrow, mechanical and **opted into by a file someone wrote**. 
 was never "a 3B is bad" — it was handing one an open-ended turn with the entire tool registry
 and your profile in context, which no declared-tier caller does.
 
-### Loop switches that wait on a measurement
+### Loop settings, and the switches that wait on a measurement
 
-Four things about the loop are built and switched off, because each changes what a 28 tok/s
-model is asked to do on every step and none has been timed on the model host yet. With all of
-them off the loop and its prompt are byte-for-byte what they were; `test/prompt-snapshot.test.mjs`
-holds the prompt to that, and fails until its snapshot is updated whenever the prompt's wording
-changes (`UPDATE_SNAPSHOT=1 node test/prompt-snapshot.test.mjs`).
+Two things about the loop are built and switched off, because each changes what a 28 tok/s model is
+asked to do and neither has been timed on the model host yet. With both off the loop and its prompt are
+byte-for-byte what they were; `test/prompt-snapshot.test.mjs` holds the prompt to that, and fails until
+its snapshot is updated whenever the prompt's wording changes
+(`UPDATE_SNAPSHOT=1 node test/prompt-snapshot.test.mjs`).
 
-| `.env` | Default | What it does when on |
+| `.env` | Default | What it does |
 |---|---|---|
-| `LOCAL_DEEP_THINKING=true` | off | A task sized `deep` that the local model has to serve (the run read mail, a file or a project, or there is no cloud tier) asks the model to think on its first step, on the re-ask after an unreadable reply, and on the step after a tool error. Same endpoint, no model switch. `LOCAL_DEEP_MAX_TOKENS` (8192) is the cap for those calls. A thought is never shown or read as the answer, and a thinking call that fails is asked again without it. The timing table lists these as `step-think` and `step-reask-think`. |
-| `TOOL_DOCS_ON_DEMAND=true` | off | A run that can see more than 16 tools gets a core set in full (`CORE_TOOLS` in `src/tool-docs.ts`) and the rest as a name and one line, and loads a full entry with `tool_docs`. Roughly halves the system prompt. Loading is not a permission: every call still goes through the broker. |
-| `LOOP_BUDGET=tokens` | `steps` | The step cap becomes an allowance: each step of the cap is worth `RUN_TOKENS_PER_STEP` (1200) generated tokens and `RUN_MS_PER_STEP` (90000) of working time, with a ceiling of three times the cap. Time parked so a chat turn could go first is not counted. Once the context passes half of `LOCAL_CONTEXT_TOKENS` (65536), old tool results are replaced by one-line stubs that `read_more` brings back. No model writes a summary. |
+| `LOCAL_DEEP_THINKING=true` | off | A task sized `deep` that the local model has to serve (the run read mail, a file or a project, or there is no cloud tier) asks the model to think on its first step, on the re-ask after an unreadable reply, and on the step after a tool error. `LOCAL_DEEP_MAX_TOKENS` (8192) caps those calls. A thinking call that fails or answers nothing is asked again the ordinary way. |
+| `TOOL_DOCS_MODE=core` | `all` | A run gets a short core set of tool descriptions in full (`CORE_TOOLS` in `src/tool-docs.ts`) and the rest as one line each, and reads a tool's full instructions with `tool_help`. |
+| `RUN_TOKENS_PER_STEP`, `RUN_MS_PER_STEP` | 22000, 72000 | Always on: each run has a token and a wall-clock budget scaled from its step cap, and is warned at 80% to finish. Time paused for a person does not count. |
+| `COMPACT_AT_TOKENS` | 30000 | Always on: past this many tokens, older tool results become stubs that `read_more` can open (`src/compact.ts`). |
 
 To measure the fourth question, what a moved system prompt costs on the second turn of a
 thread, run `node bench/h1-prefix.mjs --runs 3` on a machine whose `.env` points at the model
@@ -800,13 +793,11 @@ that still has not ended is closed out and the queue goes on without it. Chat tu
 interrupted this way; they have a Stop button and a person. `STALL_IDLE_MS=0` in `.env` turns
 it off. The watchdog is `src/stall.ts`.
 
-**A chat turn can go ahead of scheduled work (off by default).** With `CHAT_FIRST=true` in
-`.env`, anything a person is waiting for (a chat message, an approved action, `npm run do`)
-is taken before scheduled jobs that have not started, and a scheduled job that is running
-gives up the model at its next step, lets the chat turn answer, and then carries on. It is
-never cut off mid-step. The cost is that the model host keeps one prompt warm: the scheduled
-job pays its prefill again when it resumes. That is why it ships off until it has been timed
-on the model host. Scheduled jobs never go ahead of anything.
+**A chat turn goes ahead of scheduled work.** Anything a person is waiting for (a chat message,
+an approved action, `npm run do`) is taken before scheduled jobs that have not started, and a
+scheduled job that is running gives up the model at its next step, lets the chat turn answer, and
+then carries on (`src/queue.ts`). It is never cut off mid-step, and the time it spends paused does
+not count towards the stall watchdog's idle limit.
 
 ## Asking it to change itself
 
@@ -1029,7 +1020,6 @@ src/                 the agent — no build step, two runtime dependencies
   protected-paths.ts  the gate files: an edit to one always waits for you, with its diff
   area-map.md      the map of this codebase, trusted context for a run working in this repo
   area-map.ts      reads that map; no tool may write it
-  change-proposals.ts  propose, then patch: a change to its own code starts as one card
   tools/
     mac-control.ts gated, templated AppleScript (no arbitrary scripts)
     web-search.ts  Tavily (primary) + browser/SearXNG fallback, UNTRUSTED-tagged
@@ -1053,7 +1043,7 @@ src/                 the agent — no build step, two runtime dependencies
     command-output.ts  reduces a build log to the verdict and the first failure
     look-at-file.ts look_at_file — point the vision tier at an image on disk, e.g. a screenshot
     digest.ts      digest — computed summary of its own recent activity
-    draft.ts       draft — composes mail/events for YOU to send; adds no OAuth scope
+    draft.ts       draft — composes mail/events for YOU to send; optionally into Gmail Drafts or a named calendar
     recipes.ts     recipe_save / recipe_use / recipe_list — named procedures you approve
   google/
     auth.ts        one-time OAuth: `npm run auth` (read-only) or `npm run auth -- write` (separate write token)
@@ -1637,6 +1627,20 @@ clicks that look like buy/submit/send/delete/pay — and all form submits — ar
 outright, and `neverDomains` lists sites it must never open or act on (see "A few things are
 refused, whoever approves" near the top).
 
+Two things are refused outright, whoever approves. Nothing is queued, so there is nothing to
+approve, and no standing grant, chat trust setting or scheduled job's pre-approval changes it.
+A click or submit that reads as moving money or trading (transfer, withdraw, wire, buying or
+selling shares) is refused. And so is any page on a host in `browser.neverDomains`, which
+matches the host and its subdomains: put your bank and broker there. The first is a test over
+the model's own description of the button, so one labelled "Continue" gets past it, and the
+host list is the answer to that. Buying goods still queues for your approval as before.
+
+Text a tool is about to send out (a draft, a message, a notification, a web search, typing into a
+page, anything sent to an MCP server) is also checked for a card number, a Social Security number
+or a secret. It only writes a note on the audit row until you set `OUTGOING_ENFORCE=true`, because
+order and tracking numbers will sometimes look like card numbers. Read what it found with
+`npm run outgoing [days]`.
+
 ### Web search vs. page reading — use the right tool
 
 The honest split, because public search engines serve a CAPTCHA to headless browsers:
@@ -1889,6 +1893,23 @@ untouched where it matters: `resolveTier` pins `sensitivity: "private"` away fro
 code**, so mail, calendar and `profile.md` stay local regardless, and a project overlay can
 only narrow — a project holding client code can pin itself local and accept a smaller builder.
 
+### Changes to AgentSpine itself start as a card
+
+When AgentSpine finds something in its own code worth fixing, it does not edit the files. It calls
+`propose_change`, and a card arrives in the confirmation queue: what would change, why, the files it
+expects to touch, how the change will be shown to work, and the runs that prompted it. Accepting a
+"Code change" card in the weekly review queues one of these too. The card always waits for you,
+whatever chat trust or auto-approval you have set.
+
+Approving it starts the builder as a run of its own, in an AgentSpine checkout declared in
+`policy.build.repos` with `gitWrite`. A separate clone is used over the one the service runs from,
+and the card warns you when the served checkout is the only choice, because a restart before you
+merge would load the branch. The builder branches to `agentspine/<slug>` before it edits, runs the
+declared checks, and commits on the branch. It cannot push without asking, and an edit to one of the
+files that enforce the safety gates (the broker, confirmations, the local-only pin and a few more,
+listed in `src/protected-paths.ts`) shows you its own card with the change. Merging, pushing,
+`update.sh` and the restart stay yours.
+
 ### Reviewing it — the Builds page
 
 `Builds` in the sidebar, and a Builds tab on the phone. One row per run that ran a command
@@ -1983,84 +2004,15 @@ A fifth file joined them on 2026-11-26: `src/area-map.md`, the map of this codeb
 under "A map of its own code" below. It reaches a run as trusted context, so it is refused
 for the same reason `profile.md` is.
 
-### Its own gates always ask
-
-A builder that cannot write `policy.json` could still get the same result one step earlier:
-edit the broker so it stops asking, the pin so private text may leave, the approval code so a
-card approves itself, or the test that would have caught any of those. Those are ordinary
-`.ts` files in a writable folder, so until 2026-11-26 such an edit classified reversible and
-ran unasked.
-
-Nine files are now **protected**, listed in code in `src/protected-paths.ts` and pinned by
-`test/architecture.test.mjs`: `src/broker.ts`, `src/sensitivity.ts`, `src/confirmations.ts`,
-`src/learn/promote.ts`, `src/google/write.ts`, `src/instagram/api.ts`,
-`src/instagram/token.ts`, the list itself, and the architecture test. Not refused, as the
-control files are: changing the broker is real work, and a diff of it is something you can
-read. What changes is that an edit to one **always waits for you, with the diff on the card**:
-
-- The write tools classify it irreversible and `alwaysConfirm`, which the broker honours ahead
-  of every skip it has: `policy.autoApprove`, a user-directed request, a tool trusted in chat,
-  and a schedule's pre-approval. `irreversibleAlwaysConfirm: false` does not switch it off.
-- The tools check again themselves. A protected file is written only while your approval of
-  that card is being carried out, so a broker that forgot to ask still writes nothing.
-- The card records which version of the file its diff was made against. If the file changed
-  after the card was queued, approving it fails and says so, where it would otherwise have
-  replaced a fix made since with text approved before the fix existed.
-- A declared command or a project generator that changes one (a `lint --fix`, a formatter)
-  has that change put back when it finishes, and the change is queued as a card with its diff.
-  That includes your own hand edit, if you happen to make one while a long test command is
-  running in the same checkout: it is put back and waiting in the queue, one tap from applied.
-- `git_write` writes no content of its own, but `switch`, `stash` and `restore` swap a file
-  for a version git already holds. One of those that would change a protected file asks too.
-
-Only the files in the checkout the service runs from are protected. A second clone of the
-repo is just source, read as a diff before anyone merges it. And the list is a tripwire for
-the named files, not a proof: a change to `src/types.ts` or `src/runner.ts` can weaken a gate
-too, which is why the merge stays yours. Suite: `test/protected-paths.test.mjs`.
-
-### Changing itself: propose, then patch
-
-> *"The plan card shows 'Using acme_lookup' for my MCP tools. Fix that."*
-
-A change to AgentSpine's own code starts as one card in the approval queue and as nothing
-else. The `propose_change` tool writes it from a live chat: what will change, why, the files,
-how it will be checked, and the runs that showed the problem. Under those, word for word, is
-the task the builder will be handed, because that text becomes instructions an unwatched run
-follows, and a summary is not something you can judge.
-
-Approving starts the `builder` unit on a new `agentspine/…` branch in this checkout. The
-result is on the Builds page with its diff, and you get a notification when it ends. **Merging,
-pushing, `update.sh` and the restart stay yours**, so the service never restarts onto code you
-have not read. Approving the proposal approves none of the builder's own irreversible calls: a
-build manifest, a protected file or a push each still ask.
-
-What is refused, in code:
-
-- A proposal from anything but a live chat. A scheduled run or a helper that had just read a
-  hostile page could otherwise write the builder's instructions.
-- A file under `web/` or `ios/`. No declared command builds the Swift apps, and a UI change
-  has to land in all three clients, so a self-made one would break that rule.
-- A control file. No tool writes those, so proposing it would promise what cannot happen.
-- A proposal you rejected before, and a second copy of one still waiting.
-- Anything at all unless `policy.build` declares this checkout with `"gitWrite": true`.
-
-A proposal that names a protected file says so on the card, and each edit to that file asks
-again with its diff. The weekly retrospective's code-change cards feed the same queue:
-accepting one in the review queues a proposal (with "files not known yet", since no code was
-read to make it), and only approving that second card starts work.
-Suite: `test/self-change.test.mjs`.
-
 ### A map of its own code
 
 Working in this repo, an editor's assistant starts from an area table: which folder holds
 what, and which design record to read before changing it. AgentSpine working on itself had no
 equivalent. `src/area-map.md` is that table, and the server gives it as **trusted** context to
-a run that is working inside this checkout: a project whose folder is here, or the builder
-started from an approved proposal. Every other run gets nothing, so its prompt is byte for
+a run that is working inside this checkout: one whose project's folder is here. Every other run gets nothing, so its prompt is byte for
 byte what it was (prefill is the slow part on the model host).
 
-It is not a document. It is never indexed or retrieved, no tool may write it, and a declared
-command that changes it has the change put back. Edit it yourself, in an editor, when the
+It is not a document. It is never indexed or retrieved, and no tool may write it. Edit it yourself, in an editor, when the
 layout of the code changes.
 
 ## Local files
@@ -2363,7 +2315,7 @@ the confirmation queue with the **full proposed text**, not a description of it:
 ```
 #1  [draft]  Reply to sam@example.com — "Re: Q3 budget"
 
-     DRAFT (email_reply) — nothing has been sent, created, or scheduled.
+     DRAFT (email_reply) — nothing is sent to anyone. Approving saves it: in Gmail Drafts or on your calendar when those are switched on, otherwise as a file.
 
      To:      sam@example.com
      Subject: Re: Q3 budget
@@ -2374,15 +2326,37 @@ the confirmation queue with the **full proposed text**, not a description of it:
 ```
 
 Approving writes it to `drafts/` and hands you the path; you open it and send it yourself.
-That file is the *only* side effect — `src/tools/draft.ts` contains no Google client, no
-`fetch`, and no URL, so "it cannot send" is a property of the code rather than a promise
-about the prompt. Rejecting with a reason teaches it, via the preference memory above:
+With the Gmail and calendar switches below it saves into your Gmail Drafts or onto a calendar
+instead, through `src/google/write.ts`, which has no send function: "it cannot send" is a
+property of the code rather than a promise about the prompt, and the architecture test pins it. Rejecting with a reason teaches it, via the preference memory above:
 
 ```bash
 npm run confirm reject 2 never commit to a renewal on my behalf, always ask me first
 ```
 
 `drafts/` is gitignored — approved drafts are unsent correspondence.
+
+### Into Gmail Drafts, or onto your calendar (optional)
+
+With the separate write token set up (`npm run auth -- write`, `google.write.enabled`), a draft can land
+where you would send it from instead of in a file:
+
+```jsonc
+// policy.json
+"drafts": { "enabled": true, "dir": "./drafts", "gmail": true, "calendar": "Home" },
+"google": { "enabled": true, "write": { "enabled": true, "calendars": ["Bills", "Home"] } }
+```
+
+- **Email drafts** are saved in Gmail's Drafts folder, and a reply is threaded onto the message it answers.
+  Nothing is sent: you open Gmail and send it, or delete it. The write module has no send at all, not even
+  for a saved draft.
+- **Event drafts** with an exact start (`2026-12-02T15:00`) go onto the calendar you name, which must be on
+  the `calendars` list and is never created. No one is ever invited, because an invitation is an email. A
+  vague start ("Tuesday 2pm") stays a file, with the reason.
+- **Work text stays a file.** A draft written in a project, or in a conversation that read meetings, project
+  sources, files or private recalled memories, is never put into your Google account, whatever the switches say.
+- **Scheduled runs ask** before a draft goes to Gmail or the calendar. In a chat the card still shows, unless
+  you add `"draft"` to `trust.chatAutoTools`; then chat drafts go straight in (events too).
 
 ### Writing styles
 
@@ -2435,21 +2409,6 @@ Drafts are unchanged otherwise: nothing is sent.
   count is made of would not exist. Deleting a conversation deletes its runs and so lowers the count.
 - The audit log in the `actions` table records every broker decision, kept for
   `RETENTION_DAYS` (default 90). Set `AUDIT_RETENTION_DAYS=0` to keep it indefinitely.
-- **A check on text leaving the machine (log-only until you switch it on).** Before a tool
-  sends text off the machine, the broker reads the arguments that tool declares as outgoing: a
-  draft's subject and body, a `mac_control` mail or message, a push, a search query, what the
-  browser types and the address it opens, an Instagram caption, and every string handed to an
-  MCP server. Three tests, in plain code: 13 to 19 digits that pass the payment-card (Luhn)
-  check, a US Social Security number written with its separators, and what the recipe filter
-  already treats as a secret (a key block, a value after a password or key label, a long
-  opaque string). By default a match is only recorded: the call goes ahead and the model is
-  told nothing. `npm run digest 336` lists a fortnight of matches by tool and kind, which is
-  where the false positives show (one number in ten passes the card check by chance, so order
-  and tracking numbers will appear). When you are content with that list, set
-  `OUTBOUND_ENFORCE=true` in `.env` and restart: a match then denies the call, before it can
-  run or reach an approval card, and the denial names the argument and the kind. The record
-  and the denial never hold the text itself. It does not judge meaning: health or money
-  matters written in ordinary words pass, and the local pin is what keeps those off the cloud.
 - Move any credential files (e.g. `client_secret_*.json`) out of this directory; they are
   gitignored but should not live in the project at all.
 

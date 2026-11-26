@@ -23,7 +23,7 @@ client, `ios/` the SwiftUI iPhone and Mac apps, `test/` plain Node scripts, `doc
 | Instagram publishing | `src/instagram/` | `docs/INSTAGRAM.md` |
 | MCP client | `src/mcp/` | `docs/MCP.md` |
 | Voice, image generation | `src/listen.ts`, `src/comfy.ts`, `services/` | `docs/VOICE.md`, `docs/IMAGE_GENERATION.md` |
-| Build loop and self-change | `src/tools/run-command.ts`, `src/tools/git-write.ts`, `src/builds.ts`, `src/change-proposals.ts` | `docs/archive/PLAN-build-loop.md` |
+| Build loop and self-change | `src/tools/run-command.ts`, `src/tools/git-write.ts`, `src/builds.ts`, `src/tools/propose-change.ts` | `docs/archive/PLAN-build-loop.md` |
 | HTTP API and the dashboard server | `src/server.ts` | README |
 | Web client | `web/src/` | `docs/archive/PLAN-native-apps-and-ui-refresh.md` |
 | iPhone and Mac apps | `ios/` | `ios/README.md` |

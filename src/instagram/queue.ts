@@ -25,7 +25,9 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { OUTGOING_ENFORCE } from "../config.ts";
 import { rawDb } from "../memory/store.ts";
+import { describeFindings, scanOutgoing } from "../outgoing.ts";
 import {
   CAPTION_MAX_CHARS,
   CAPTION_MAX_HASHTAGS,
@@ -329,6 +331,36 @@ export const describeRow = (r: QueueRow): string => {
   return lines.join("\n");
 };
 
+/**
+ * One row for the dashboard's queue screen (section 1, item 6, built 2026-11-25). `card` is describeRow's exact text,
+ * caption and all, because what is approved is what was read; `hash` is the content digest that approval must name,
+ * so the screen cannot approve a row that changed after it was shown.
+ */
+export const rowForClient = (r: QueueRow) => ({
+  approved: isApproved(r),
+  approvedChanged: r.approved === 1 && !isApproved(r),
+  blockers: blockers(r),
+  card: describeRow(r),
+  hash: contentHash(r),
+  id: r.id,
+  kind: r.kind,
+  permalink: r.permalink,
+  publishAt: r.publish_at,
+  status: r.status,
+  surface: r.surface,
+});
+
+/**
+ * Approve from the dashboard: only if the row still has the content the person read. A re-seed that changed the
+ * caption or image between the page loading and the click is refused, not approved unseen.
+ */
+export const approveIfUnchanged = (id: string, seenHash: string, by: string, now: Date = new Date()): Outcome => {
+  const row = getRow(id);
+  if (!row) return { ok: false, reason: `no row ${id}` };
+  if (contentHash(row) !== seenHash) return { ok: false, reason: "the post changed after you read it. Read it again before approving." };
+  return approve(id, by, now);
+};
+
 // ---- seeding -----------------------------------------------------------------------------
 
 export interface SeedPost {
@@ -501,6 +533,12 @@ export const seed = (
     // A Story carries no caption through the API, so none is stored: the row holds what will be sent.
     const caption = surface === "story" ? "" : String(post.caption ?? "");
     rowProblems.push(...captionProblems(caption));
+    // The outgoing-text check (D3), on a caption that will be public. Like every other surface it only notes what it
+    // found until OUTGOING_ENFORCE is on; then it blocks approval, naming what matched and never the value.
+    const found = caption ? scanOutgoing([caption]) : [];
+    const outgoing = found.length ? `the caption contains a ${describeFindings(found)}` : "";
+    if (outgoing && OUTGOING_ENFORCE) rowProblems.push(outgoing);
+    const outgoingNote = outgoing && !OUTGOING_ENFORCE ? `outgoing check, log only: ${outgoing}` : "";
 
     const next = {
       account,
@@ -510,7 +548,7 @@ export const seed = (
       image_sha256: facts.sha256,
       image_url: imagePath ? publicUrl(o.baseUrl, imagePath) : null,
       kind,
-      note: occ.note ? String(occ.note) : null,
+      note: [occ.note ? String(occ.note) : "", outgoingNote].filter(Boolean).join(" · ") || null,
       problem: rowProblems.length ? rowProblems.join("; ") : null,
       publish_at: iso(at),
       publish_local: occ.at.trim(),

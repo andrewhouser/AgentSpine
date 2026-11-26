@@ -178,4 +178,38 @@ console.log("\nwhat a person is shown");
   check("upcoming() is soonest first and ignores finished rows", q.upcoming(NOW, 3).map((r) => r.id)[0], "2026-11-23T09:00/E1/feed");
 }
 
+console.log("\nseeding: the outgoing-text check on a caption (D3)");
+{
+  const file = { ...kit.file, posts: [...kit.file.posts, { caption: "Raffle tonight. Pay with 4111 1111 1111 1111.", id: "C1", image: "images/evergreen.jpg", kind: "evergreen", story_image: null }] };
+  seed([{ at: "2026-12-04 09:00", post: "C1" }], { file });
+  const row = q.getRow("2026-12-04T09:00/C1/feed");
+  check("a card number in a caption is noted on the row", /outgoing check, log only: the caption contains a card number/.test(row.note ?? ""), true);
+  check("the note names what matched, never the number", (row.note ?? "").includes("4111"), false);
+  check("log only: it does not block approval", q.blockers(row), []);
+  check("and the approval card shows the note", /Note:\s+outgoing check, log only/.test(q.describeRow(row)), true);
+  const clean = q.getRow("2026-11-23T09:00/E1/feed");
+  check("a clean caption gets no such note", /outgoing check/.test(clean.note ?? ""), false);
+}
+
+console.log("\nthe dashboard screen: approval names the content it showed");
+{
+  const id = "2026-11-23T09:00/E1/feed";
+  q.revoke(id);
+  const shown = q.rowForClient(q.getRow(id));
+  check("the screen gets the approval card's exact text", shown.card, q.describeRow(q.getRow(id)));
+  check("and the hash an approval must name", shown.hash, q.contentHash(q.getRow(id)));
+  check("a wrong hash is refused, and nothing is approved", [q.approveIfUnchanged(id, "not-the-hash", "dashboard", NOW).ok, q.isApproved(q.getRow(id))], [false, false]);
+  const ok = q.approveIfUnchanged(id, shown.hash, "dashboard", NOW);
+  check("the hash that was shown approves it, by the dashboard", [ok.ok, q.getRow(id).approved_by], [true, "dashboard"]);
+  check("the screen then shows it approved", q.rowForClient(q.getRow(id)).approved, true);
+  // A re-seed with a new caption between the page loading and the click.
+  const changed = { ...kit.file, posts: kit.file.posts.map((p) => (p.id === "E1" ? { ...p, caption: "A different caption." } : p)) };
+  q.revoke(id);
+  const before = q.rowForClient(q.getRow(id)).hash;
+  seed([{ at: "2026-11-23 09:00", post: "E1" }], { file: changed });
+  const stale = q.approveIfUnchanged(id, before, "dashboard", NOW);
+  check("a post changed after it was read is refused, saying why", [stale.ok, /changed after you read it/.test(stale.ok ? "" : stale.reason)], [false, true]);
+  check("an unknown row is refused", q.approveIfUnchanged("no/such/row", "x", "dashboard").ok, false);
+}
+
 done();

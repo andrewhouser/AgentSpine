@@ -12,7 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const dbPath = path.join(os.tmpdir(), `agentspine-chat-${process.pid}.db`);
+const dbPath = path.join(os.tmpdir(), `agentspine-chat-${process.pid}-${Date.now()}.db`);
 process.env.SPINE_DB_PATH = dbPath;
 
 const { buildChatMessages, buildMessages, CHAT_HISTORY_TURNS } = await import("../src/meetings/coach.ts");

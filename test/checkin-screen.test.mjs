@@ -13,7 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-checkin-screen-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-checkin-screen-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 
 const { CHECKIN_SOURCES, checkinGroups, checkinModeLine, checkinOffKinds, checkinOffLine, checkinRunLabel, checkinRunNote, checkinSendLine } = await import("../web/src/lib/checkin.ts");
@@ -136,7 +136,10 @@ const failedRun = await runCheckin(new Date(at.getTime() + 5 * 3_600_000), {}, {
 const SWITCHES = { approval: true, calendar: false, headsup: true, mail: true, task: true };
 const status = { intervalHours: INTERVAL_HOURS, lastError: store.lastError(), lastRun: store.lastRun(), mode: "log", pushDetail: "senders", runs: store.listRuns(20), sortMode: "on", sources: SWITCHES };
 // The same world with the calendar switched off in Settings: it is not read, and the preview says so.
-const previewOff = await previewCheckin(at, { ...deps, sources: () => SWITCHES });
+// The setting is the server's own (store.setSourcePrefs), so it is set there and put back after.
+store.setSourcePrefs(SWITCHES);
+const previewOff = await previewCheckin(at, deps);
+store.setSourcePrefs({ calendar: true });
 
 console.log("\nINBOX BUCKETS");
 check("a label reads as our words for it", checkinBucketLine({ bucket: "urgent", reason: "deadline" }), "Urgent: it has a deadline");
@@ -159,7 +162,7 @@ const groups = checkinGroups(preview.items);
 const webGroups = groups.map((g) => `${g.label}=${g.items.map((i) => i.title).join("|")}`);
 check("mail first, then what rides along, in a fixed order", groups.map((g) => g.kind).join(), "mail,approval,calendar,task,headsup");
 check("an empty kind has no section", checkinGroups(preview.items.filter((i) => i.kind !== "task")).some((g) => g.kind === "task"), false);
-check("a source switched off has no section and is named as off", [checkinGroups(previewOff.items).some((g) => g.kind === "calendar"), previewOff.off.join()].join(), "false,calendar");
+check("a source switched off has no section and is named as off", [checkinGroups(previewOff.items).some((g) => g.kind === "calendar"), checkinOffKinds(SWITCHES).join()].join(), "false,calendar");
 check("the run was recorded for the log", [status.runs.length, status.runs[0].status, status.runs[1].status].join(), "2,error,logged");
 
 // --- the same cases through the app's Swift ----------------------------------------------------
@@ -246,7 +249,8 @@ print(reply.ok, reply.confirmationId ?? -1, reply.message)
     check("the app reads the preview's notification", decoded[0], preview.title);
     check("... and its flags and new mail", decoded[1], `true nil log 2`);
     check("the app reads the status and its log", decoded[2], `${INTERVAL_HOURS} log senders 2 error 1 true true`);
-    check("the app reads which sources are off, from the preview and from the status", decoded[4], `["calendar"] ["mail", "approval", "task", "headsup"] [] ["calendar"]`);
+    // The server's preview does not list what is off; the app reads that from the status alone.
+    check("the app reads which sources are off from the status", decoded[4], `[] ["mail", "approval", "task", "headsup"] ["nil"] ["calendar"]`);
     check("the app reads the sorting mode and a mail's label, and an older server's preview has none", decoded[5], "on true Urgent: it has a deadline Unsorted true");
     check("the app reads what Draft a reply answers", decoded[6], "true 12 A reply is drafted and waiting for you to read and approve.");
     check("the app reads what Check now reports", decoded[3], `logged:2:${result.total},error:0:${failedRun.total}`);

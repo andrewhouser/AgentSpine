@@ -119,6 +119,11 @@ final class APIClient {
 
     @discardableResult
     private func sendRaw(_ req: URLRequest, using session: URLSession? = nil) async throws -> Data {
+        try await sendWithResponse(req, using: session).0
+    }
+
+    /// `sendRaw`, keeping the response for the one caller that reads a header.
+    private func sendWithResponse(_ req: URLRequest, using session: URLSession? = nil) async throws -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {
@@ -142,7 +147,7 @@ final class APIClient {
                 ?? ""
             throw APIError.server(http.statusCode, detail)
         }
-        return data
+        return (data, http)
     }
 
     private var cacheOwner: String? {
@@ -523,8 +528,8 @@ final class APIClient {
     /// Switch one check-in source on or off. Stored on the server, so it holds for the timer and
     /// for every device. Returns the switches as they now stand.
     func setCheckinSource(_ kind: String, on: Bool) async throws -> [String: Bool] {
-        struct Reply: Decodable { let sources: [String: Bool] }
-        return try await send(jsonRequest("/api/checkin/sources", method: "POST", body: [kind: on]), as: Reply.self).sources
+        // The server answers with the switches themselves, not wrapped in an object.
+        try await send(jsonRequest("/api/checkin/sources", method: "POST", body: [kind: on]), as: [String: Bool].self)
     }
 
     /// "Draft a reply" on one unread mail (section 14, U7). The server writes it with the local
@@ -861,9 +866,30 @@ final class APIClient {
         return try await send(req, as: InboxExtractResult.self, using: longSession)
     }
 
-    /// Hybrid search over every indexed document and filed meeting.
-    func searchKnowledge(_ query: String) async throws -> [KnowledgeHit] {
-        try await send(request("/api/knowledge/search", query: ["q": query]), as: [KnowledgeHit].self)
+    /// Hybrid search over every indexed document and filed meeting, optionally narrowed. An unknown person or team is
+    /// a server error with its sentence; a team with no recorded members comes back as `note` (an `X-Search-Note`
+    /// header, so the body stays the plain list older builds read).
+    func searchKnowledge(_ query: String, filters: KnowledgeSearchFilters = KnowledgeSearchFilters()) async throws -> KnowledgeSearchResult {
+        var q = ["q": query]
+        if let id = filters.projectID { q["project"] = String(id) }
+        if let id = filters.personID { q["person"] = String(id) }
+        if let id = filters.teamID { q["team"] = String(id) }
+        if let e = filters.evidence, !e.isEmpty { q["evidence"] = e }
+        let day = DateFormatter()
+        day.calendar = Calendar(identifier: .gregorian)
+        day.locale = Locale(identifier: "en_US_POSIX")
+        day.dateFormat = "yyyy-MM-dd"
+        if let d = filters.since { q["since"] = day.string(from: d) }
+        // A passage is dated by its day, so "as of" a day means through the end of it.
+        if let d = filters.until { q["until"] = "\(day.string(from: d))T23:59:59" }
+        let (data, http) = try await sendWithResponse(request("/api/knowledge/search", query: q))
+        do {
+            let hits = try decoder.decode([KnowledgeHit].self, from: data)
+            let note = http.value(forHTTPHeaderField: "X-Search-Note").flatMap { $0.isEmpty ? nil : $0 }
+            return KnowledgeSearchResult(hits: hits, note: note)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
     }
 
     // MARK: - Knowledge Inbox

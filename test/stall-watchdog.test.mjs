@@ -29,7 +29,6 @@ process.env.STALL_MODEL_MARGIN_MS = "100";
 process.env.STALL_TOOL_MS = "600";
 process.env.STALL_GRACE_MS = "600";
 process.env.STALL_SWEEP_MS = "25";
-delete process.env.CHAT_FIRST;
 
 process.env.POLICY_PATH = path.join(root, "policy.json");
 fs.writeFileSync(
@@ -315,7 +314,7 @@ console.log("\nA STALLED RUN THAT NEVER RETURNS");
   check("it is closed out while its tool is still running", [toolReturned, r.status], [0, "failed"]);
   check("the note says it stalled and was left behind", [String(r.note).startsWith("Stalled:"), String(r.note).includes("did not stop when asked")], [true, true]);
   check("its caller hears that", result, { threw: r.note });
-  check("the queue has let go of it", queue.queueStatus(), { depth: 0, running: false });
+  check("the queue has let go of it", queue.queueStatus(), { depth: 0, paused: 0, running: false });
   // The next job does not wait for the hung tool.
   const before = asked;
   script.length = 0;
@@ -352,8 +351,7 @@ console.log("\nWAITING IS NOT STALLING");
   check("time in the queue is not counted", [results, row(second.runId).status], [[{ ok: "done" }, { ok: "done" }], "ok"]);
 }
 {
-  // Parked for a chat turn whose model call takes longer than the idle limit.
-  queue.__test.setChatFirst(true);
+  // Paused for a chat turn whose model call takes longer than the idle limit (yieldToPerson, src/queue.ts).
   toolMs = 100;
   script.push(SLOW); // the background run's first step; it parks at the boundary after its tool
   const bg = startTask("tidy the folder", opts("schedule"));
@@ -364,7 +362,6 @@ console.log("\nWAITING IS NOT STALLING");
   const chatResult = await outcome(chat);
   modelDelayMs = 0;
   const bgResult = await outcome(bg);
-  queue.__test.setChatFirst(false);
   check("the chat turn finishes first", chatResult, { ok: "done" });
   check("time parked for it is not counted against the background run", [bgResult, row(bg.runId).status], [{ ok: "done" }, "ok"]);
 }

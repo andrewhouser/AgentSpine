@@ -1,201 +1,150 @@
 /**
- * A tiny serial queue. The local MLX-LM server handles one request at a time, so we run
- * agent cycles one after another rather than firing several at once (e.g. when several
- * schedules come due in the same minute, or a manual task overlaps a scheduled one).
+ * The queue in front of the model host. The local MLX-LM server handles one request at a time, so agent cycles take
+ * turns rather than firing several at once (several schedules due in the same minute, a chat over a scheduled job).
  *
- * Two lanes (PLAN-open-work section 10, LP5). A job is `foreground` when a person is waiting
- * for it (a chat turn, an approved action, `npm run do`) and `background` when nobody is (a
- * schedule, a watcher, the heartbeat). With `CHAT_FIRST` off the lanes are only labels and the
- * queue is first-in first-out, exactly as it always was. With it on:
- *   - a waiting foreground job is taken before any waiting background job, and foreground
- *     jobs keep their order among themselves;
- *   - a background job that is RUNNING gives the model up at its next step boundary when a
- *     foreground job is waiting (`shouldPark`, `park`, called through src/turn-gate.ts), and
- *     takes it back once no foreground job is left, ahead of background jobs that have not
- *     started. Only one job can be parked at a time, because only a background job parks and
- *     nothing ever interrupts a foreground one;
- *   - a background job never goes ahead of anything.
+ * Two lanes (PLAN-open-work section 10, LP5, built 2026-11-25). A person waiting (a chat turn, an approval being
+ * carried out, a run from the command line) is the `person` lane; a schedule, a watcher or the heartbeat is
+ * `background`. Before, it was one first-in-first-out chain, so a chat turn sat behind a whole scheduled job, minutes
+ * on a local model. Now:
  *
- * Still one job holding the model at any moment: a parked job is waiting, not running.
+ *   - a person's work starts before any background work still waiting;
+ *   - a background run that is already going hands the model over at its next step boundary (`yieldToPerson`, called
+ *     by the agent loop where it checks for a stop), and carries on, ahead of other background work, once nobody is
+ *     waiting. It is paused, not stopped: its history, budgets and state are untouched, and the step it was about to
+ *     take is simply taken later.
+ *
+ * A model call already in flight is never interrupted for this, unlike a stop: the chat waits for that call to return,
+ * which is the cost of keeping each run's prompt prefix whole (prefill is the expensive part on this host).
+ *
+ * Which lane a piece of work is in rides on AsyncLocalStorage (built into Node, no dependency), so a subagent started
+ * inside a background run yields with it, and nothing has to pass the lane down by hand.
+ *
+ * The stall watchdog (src/stall.ts, PLAN-open-work section 13 H6) needs two things from here: to hear when a run is
+ * paused for a person, since that time is waiting and not idling, and to let the queue go on without a run that was
+ * interrupted and still never ended (`abandon`), so one hung tool cannot hold every later job.
  */
-import { CHAT_FIRST } from "./config.ts";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-export type Lane = "background" | "foreground";
+export type Lane = "background" | "person";
 
 export interface QueueStatus {
-  running: boolean;
-  /** Jobs not yet finished: the one running, any parked, and those waiting. */
+  /** Work holding or waiting for the model, paused background runs included. */
   depth: number;
-}
-
-export interface EnqueueOpts {
-  /** Absent means foreground: a caller that does not say is assumed to have someone waiting. */
-  lane?: Lane;
-  /** The top-level run this job is, so a step boundary inside it can find its own job. */
-  runId?: null | number;
+  /** Background runs that handed the model to a person and are waiting to carry on. */
+  paused: number;
+  running: boolean;
 }
 
 interface Job {
-  /** Set once the queue has let go of it without waiting for it to end (see `abandon`). */
-  abandoned: boolean;
   lane: Lane;
-  /** Wakes a parked job. Null while it is not parked. */
-  resume: (() => void) | null;
-  runId: null | number;
-  /** Lets a waiting job begin. */
   start: () => void;
-  /** Ends the caller's promise early, for a job the queue has given up on. */
-  fail: (err: Error) => void;
 }
 
-const waiting: Job[] = [];
-let active: Job | null = null;
-let parked: Job | null = null;
+/** The work holding the model, as far as `abandon` and `yieldToPerson` need to know it. */
+interface Holding {
+  /** Set once the queue has let go of it, by its own end or by `abandon`, so it is never released twice. */
+  done: boolean;
+  fail: (err: Error) => void;
+  lane: Lane;
+  runId: null | number;
+}
+
+const lanes: Record<Lane, Job[]> = { background: [], person: [] };
+/** Paused background runs, resumed before any background run that has not started. */
+const resumes: Job[] = [];
+let holder: Lane | null = null;
+let current: Holding | null = null;
 let depth = 0;
+const laneOf = new AsyncLocalStorage<Holding>();
+const pauseListeners: ((runId: number, paused: boolean) => void)[] = [];
 
-/** The switch is read through here so a test can turn the behaviour on without a second process. */
-let chatFirst = CHAT_FIRST;
-
-const takeNext = (): Job | null => {
-  if (chatFirst) {
-    const i = waiting.findIndex((j) => j.lane === "foreground");
-    if (i !== -1) return waiting.splice(i, 1)[0];
-    // No one is waiting on a person's behalf, so the job that stepped aside goes on before
-    // anything that has not started: it is mid-run, and its work so far is in the model's cache.
-    if (parked) return parked;
-  }
-  return waiting.shift() ?? null;
+/** Hear when a run hands the model to a person (`paused` true) and when it carries on. Used by src/stall.ts. */
+export const onPauseChange = (fn: (runId: number, paused: boolean) => void): void => {
+  pauseListeners.push(fn);
+};
+const tellPause = (runId: null | number, paused: boolean): void => {
+  if (runId != null) for (const fn of pauseListeners) fn(runId, paused);
 };
 
-const dispatch = (): void => {
-  if (active) return;
-  const next = takeNext();
+/** Give the model to the next piece of work, if it is free: a person first, then a paused run, then new background work. */
+const pump = (): void => {
+  if (holder) return;
+  const next = lanes.person.shift() ?? resumes.shift() ?? lanes.background.shift();
   if (!next) return;
-  active = next;
-  if (next === parked) {
-    parked = null;
-    const resume = next.resume;
-    next.resume = null;
-    resume?.();
-  } else {
-    next.start();
-  }
+  holder = next.lane;
+  next.start();
 };
 
-/** A job has ended, or been given up on: free whatever it held and move on. */
-const release = (job: Job): void => {
-  if (job.abandoned) return;
-  job.abandoned = true; // also the "already released" mark, so a late settle cannot release twice
+const release = (): void => {
+  holder = null;
+  current = null;
+  pump();
+};
+
+/** Let go of a job once, whichever comes first: its own end or `abandon`. */
+const finish = (job: Holding): void => {
+  if (job.done) return;
+  job.done = true;
   depth -= 1;
-  if (parked === job) parked = null;
-  if (active === job) active = null;
-  dispatch();
+  if (current === job) release();
 };
 
-export const enqueue = <T>(fn: () => Promise<T>, opts: EnqueueOpts = {}): Promise<T> =>
+/** `runId` names the run this job is, so the stall watchdog can `abandon` it; omit it for work that is not a run. */
+export const enqueue = <T>(fn: () => Promise<T>, lane: Lane = "person", runId: null | number = null): Promise<T> =>
   new Promise<T>((resolve, reject) => {
-    const job: Job = {
-      abandoned: false,
-      fail: reject,
-      lane: opts.lane ?? "foreground",
-      resume: null,
-      runId: opts.runId ?? null,
-      start: () => {
-        // Released before the caller hears the result, so whoever awaits a job finds the queue
-        // already moved on; and on a throw as well as a return, so one failed job cannot stop it.
-        Promise.resolve()
-          .then(fn)
-          .then(
-            (value) => {
-              release(job);
-              resolve(value);
-            },
-            (err) => {
-              release(job);
-              reject(err);
-            },
-          );
-      },
-    };
     depth += 1;
-    waiting.push(job);
-    dispatch();
+    const job: Holding = { done: false, fail: reject, lane, runId };
+    lanes[lane].push({
+      lane,
+      start: () => {
+        current = job;
+        // Through a resolved promise, so a job that throws before its first await still releases the model.
+        Promise.resolve()
+          .then(() => laneOf.run(job, fn))
+          .then(resolve, reject)
+          .finally(() => finish(job));
+      },
+    });
+    pump();
   });
 
-export const queueStatus = (): QueueStatus => ({ depth, running: active !== null });
-
 /**
- * What a job arriving now in `lane` will wait behind. `ahead` is the number of jobs that run
- * first; `yielding` is true when the only thing in the way is a background job that will step
- * aside at its next step boundary, i.e. the wait is one model call or tool call long and not
- * a whole job. Read BEFORE the job is enqueued.
- */
-export const queueAhead = (lane: Lane): { ahead: number; yielding: boolean } => {
-  if (!chatFirst || lane === "background") return { ahead: depth, yielding: false };
-  const foregroundWaiting = waiting.filter((j) => j.lane === "foreground").length;
-  const blocker = active ? 1 : 0;
-  return { ahead: blocker + foregroundWaiting, yielding: active?.lane === "background" };
-};
-
-/** Whether the job running as `runId` is background work with a person's job waiting behind it. */
-export const shouldPark = (runId: number): boolean =>
-  chatFirst &&
-  active !== null &&
-  active.lane === "background" &&
-  active.runId === runId &&
-  waiting.some((j) => j.lane === "foreground");
-
-/**
- * Step aside: hand the model to the waiting foreground job and resolve once this job has it
- * back. `signal` is the run's stop signal; if it fires while the job is parked the promise
- * resolves early and returns false, and the job is no longer in line: it may only unwind, and
- * the caller must throw. Returns true when the job was resumed and holds the model again.
- */
-export const park = (runId: number, signal?: AbortSignal): Promise<boolean> => {
-  const job = active;
-  if (!job || job.runId !== runId || job.lane !== "background") return Promise.resolve(true);
-  if (signal?.aborted) return Promise.resolve(false);
-  return new Promise<boolean>((resolve) => {
-    const onStop = (): void => {
-      // Stopped while parked. It never gets the model back, so it must not be resumed later;
-      // its slot is released when its own promise settles (see `enqueue`).
-      if (parked === job) parked = null;
-      job.resume = null;
-      resolve(false);
-    };
-    job.resume = () => {
-      signal?.removeEventListener("abort", onStop);
-      resolve(true);
-    };
-    signal?.addEventListener("abort", onStop, { once: true });
-    parked = job;
-    active = null;
-    dispatch();
-  });
-};
-
-/** Whether the job for this run is parked right now. */
-export const isParked = (runId: number): boolean => parked !== null && parked.runId === runId;
-
-/**
- * Give up on a job that will not end (the stall watchdog, src/stall.ts): its caller's promise
- * rejects with `err`, and the queue moves on as if it had finished. Whatever the job was stuck
- * in is left behind; when it does return, its result goes nowhere. Returns false when no job
- * for that run is running or parked.
+ * Stop waiting for a run that holds the model and will not end: its caller hears `err`, and the next job starts. The
+ * run's own code may still be going (a tool that never returns); when it does end, nothing is released twice. Only
+ * the stall watchdog calls this, and only after it has already asked the run to stop. Returns whether it let go.
  */
 export const abandon = (runId: number, err: Error): boolean => {
-  const job = active?.runId === runId ? active : parked?.runId === runId ? parked : null;
-  if (!job) return false;
+  const job = current;
+  if (!job || job.runId !== runId || job.done) return false;
   job.fail(err);
-  release(job);
+  finish(job);
   return true;
 };
 
-export const __test = {
-  /** Turn chat-first on or off for a test, and report what it was. */
-  setChatFirst: (on: boolean): boolean => {
-    const was = chatFirst;
-    chatFirst = on;
-    return was;
-  },
+/** Whether a person is waiting for the model. */
+export const personWaiting = (): boolean => lanes.person.length > 0;
+
+/**
+ * Called between steps. In a background run with a person waiting, hand the model over and resolve once it is this
+ * run's turn again; anywhere else, return at once. Resolves true when it did pause, so the caller can say so.
+ */
+export const yieldToPerson = async (): Promise<boolean> => {
+  const job = laneOf.getStore();
+  // `current === job`: a run the watchdog abandoned no longer holds anything, so it must not hand over someone else's turn.
+  if (job?.lane !== "background" || current !== job || !personWaiting()) return false;
+  tellPause(job.runId, true);
+  await new Promise<void>((resume) => {
+    resumes.push({
+      lane: "background",
+      start: () => {
+        current = job;
+        resume();
+      },
+    });
+    release();
+  });
+  tellPause(job.runId, false);
+  return true;
 };
+
+export const queueStatus = (): QueueStatus => ({ depth, paused: resumes.length, running: holder !== null });

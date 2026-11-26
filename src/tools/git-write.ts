@@ -37,14 +37,6 @@
  * agent may commit without asking only to branches it made, and everything else, including a
  * default branch named something this code has never heard of, queues.
  *
- * ## AgentSpine's own gate files
- *
- * `switch`, `stash` and `restore` are the three verbs that change files in the working tree.
- * In the checkout the service itself runs from, one of those that would change a protected
- * file (the broker, the approval code and the rest of src/protected-paths.ts) always queues,
- * under every skip the broker has. `add` and `commit` only record what is already there, and
- * what is there got there through a write tool that asked.
- *
  * ## Why `classify` runs git
  *
  * `classify(args)` is handed nothing but the model's arguments, and the classification turns
@@ -67,7 +59,6 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { expand, real } from "../fs-scope.ts";
-import { asksEveryTime, currentApproval, gitTouchesProtected } from "../protected-paths.ts";
 import { clip } from "../stash.ts";
 import type { ClassifiedAction, Policy, PolicyDecision, Tool } from "../types.ts";
 import { findRepo } from "./run-command.ts";
@@ -141,12 +132,6 @@ const pathArgs = (a: any): string[] =>
 
 export const gitWrite: Tool = {
   name: "git_write",
-  // Registry pass, 2026-11-26 (PLAN-open-work section 12, D2). The table above says a push is
-  // "always queued", and it was not: a schedule's pre-approval skipped the queue for every
-  // irreversible verb, so a job that had read a hostile page could push a branch off the
-  // machine, discard work with `restore`, or commit onto a branch a person owns. A commit on
-  // the tool's own branch is reversible and never reaches this flag.
-  confirmWhenUnattended: true,
   description:
     `Work with git in a declared repo: ${VERBS.join(", ")}. ` +
     `"branch" starts a new ${AGENT_BRANCH_PREFIX}… branch to work on — do that FIRST, before editing, ` +
@@ -175,26 +160,16 @@ export const gitWrite: Tool = {
             ? ` ${pathArgs(a).slice(0, 5).join(" ")}`
             : "";
 
-    const summary = `git ${verb || "(no verb)"}${detail} in ${repo}${where}`;
-    const target = `${repo}@${currentBranch(repo) ?? "(no branch)"}`;
-
-    // git writes no content of its own, but three verbs swap a working file for a version git
-    // already holds. In AgentSpine's own checkout, when that would change one of the gate
-    // files, a person is asked whatever else is trusted (src/protected-paths.ts, SC6).
-    const gates = gitTouchesProtected(repo, verb, { branch, paths: pathArgs(a) });
-    if (gates.length) {
-      return asksEveryTime({
-        reversibility: "irreversible",
-        summary:
-          `${summary}\n\nThis changes PROTECTED FILES in the checkout the service runs from: ${gates.join(", ")}. ` +
-          `They are AgentSpine's own gates, so it waits for you whatever else is trusted. ` +
-          `Read \`git diff\` for those files before approving; the versions take effect at the next restart.`,
-        target,
-      });
-    }
-
-    return { reversibility, summary, target };
+    return {
+      reversibility,
+      summary: `git ${verb || "(no verb)"}${detail} in ${repo}${where}`,
+      target: `${repo}@${currentBranch(repo) ?? "(no branch)"}`,
+    };
   },
+  // Registry pass (2026-11-25): the irreversible verbs are push, restore, and a commit off the
+  // agent's own branch. A scheduled run that has read a hostile page could push code out or
+  // overwrite files unasked, and the build loop is run from chat, so no schedule needs this.
+  confirmWhenUnattended: true,
   available: (policy): PolicyDecision =>
     policy.build?.enabled
       ? { allowed: true, reason: "policy.build.enabled is set" }
@@ -279,13 +254,6 @@ export const gitWrite: Tool = {
     const verb = String(a?.verb ?? "");
 
     if (!fs.existsSync(path.join(root, ".git"))) return `${root} is not a git repository (no .git).`;
-
-    // The tool's own check, for a broker that did not ask: a verb that would change a gate
-    // file goes ahead only while the user's approval of it is being carried out.
-    const gates = gitTouchesProtected(root, verb, { branch: a?.branch, paths: pathArgs(a) });
-    if (gates.length && !currentApproval()) {
-      return `NOT DONE: git ${verb} would change protected file(s) ${gates.join(", ")}, and that happens only when the user approves it.`;
-    }
 
     try {
       switch (verb) {

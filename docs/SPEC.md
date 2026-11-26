@@ -486,6 +486,33 @@ is to keep it.
 > publish it) and no delete, comment or message call. A publish with an unknown outcome is reconciled before
 > anything is sent again. Built and tested against a mocked API; not yet run against Meta.
 
+> ### Amendment — 2026-11-25: Gmail drafts and timed events (PLAN-open-work section 10, CP2)
+>
+> Decided by the user on 2026-11-25. It widens what the separate write token is used for by two calls, and repeals
+> nothing above: there is still no send, reply, forward, permanent delete or calendar delete anywhere.
+>
+> - **No new scope.** `gmail.modify` covers saving a draft and `calendar.events` covers a timed event, so the write
+>   token is unchanged and nothing is re-authorised. The read token is unchanged.
+> - `src/google/write.ts` gains `createDraft` (POST `users/me/drafts`, threaded onto the message it answers by its
+>   Message-ID when `replyTo` names it; header values are stripped of line breaks) and `createTimedEvent` (POST to a
+>   calendar's `events?sendUpdates=none`, with no attendees field). It has no `drafts/send` and no attendees or RSVP,
+>   because each of those makes Google email someone. The architecture test pins all three.
+> - The only new user of the module is the `draft` tool. An approved email draft goes to Gmail Drafts when
+>   `policy.drafts.gmail` is exactly true; an event draft with an exact start (`2026-12-02T15:00`) goes onto the
+>   calendar named by `policy.drafts.calendar`, which must be one of `policy.google.write.calendars` (the same list
+>   as bills) and is never created. Both need `policy.google.write.enabled` and the write token. Otherwise, or on any
+>   refusal from Google, it stays a local file and says why.
+> - **Work text never goes to Google.** A draft stays a file when the run is in a project, when any run in its
+>   conversation started with private recalled memories (`runs.work_private`), or when any of them ran a tool that
+>   returns private material other than Gmail's and Calendar's own (meetings, knowledge, project sources, files, local
+>   MCP servers). When the context cannot be read, it stays a file. The same check runs on a later approval, from
+>   the run that queued the card.
+> - **Review.** A draft is still irreversible. In a scheduled run, a draft that could reach Google asks first
+>   (`confirmWhenUnattended`); a note, or any draft with the switches off, still saves its file unasked. In a live
+>   chat it shows its card unless the user lists `draft` in `policy.trust.chatAutoTools`, which is how they chose to
+>   have drafts go straight to Gmail (and events straight onto the calendar) from a chat.
+> - **Still not done, and waiting on N2's live baseline:** sending, and answering invitations.
+
 ## 6. Cross-cutting — earn trust as it acts more  ✅ **BUILT**
 
 > **Status: done — all four bullets.**

@@ -8,7 +8,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-kn-answer-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-kn-answer-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 
 const k = await import("../src/knowledge/store.ts");

@@ -1,5 +1,5 @@
 /**
- * Shared by the loop-switch suites (local-deep, tool-docs, loop-budget).
+ * Shared by the loop-switch suites (local-deep).
  *
  * Each switch is read from the environment once, when config.ts loads, so one process can only
  * be in one setting. A suite therefore runs its "on" half in the process `npm test` starts and
@@ -29,8 +29,7 @@ export const isolate = (name, env = {}) => {
     SPINE_DB_PATH: path.join(root, "t.db"),
     // Set, not left to .env: a machine that has turned a switch on must not change a suite.
     LOCAL_DEEP_THINKING: "false",
-    LOOP_BUDGET: "steps",
-    TOOL_DOCS_ON_DEMAND: "false",
+    TOOL_DOCS_MODE: "all",
     ...env,
   });
   return root;

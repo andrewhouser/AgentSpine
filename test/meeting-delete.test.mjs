@@ -6,7 +6,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-mdelete-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-mdelete-${process.pid}-${Date.now()}.db`);
 const store = await import("../src/meetings/store.ts");
 const session = await import("../src/meetings/session.ts");
 const memory = await import("../src/memory/store.ts");

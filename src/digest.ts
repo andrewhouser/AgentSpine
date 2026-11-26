@@ -15,11 +15,10 @@ import * as store from "./memory/store.ts";
 import { deniedProposals } from "./learn/denials.ts";
 import { promotionProposals, proposalDiff } from "./learn/promote.ts";
 import { notify } from "./notify.ts";
-import { tallyOutbound } from "./outbound.ts";
 import { tallyBySource } from "./outbox.ts";
 import { headsupSection } from "./headsup/telemetry.ts";
 import { anyCapSet, CAPS, cloudCapLine } from "./cloud-cap.ts";
-import { CLOUD_ENABLED, OUTBOUND_ENFORCE, OUTBOX_ENFORCE } from "./config.ts";
+import { CLOUD_ENABLED, OUTBOX_ENFORCE } from "./config.ts";
 
 const sinceIso = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 const daysAgoIso = (days: number): string => sinceIso(days * 24);
@@ -278,19 +277,6 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
         r.ignored ? `${r.ignored} ignored after a day` : "",
       ].filter(Boolean);
       out.push(`  ${r.source.padEnd(13)} ${String(r.sent).padStart(3)} sent${[...extra, ...seen].length ? ` — ${[...extra, ...seen].join(", ")}` : ""}`);
-    }
-  }
-
-  // --- text that matched the outgoing check (PLAN-open-work section 12, D3) ---
-  // Counts only: the tool, the kind of match and how many. The text itself is never stored.
-  // In log-only mode these are what enforcement WOULD have refused, which is the list to read
-  // for false positives (an order number that passes the card check) before turning it on.
-  const leaving = tallyOutbound(hours / 24);
-  if (leaving.length) {
-    const total = leaving.reduce((n, r) => n + r.count, 0);
-    out.push(`\nOutgoing text that matched a check (${plural(total, "match", "matches")}${OUTBOUND_ENFORCE ? "" : ", log-only: nothing was stopped"}):`);
-    for (const r of leaving) {
-      out.push(`  ${r.tool.padEnd(22)} ${r.kind.padEnd(12)} ${String(r.count).padStart(3)}${r.refused ? ` — ${r.refused} refused` : ""}`);
     }
   }
 

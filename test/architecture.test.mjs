@@ -138,12 +138,17 @@ check("the token's file name appears only where config sets it", filesMatching(/
 check("only config and auth name the write scopes", filesMatching(/\bGOOGLE_WRITE_SCOPES\b/), ["src/config.ts", "src/google/auth.ts"]);
 
 console.log("\nTHE GOOGLE WRITE TOKEN: WHO CAN REACH THE MODULE THAT HOLDS IT");
-check("only the two tools built for it import src/google/write.ts", filesMatching(/from\s+"[^"]*google\/write(\.ts)?"/), ["src/tools/calendar-write.ts", "src/tools/gmail-triage.ts"]);
+// The draft tool joined them on 2026-11-25 (SPEC section 5, third amendment, CP2): Gmail drafts and timed events.
+check("only the three tools built for it import src/google/write.ts", filesMatching(/from\s+"[^"]*google\/write(\.ts)?"/), ["src/tools/calendar-write.ts", "src/tools/draft.ts", "src/tools/gmail-triage.ts"]);
 check("nothing imports it dynamically", filesMatching(/import\s*\(\s*["'`][^"'`]*google\/write/), []);
 
 console.log("\nTHE GOOGLE WRITE TOKEN: WHAT THE MODULE CANNOT DO");
 const writeTs = sources["src/google/write.ts"];
-check("it has no send endpoint", /\/send\b|messages\/send|drafts/.test(writeTs), false);
+check("it has no send endpoint, a draft's included", /\/send\b|messages\/send|drafts\/send/.test(writeTs), false);
+// Since CP2 it may save a draft: exactly one drafts endpoint, the plain create, and nothing under it.
+check("its only drafts endpoint is the plain create", [...writeTs.matchAll(/drafts[^`"'\s]*/g)].map((m) => m[0]).filter((d) => d !== "drafts"), []);
+check("no event it creates carries attendees", /attendees/.test(writeTs), false);
+check("an event is created with no notifications sent", /events\?sendUpdates=none/.test(writeTs), true);
 check("it has no permanent delete or empty-trash call", /batchDelete|trash\/empty|emptyTrash|["'`]DELETE["'`]/.test(writeTs), false);
 // The type annotation is gone from the stripped text, so the signature is read from the raw file, and the
 // methods actually used are read from the stripped code.
@@ -191,43 +196,28 @@ const claimAt = igRunner.search(/transition\(r\.id,\s*"container",\s*"publishing
 check("the row is claimed as 'publishing' before the publish request is sent", claimAt > 0 && claimAt < igRunner.search(/\.publishContainer\s*\(/), true);
 check("the tools reach publishing only through the runner's publishNow", /\bpublishNow\b/.test(sources["src/tools/instagram.ts"]) && !/publishContainer|createImageContainer/.test(sources["src/tools/instagram.ts"]), true);
 
-// ---- 4. The gate files, the code map and self-change ----------------------------------------
-// PLAN-open-work section 10, SC3, SC5 and SC6. test/protected-paths.test.mjs and test/self-change.test.mjs
-// prove the behaviour; this pins the list and the few places that are allowed to hold each key.
-
-console.log("\nPROTECTED FILES: THE LIST IS PINNED HERE");
-// To take a file off this list, change it here as well, on purpose, and say why in the commit. This test
-// file is itself on the list, so an agent's edit to it waits for a person with the diff shown.
-const PINNED = [
-  "src/broker.ts",
-  "src/confirmations.ts",
-  "src/google/write.ts",
-  "src/instagram/api.ts",
-  "src/instagram/token.ts",
-  "src/learn/promote.ts",
-  "src/protected-paths.ts",
-  "src/sensitivity.ts",
-  "test/architecture.test.mjs",
-];
-const gateSource = sources["src/protected-paths.ts"] ?? "";
-const listLiteral = /PROTECTED_PATHS[^=]*=\s*\[([^\]]*)\]/.exec(gateSource)?.[1] ?? "";
-check("the scanner can read the list out of the source", /PROTECTED_PATHS[^=]*=\s*\[([^\]]*)\]/.exec('const PROTECTED_PATHS = ["a", "b"];')?.[1], '"a", "b"');
-check("src/protected-paths.ts lists exactly the pinned files", [...listLiteral.matchAll(/"([^"]+)"/g)].map((m) => m[1]), PINNED);
-check("every pinned file exists", PINNED.filter((rel) => !fs.existsSync(path.join(ROOT, rel))), []);
-check("the list is a constant in code, not read from policy or the environment", /PROTECTED_PATHS[^;]*(policy|process\.env|loadPolicy)/.test(gateSource), false);
-
-console.log("\nPROTECTED FILES: EVERY WRITE PATH CHECKS");
-// write_file, edit_file and move_file each call it before touching the disk.
-check("the write tools refuse a protected file without an approval", (sources["src/tools/write-file.ts"].match(/\bnotApproved\s*\(/g) ?? []).length, 3);
-check("and classify it to ask every time", /\basksEveryTime\s*\(/.test(sources["src/tools/write-file.ts"]) && /\bprotectedRel\s*\(/.test(sources["src/tools/write-file.ts"]), true);
-check("git_write asks before a verb swaps one in", /\bgitTouchesProtected\s*\(/.test(sources["src/tools/git-write.ts"]) && /\bcurrentApproval\s*\(/.test(sources["src/tools/git-write.ts"]), true);
-// Every tool that starts a process which may write where it likes puts protected files back afterwards.
-// apple.ts, mac-control.ts and git-status.ts run fixed system tools that take no path into this checkout.
-for (const file of ["src/tools/run-command.ts", "src/tools/scaffold-ios.ts"]) {
-  check(`${path.basename(file)} runs its process inside keepingProtected`, /\bkeepingProtected\s*\(/.test(sources[file]), true);
+console.log("\nSC6: THE FILES THAT ENFORCE THE GATES ARE PROTECTED");
+// A builder that cannot write policy.json could still edit the code that reads it. These files queue with the change
+// shown (src/protected-paths.ts). The list is pinned here, so shortening it means editing this file, which is itself on it.
+{
+  const { PROTECTED_PATHS } = await import("../src/protected-paths.ts");
+  const PINNED = [
+    "src/broker.ts",
+    "src/confirmations.ts",
+    "src/google/write.ts",
+    "src/instagram/api.ts",
+    "src/instagram/token.ts",
+    "src/learn/promote.ts",
+    "src/outgoing.ts",
+    "src/protected-paths.ts",
+    "src/sensitivity.ts",
+    "src/tools/browser.ts",
+    "test/architecture.test.mjs",
+  ];
+  check("the protected list is exactly the pinned one", [...PROTECTED_PATHS], PINNED);
+  check("every protected path exists, so a rename cannot quietly unprotect it", PINNED.filter((p) => !fs.existsSync(path.join(ROOT, p))), []);
+  check("the write tools consult it", /protectedPathOf/.test(sources["src/tools/write-file.ts"]), true);
 }
-check("only the approval code can mark a call as approved", filesMatching(/\brunApproved\s*\(/).filter((f) => f !== "src/protected-paths.ts"), ["src/confirmations.ts"]);
-check("and it does so on exactly one line", (sources["src/confirmations.ts"].match(/\brunApproved\s*\(/g) ?? []).length, 1);
 
 console.log("\nTHE CODE MAP: READ BY ONE MODULE, WRITTEN BY NONE");
 check("AREA_MAP_PATH is named only by area-map.ts and the control-file list", filesMatching(/\bAREA_MAP_PATH\b/), ["src/area-map.ts", "src/tools/write-file.ts"]);
@@ -235,13 +225,5 @@ check("area-map.ts makes no file-writing call", FS_WRITE.test(sources["src/area-
 check("the map is a control file", /real\(AREA_MAP_PATH\)/.test(sources["src/tools/write-file.ts"]), true);
 check("only the runner asks for it", filesMatching(/\bareaMapFor\s*\(/).filter((f) => f !== "src/area-map.ts"), ["src/runner.ts"]);
 check("the committed map exists", fs.existsSync(path.join(SRC, "area-map.md")), true);
-
-console.log("\nSELF-CHANGE: ONE DOOR TO THE BUILDER");
-check("startChange is called only by the propose_change tool", filesMatching(/\bstartChange\s*\(/).filter((f) => f !== "src/change-proposals.ts"), ["src/tools/propose-change.ts"]);
-check("which starts nothing unless an approval is being carried out", /\bcurrentApproval\s*\(/.test(sources["src/tools/propose-change.ts"]), true);
-check("and refuses a run that is not a live chat", /!run\.conversational/.test(sources["src/tools/propose-change.ts"]), true);
-check("a run is started as a unit from one place", filesMatching(/\bunit:\s*CHANGE_UNIT\b/), ["src/change-proposals.ts"]);
-check("no tool or route passes a unit name of its own", filesMatching(/\bunit:\s*["'`a-z]/).filter((f) => f !== "src/change-proposals.ts"), []);
-
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

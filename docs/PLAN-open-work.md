@@ -106,8 +106,12 @@ Nothing below has run against real systems yet. F3 and F4 from section 0 are fix
    nine setup steps in that doc are all yours: confirm the account type, create the Meta app, host the JPEGs
    (the DJLive R2 bucket), add the `instagram` section to `policy.json` without `publish`, store the token
    with `npm run instagram -- token`, seed the queue from the djlive kit, read `npm run instagram -- dry-run`,
-   publish one approved test post, then approve a week at a time. Still to build if wanted: a queue screen in
-   the dashboard and apps (approval is the CLI or the confirmation queue today).
+   publish one approved test post, then approve a week at a time. Queue screen (built 2026-11-25, web): Instagram in the
+   sidebar menu (under More) shows each row exactly as the approval card prints it, and approves through
+   `POST /api/instagram/queue/:id/approve`, which names the content hash that was on screen and is refused (409) if
+   the row changed since (`approveIfUnchanged`). It also takes an approval back. It says whether the queue is off,
+   a dry run or live. Suite: the dashboard section of `test/instagram-queue.test.mjs`; checked in a browser. Not
+   done: the same screen on iPhone and Mac.
 
 Never exercised against real services: Google Calendar reads, web search and retailer pages for Heads-up,
 AeroDataBox, TomTom, APNs delivery of the Heads-up categories, Gmail and Calendar writes, the Instagram API.
@@ -215,8 +219,17 @@ Section 0 is the priority in this area. What is left of the Nod items:
   attempted. Run it once per model change and before any ROLLOUT step that switches on a learner, and record the
   baseline in SPEC or MODELS. Fixtures marked `liveOnly` (a plausible false fact, a recipe from a hostile file)
   can only be judged here. A broker bypass must be zero by construction; any other threshold is set after the
-  baseline. Not covered: Heads-up. Its scanner parses event titles in plain code and I did not trace whether an
-  event title reaches a search query or a card, so that path is unchecked. The write token raised the value of
+  baseline. Heads-up was traced 2026-11-25: an event title (written by whoever sent the invite) becomes a heads-up's
+  `subject`. It never reaches a web search query: gift and dinner queries are built from a fixed shape, and only the
+  local model's re-validated summary fills it, with every protected name checked out (`assertAnonymous`). It reaches
+  push text (your own phone) and travel watches (the event's location goes to the routing provider, by design).
+  Two holes found and fixed: `headsup_status`, which the scheduled morning brief calls, returned titles bare and
+  without `privateOutput`, so an invite's title reached the model as plain text and could reach the cloud tier (now
+  tagged untrusted and declared private); and gift research gave the whole title to the local model as "who" when
+  it was not "X's birthday", so a crafted title could steer which remembered facts became search words (now a title
+  that is not name-shaped gives no "who", no recall and no model call, and the name it does give is labelled data).
+  Suites: `test/headsup-brief.test.mjs`, `test/headsup-research.test.mjs`. The fixtures above do not yet include a
+  calendar-title payload for the live run. The write token raised the value of
   this work, since a hostile email is now worth more to an attacker.
 - **N1 memory provenance.** Built 2026-11-21: a friction note now records the run that first met the error
   (`recordFriction` takes the run id from the broker). Nothing uses `origin` to change recall or pruning, by design.
@@ -357,8 +370,16 @@ plus More); whether to cut a Swift package once there is a compiler to check the
 ## 6. Your Claude setup and small leftovers (`docs/archive/PLAN-video-ideas.md`)
 
 All You, on your own machines.
-- **A8 Spoken "I need you" on the dashboard (optional).** Kokoro TTS exists. A Settings, Voice option: when a
-  long run finishes or an approval is waiting, the open tab speaks one line. Per browser, off by default.
+- **A8 Spoken "I need you" on the dashboard (built 2026-11-25, web; not heard with the real voice yet).**
+  Settings, Voice, "Say when I am needed": an open tab speaks one fixed line through `/api/voice/speak` when an
+  approval starts waiting, or when a run someone waits on (chat, approval, build, CLI) finishes after at least 60
+  seconds while the tab is hidden or on another thread. `GET /api/status` gains `lastRun` (id, kind, seconds, thread;
+  never the task or answer). Nothing present at page load is announced, lines are at least 20 seconds apart and
+  what arrives in between is said together, and nothing is held while it is off. Per browser, off by default
+  (`web/src/lib/spokenAlerts.ts`, `useSpokenAlerts`). Suite: `test/spoken-alerts.test.mjs`; checked end to end in a
+  browser with the speak request intercepted. Quiet hours (2026-11-25): `GET /api/status` reports `quiet` from the
+  shared preference (`isQuietNow`), and the tab says nothing then and saves nothing for later. Not done: hearing it
+  on the Mini with Kokoro.
 - **B2 Project skills** for repeated chores (`add-tool`, `ship`, `ios-check`), each written from a real session
   after you have done the job by hand twice.
 - **B4 Stale auto-mode environment, on each Mac.** `~/.claude/settings.json` `autoMode.environment` may still
@@ -437,8 +458,12 @@ baseline, and the meeting recall number is still unmeasured.
   care about (some with changed information, some whose right answer is "not enough evidence"), then run it on
   the Mini before changing retrieval again; `VECTOR_MIN_SIMILARITY` is set from the result: run it with `KNOWLEDGE_VECTOR_MIN=0.15`, `0.25` and `0.35` in front of the command and keep the value with the best recall and no new leaks. `eval/questions.example.json` is an invented template to copy outside the repo. Suite:
   `test/knowledge-eval.test.mjs`, which shows each path winning its own kind of question and the fused mode
-  winning both. Not built: citation correctness, stale-answer rate and extraction acceptance rate (they need
-  K4's records and K6's answers). This also still measures meeting recall (section 4a) once questions exist.
+  winning both. Answer metrics (built 2026-11-25, `src/eval/answers.ts`, printed by the same command): per question,
+  optional `expectClaims`, `staleClaims`, `expectStatus` and `asOf` give citation recall and precision, the
+  stale-answer rate (a superseded claim cited as current) and status accuracy, all through `gatherEvidence`, no
+  model; and the extraction acceptance rate (of model- and meeting-proposed claims a person decided on, the share
+  accepted, by method) needs no questions. Suite: `test/knowledge-eval-answers.test.mjs`; the example file shows
+  the fields. This also still measures meeting recall (section 4a) once questions exist.
 - **K2. Hybrid global retrieval (built 2026-11-21, structured lookup waits for K4).** `src/projects/search.ts`:
   an FTS5 index over `chunks` (kept in step by triggers, built into `node:sqlite`, no dependency) and the existing
   vector search, fused by reciprocal-rank fusion with the path that found each hit recorded, a per-source quota
@@ -446,9 +471,27 @@ baseline, and the meeting recall number is still unmeasured.
   kind and a date range. Run-level project recall (`recallChunks`, `knowledgeFor`) uses it, so an exact name or
   ticket number is now found without an embedding; the live meeting cards keep their cosine path because they
   threshold on it. `GET /api/knowledge/search` exposes it. Suite: `test/knowledge-search.test.mjs`. The vector
-  floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. Not built: the structured path (people,
-  decisions, owners, status; needs K4), "as of" and reviewed-versus-extracted filters (need K4's review state),
-  and a person and team filter. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
+  floor (`VECTOR_MIN_SIMILARITY`, 0.25) is a guess to set from K1. **Filters and the structured path (built
+  2026-11-25, backend and agent tools; no screen yet).** `searchFiltered` (`src/knowledge/retrieval.ts`) adds a person
+  or team filter (a passage must name the person, by recorded name or alias as a whole word, or for a team the team
+  or any recorded member; a bare first name is not a match until it is taught as an alias) and an evidence filter
+  (`reviewed`, `extracted`, `none`, by what backs the source). Both narrow before the per-source quota, so the list
+  still fills, and neither re-orders what it keeps. "As of" for passages is `until` (`asOf` on the API); for claims it
+  was already in `listClaims`. The structured path is in `knowledge_claims` (`gatherEvidence`): with a person, team
+  or kind, the store's owners, speakers and kinds decide which claims qualify and the question's words only narrow
+  them, after dropping names and words that restate the filter, so "what has Sam raised" answers from Sam's claims.
+  An unknown person or team is an error, never an answer for everyone. `knowledge_search` and `knowledge_claims` take
+  `person`, `team`, `evidence` and `kind`; `GET /api/knowledge/search` takes `person`, `team`, `evidence` and `asOf`
+  and keeps its array shape. Fixed with it: `knowledge_claims` did not keep a project run to its own project, as
+  `knowledge_search` did, so a project chat could read another project's claims; it is pinned now. Suite:
+  `test/knowledge-filters.test.mjs`. The web Drop zone's "Search everything" has
+  them (2026-11-25): project, a person or team picker (people and teams from the knowledge store), what backs the
+  source, and From and As of dates; a change re-runs the search on screen, and each hit now shows its project, date
+  and what backs it. Checked in a real browser against a seeded database, desktop and phone width. iPhone and Mac have
+  the same filters in a collapsible "Filters" group in the shared `InboxView.swift` (2026-11-25; written in a
+  sandbox with no Swift toolchain, so **not compiled or run: build it in Xcode first**), and their hits show the same
+  project, date and evidence line. Not built: any measurement of whether the filters help, which is K1's questions
+  again. Search everything is on the Drop zone screen on web, iPhone and Mac (native added
   2026-11-22, built but not seen running). The agent tool is built (2026-11-22): `knowledge_search`
   declares `privateOutput`, and a run inside a project can search only that project.
   Done when K1 shows an improvement: that measurement is still to be taken.
@@ -900,35 +943,72 @@ is built. Every measurement named below needs the model host, so every item is *
   larger token cap. Code decides when; no model switch, so no reload cost. Measure the added seconds per step
   and whether the builder and multi-part chat tasks finish more often.
   **Built 2026-11-26, off until `LOCAL_DEEP_THINKING=true`.** A `deep` run served locally thinks on its first step, on the re-ask after an unreadable reply and on the step after a tool error, with `LOCAL_DEEP_MAX_TOKENS` (8192); a thinking call that fails or answers nothing is retried once without it, and a thought is stripped before parsing and streaming. It also applies when `deep` lands locally because no cloud tier is configured. Suite: `test/local-deep.test.mjs`. You: whether `mlx_lm.server` honours `enable_thinking`, the seconds a thinking step adds, and the finish rate.
-- **LP3 Budgets by tokens, with compaction at a threshold.** `MAX_STEPS` is 10, a subagent gets 6, and chat
-  history is 8 turns in 6,000 characters. Replace the step cap with a token and wall-clock budget, and when a
-  run's context passes a threshold, replace old tool results with short stubs (the full text stays reachable
-  through `read_more`). Compact rarely, since each compaction rewrites the prefix and pays prefill again.
-  Section 13 H5 has Hermes Agent's threshold and order as a starting point.
-  **Built 2026-11-26, off until `LOOP_BUDGET=tokens`.** `src/loop-budget.ts`: a run's step cap becomes generated tokens (`RUN_TOKENS_PER_STEP` 1200 a step) plus working time (`RUN_MS_PER_STEP` 90 s a step, parked time from LP5 subtracted), with a hard ceiling of three times the old cap. Past half of `LOCAL_CONTEXT_TOKENS` (65,536, a guess) old executed tool results become stubs that `read_more` restores, at most once every 4 steps and only when it frees 1,500 tokens; nothing is summarised by a model. Suite: `test/loop-budget.test.mjs`. Every number is a guess to set on the model host; the budget counts generated tokens only.
+- **LP3 Budgets by tokens, with compaction at a threshold (built 2026-11-25; numbers not yet set on the model
+  host).** The step count is now a ceiling (`MAX_STEPS` 10, a subagent 6, a unit's own `maxSteps`, all unchanged),
+  and each loop also has a token budget and a wall-clock budget scaled from it: `RUN_TOKENS_PER_STEP` (22,000) and
+  `RUN_MS_PER_STEP` (72 s) in `src/config.ts`, both settable in `.env`. Tokens are the host's own counts when it
+  reported every call, else a characters-over-four estimate. Time paused for a person (LP5) does not count. Over
+  budget, the run is closed out with what it gathered, as at the step cap; at 80% of either, the model is told once
+  to finish (appended to the message it is about to read, so the prefix holds). With coarse steps the warning can
+  be skipped, when one step jumps from under 80% to over the budget. Compaction (`src/compact.ts`): once the loop's
+  own messages pass `COMPACT_AT_TOKENS` (30,000 estimated), older tool results become stubs down to 60% of that,
+  keeping the newest two whole and never touching the prefix before the run's goal; each full result is held under
+  a ref `read_more` opens, and a run without `read_more` is never compacted. Events: `budget`, `compacted`. These
+  and LP5's pause are also kept with the run (`run_notes`, pruned with it, `GET /api/runs/:id` `notes`), because the
+  live stream keeps a finished run's events for five minutes and a background job is looked at later. Web
+  (2026-11-25): the Activity page's run view has an "Along the way" section in words (`web/src/lib/runNotes.ts`,
+  suite `test/run-notes.test.mjs`), checked in a browser at desktop and phone width; a live chat turn shows the same
+  lines as they happen, which was typechecked but not seen running. iPhone and Mac do not show them yet. Suite:
+  `test/run-budget.test.mjs`, whose compaction rows fail with compaction switched off. Not done: setting the three
+  numbers from a week of real runs, and raising `MAX_STEPS` so the token budget, not the count, is what binds;
+  chat history (8 turns in 6,000 characters) is unchanged.
 - **LP4 More than one tool call per step (measure first).** The protocol is one JSON action per turn and every
   step pays prefill. Bench native tool calling on the standard model through `mlx_lm.server` against the current
   protocol: parse failures, steps per task, seconds per task. Switch only if it wins. Not checked: how well
   `mlx_lm.server` handles native tool calls.
-- **LP5 Chat goes ahead of scheduled work.** Runs are serialized (`queue_wait` in `src/runner.ts`), so a chat
-  turn waits behind a scheduled job. Let a chat turn take the model at the next step boundary of a background
-  run, the same boundary the stop button uses, and resume the job afterwards.
-  **Built 2026-11-26, off until `CHAT_FIRST=true`.** `src/queue.ts` has two lanes; a chat turn, an approved action or `do` goes ahead of unstarted scheduled jobs, and a running one parks at its next step boundary (`yieldToChat` in `src/turn-gate.ts`) and resumes after. Stop while parked ends the run as stopped. Suite: `test/chat-first.test.mjs`. You: time the resumed job's prefill on the model host before switching it on, since the chat turn replaces the warm prefix.
-- **LP6 Load tool descriptions on demand.** Every visible tool's description and schema is in the prompt
-  prefix (`toolDocs` in `src/agent.ts`). Keep a small core set there and let the model ask for the rest by
-  name. This is a precondition for CP1, which would otherwise grow the prefix with every server.
-  **Built 2026-11-26, off until `TOOL_DOCS_ON_DEMAND=true`.** A run with more than 16 visible tools gets 13 core tools in full (`src/tool-docs.ts`) and the rest as one line each; `tool_docs` loads a full entry and is answered inside the loop. Every call still crosses the broker, loaded or not. The test prompt went from 44,000 to about 21,600 characters. Suite: `test/tool-docs.test.mjs`. You: whether the standard model actually asks, and what it costs in steps and parse failures.
+- **LP5 Chat goes ahead of scheduled work (built 2026-11-25; not yet seen on the model host).** `src/queue.ts` has two
+  lanes: `person` (a chat turn, an approval being carried out, a command-line run) and `background` (a schedule, a
+  watcher, the heartbeat). A person's work starts before any background work still waiting, and a background run
+  already going hands the model over at its next step boundary, where the loop checks for a stop (`yieldToPerson`
+  in `src/agent.ts`), then resumes ahead of other background work. It is paused, not stopped; a stop asked for while
+  paused lands when it resumes. A model call in flight is not interrupted, so a chat can still wait for one step's
+  call, which keeps each run's prompt prefix whole. The lane rides on AsyncLocalStorage, so a subagent pauses with
+  its parent. A paused run publishes `paused_for_person` with how long it waited, and keeps it as a run note (see LP3).
+  Suite: `test/queue-lanes.test.mjs`, whose real-run row fails with the yield removed. Not checked: how long a chat
+  waits in practice on the Mini (one step of a job, which is one model call; measure it with a watcher running).
+- **LP6 Load tool descriptions on demand (built 2026-11-25, off by default until measured).** Measured: tool
+  descriptions were about 40,000 characters (about 10,000 tokens) of a chat run's 11,500-token system prompt, 85
+  tools. `src/tool-docs.ts`: with `TOOL_DOCS_MODE=core`, sixteen core tools (memory, web, `read_more`, knowledge,
+  tasks, Gmail and Calendar reads, file reads, weather, `tool_help`) keep their full description and the rest are one
+  line each (name and first sentence), about 11,500 characters in all. The new read-only `tool_help` returns full
+  instructions for tools this run can use, appended to the history so the cached prefix holds. A run with 20 tools
+  or fewer (a unit) still sees all of them in full. A failed call to a tool whose instructions were never read is
+  told to read them. In the default mode nothing changes and `tool_help` is not offered. Suite:
+  `test/tool-docs.test.mjs`. Not done: the bench on the model host (does the model read before it guesses, and what
+  does the first request of a run save), then switching the default.
 
 ### CP. Capabilities (each waits on a decision below)
 
-- **CP1 MCP over stdio, and a privacy flag per server.** The client is HTTP-only (`src/mcp/client.ts`), and
-  MCP tools do not declare `privateOutput`. Most MCP servers people run with Claude Desktop are local stdio
-  processes, which are more private than a remote one. Add stdio transport, a per-server `privateOutput` in
-  `policy.mcp.servers`, and keep the existing gating (deny by default, `readOnlyHint` or the queue).
-- **CP2 Google: real drafts, timed events, user-directed send.** `policy.userDirected` already sends mail
-  through Apple Mail when your own message names the recipient (`mac_control.send_mail`). Proposed: Gmail
-  drafts created in Gmail, timed events and RSVPs, and send under the same named-recipient rule. Unattended
-  auto-send stays in "Not doing". Run N2's live half first (section 4).
+- **CP1 MCP over stdio, and a privacy flag per server (built 2026-11-25; no real server run yet).**
+  `src/mcp/stdio.ts`: a server entry gives `url` (remote) or `command` (a local program, an argument list spawned
+  without a shell). The child gets a minimal environment (PATH, HOME, locale, plus the entry's `env` values and the
+  `envFrom` names), not this process's keys and tokens. It starts on first use, is restarted once if it died, and is
+  stopped on re-discovery and at exit; a request from the server (sampling, roots) is refused and a ping answered.
+  `privateOutput` per server: on by default for a local server, off for a remote one, so a local server's tools pin
+  the run local like a file read. Gating is unchanged (deny by default, the `tools` list, `readOnlyHint` or the
+  queue, `confirmWhenUnattended`, the outgoing-text check on arguments). Suite: `test/mcp-stdio.test.mjs` with a
+  fake server in `test/fixtures/mcp/`. Not done: a real server (the filesystem or git server) on the Mini, and LP6,
+  which keeps every exposed tool's description out of the prompt prefix until asked for; until then set `tools`.
+- **CP2 Google: real drafts, timed events, user-directed send (drafts and timed events built 2026-11-25; send and
+  RSVPs wait for N2).** Recorded as SPEC section 5's third amendment. The `draft` tool, on approval, saves an email
+  draft in Gmail Drafts (`policy.drafts.gmail`), threaded by `replyTo`, or puts an event with an exact start on the
+  calendar named by `policy.drafts.calendar` (one of `google.write.calendars`), with no attendees and no
+  notifications; `src/google/write.ts` gains `createDraft` and `createTimedEvent` and still has no send. Work text
+  stays a file: a project run, a conversation with a private recall (`runs.work_private`, set by the runner) or a
+  private non-Google tool call. The same check runs on approval, from the run that queued the card
+  (`ToolContext.queuedByRunId`). Scheduled runs ask; a chat skips the card only with `draft` in
+  `policy.trust.chatAutoTools`, which you chose. Suite: `test/draft-google.test.mjs` (Google stubbed). Not done:
+  a real draft and event against your account, and send and RSVPs, which wait for N2's live baseline.
 - **CP3 A scratch interpreter.** `run_command` runs only declared commands, so there is nothing like Claude's
   analysis tool for arithmetic over a file. A `sandbox-exec` scratch directory with no network and a time
   limit. This is not the Docker workspace container that "Not doing" rules out, but it is close enough to need
@@ -952,20 +1032,33 @@ edits, and ends on the Builds page. No tool can write `policy.json`, `profile.md
   `CLAUDE.md`. AgentSpine has no equivalent: S6's `AGENTSPINE.md` cannot be used here, because `policy.json`
   makes `~/Developer` writable and the file must sit outside every writable folder. Either narrow
   `fs.writableDirs` (You) or have the server supply a fixed, read-only area map for runs in this repo (Code).
-  **Built 2026-11-26 (the Code route).** `src/area-map.md` is a committed map (areas, code, the doc to read first, the rules that are easy to break) that the runner gives as trusted context only to a run whose folder is inside this checkout, or to the builder SC5 starts. It is a control file no tool may write, never indexed, and put back if a declared command changes it. Suite: `test/self-change.test.mjs`. Not seen on a live model.
+  **Built 2026-11-26 (the Code route).** `src/area-map.md` is a committed map (areas, code, the doc to read first, the rules that are easy to break) that the runner gives as trusted context only to a run whose project folder is inside this checkout. It is a control file no tool may write and is never indexed. When the two branches were merged on 2026-11-26 the local SC5 and SC6 gave way to the ones built 2026-11-25, so the map no longer reaches the builder an approved proposal starts, and a declared command that changes it is not put back. Suite: the code-map section of `test/architecture.test.mjs`. Not seen on a live model.
 - **SC4 A real check command (You, then Code).** The declared commands do not include `npm run check`, and
   nothing builds Swift. Add `check` to this repo's entry in `policy.json` (yours to edit). Until an
   `xcodebuild` command is declared, a self-made UI change covers web only, which breaks the three-clients
   rule, so UI changes stay out of scope for self-change.
-- **SC5 Propose, then patch.** A change starts as a proposal card in the confirmation queue: what, why, the
-  files, the test plan, and the runs that prompted it. Approving starts the builder on an `agentspine/` branch.
-  Merge, push, `update.sh` and the restart stay yours, so the service never restarts onto code you have not read.
-  **Built 2026-11-26.** `propose_change` queues one card from a live chat with what, why, the files, the test plan, the runs and the builder's task word for word; approving starts the `builder` unit on an `agentspine/` branch. Refused: non-chat runs, files under `web/` or `ios/` (SC4), control files, a repeat of a rejected or still-pending proposal, and any proposal unless `policy.build` declares this checkout with `gitWrite`. Accepting a retrospective's code-change card (SL2) now queues such a proposal. `npm run confirm approve` refuses one, so the build runs in the service's queue. Suite: `test/self-change.test.mjs`. Not run with a real builder. Would help: `agents/builder.md` has no `search_files` (your edit), and the cards show a diff in proportional text.
-- **SC6 Guard the gates in code, not only in policy.** A builder that cannot write `policy.json` can still
-  edit `src/broker.ts`, `src/sensitivity.ts`, `src/confirmations.ts`, `src/learn/promote.ts` or
-  `test/architecture.test.mjs`. Add a protected-paths list in code: an edit to one queues with the diff shown,
-  as a build manifest does today, and the architecture test pins the list.
-  **Built 2026-11-26, with the proposed list plus the list file itself (nine files, `src/protected-paths.ts`).** An edit, a move, a change made by a declared command, or a git switch, stash or restore that would change one always queues with its diff. The broker reads a new `alwaysConfirm` on the classification and applies none of its four skips, and the tools also refuse on their own unless an approval is being carried out. A card whose file changed after it was queued writes nothing. Suites: `test/protected-paths.test.mjs`, `test/architecture.test.mjs`. It is a tripwire for the named files: `src/types.ts` and `src/runner.ts` are not on it.
+- **SC5 Propose, then patch (built 2026-11-25; not yet run on the model host).** `propose_change`
+  (`src/tools/propose-change.ts`) queues a card: what, why, the files (repo-relative, at most 20), the test plan
+  (default: `npm run check` passes with a test that fails without the change), and the runs that prompted it. It
+  always shows the card (`alwaysConfirm`). Approving starts the builder unit as its own run of kind `build`, through
+  a new `unit` option on the runner (the unit's instructions lead the trusted context, its tools are the ceiling,
+  its `maxSteps` and tier apply). The repo is an AgentSpine checkout declared in `policy.build.repos` with
+  `gitWrite`, a separate clone before the served one; the card warns when the served checkout is the only choice
+  (SC7). The builder's task says to branch first, follow the test plan, commit and not push; pushes still queue,
+  and gate files still show their own card (SC6). Accepting a `code_change` card in the weekly review (SL2) queues
+  a proposal from that card's title, reason and runs. Suite: `test/propose-change.test.mjs`. Not done: a run of it
+  end to end on the Mini (it needs this repo declared with `gitWrite` and, per SC4, a `check` command), and SC7's
+  separate clone, which is yours to make and declare.
+- **SC6 Guard the gates in code, not only in policy (built 2026-11-25).** A builder that cannot write `policy.json`
+  could still edit the code that reads it. `src/protected-paths.ts` lists eleven files (the five named here, the
+  Google and Instagram write modules, and `src/outgoing.ts`, `src/tools/browser.ts` and the list itself). An edit,
+  whole-file write, append or move touching one is irreversible, so it queues in a chat and from a schedule, and the
+  card carries the change (`diffPreview`, cut at 40 lines with a note to read the rest). A protected path is matched
+  in any checkout whose package.json is named `agentspine`, so a separate builder clone (SC7) is covered, ignoring
+  case (the Mac's disk does) and following symlinks. `test/architecture.test.mjs` pins the list and is on it.
+  Suite: `test/protected-paths.test.mjs`. Decided 2026-11-25: a protected edit always shows its card. Its
+  classification carries `alwaysConfirm`, and the broker then ignores `autoApprove`, `userDirected`,
+  `trust.chatAutoTools`, a schedule's pre-approval and `irreversibleAlwaysConfirm` being off.
 - **SC7 Which checkout it works in (You).** Not checked: whether the builder on the Mini would branch inside
   the checkout the LaunchAgent serves from. If so, give it a separate clone, so a half-made branch is never
   what the next restart loads.
@@ -1036,18 +1129,18 @@ Order: SL1 (nearest to done, and N2 gates the rest); LP1, LP2 and LP5; SC2, SC4,
 three-change measurement; SL2 feeding SC5; LP3, LP4 and LP6; the CP items as each decision is made. Within SL, the
 answer key (SL6) comes first because candidate testing (SL7) depends on it. SL8 can follow in either order.
 
-Open decisions for you:
+Decided 2026-11-25:
 
-- Where this section sits against section 8. Proposed: LP and SL1 alongside section 8, since both make
-  section 8 better; SC after LP2; CP last.
-- Reopen "MCP connectors beyond `docs/MCP.md`" for CP1. Proposed: yes, for local stdio servers only.
-- Amend the Google-writes ground rule for CP2. Proposed: yes to Gmail drafts and timed events now; send only
-  after N2's live half has a baseline.
-- CP3's scratch interpreter. Proposed: yes, no network, You-enabled per project.
-- SC6's protected-paths list. Proposed: the five files named there, plus `src/google/write.ts`,
-  `src/instagram/api.ts` and `src/instagram/token.ts`.
-- Whether source folders may be exempt from the local pin so the builder can use the cloud tier. Proposed: no,
-  until SC1's measurement shows the local builder is not good enough.
+- Placement: section 10 is the main code direction now, because section 8's code is done and waits on K1. Order,
+  by what can be finished and tested off the model host: SC6, then LP5, then LP3; then LP2, LP4 and LP6 (which need
+  the model host to prove), and SC5 once SC6 exists. SL1 stays yours, as before.
+- CP1: yes, local stdio MCP servers only, with a per-server `privateOutput`.
+- CP2: yes to Gmail drafts and timed events; send only after N2's live half has a baseline.
+- CP3: yes, no network, enabled per project by you.
+- SC6's list: the eight proposed files plus `src/outgoing.ts` and `src/tools/browser.ts` (and the list's own file).
+- Source folders stay inside the local pin until SC1's measurement says the local builder is not good enough.
+
+- An edit to a protected file always shows its card, whatever trust or auto-approval is set (built, SC6).
 
 ---
 
@@ -1089,7 +1182,7 @@ SQLite file per user rather than a `user_id` on every table).
   Done 2026-11-26: APNs pushes each device under the bundle id its app reported at registration
   (`devices.bundle_id`, `topicFor` in `src/push/apns.ts`), with `APNS_BUNDLE_ID` as the fallback and still
   required for APNs to be on. Not verified against Apple.
-- Done 2026-11-26: the committed `services/*/__pycache__/*.pyc` files are deleted and ignored.
+- Committed `services/*/__pycache__/*.pyc` files: deleted and gitignored (2026-11-25).
 
 ---
 
@@ -1187,9 +1280,14 @@ first thing the preview will show.
   (unsigned, outside the sandbox), and the web screen was looked at in a browser against a throwaway server
   with tasks, an approval and a log, including Check now. **Not seen:** the iPhone and Mac screens rendered,
   the Mail section with real mail on any client, and a tap on a real push.
-- **Built 2026-11-26 on web, iPhone and Mac: a switch for each source.** Stored in `kv` (`checkin:sources`, `src/checkin/prefs.ts`), set by `POST /api/checkin/sources`. A source that is off is not read. With mail off a check returns `nomail`, reads nothing and logs nothing, and every screen says no notification will be sent. Suites: `test/checkin.test.mjs`, `test/checkin-screen.test.mjs`. Seen on web against a throwaway server; not on iPhone or Mac.
-- `.env.example` has no entry for `CHECKIN_MODE` or `CHECKIN_PUSH_DETAIL`: the sandbox Claude ran in could not
-  read or write that file. Add both, commented out, by hand.
+- **Each source on or off (built 2026-11-25, web).** Stored on the server (`checkin:sources`, all on by default,
+  `sourcePrefs` and `setSourcePrefs` in `src/checkin/store.ts`), returned by `GET /api/checkin` and changed with
+  `POST /api/checkin/sources`. A source that is off is not read at all, by the check-in or its preview, so mail off
+  means Gmail is not asked. The web Check-in screen has a "What a check-in reads" row. Suite: the D1 section of
+  `test/checkin.test.mjs`. iPhone and Mac (2026-11-26): the same switches, built against an earlier copy of this
+  API and moved onto it when the two branches were merged; both apps build, and `test/checkin-screen.test.mjs`
+  decodes the server's reply in Swift. Not seen running on a device.
+- `.env.example` now has `CHECKIN_MODE` and `CHECKIN_PUSH_DETAIL`, commented out (2026-11-25).
 - The interval and the mode are code and env today. Whether they should be settings waits on the log.
 - A model's sense of urgency ("this one is from your landlord and has a deadline") is what this version
   gives up. If the log shows Gmail's sorting is too coarse, the next step is a local model ordering the new
@@ -1198,6 +1296,21 @@ first thing the preview will show.
 Decided with it, as proposed: the Morning brief stays its own schedule, and Heads-up keeps its morning push.
 
 ### D2. A third tier: refused, whoever approves (Code)
+
+**Built 2026-11-25: the refused tier, `neverDomains`, the registry pass, and delete and remove clicks asking from a
+schedule. Nothing left in code; setting `BROWSER_MODE=headless` on the Mini is yours.** Shape: not a third
+`Reversibility` value but an optional `Tool.refuse(args, run, policy)` that returns a reason or null. The broker
+calls it right after the allowlist, before budgets and before every way past the queue, records the result as
+a denial, and queues nothing. A refuser that throws refuses. Members so far: the browser's click or submit that
+reads as transfer, withdraw, wire, or buying or selling shares, stocks, bonds, options or crypto, and any
+navigation to a host in `policy.browser.neverDomains` (also checked by `web_read`, and at run time for a page that
+got to one by a redirect or link). A project overlay can add to `neverDomains` and cannot remove the base's.
+Money words that are not trades (buy, order, pay, checkout, subscribe) still queue, as H6 says. Suites:
+`test/refused-tier.test.mjs` (one row per skip path, and that nothing is queued) and the changed rows in
+`test/unattended-asks.test.mjs`. Refusals listed apart (2026-11-25): `GET /api/refusals` (time, tool, the
+broker's reason and the run, never the arguments), a "Refused, whoever approves" section on the web Activity page,
+and a "refused" badge in a run's tool calls (`REFUSED_PREFIX`, pinned by `test/refused-web.test.mjs`). Not done:
+the same on iPhone and Mac, and the bank and broker hosts, which are yours to put in `policy.json`.
 
 Duet will not trade securities or move money between accounts even with your approval. Here every irreversible
 action can be approved, and `policy.autoApprove`, `policy.userDirected`, `policy.trust.chatAutoTools` and the
@@ -1229,15 +1342,29 @@ scheduled-run pre-approval can each skip the queue.
   - "Continue", the last row: a button whose label is on neither list is reversible everywhere, in a chat as
     much as in a schedule. The test reads the model's description of the button, not the page. The
     `forbidden` tier and `neverDomains` below are the answer to that, not a longer word list.
-  - Delete and remove clicks still run unasked from a schedule. Left out on purpose: you agreed to money and
-    purchases, and I did not check what a scheduled job legitimately deletes. Decide below.
+  - Delete and remove clicks ran unasked from a schedule. Decided 2026-11-25: they ask now (see the end of this
+    section).
   - `BROWSER_MODE` defaults to `auto`, which attaches to a debugging Chrome when one is running, and that
     profile may be signed in. `headless` on the Mini keeps unattended runs in a logged-out profile.
   - `mac_control` sends were the same gap. That was F9, fixed 2026-11-24 (section 0). Still pre-approved
     there, on purpose: notes, reminders and calendar events, which do not leave the machine.
-  - Not looked at: the other irreversible tools without `confirmWhenUnattended` (`draft`, `write_file`,
-    `git_write`, `gmail_triage` and the rest). F8 and F9 were found one tool at a time, so a pass over the
-    whole registry, asking of each "what can a steered scheduled run do with this", is worth doing once.
+  - **Registry pass (done 2026-11-25).** Every tool that can make an irreversible call, asked "what can a
+    steered scheduled run do with this". Changed, so each now queues from a schedule (suite:
+    `test/unattended-asks.test.mjs`): `git_write` (push, restore and a commit off the agent's branch could send
+    code out or overwrite files; the build loop runs from chat, so no schedule needs it), `write_file`,
+    `edit_file` and `move_file` (their only irreversible call is a build manifest, which decides what code the
+    build runs), and `study_topic` (delete takes a topic's cards and history). Left as they are, on purpose:
+    - `gmail_triage` and `gmail_unsubscribe` are what the inbox-cleanup schedule is for. Their protections are
+      code (inbox only, never mail you sent, starred or replied to, 60 changes a run), and the unsubscribe link is
+      read by code from the message header and never shown to the model, so a steered run cannot aim it.
+    - `draft` writes proposed text to the drafts folder and sends nothing. A steered run could leave a
+      misleading draft for you to find, which is a nuisance and not a leak.
+    - `schedule_*`, `date_remember`, `headsup_kind_set` and the Instagram tools already ask. `recipe_save` and
+      `profile_save` already refuse any run that is not a live chat.
+    - Reversible tools I looked at and did not change: `run_command` (only commands declared in `policy.build`
+      run), `notify`, `calendar_write` (all-day events on a named calendar), `memory_save` and `state_set`.
+      `memory_save` is the one worth a later look: a steered run could plant a memory that later runs recall.
+      The provenance work in `test/memory-provenance.test.mjs` is the guard today; I did not re-audit it.
 - Add `forbidden` beside `reversible` and `irreversible`. The broker checks it before gate 2, none of the four
   skips apply to it, and it is recorded and shown as an ordinary denial with its reason.
 - First members, listed in code: browser clicks and submits whose target reads as moving money or trading
@@ -1247,36 +1374,22 @@ scheduled-run pre-approval can each skip the queue.
   the comment, and consider a `policy.browser.neverDomains` list that you fill with your bank and broker.
 - Tests: one per skip path, each proving the call is still refused.
 
-**Built 2026-11-26 (all of D2 except the two decisions below).**
-- **The registry pass.** Every tool was read with the one question. Three gaps, all the scheduled pre-approval
-  skipping a queue the tool's own comment said was always asked: `git_write` (push, restore, a commit off its
-  own branch), a build-manifest write through `write_file`, `edit_file` or `move_file`, and deleting a study
-  topic. Each now sets `confirmWhenUnattended`. Left as they are, with the reason in the test: `draft` (text in
-  the drafts folder), `gmail_triage` and `gmail_unsubscribe` (the inbox cleanup's job, bounded in code).
-  `profile` and `recipe_save` already refuse a run nobody is watching. A tripwire in
-  `test/forbidden-tier.test.mjs` reads the tool sources, so a new irreversible tool fails until it asks when
-  unattended or is listed with its reason.
-- **Found by the pass and not changed, for you to decide:** `memory_save` is reversible, so it runs unasked in
-  any run, and what it stores is recalled into later runs as "your own past notes". A scheduled job steered by
-  a page it read can therefore leave text that later runs read, which is LEARNING invariant 2. Proposed: a
-  `memory_save` from an unattended run goes to the weekly review's queue (`proposeLesson`) and is recalled only
-  once you keep it. It changes what your schedules can do, so it is not built.
-- **`forbidden`** is the third value of `Reversibility`. The broker denies it before either gate and before a
-  dry run, never queues it, and records an ordinary denial with the reason. An approval card queued before a
-  call became forbidden is refused when approved (`src/confirmations.ts`).
-- **First members**, in `src/tools/browser.ts`: a click or submit that reads as moving money (transfer,
-  withdraw, withdrawal, wire, send money, cash out) or as trading (buy, sell, trade or short within a few
-  words of shares, stock, securities, ETFs, bonds or crypto; "place a trade"). "Buy stock photos" is a
-  purchase and still queues. The comment says it is a heuristic that fails both ways.
-- **`policy.browser.neverDomains`**, empty by default, in `policy.example.json`. `browser` and `web_read`
-  refuse a listed domain and its subdomains at gate 1, before the allowlist, for every action by where the tab
-  is, and leave for a blank page if a click or redirect lands on one. A project overlay can add to it and
-  never remove. Not driven against a real Chrome: the landing check is tested with a stand-in page.
-- Suites: `test/forbidden-tier.test.mjs` (one test per skip path, the old card, the word lists, never-domains,
-  the registry pass) and the changed rows in `test/unattended-asks.test.mjs`. README: "A few things are
-  refused, whoever approves".
-
 ### D3. A check on text leaving the machine (Code, log-only first)
+
+**Built 2026-11-25, log-only. Still yours: leave `OUTGOING_ENFORCE` off for a fortnight, read `npm run outgoing`,
+then decide.** `src/outgoing.ts` holds the scanner and `Tool.outgoingText(args)` is how a tool says which of
+its arguments leave the machine. The broker scans them right after the refused-tier check and puts a note
+(`[outgoing check, log only: contains a card number]`) on that call's audit row, whatever happens to the call.
+With `OUTGOING_ENFORCE=true` it denies the call and names what matched. A finding never repeats the value.
+Declared so far: `draft` (subject, body), `notify` (title, body), `web_search` (query), `mac_control` sends,
+the browser's typed text, and every string argument to an MCP tool. The secret rule is the recipe filter
+(`looksLikeSecretValue`), reused as the plan said, so its "32 or more opaque characters" clause will catch some
+long URLs; the fortnight's log is what tells you. Suite: `test/outgoing.test.mjs`. Added 2026-11-25:
+Instagram captions are checked where the queue row is written (`seed`): a finding is a note on the row, shown on
+the approval card, and becomes a blocking problem once `OUTGOING_ENFORCE` is on; and `web_read` and browser
+navigation declare the decoded query-string values and fragment of their address (`urlOutgoingParts`), not the
+host or path, whose long ids would trip the long-string rule on nearly every page.
+Proposed and not built, as before: Duet's second tier of health and finance text, which needs a model to judge.
 
 Duet checks each outgoing message for card numbers and government IDs and refuses them. Here the only filter
 of that kind drops credential-shaped strings before they are stored as memories.
@@ -1292,18 +1405,6 @@ of that kind drops credential-shaped strings before they are stored as memories.
 - Duet's second tier (health and personal finance go out only when you say so) needs a model to judge, which
   "Not doing" rules out. Proposed: do not build it. The local pin already keeps that material off the cloud
   tier, which is the leak that matters here.
-
-**Built 2026-11-26, log-only (`src/outbound.ts`).** `Tool.outboundText` declares the outgoing arguments: a
-draft's subject, body and location; `mac_control` mail and messages; `notify`; a `web_search` query; what the
-browser types; the address `browser` and `web_read` open (number checks only, since a long id in a URL is
-ordinary); an Instagram caption, read from the row a call names; and every string handed to an MCP server.
-The credential test is `looksLikeSecretValue` from `src/recipes/store.ts`, the narrower of the existing
-filters: the memory one rejects any text containing "token", which is right for a fact and wrong for a mail.
-The broker checks after the allowlist and before the budget, the queue and the run. A match is recorded in
-`outbound_checks` (tool, argument name, kind; never the text) and `npm run digest 336` lists a fortnight by
-tool and kind. With `OUTBOUND_ENFORCE=true` a match denies the call and the denial names the argument and
-the kind. Suites: `test/outbound-check.test.mjs`, `test/outbound-enforce.test.mjs`. You: read the digest after
-a fortnight on the Mini, then decide on the switch.
 
 ### D4. Connectors (You decide; adds to CP1, starts no work)
 
@@ -1323,15 +1424,19 @@ Order: the registry pass in D2 first (F8 and F9, which the trace found, are fixe
 D3, which are small, sit in the broker and need no decision beyond a yes. D1 is built with its screens: its rollout
 is yours. D4 waits on CP1.
 
-Open decisions for you:
-- Should delete and remove clicks in the browser also ask from a scheduled run? Proposed: yes, unless a
-  schedule of yours relies on one.
-- `BROWSER_MODE=headless` on the Mini. Proposed: yes, unless a scheduled job needs the signed-in profile.
+Decided 2026-11-25:
+- Delete and remove clicks in the browser ask from a scheduled run, like money words (built: `DESTRUCTIVE_WORDS`
+  in `src/tools/browser.ts`, rows in `test/unattended-asks.test.mjs`). No schedule relied on them.
+- `BROWSER_MODE=headless` on the Mini. **You: set it in the Mini's `.env` and restart the dashboard.** The default
+  stays `auto` for a laptop; `.env.example` and the README say which machine wants which.
+- No schedule pushes with `git_write` or writes a build manifest, so the registry pass's new asks change nothing
+  that runs today.
+- D2 and D3 alongside section 8: done. `policy.browser.neverDomains`: built, empty by default; your bank and
+  broker hosts are yours to add.
+
+Still open:
 - (Decided 2026-11-24: the hold on new proactive behaviour is lifted for D1 only.)
 - After a week of D1's log: is Gmail's sorting good enough, or does new mail need a local model to order it?
-- (Taken 2026-11-26 when you asked for everything buildable: D2 and D3 are built, D3 log-only, and
-  `policy.browser.neverDomains` exists and is empty.)
-- New from the registry pass: should a `memory_save` from an unattended run wait for your review? Proposed: yes.
 - A named service for D4. Proposed: none until you want one.
 
 ---
@@ -1458,8 +1563,9 @@ which is Hermes's at-most-once rule. Two of its rules are missing:
   on an overdue job re-arms it (as before), so setting the override on an overdue job drops that slot.
 - **Stall watchdog.** An unattended run with no model or tool activity for 600 s (`STALL_IDLE_MS`, 0 is off),
   and nothing in flight still inside its own limit, is stopped and ends `failed` with "Stalled: …" and the
-  failure push; 60 s later a run that will not end is closed out and the queue released. Parked and queued
-  time do not count, and chat is never touched. Code: `src/stall.ts`. Suite: `test/stall-watchdog.test.mjs`.
+  failure push; 60 s later a run that will not end is closed out and the queue released. Time paused for a
+  person (LP5's `yieldToPerson`) and time queued do not count, and chat is never touched. At the 2026-11-26 merge
+  it moved onto LP5's queue, which gained `abandon` and a pause listener for it. Code: `src/stall.ts`. Suite: `test/stall-watchdog.test.mjs`.
   Not covered: post-run learners and pre-loop sizing, which call the model without a run id; an abandoned
   run's hung tool keeps running beside the next job. Neither has run on the Mini.
 - Not built: the pre-run script and passing one job's answer to another. Both add a way for text to reach a
@@ -1717,8 +1823,8 @@ Open decisions for you, each with the default the build will take:
 - **UI changes are built for web, Mac and iPhone together.**
 
 **Not doing.** Model-judged safety checks (revisit only if N2 shows the code gates cost real approval fatigue);
-MCP connectors beyond `docs/MCP.md` (section 10 CP1 proposes reopening this for local stdio servers; still
-not doing until you decide); Docker workspace containers; Telegram or WhatsApp (a second place for
+MCP connectors beyond `docs/MCP.md` (reopened 2026-11-25 for local stdio servers only, which CP1 built; hosted
+connectors with OAuth are still not doing); Docker workspace containers; Telegram or WhatsApp (a second place for
 approvals to be dismissed unseen); usage telemetry (local-first); auto-sending email; a live "agent thinking"
 dashboard; unsubscribing through a browser in the inbox cleanup (one-click unsubscribe is built, SPEC section 5, 2026-11-21; senders
 whose link needs a page click are listed as "unsubscribe by hand").

@@ -7,6 +7,7 @@
  *
  * Run with `node test/memory-privacy.test.mjs`.
  */
+import "./helpers/example-policy.mjs";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";

@@ -13,7 +13,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-narrow-holes-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-narrow-holes-${process.pid}-${Date.now()}.db`);
 process.env.EMBEDDINGS_URL = "";
 const { narrowPolicy } = await import("../src/projects/narrow-policy.ts");
 const { registry } = await import("../src/tools/index.ts");

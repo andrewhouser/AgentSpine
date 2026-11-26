@@ -32,6 +32,10 @@ struct InboxView: View {
     @State private var searchText = ""
     @State private var searching = false
     @State private var hits: [KnowledgeHit]?
+    @State private var searchNote: String?
+    @State private var filters = KnowledgeSearchFilters()
+    @State private var showFilters = false
+    @State private var entities: [KnowledgeEntity] = []
     @State private var extractingID: Int?
     @State private var extractNotes: [Int: String] = [:]
 
@@ -59,14 +63,30 @@ struct InboxView: View {
                         .buttonStyle(.borderless)
                         .disabled(searching)
                 }
+                DisclosureGroup(isExpanded: $showFilters) {
+                    filterControls
+                } label: {
+                    Text(filters.isEmpty ? "Filters" : "Filters (on)")
+                        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                }
+                if let whoLine {
+                    Text(whoLine)
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
+                if let searchNote {
+                    Text(searchNote.prefix(1).uppercased() + searchNote.dropFirst())
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
+                }
                 if hits?.isEmpty == true {
-                    Text("Nothing found.")
+                    Text(filters.isEmpty ? "Nothing found." : "Nothing found with these filters.")
                         .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                         .foregroundStyle(Spine.Palette.textDim)
                 }
                 ForEach(hits ?? []) { hit in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(hit.path) · found by \(hit.via.joined(separator: " and "))")
+                        Text(hitLine(hit))
                             .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                             .foregroundStyle(Spine.Palette.textFaint)
                         Text(String(hit.text.prefix(280)))
@@ -153,6 +173,8 @@ struct InboxView: View {
         .navigationTitle("Drop zone")
         .refreshable { await load() }
         .task { await load() }
+        // A changed filter re-runs a search already on screen, as the web Drop zone does.
+        .onChange(of: filters) { if hits != nil { Task { await search() } } }
         .toolbar {
             ToolbarItem(placement: .spineTrailing) {
                 Menu {
@@ -231,8 +253,11 @@ struct InboxView: View {
         do {
             async let list = APIClient.shared.inboxItems()
             async let st = try? APIClient.shared.inboxStatus()
+            // People and teams for the search filter. Optional: without them the picker offers only "Anyone".
+            async let known = try? APIClient.shared.knowledgeEntities()
             items = try await list
             status = await st
+            entities = await known ?? []
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -242,15 +267,117 @@ struct InboxView: View {
 
     private func search() async {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2 else { hits = nil; return }
+        guard query.count >= 2 else { hits = nil; searchNote = nil; return }
         guard !searching else { return }
         searching = true
         defer { searching = false }
         do {
-            hits = try await APIClient.shared.searchKnowledge(query)
+            let found = try await APIClient.shared.searchKnowledge(query, filters: filters)
+            hits = found.hits
+            searchNote = found.note
         } catch {
+            hits = nil
+            searchNote = nil
             actionError = error.localizedDescription
         }
+    }
+
+    // MARK: - Search filters
+
+    private var people: [KnowledgeEntity] { entities.filter { $0.kind == "person" } }
+    private var teams: [KnowledgeEntity] { entities.filter { $0.kind == "team" } }
+
+    /// One picker for a person or a team, because a search narrows to one or the other: "person:3", "team:7" or "".
+    private var whoSelection: Binding<String> {
+        Binding(
+            get: {
+                if let id = filters.personID { return "person:\(id)" }
+                if let id = filters.teamID { return "team:\(id)" }
+                return ""
+            },
+            set: { value in
+                let parts = value.split(separator: ":")
+                let id = parts.count == 2 ? Int(parts[1]) : nil
+                filters.personID = parts.first == "person" ? id : nil
+                filters.teamID = parts.first == "team" ? id : nil
+            }
+        )
+    }
+
+    /// A date filter is off until switched on, because a DatePicker always holds some date.
+    private func dateToggle(_ keyPath: WritableKeyPath<KnowledgeSearchFilters, Date?>) -> Binding<Bool> {
+        Binding(
+            get: { filters[keyPath: keyPath] != nil },
+            set: { filters[keyPath: keyPath] = $0 ? Calendar.current.startOfDay(for: Date()) : nil }
+        )
+    }
+
+    private func dateValue(_ keyPath: WritableKeyPath<KnowledgeSearchFilters, Date?>) -> Binding<Date> {
+        Binding(
+            get: { filters[keyPath: keyPath] ?? Date() },
+            set: { filters[keyPath: keyPath] = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private var filterControls: some View {
+        Picker("Project", selection: $filters.projectID) {
+            Text("All projects").tag(Int?.none)
+            ForEach(state.projects) { project in
+                Text(project.name).tag(Int?.some(project.id))
+            }
+        }
+        Picker("Naming", selection: whoSelection) {
+            Text("Anyone").tag("")
+            if !people.isEmpty {
+                Section("People") {
+                    ForEach(people) { e in Text(e.name).tag("person:\(e.id)") }
+                }
+            }
+            if !teams.isEmpty {
+                Section("Teams") {
+                    ForEach(teams) { e in Text(e.name).tag("team:\(e.id)") }
+                }
+            }
+        }
+        Picker("Backed by", selection: Binding(get: { filters.evidence ?? "" }, set: { filters.evidence = $0.isEmpty ? nil : $0 })) {
+            Text("Any source").tag("")
+            Text("Reviewed claims").tag("reviewed")
+            Text("Extracted, not reviewed").tag("extracted")
+            Text("Nothing analysed yet").tag("none")
+        }
+        Toggle("From a date", isOn: dateToggle(\.since))
+        if filters.since != nil {
+            DatePicker("From", selection: dateValue(\.since), displayedComponents: .date)
+        }
+        Toggle("As of a date", isOn: dateToggle(\.until))
+        if filters.until != nil {
+            DatePicker("As of", selection: dateValue(\.until), displayedComponents: .date)
+        }
+        if !filters.isEmpty {
+            Button("Clear filters") { filters = KnowledgeSearchFilters() }
+                .buttonStyle(.borderless)
+        }
+    }
+
+    /// Says what a person or team filter matches, so an empty list is not mistaken for "nobody said anything".
+    private var whoLine: String? {
+        if let id = filters.personID, let e = entities.first(where: { $0.id == id }) {
+            return "Only passages that name \(e.name), by a recorded name or alias."
+        }
+        if let id = filters.teamID, let e = entities.first(where: { $0.id == id }) {
+            return "Only passages that name \(e.name) or one of its recorded members, by a recorded name or alias."
+        }
+        return nil
+    }
+
+    private func hitLine(_ hit: KnowledgeHit) -> String {
+        var parts = [hit.path]
+        if let id = hit.projectId, let project = state.projects.first(where: { $0.id == id }) { parts.append(project.name) }
+        if let mtime = hit.mtime { parts.append(String(mtime.prefix(10))) }
+        parts.append("found by \(hit.via.joined(separator: " and "))")
+        if let evidence = hit.evidence { parts.append(evidence.words) }
+        return parts.joined(separator: " · ")
     }
 
     private func add(_ urls: [URL]) async {

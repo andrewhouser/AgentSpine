@@ -35,8 +35,7 @@ import type { ShapedHistory } from "./history.ts";
 import { sizeTask } from "./dispatch.ts";
 import { publish } from "./events.ts";
 import type { Tier } from "./tiers.ts";
-import { abandon, enqueue, queueAhead } from "./queue.ts";
-import type { Lane } from "./queue.ts";
+import { abandon, enqueue, queueStatus } from "./queue.ts";
 import { profileMessage } from "./memory/profile.ts";
 import { recall, recallOfKind } from "./memory/rag.ts";
 import type { RecallSeen } from "./memory/rag.ts";
@@ -52,19 +51,18 @@ import { narrowPolicy } from "./projects/narrow-policy.ts";
 import { instructionsFor, knowledgeFor } from "./projects/recall.ts";
 import { watchPin } from "./sensitivity.ts";
 import { workspaceInstructions } from "./projects/workspace.ts";
+import { getAgent } from "./agents.ts";
 import { buildHarnessContext, isConversationalKind, isUnattendedKind } from "./harness.ts";
 import { getProject, projectOverlay } from "./projects/store.ts";
-import { getAgent } from "./agents.ts";
-import { areaMapFor } from "./area-map.ts";
 import { route } from "./router.ts";
 import { look, NoVisionError, priorImagesContext } from "./vision.ts";
 import { setFrame } from "./tools/subagent.ts";
 import { projectWriteDir, setWriteDefault, writeDefaultDir } from "./tools/write-file.ts";
+import { areaMapFor } from "./area-map.ts";
+import { stallNote, unwatchRun, watchRun } from "./stall.ts";
 import { CloudCapError } from "./cloud-cap.ts";
 import { notify } from "./notify.ts";
-import { stallNote, unwatchRun, watchRun } from "./stall.ts";
 import { clearStop, isStopRequested, StoppedError, throwIfStopped } from "./stop.ts";
-import { forgetTurn } from "./turn-gate.ts";
 import * as store from "./memory/store.ts";
 import type { Policy } from "./types.ts";
 
@@ -130,15 +128,11 @@ export interface RunOpts {
    */
   tier?: Tier;
   /**
-   * Run as one unit from `agents/*.md`: its instructions, its tool ceiling and its step limit,
-   * as the `subagent` tool would give it, but as a top-level run with its own row, queue slot
-   * and notifications. Set by code alone: an approved change proposal starts the `builder`
-   * this way (src/change-proposals.ts, PLAN-open-work section 10, SC5). An unknown name fails
-   * the run before any model call.
+   * Run as this unit from agents/ (SC5): its instructions join the trusted context, its tools are the ceiling, and its
+   * maxSteps and tier apply, as when a run delegates to it. How an approved change proposal starts the builder as a
+   * run of its own, which the Builds page then shows. An unknown name fails the run rather than running without it.
    */
   unit?: string;
-  /** The folder a `unit` run works in: where a bare filename lands, and what decides whether it gets the code map. */
-  workDir?: string;
 }
 
 /**
@@ -362,7 +356,6 @@ const stoppable = async (
   } finally {
     clearStop(runId);
     unwatchRun(runId);
-    forgetTurn(runId);
   }
 };
 
@@ -407,19 +400,12 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
 
   publish(runId, { attachments: attachmentIds.length, conversationId, kind, task, type: "run_start" });
 
-  // Work a person is waiting for, or work nobody is watching. With CHAT_FIRST on the first
-  // goes ahead of the second (src/queue.ts); with it off this is only a label.
-  const lane: Lane = isUnattended(kind) ? "background" : "foreground";
-
-  // Agent cycles are serialized, so this run may genuinely be waiting on a scheduled job.
-  // Saying so beats a spinner that looks identical to a hang. `depth` is the number of jobs
-  // that will run before this one, which with CHAT_FIRST on leaves out the background jobs a
-  // chat turn goes ahead of. `yielding` is set when the only thing in the way is a background
-  // run that will step aside at its next step boundary: the wait is then one model call or
-  // tool call long, not a whole job, and a client may word it that way. The clients read
-  // `depth` alone today ("waiting for another job to finish").
-  const { ahead, yielding } = queueAhead(lane);
-  if (ahead > 0) publish(runId, { depth: ahead, type: "queue_wait", ...(yielding ? { yielding: true } : {}) });
+  // Agent cycles take turns on the model, so this run may genuinely be waiting. Saying so beats a spinner that looks
+  // identical to a hang. A person's run goes ahead of background work, and a background run already going hands the
+  // model over at its next step (src/queue.ts, LP5), so the wait is one step of a job, not the whole job.
+  const lane = isUnattendedKind(kind) ? "background" : "person";
+  const { depth } = queueStatus();
+  if (depth > 0) publish(runId, { depth, type: "queue_wait" });
 
   // A stall is a failure nobody was there to see, so it is pushed like one.
   const pushStalled = (note: string): void => {
@@ -499,7 +485,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     // Size the task before doing it. Deliberately inside the queue rather than at submit
     // time: the classifier is itself a model call, and firing it while another cycle holds
     // the model would put two requests on a server that serves one at a time.
-    const sizing = await sizeTask(task, opts.tier);
+    const unit = opts.unit ? getAgent(opts.unit) : undefined;
+    if (opts.unit && !unit) throw new Error(`no unit called "${opts.unit}" in the agents folder`);
+    const sizing = await sizeTask(task, opts.tier ?? unit?.tier);
     store.setRunTier(runId, sizing.tier);
     publish(runId, { reason: sizing.reason, tier: sizing.tier, type: "tier", via: sizing.via });
 
@@ -508,6 +496,15 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     const instructionSources: string[] = [];
     const recalled: RecallSeen = { private: false };
     const context = opts.noMemory ? [] : await buildContext(task, used, recalled);
+    // A unit's standing instructions lead the trusted context, as they do for a subagent (src/tools/subagent.ts).
+    if (unit?.instructions) context.unshift(unit.instructions);
+    // Working inside this checkout: the code map joins the trusted context (src/area-map.ts, section 10 SC3).
+    const codeMap = areaMapFor(projectWriteDir(project?.id));
+    if (codeMap) {
+      context.unshift(codeMap.text);
+      used.push(codeMap.source);
+      instructionSources.push(codeMap.source);
+    }
     // Project instructions join the TRUSTED system context (they are yours, like
     // profile.md); project documents do not — see the knowledge block below.
     if (project) {
@@ -535,22 +532,6 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         `This conversation belongs to the project "${project.name}". Tasks you add are filed under it automatically. ` +
           'To file a task created earlier under it, call task_update with project "this".',
       );
-    }
-    // A run started as a unit carries that unit's instructions as trusted context, exactly as
-    // a delegated one does (tools/subagent.ts). The file is one no tool may write.
-    const unit = opts.unit ? getAgent(opts.unit) : undefined;
-    if (opts.unit && !unit) throw new Error(`there is no "${opts.unit}" unit in agents/.`);
-    if (unit) {
-      context.push(unit.instructions);
-      instructionSources.push(`the ${unit.name} unit's instructions`);
-    }
-    // A run working inside AgentSpine's own checkout gets the code map (src/area-map.ts, SC3).
-    // Every other run gets nothing here, so its prompt is byte for byte what it was.
-    const codeMap = areaMapFor(opts.workDir ?? projectWriteDir(project?.id));
-    if (codeMap) {
-      context.unshift(codeMap.text);
-      used.push(codeMap.source);
-      instructionSources.push(codeMap.source);
     }
     const projectKnowledge = project ? await knowledgeFor(project.id, task) : "";
     // Both are UNTRUSTED-tagged blocks bound for the same slot — project excerpts are file
@@ -604,7 +585,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     // first directory among its path sources), else AgentSpine's docs folder. Set on EVERY
     // run, null included, so one project's folder cannot leak into the next run.
     const writeDir = projectWriteDir(project?.id);
-    setWriteDefault(opts.workDir ?? writeDir);
+    setWriteDefault(writeDir);
     if (!opts.noMemory) {
       context.push(
         `You CAN save files: use write_file. A bare filename (e.g. "BUSINESSPLAN.md") is saved in ${writeDefaultDir()}` +
@@ -626,6 +607,9 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         project != null || recalled.private || (conversationId != null && store.getConversation(conversationId)?.local_only === 1);
       // Kept here because the loop releases its pin when it ends, before the learners below ask what this run saw.
       let runWasPrivate = startPrivate;
+      // Recorded on the run, for the draft tool (CP2): a project or a private recall is work context, and a draft
+      // written from it stays a local file rather than going to Gmail, now or when its card is approved later.
+      if (project != null || recalled.private) store.markRunWorkPrivate(runId);
       watchPin(runId, () => {
         runWasPrivate = true;
         if (conversationId != null) store.setConversationLocalOnly(conversationId);
@@ -659,9 +643,6 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         approvedTask: harness.preApproved ? task : undefined,
         context,
         history,
-        // A unit's own ceiling and step limit (RunOpts.unit); undefined leaves the defaults.
-        maxSteps: unit?.maxSteps,
-        tools: unit?.tools,
         // Only a thread that actually holds an image is shown look_at_image — see
         // settingTools in agent.ts for why an always-listed tool with nothing to act on is
         // worse than no tool.
@@ -670,6 +651,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         projectId: project?.id ?? null,
         startPrivate,
         tier: sizing.tier,
+        ...(unit ? { maxSteps: unit.maxSteps, tools: unit.tools } : {}),
       });
       store.saveTrace(runId, trace);
       /**
@@ -795,7 +777,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       }
       throw err;
     }
-  }, pushStalled), { lane, runId });
+  }, pushStalled), lane, runId);
 
   return { done, runId };
 };

@@ -2,6 +2,7 @@
  * Heads-up telemetry (docs/archive/PLAN-heads-up-next.md workstream F). Run with `node test/headsup-telemetry.test.mjs`.
  * Fixture rows in, exact numbers out. No model, no network.
  */
+import "./helpers/example-policy.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

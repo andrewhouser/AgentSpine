@@ -7,6 +7,7 @@
  * it noticed in chat and wants confirmed. A snoozed item is waiting on the clock, and a tracked
  * flight is informational, so neither counts (the iOS badge follows the same rule).
  */
+import { tagUntrusted } from "../audit.ts";
 import { datesForClient } from "../headsup/dates.ts";
 import { listForClient } from "../headsup/ledger.ts";
 import type { ClassifiedAction, PolicyDecision, Tool } from "../types.ts";
@@ -50,5 +51,14 @@ export const headsupStatus: Tool = {
   argsSchema: "{}",
   classify: (): ClassifiedAction => ({ reversibility: "reversible", summary: "Count waiting heads-ups", target: "headsup" }),
   checkPolicy: (): PolicyDecision => ({ allowed: true, reason: "local read" }),
-  run: async () => describeWaiting(listForClient("open").filter((h) => h.state === "offered"), datesForClient().proposals.length),
+  // The named items are calendar event titles, which anyone who can send an invite writes, and calendar material
+  // stays local (CLAUDE.md, F7). Found by the 2026-11-25 trace: this tool returned them bare and undeclared, so a
+  // morning brief, a scheduled and pre-approved run, read an invite's title as plain text and could carry it to the
+  // cloud tier. The counts are code; the titles are data.
+  privateOutput: true,
+  run: async () => {
+    const offered = listForClient("open").filter((h) => h.state === "offered");
+    const text = describeWaiting(offered, datesForClient().proposals.length);
+    return offered.length ? tagUntrusted("calendar event titles", text) : text;
+  },
 };

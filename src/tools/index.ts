@@ -34,6 +34,8 @@ import { lookAtImage } from "./look-at-image.ts";
 import { digestTool } from "./digest.ts";
 import { draft } from "./draft.ts";
 import { subagent } from "./subagent.ts";
+import { proposeChange } from "./propose-change.ts";
+import { toolHelp } from "./tool-help.ts";
 import { clientList, clientUpsert, timeLog, timeReportTool } from "./clients.ts";
 import { sourceRead, sourcesList } from "./sources.ts";
 import { taskAdd, taskDone, taskList, taskUpdate } from "./tasks.ts";
@@ -49,7 +51,6 @@ import { headsupStatus } from "./headsup.ts";
 import { headsupKindSet } from "./headsup-kind-set.ts";
 import { styleFor, styleLearn } from "./styles.ts";
 import { instagramTools } from "./instagram.ts";
-import { proposeChange } from "./propose-change.ts";
 import { siteAudit } from "./site-audit.ts";
 
 export const tools: Tool[] = [
@@ -119,9 +120,10 @@ export const tools: Tool[] = [
   styleFor,
   styleLearn,
   harnessStatus,
-  ...instagramTools,
   proposeChange,
   siteAudit,
+  toolHelp,
+  ...instagramTools,
 ];
 
 export const registry: Record<string, Tool> = Object.fromEntries(tools.map((t) => [t.name, t]));

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
-import type { Action, Run } from "../../lib/types.ts";
+import type { Action, Run, RunNote } from "../../lib/types.ts";
 
 import { api } from "../../lib/api.ts";
+import { isRefused } from "../../lib/refusals.ts";
+import { describeRunNote } from "../../lib/runNotes.ts";
 import { DecisionBadge } from "../DecisionBadge/DecisionBadge.tsx";
 import styles from "./RunDetail.module.css";
 
@@ -27,11 +29,11 @@ interface TraceMessage {
  * thought it knew going in.
  */
 export const RunDetail = ({ onBack, runId }: RunDetailProps) => {
-  const [data, setData] = useState<{ actions: Action[]; run: Run; trace: TraceMessage[] } | null>(null);
+  const [data, setData] = useState<{ actions: Action[]; notes?: RunNote[]; run: Run; trace: TraceMessage[] } | null>(null);
   const [showTrace, setShowTrace] = useState(false);
 
   useEffect(() => {
-    void api.run(runId).then((d) => setData(d as unknown as { actions: Action[]; run: Run; trace: TraceMessage[] }));
+    void api.run(runId).then((d) => setData(d as unknown as { actions: Action[]; notes?: RunNote[]; run: Run; trace: TraceMessage[] }));
   }, [runId]);
 
   if (!data) return <div className={styles.page}>Loading…</div>;
@@ -54,6 +56,20 @@ export const RunDetail = ({ onBack, runId }: RunDetailProps) => {
 
       {data.run.note && <div className={styles.summary}>{data.run.note}</div>}
 
+      {(data.notes ?? []).length > 0 && (
+        <>
+          <h2 className={styles.subhead}>Along the way</h2>
+          {(data.notes ?? []).map((n, i) => {
+            const text = describeRunNote(n);
+            return text ? (
+              <p className={styles.alongTheWay} key={`${n.ts}-${i}`}>
+                <span className={styles.meta}>{new Date(n.ts).toLocaleTimeString()}</span> {text}
+              </p>
+            ) : null;
+          })}
+        </>
+      )}
+
       {data.actions.length > 0 && (
         <>
           <h2 className={styles.subhead}>Tool calls</h2>
@@ -62,7 +78,7 @@ export const RunDetail = ({ onBack, runId }: RunDetailProps) => {
               <div className={styles.actionHead}>
                 <code className={styles.tool}>{a.tool}</code>
                 {a.target && <span className={styles.target}>{a.target}</span>}
-                <DecisionBadge status={a.decision} />
+                <DecisionBadge refused={isRefused(a.output)} status={a.decision} />
               </div>
               <pre className={styles.pre}>{a.args}</pre>
               {a.output && <pre className={styles.pre}>{a.output}</pre>}

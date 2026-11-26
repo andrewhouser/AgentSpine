@@ -16,7 +16,7 @@
 import os from "node:os";
 import path from "node:path";
 
-process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-final-${process.pid}.db`);
+process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-final-${process.pid}-${Date.now()}.db`);
 
 const { __test } = await import("../src/agent.ts");
 

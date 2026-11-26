@@ -55,7 +55,7 @@ struct CheckinView: View {
 
             if let preview {
                 Section("If it checked now") {
-                    Text(CheckinWords.sendLine(wouldSend: preview.wouldSend, heldBy: preview.heldBy, mode: preview.mode, off: preview.off))
+                    Text(CheckinWords.sendLine(wouldSend: preview.wouldSend, heldBy: preview.heldBy, mode: preview.mode, off: CheckinWords.offKinds(switches ?? status?.sources)))
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textDim)
                     if preview.wouldSend {
