@@ -13,7 +13,6 @@ import path from "node:path";
 
 process.env.SPINE_DB_PATH = path.join(os.tmpdir(), `agentspine-macbanner-${process.pid}-${Date.now()}.db`);
 // No push transports, so notify() falls through to the Mac banner.
-delete process.env.NTFY_TOPIC;
 delete process.env.APNS_KEY_PATH;
 delete process.env.MAC_BANNER;
 

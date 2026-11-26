@@ -99,7 +99,7 @@ export const reviewItems = (now: Date = new Date(), days: number = REVIEW_DAYS):
 
 /**
  * The review. Listing it also stamps `seen_at` on each message in it, once. That is the whole of the
- * "weak signal" for a setup with only ntfy, which cannot report an open: you looked at the list that
+ * "weak signal" for a push that cannot report an open (a Mac banner): you looked at the list that
  * contained it. Stored for Phase 4 and shown nowhere as a verdict, because looking is not liking.
  */
 /** A failed count must not fail the review screen. */

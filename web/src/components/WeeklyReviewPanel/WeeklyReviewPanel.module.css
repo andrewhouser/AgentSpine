@@ -111,3 +111,36 @@
   font-size: 0.8125rem;
   margin-top: 6px;
 }
+
+/* Five cards, one at a time (section 15, R10). */
+.cards {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 8px 0 14px;
+}
+
+.cardTab {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.cardOn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-line);
+}
+
+.cardTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.cardLine {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}

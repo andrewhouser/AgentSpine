@@ -231,7 +231,7 @@ const postOnce = (
 // --- the alert we actually send ---
 
 /**
- * How an ntfy priority becomes an iOS one. Two separate knobs on Apple's side and it is
+ * How a 1–5 priority becomes an iOS one. Two separate knobs on Apple's side and it is
  * worth knowing which does what, because only one of them is capable of interrupting you:
  *
  *   apns-priority       10 = deliver now, 5 = deliver when convenient (may be coalesced)
@@ -264,7 +264,7 @@ export interface PushAlert {
   screen?: string;
   /**
    * The scoped, single-use approval token, so Approve/Reject can be answered from the lock
-   * screen. Same security posture as the ntfy buttons in notify.ts: this travels through
+   * screen. Same security posture as the approval token in notify.ts: this travels through
    * Apple's servers, so it is deliberately the narrow token and not the dashboard one.
    */
   approvalToken?: string;
@@ -280,7 +280,7 @@ export interface PushAlert {
    */
   outboxId?: number;
   headsupToken?: string;
-  /** ntfy-style 1–5; mapped above. */
+  /** 1–5; mapped above. */
   priority?: number;
   /**
    * Collapse key. Two notifications sharing one replace each other on the phone, which is

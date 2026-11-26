@@ -97,8 +97,8 @@ final class APIClient {
 
         var req = URLRequest(url: url)
         // The header form, never `?token=`. The query-string form exists on the server for
-        // the ntfy buttons, which have no way to set a header; this app does, and a token in
-        // a URL ends up in logs.
+        // what a browser fetches by itself (event streams, images, audio), which cannot set a
+        // header; this app can, and a token in a URL ends up in logs.
         req.setValue(settings.token, forHTTPHeaderField: "X-Dashboard-Token")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         return req
@@ -820,6 +820,11 @@ final class APIClient {
     }
 
     /// Accept (optionally corrected) or reject a proposed claim, or change its status.
+    /// Take back a reversible action from the last few minutes (section 15, R10). The server says whether it could.
+    func undoAction(_ actionId: Int) async throws -> UndoResult {
+        try await send(jsonRequest("/api/undo/\(actionId)", method: "POST"), as: UndoResult.self)
+    }
+
     /// A project's decision log, open questions, risks and who is waiting (section 15, R8).
     func projectPage(_ id: Int) async throws -> ProjectPage {
         try await send(request("/api/projects/\(id)/page"), as: ProjectPage.self)

@@ -126,7 +126,6 @@ const speak = async (deps: WatchDeps, w: WatchRow, title: string, lines: string[
       priority: urgent ? 4 : 3,
       // One notification per watch on the lock screen: a newer update replaces the last.
       push: { collapseId: `headsup-watch-${w.headsup_id}`, priority: urgent ? 4 : 3, screen: "headsup" },
-      tags: [tag],
     });
   } catch (err) {
     console.warn(`[headsup] watch notification failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -148,7 +147,7 @@ const pollFlight = async (w: WatchRow, deps: WatchDeps, now: Date): Promise<Watc
   if (!hasRoom("flight", period, flightsPerMonth)) {
     if (!noticeGiven("flight", period)) {
       markNoticeGiven("flight", period);
-      void deps.send("Flight tracking paused", `This month's ${flightsPerMonth} flight lookups are used up. Tracking resumes next month.`, { priority: 2, push: { screen: "headsup" }, tags: ["warning"] }).catch(() => {});
+      void deps.send("Flight tracking paused", `This month's ${flightsPerMonth} flight lookups are used up. Tracking resumes next month.`, { priority: 2, push: { screen: "headsup" } }).catch(() => {});
     }
     updateWatch(w.id, { note: "Paused: this month's flight lookup budget is used up." });
     return "budget";
@@ -216,7 +215,7 @@ const pollDrive = async (w: WatchRow, deps: WatchDeps, now: Date): Promise<Watch
   if (!hasRoom("travel", period, travelPerDay)) {
     if (!noticeGiven("travel", period)) {
       markNoticeGiven("travel", period);
-      void deps.send("Drive watching paused", "Today's routing lookups are used up. It resumes tomorrow.", { priority: 2, push: { screen: "headsup" }, tags: ["warning"] }).catch(() => {});
+      void deps.send("Drive watching paused", "Today's routing lookups are used up. It resumes tomorrow.", { priority: 2, push: { screen: "headsup" } }).catch(() => {});
     }
     updateWatch(w.id, { note: "Paused: today's routing budget is used up." });
     return "budget";

@@ -2,7 +2,7 @@
 
 A native app that starts tasks, watches them run, approves what the broker queues, keeps an
 eye on what runs on a clock, and — the actual reason it exists — gets AgentSpine's
-notifications their own icon on your home screen instead of a share of ntfy's.
+notifications their own icon on your home screen. It is the only push since ntfy was removed (2026-11-26).
 
 It talks to the dashboard API over your tailnet and is never submitted to the App Store.
 You install it on your own phone from Xcode, where it lasts a year before it needs
@@ -105,11 +105,8 @@ The app reports its own bundle id when it registers, and the server pushes each 
 app that registered it. `APNS_BUNDLE_ID` is the fallback for a device that has not said (an older
 build of the app), so it still has to be set. `GET /api/devices` shows each device's `bundleId`.
 
-Restart the dashboard. It will say `push: APNs + ntfy` on startup once both are configured.
-
-You can leave `NTFY_TOPIC` set while you learn to trust the app — the two transports run
-**together**, not as a fallback chain, so a push that silently fails on one still reaches
-you on the other. Unset it when you stop needing the belt.
+Restart the dashboard. It will say `push: APNs (N device(s) registered)` on startup once configured.
+ntfy is gone (2026-11-26): `NTFY_*` lines in `.env` are ignored and can be deleted.
 
 ### 4. Set your bundle id and team
 
@@ -210,8 +207,7 @@ broker queues an irreversible action
   └── notify()                                  src/notify.ts
         ├── APNs ──► api.push.apple.com ──► your iPhone
         │              src/push/apns.ts
-        ├── ntfy  ──► ntfy.sh (if NTFY_TOPIC is set)
-        └── Mac banner, only if neither delivered
+        └── Mac banner, only if the push did not deliver
 ```
 
 The app registers its APNs device token with `POST /api/devices` on every launch, because a
@@ -276,7 +272,7 @@ diagnostics. Work down this list.
 | Symptom | Where to look |
 |---|---|
 | **Test connection fails** | Tailscale connected on *both* ends? `npm run dashboard` running? Try the same URL in Safari on the phone. |
-| **"The server rejected the dashboard token"** | It is `DASHBOARD_TOKEN` in `.env`, not the ntfy token. |
+| **"The server rejected the dashboard token"** | It is `DASHBOARD_TOKEN` in `.env`. |
 | **Device token says "not issued"** | Permission not granted, or the App ID is missing the Push Notifications capability. Check `registrationNote` under it — a signing problem says so there. |
 | **Test push: "no registered devices"** | The app never reached step 6. Open it, Test connection, then the push button again. |
 | **Test push: `BadDeviceToken`** | Normally self-healing — the server flips the device's environment and retries once, then remembers. Twice in a row means the token really is dead; delete the row and relaunch the app. |

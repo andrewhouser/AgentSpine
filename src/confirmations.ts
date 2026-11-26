@@ -15,7 +15,7 @@ import { registry } from "./tools/index.ts";
 import { enqueue } from "./queue.ts";
 import { remember } from "./memory/rag.ts";
 import * as store from "./memory/store.ts";
-import { confirmationActions, confirmationPush, notify } from "./notify.ts";
+import { confirmationPush, notify } from "./notify.ts";
 import type { NotifyResult } from "./notify.ts";
 import type { Tier } from "./tiers.ts";
 
@@ -407,7 +407,6 @@ export const sweepConfirmations = async (
           await push(`Approval expired (#${row.id})`, `${row.summary}\n\nWaited ${describeWait(age)}. Nothing ran.`, {
             source: "confirmation",
             priority: 3,
-            tags: ["hourglass"],
           });
         }
         continue;
@@ -435,19 +434,17 @@ export const sweepConfirmations = async (
         rung === 2 ? `Still waiting (#${row.id})` : `Approval needed (#${row.id})`,
         `${row.summary}\n\nQueued ${describeWait(age)} ago and still unanswered.`,
         {
-          actions: token ? confirmationActions(row.id, token) : [],
           priority: rung === 2 ? 5 : 4,
           // A reminder shares the first push's collapse id, so three nudges about #12 are
           // one item on the lock screen rather than a stack you have to clear.
           push: token
             ? confirmationPush(row.id, token, row.conversation_id)
             : { category: "CONFIRMATION", collapseId: `confirmation-${row.id}`, confirmationId: row.id },
-          tags: rung === 2 ? ["rotating_light"] : ["warning"],
         },
       );
 
       // Only record the rung if it actually went somewhere. A failed push that marked
-      // itself delivered would turn a transient ntfy outage into a question you are never
+      // itself delivered would turn a transient push outage into a question you are never
       // reminded about again — the precise failure this is here to prevent.
       if (sent.ok) {
         store.setConfirmationRung(row.id, rung);

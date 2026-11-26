@@ -941,7 +941,8 @@ const runAgentLoop = async (
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
       // Outside content is about to reach the model (section 15, R2). Recorded so a later card can say a
       // run that had read an email or a page made the call, and so it never offers "Always allow" then.
-      if (runId != null && result.status === "executed" && result.output.includes("[UNTRUSTED CONTENT from ")) {
+      // Any untrusted marker counts, not only tagUntrusted's: source_read labels stored pages its own way (review, 2026-11-26).
+      if (runId != null && result.status === "executed" && /UNTRUSTED/.test(result.output)) {
         try {
           markReadOutside(runId);
         } catch (err) {

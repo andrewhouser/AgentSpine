@@ -343,6 +343,7 @@ export const ChatView = ({ attention, conversationId, onTitleMayHaveChanged, unr
               plan={turn.plan}
               projectId={thread?.conversation.project_id ?? null}
               runId={turn.id}
+              served={turn.served ?? null}
               sources={turn.sources ?? null}
               starred={turn.starred}
               startedAt={turn.started}

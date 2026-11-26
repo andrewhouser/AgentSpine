@@ -782,6 +782,9 @@ struct TurnView: View {
             HStack(spacing: 6) {
                 Text(SpineDate.timeOfDay(turn.started))
                 if let tier = turn.tier { Text("·"); Text(tier) }
+                // Where it ran (section 15, R10), from what the server recorded.
+                let whereRan = PrivacyWords.turnWhere(cloud: turn.served?.cloud, via: turn.served?.via)
+                if !whereRan.isEmpty { Text("·"); Text(whereRan) }
                 if !turn.actions.isEmpty {
                     Text("·")
                     Text("\(turn.actions.count) tool call\(turn.actions.count == 1 ? "" : "s")")

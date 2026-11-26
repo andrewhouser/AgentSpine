@@ -227,6 +227,13 @@ struct MacSidebar: View {
                 .lineLimit(1)
                 .foregroundStyle(Spine.Palette.text)
             Spacer(minLength: Spine.Space.xs)
+            // The privacy rail (section 15, R10): marked only where the cloud was used.
+            if PrivacyWords.threadWhere(localOnly: conversation.localOnly, projectID: conversation.projectID, ranCloud: conversation.ranCloud) == "Cloud used" {
+                Image(systemName: "cloud")
+                    .font(.caption2)
+                    .foregroundStyle(Spine.Palette.accent)
+                    .help("A turn here was answered by the cloud model")
+            }
             Text(SpineDate.relative(conversation.updated))
                 .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
                 .foregroundStyle(Spine.Palette.textFaint)

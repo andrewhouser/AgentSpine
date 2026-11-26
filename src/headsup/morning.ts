@@ -11,7 +11,6 @@
  * Same shape as the study-card sweep: a stamp in kv so a restart does not repeat the day, and
  * `send` and `fetchEvents` as seams so tests never touch Google or push a real notification.
  */
-import { DASHBOARD_PUBLIC_URL } from "../config.ts";
 import { headsupEnabled } from "../modes.ts";
 import { notify } from "../notify.ts";
 import type { NotifyOpts } from "../notify.ts";
@@ -184,12 +183,10 @@ export const runMorningHeadsup = async (
   const { body, title } = composeNotification(plan.offers, plan.deferred);
   try {
     await deps.send(title, body, {
-      ...(DASHBOARD_PUBLIC_URL ? { click: `${DASHBOARD_PUBLIC_URL}/headsup` } : {}),
       // One kind when every offer is the same kind, so "skip this kind" in the weekly review means it.
       kind: new Set(plan.offers.map((o) => o.candidate.kind)).size === 1 ? plan.offers[0].candidate.kind : "morning list",
       priority: 3,
       push: { collapseId: "headsup-morning", priority: 3, screen: "headsup", ...answerButtons(rows) },
-      tags: ["bell"],
     });
   } catch (err) {
     console.warn(`[headsup] notification failed: ${err instanceof Error ? err.message : String(err)}`);

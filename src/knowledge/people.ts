@@ -213,9 +213,9 @@ const ONE_TO_ONE_WORDS = /\b(1[:\-\s]?(on[\s-])?1|one[\s-]on[\s-]one)\b/i;
 
 /** The next calendar event that names this person and reads as a 1:1. From the stored copy, never Google. */
 const nextOneToOne = (p: k.Entity, now: Date): Person["nextOneToOne"] => {
-  const names = [p.name, ...p.aliases, p.name.split(" ")[0]].map((n) => n.toLowerCase()).filter((n) => n.length > 1);
   const events = calendarEventsBetween(now, new Date(now.getTime() + NEXT_ONE_TO_ONE_DAYS * 86_400_000));
-  const hit = events.find((e) => ONE_TO_ONE_WORDS.test(e.title) && names.some((n) => e.title.toLowerCase().includes(n)));
+  // The same match the spine uses: whole words, full names first, exactly one person (security review, 2026-11-26).
+  const hit = events.find((e) => personForEvent(e.title) === p.id);
   return hit ? { at: hit.start, title: hit.title } : null;
 };
 

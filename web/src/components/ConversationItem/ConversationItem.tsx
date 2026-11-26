@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { Conversation } from "../../lib/types.ts";
 
 import { dotLabel, isWaiting, needsYou } from "../../lib/attention.ts";
+import { threadWhere } from "../../lib/privacy.ts";
 import styles from "./ConversationItem.module.css";
 
 interface ConversationItemProps {
@@ -49,9 +50,15 @@ export const ConversationItem = ({
 
   return (
     <div className={`${styles.item} ${active ? styles.active : ""}`}>
-      <button className={`${styles.label} ${dotted ? styles.waiting : ""}`} onClick={onSelect} type="button">
+      <button className={`${styles.label} ${dotted ? styles.waiting : ""}`} onClick={onSelect} title={threadWhere(conversation)} type="button">
         {label}
       </button>
+      {/* The privacy rail (section 15, R10): a cloud mark only where the cloud was used; local is the default. */}
+      {threadWhere(conversation) === "Cloud used" && (
+        <span aria-label="Cloud used in this thread" className={styles.cloud} title="A turn here was answered by the cloud model">
+          ☁
+        </span>
+      )}
       {dotted && (
         <span aria-label={dotLabel(conversation)} className={styles.dot} role="status" title={dotLabel(conversation)} />
       )}

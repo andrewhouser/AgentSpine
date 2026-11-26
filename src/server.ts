@@ -88,6 +88,7 @@ import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { readSpine } from "./day-line.ts";
 import { decisionCard } from "./decision-card.ts";
+import { undoAction, undoOffers } from "./undo.ts";
 import { listPeople, readPerson } from "./knowledge/people.ts";
 import { readProjectPage } from "./knowledge/project-page.ts";
 import { sourcesForRuns } from "./knowledge/sources.ts";
@@ -107,7 +108,7 @@ import { previewCheckin, runCheckin, sweepCheckin } from "./checkin/run.ts";
 import * as checkinStore from "./checkin/store.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { asBundleId, defaultApnsEnv, sendPush } from "./push/apns.ts";
-import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, MAC_BANNER, NTFY_ENABLED } from "./config.ts";
+import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, MAC_BANNER } from "./config.ts";
 import { CHECKIN_PUSH_DETAIL } from "./config.ts";
 import { checkinMode, inboxSortMode, listDials, setMode } from "./modes.ts";
 import { agreement, clampDays, isWatched, setThumbsDown, wouldHave } from "./modes-watch.ts";
@@ -487,9 +488,9 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
    * The dashboard token is the general key: it opens everything, so it stays on the box
    * and only ever travels between your browser and the API.
    *
-   * An approval token is the narrow one, and exists because Approve/Reject buttons in a
-   * phone push have to carry their credential *through an ntfy server* — possibly the
-   * public one. So the thing they carry is scoped to a single pending confirmation, one
+   * An approval token is the narrow one, and exists because the iPhone's Approve/Reject
+   * buttons carry their credential through Apple's push servers (ntfy carried it too, until
+   * it was removed on 2026-11-26). So the thing they carry is scoped to a single pending confirmation, one
    * use, no other route. Worst case for a leaked approval token is that someone
    * approves or rejects one action you were already being asked about; worst case for a
    * leaked dashboard token is they run the agent and read your mail. Hence two tokens.
@@ -1794,11 +1795,12 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
               res.end();
               return;
             }
-            res.writeHead(206, { "Accept-Ranges": "bytes", "Content-Length": end - start + 1, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Type": "audio/flac" });
+            res.writeHead(206, { "Accept-Ranges": "bytes", "Cache-Control": "no-store", "Content-Length": end - start + 1, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Type": "audio/flac" });
             fs.createReadStream(file, { end, start }).pipe(res);
             return;
           }
-          res.writeHead(200, { "Accept-Ranges": "bytes", "Content-Length": size, "Content-Type": "audio/flac" });
+          // no-store: the browser must not keep the recording (or its ?token= URL) past MEETING_KEEP_AUDIO_HOURS.
+          res.writeHead(200, { "Accept-Ranges": "bytes", "Cache-Control": "no-store", "Content-Length": size, "Content-Type": "audio/flac" });
           fs.createReadStream(file).pipe(res);
           return;
         }
@@ -2252,8 +2254,15 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       const meeting = live.recording && live.meetingId != null ? meetingStore.getMeeting(live.meetingId) : undefined;
       return sendJson(res, 200, {
         ...readSpine(),
+        undo: undoOffers(),
         live: meeting ? { elapsedMs: live.elapsedMs, meetingId: meeting.id, title: meeting.title?.trim() || `Meeting #${meeting.id}` } : null,
       });
+    }
+    // POST /api/undo/:actionId: take back a reversible action from the last few minutes (src/undo.ts, section 15 R10).
+    // A person's click only; no tool reaches it, and each action is undone at most once.
+    if (m === "POST" && seg[1] === "undo" && seg.length === 3) {
+      const r = undoAction(Number(seg[2]));
+      return sendJson(res, r.ok ? 200 : 409, r);
     }
     if (seg[1] === "today") {
       if (m === "GET" && seg.length === 2) return sendJson(res, 200, readToday());
@@ -2723,19 +2732,12 @@ http.createServer(handle).listen(PORT, HOST, () => {
   );
   // Which transports are actually live, and whether an approval can be answered from the
   // phone. Worth printing in full: every one of these failures is silent at the phone end.
-  const transports = [
-    ...(APNS_ENABLED ? [`APNs (${store.activeDevices().length} device(s) registered)`] : []),
-    ...(NTFY_ENABLED ? ["ntfy"] : []),
-  ];
+  // ntfy was removed on 2026-11-26; the iPhone app is the only push.
   console.log(
     `  push: ${
-      transports.length
-        ? `${transports.join(" + ")}${
-            remoteApprovalConfigured()
-              ? ", Approve/Reject from the phone"
-              : " (no DASHBOARD_PUBLIC_URL — ntfy pushes arrive without buttons)"
-          }`
-        : "off (Mac banners only — set NTFY_TOPIC, or see ios/README.md for the iPhone app)"
+      APNS_ENABLED
+        ? `APNs (${store.activeDevices().length} device(s) registered)${remoteApprovalConfigured() ? ", Approve (Face ID) and Reject from the iPhone" : ""}`
+        : "off (Mac banners only — see ios/README.md for the iPhone app)"
     }`,
   );
 });

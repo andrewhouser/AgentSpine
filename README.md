@@ -121,6 +121,11 @@ often enough the card offers **Always allow**, which is the existing auto-approv
 for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
 returns the card (`src/decision-card.ts`).
 
+**Small things on the line** (section 15, R10). For ten minutes after it added or finished a task, or wrote
+or edited a file, Today offers **Undo** (a task is dropped or reopened, a file gets its earlier version back
+or is moved to backups). A thread where the cloud model answered shows a cloud mark, and each turn says Local
+or Cloud. The weekly review is five cards. The Mac menu bar shows the same number as the Dock.
+
 **For today, before a 1:1** (section 15, R9). A person's page starts with what to bring: what you owe
 them, oldest first, the questions they raised that nothing has settled, then what they owe you. A 1:1 on
 Today's line shows "Prep: 2 you owe · 1 they owe" and opens that page. All code, no model.
@@ -1060,7 +1065,7 @@ src/                 the agent — no build step, two runtime dependencies
   agent.ts         plan → tool → observe loop
   runner.ts        the one place a run executes; injects profile + recalled memories
   reflect.ts       post-run pass that learns durable facts about you (local-only)
-  notify.ts        reaching you: APNs + ntfy together, Mac banner only if neither landed
+  notify.ts        reaching you: the iPhone app (APNs), Mac banner only if it did not land
   push/
     apns.ts        Apple Push, HTTP/2 + a self-signed ES256 JWT, no dependencies
   watcher.ts       npm run watcher — install/inspect poll-diff-act schedules
@@ -1468,27 +1473,29 @@ A Mac banner only works if you're sitting at the Mac. Once AgentSpine lives on a
 always-on box, "it acted while you were away" needs two things: it can reach you, and you
 can answer.
 
-**There are two ways to reach your phone**, and they run *together* rather than as a
-fallback chain: [the AgentSpine iOS app](ios/README.md), and ntfy. Both configured means
-both get pushed, every time — because the failure worth guarding against is not a transport
-erroring, it is a transport that looks like it worked while the notification went nowhere,
-which is the normal failure mode of a stale APNs token and of an ntfy topic you have
-stopped looking at. The Mac banner is a true fallback and fires only when neither delivered.
+**One way reaches your phone: [the AgentSpine iOS app](ios/README.md)**, over Apple's push
+service. ntfy was a second transport until 2026-11-26; it was removed because its Approve and
+Reject buttons answered a one-line summary, through a server that may be the public one, with no
+Face ID. `NTFY_*` lines left in an old `.env` are ignored. The Mac banner is a fallback and fires
+only when the push did not deliver.
+
+Three things push automatically: an irreversible action landing in the confirm queue, an
+unattended run failing, and, if you turn it on, scheduled jobs reporting in. That last one is
+**off by default**, because a watcher that polls every five minutes should be silent unless
+something actually changed. A job that does want you calls the `notify` tool itself, which is also
+how a morning brief arrives.
 
 ### The iPhone app
 
 [`ios/`](ios/README.md) is a native SwiftUI client: the thread list, a composer, turns
 streaming in live with the broker's verdict on every tool call, the approval queue, and
-notifications with Approve / Reject on the lock screen. It is never submitted to the App
-Store — you install it on your own phone from Xcode and it lasts a year before it needs
-re-signing.
+notifications with Approve / Reject on the lock screen. Approve asks for Face ID or a passcode
+first; it is the one place outside the full decision card where an approval can be answered
+(your decision, 2026-11-26). It is never submitted to the App Store — you install it on your own
+phone from Xcode and it lasts a year before it needs re-signing.
 
-It exists for a reason that is slightly embarrassing to write down: a notification you have
-trained yourself to swipe away is not a notification. ntfy works, but it is a generic client
-sharing its Focus allowance and its badge with whatever else you subscribed to, and the
-approval that most needs to interrupt you is the one most likely to be dismissed with
-everything else. A dedicated app gets its own icon, its own Time Sensitive permission, and a
-tap that lands on the actual thread.
+A dedicated app gets its own icon, its own Time Sensitive permission, and a tap that lands on the
+actual thread, which a generic push client sharing its Focus allowance with everything else cannot.
 
 The cost is an Apple Developer membership — $99/year, and not for distribution. Push
 Notifications is the one entitlement a free Apple ID cannot have, so without it iOS never
@@ -1499,30 +1506,15 @@ Pushes to the app travel over **Apple's** network, not the tailnet, so they arri
 cellular and on other people's Wi-Fi. Reading the thread afterwards needs Tailscale; being
 told does not.
 
-### ntfy
+**What an approval from the phone carries.** It is deliberately **not** the dashboard token —
+that one opens everything, so it never leaves the box. Every queued confirmation gets its own
+24-byte token that can approve or reject *that one pending action, once*. It's burned the moment
+the confirmation changes state, so a replayed button does nothing; it's scoped to a single id, so
+it can't be pointed at a different action; it's rejected on any other route; and approval attempts
+are rate limited to 20/min per IP. The worst case for a leaked approval token is that someone
+answers one question you were already about to be asked.
 
-**Push.** Set `NTFY_TOPIC` (and optionally `NTFY_URL` for your own server) and
-notifications go to the [ntfy](https://ntfy.sh) app on your phone; leave it empty and
-everything falls back to a Mac banner. Three things push automatically: an irreversible
-action landing in the confirm queue, an unattended run failing, and — if you turn it on —
-scheduled jobs reporting in. That last one is **off by default**, because a watcher that
-polls every five minutes should be silent unless something actually changed. A job that
-does want you calls the `notify` tool itself, which is also how a morning brief arrives.
-
-**No account needed.** ntfy.sh requires none — pick a topic name and publish. The free tier
-allows 250 messages a day, far more than confirmations, failures, and a daily digest will
-use. But the topic name *is* the authentication, so make it unguessable:
-
-```bash
-NTFY_TOPIC=agentspine-$(openssl rand -hex 12)
-```
-
-Anyone who learns that name can read your notifications, and they quote calendar entries,
-mail subjects, and draft bodies. (An ntfy account buys you a *reserved* topic, which also
-stops anyone else publishing **to** you under that name — worth having eventually on the
-public server, not urgent to start.)
-
-**The Mac banner.** When no push delivers, the fallback is a banner on the Mac. By default
+**The Mac banner.** When the push does not deliver, the fallback is a banner on the Mac. By default
 (`MAC_BANNER=app`) the server only records it in the outbox and the AgentSpine Mac app shows it,
 within about 30 seconds, under its own icon. The app is the one that has to be running: it polls
 `GET /api/outbox/banners`, starts after whatever was sent before it opened, and leaves approvals
@@ -1530,53 +1522,7 @@ to its own approval banner. Set `MAC_BANNER=osascript` for the old behaviour, wh
 runs `display notification`; macOS attributes that to Script Editor (a generic script icon) and a
 click does not open AgentSpine.
 
-### Self-hosting ntfy — worth doing eventually
-
-Start on ntfy.sh to confirm the loop works end to end. Then move to your own server, which
-is the option that actually matches this project's posture: local-first, with nothing
-sensitive passing through infrastructure you don't run. On the public server every
-notification body — every draft reply, every calendar summary — transits someone else's
-machine. The topic name protects it from casual discovery, not from the operator.
-
-Migrating is one environment variable, because `NTFY_URL` was config rather than hardcoded
-from the start:
-
-```bash
-brew install ntfy
-brew services start ntfy          # defaults to http://localhost:80
-
-# .env — everything else is unchanged
-NTFY_URL=http://mini.your-tailnet.ts.net
-NTFY_TOPIC=agentspine            # a self-hosted topic needn't be random
-NTFY_TOKEN=                      # only if you enable auth on your server
-```
-
-Then point the phone app at your server instead of ntfy.sh and re-subscribe.
-
-The natural moment for this is when you set up the Mac Mini (see [MIGRATION.md](MIGRATION.md)),
-since you'll already be running Tailscale there for `DASHBOARD_PUBLIC_URL` and the
-Approve/Reject buttons — the same tailnet address serves both. One caveat: a self-hosted
-ntfy is only as reachable as the box it runs on, so if the Mini is down you lose the
-notification telling you the Mini is down. The Mac-banner fallback doesn't help on a
-headless machine either. If that matters, keep a public-server topic configured for the
-"something is badly wrong" case, or accept that a dead host is a silent host.
-
-**Approving remotely.** Set `DASHBOARD_PUBLIC_URL` to a Tailscale or LAN address your
-phone can reach, and confirmation pushes arrive with Approve / Reject buttons that call
-straight back into the API. Tapping one closes the loop from wherever you are.
-
-The interesting problem there is what credential the button carries, since the
-notification passes through an ntfy server you may not control. It is deliberately **not**
-the dashboard token — that one opens everything, so it never leaves the box. Instead every
-queued confirmation gets its own 24-byte token that can approve or reject *that one
-pending action, once*. It's burned the moment the confirmation changes state, so a
-replayed button does nothing; it's scoped to a single id, so it can't be pointed at a
-different action; it's rejected on any other route; and approval attempts are rate limited
-to 20/min per IP, which puts brute-forcing it out of reach. The worst case for a leaked
-approval token is that someone answers one question you were already about to be asked.
-
-Do not port-forward the dashboard to the public internet to make this work. Tailscale or
-the LAN, per SPEC §3.
+Do not port-forward the dashboard to the public internet. Tailscale or the LAN, per SPEC §3.
 
 ### The weekly review — what it sent you, and what you thought
 
@@ -1593,7 +1539,7 @@ kind), so recall picks it up the next day. It does **not** switch a watcher or s
 can forget the note under Memory. A box at the top takes "something I wish I'd been told", stored as
 a memory phrased as something to bring up. Answers write memory only, never `profile.md`,
 `goals.md`, `policy.json` or `agents/*.md`. No model does the counting. Opening the review marks what
-it lists as seen, which is the only signal an ntfy-only setup can give.
+it lists as seen, which is the only signal a Mac banner can give.
 
 ### The watchdog — a clock on the queue
 

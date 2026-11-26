@@ -93,7 +93,7 @@ export const WISH_MAX = 300;
  *
  * A message is "skipped" when you pressed Skip this kind, dismissed the push, or left it for
  * IGNORED_AFTER_HOURS; "Useful" cancels the other two. The rate is over messages whose outcome is known,
- * because a push that ntfy could not report on says nothing either way.
+ * because a push that could not report (a Mac banner; ntfy, before it was removed) says nothing either way.
  */
 export const SKIP_WINDOW_DAYS = OUTBOX_RETENTION_DAYS;
 /** Fewer known outcomes than this and a kind earns nothing: eight is enough to tell a habit from a bad week. */

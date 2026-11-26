@@ -137,6 +137,15 @@ const checkoutOf = (dir: string): null | string => {
   }
 };
 
+/** Whether a path is itself a symlink (not what it points to). */
+const isLink = (file: string): boolean => {
+  try {
+    return fs.lstatSync(file).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
 const readOrNull = (file: string): Buffer | null => {
   try {
     return fs.readFileSync(file);
@@ -177,7 +186,11 @@ export const keepingProtected = async <T>(
     }
   };
   const before = new Map<string, Buffer | null>();
-  for (const rel of [...PROTECTED_PATHS, ...CONTROL_PATHS, ...agentFiles()]) before.set(rel, readOrNull(abs(rel)));
+  const linkedBefore = new Set<string>();
+  for (const rel of [...PROTECTED_PATHS, ...CONTROL_PATHS, ...agentFiles()]) {
+    before.set(rel, readOrNull(abs(rel)));
+    if (isLink(abs(rel))) linkedBefore.add(rel);
+  }
 
   const restore = (): string[] => {
     const putBack: string[] = [];
@@ -185,9 +198,13 @@ export const keepingProtected = async <T>(
     for (const rel of agentFiles()) if (!before.has(rel)) before.set(rel, null);
     for (const [rel, was] of before) {
       const now = readOrNull(abs(rel));
+      // A file swapped for a symlink to an identical copy reads the same, but the next write to the copy would
+      // change it (security review, 2026-11-26). So a new symlink is a change even when the contents match.
+      const relinked = isLink(abs(rel)) && !linkedBefore.has(rel);
       if (was == null && now == null) continue;
-      if (was != null && now != null && was.equals(now)) continue;
+      if (!relinked && was != null && now != null && was.equals(now)) continue;
       try {
+        if (relinked) fs.rmSync(abs(rel), { force: true });
         if (was == null) fs.rmSync(abs(rel), { force: true });
         else {
           fs.mkdirSync(path.dirname(abs(rel)), { recursive: true });

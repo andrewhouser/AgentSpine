@@ -249,7 +249,7 @@ export const markOutcome = (id: number, report: OutboxReport, now: Date = new Da
 
 /**
  * What became of a message, as far as we can honestly say. Only an APNs delivery can ever be
- * anything but `unknown`: ntfy and the Mac banner report nothing, and that is not guessed.
+ * anything but `unknown`: the Mac banner (and ntfy, before it was removed) reports nothing, and that is not guessed.
  * `opened` wins over `dismissed` (you dismissed it, then thought better), and `ignored` is a
  * read-time inference from silence after IGNORED_AFTER_HOURS, never stored.
  */

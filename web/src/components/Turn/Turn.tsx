@@ -1,8 +1,10 @@
 import type { TurnSources } from "../../lib/moments.ts";
 import type { RunNoteLike } from "../../lib/runNotes.ts";
+import type { ServedModel } from "../../lib/types.ts";
 import type { Attachment, LiveToolCall, PlanStep, VisionPass } from "../../lib/types.ts";
 
 import { describeActivity } from "../../lib/activity.ts";
+import { turnWhere } from "../../lib/privacy.ts";
 import { describeRunNote } from "../../lib/runNotes.ts";
 import { weatherCardOf } from "../../lib/weatherCard.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
@@ -42,6 +44,8 @@ interface TurnProps {
   plan?: PlanStep[];
   projectId?: null | number;
   runId?: number;
+  /** Persisted turns only: what answered it, for the privacy rail (section 15, R10). */
+  served?: null | ServedModel;
   /** Persisted turns only: what a knowledge answer rested on (section 15, R5). */
   sources?: null | TurnSources;
   starred?: boolean;
@@ -83,6 +87,7 @@ export const Turn = ({
   plan = [],
   projectId = null,
   runId,
+  served,
   sources,
   starred = false,
   startedAt,
@@ -156,9 +161,11 @@ export const Turn = ({
         {runId !== undefined && !live && !error && (
           <ReplyActions contextUsed={contextUsed} projectId={projectId} runId={runId} starred={starred} />
         )}
-        {tier && (
+        {(tier || turnWhere(served)) && (
           <div className={styles.footer}>
-            <TierBadge reason={tierReason} tier={tier} />
+            {tier && <TierBadge reason={tierReason} tier={tier} />}
+            {/* Where it ran (section 15, R10), from what the server recorded. */}
+            {turnWhere(served) && <span className={styles.where}>{turnWhere(served)}</span>}
           </div>
         )}
       </>

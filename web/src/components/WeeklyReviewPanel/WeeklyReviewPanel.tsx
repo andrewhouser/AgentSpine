@@ -1,9 +1,11 @@
 import { useState } from "react";
 
+import type { ReviewCardKey, ReviewCounts } from "../../lib/review-cards.ts";
 import type { AfterCheckCard, LessonCard, OutboxReview, RetroCard, ReviewItem } from "../../lib/types.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
+import { firstOpenCard, REVIEW_CARDS, reviewCardLine } from "../../lib/review-cards.ts";
 import styles from "./WeeklyReviewPanel.module.css";
 
 const NONE: null | OutboxReview = null;
@@ -56,6 +58,8 @@ const OUTCOME_LABELS: Record<ReviewItem["outcome"], string> = {
 export const WeeklyReviewPanel = () => {
   const [review, refresh] = useResource(api.outboxReview, NONE);
   const [wish, setWish] = useState("");
+  // Which of the five cards is open; null opens the first with something waiting (section 15, R10).
+  const [card, setCard] = useState<null | ReviewCardKey>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -100,9 +104,26 @@ export const WeeklyReviewPanel = () => {
       return r.remembered ? "Noted. I will bring up things like that." : "I already had that one.";
     });
 
+  // Five cards, one at a time (section 15, R10). The counts are arithmetic on what the review returned.
+  const counts: ReviewCounts = {
+    changes: (review.retro ?? []).length + (review.afterChecks ?? []).length,
+    learned: (review.lessons?.cards ?? []).length,
+    quiet: (review.quiet ?? []).length,
+    unrated: review.items.filter((i) => i.feedback === null).length,
+  };
+  const shown = card ?? firstOpenCard(counts);
+
   return (
     <section>
       <h2 className={styles.subhead}>Weekly review</h2>
+      <div aria-label="Review cards" className={styles.cards} role="tablist">
+        {REVIEW_CARDS.map((c) => (
+          <button aria-selected={shown === c.key} className={`${styles.cardTab} ${shown === c.key ? styles.cardOn : ""}`} key={c.key} onClick={() => setCard(c.key)} role="tab" type="button">
+            <span className={styles.cardTitle}>{c.title}</span>
+            <span className={styles.cardLine}>{reviewCardLine(c.key, counts)}</span>
+          </button>
+        ))}
+      </div>
       <p className={styles.note}>
         What I sent you in the last {review.days} days. Tell me which were useful and which kinds to skip. Skipping
         saves a note that I should not interrupt you about that kind again unless it is clearly more important; it
@@ -110,7 +131,7 @@ export const WeeklyReviewPanel = () => {
         A Sunday evening push tells you when a week is ready.
       </p>
 
-      {review.tally.length > 0 && (
+      {shown === "sent" && review.tally.length > 0 && (
         <ul className={styles.counts}>
           {review.tally.map((t) => (
             <li key={t.source}>
@@ -125,7 +146,8 @@ export const WeeklyReviewPanel = () => {
         </ul>
       )}
 
-      {(review.quiet ?? []).length > 0 && (
+      {shown === "quiet" && (review.quiet ?? []).length === 0 && <div className={styles.empty}>Nothing you mostly skip.</div>}
+      {shown === "quiet" && (review.quiet ?? []).length > 0 && (
         <>
           <p className={styles.note}>
             Kinds you mostly skip, over the last 90 days. Nothing is switched off. For a scheduled job at the top of
@@ -141,7 +163,8 @@ export const WeeklyReviewPanel = () => {
         </>
       )}
 
-      {(review.lessons?.cards ?? []).length > 0 && (
+      {shown === "learned" && (review.lessons?.cards ?? []).length === 0 && <div className={styles.empty}>No lessons or recipes waiting.</div>}
+      {shown === "learned" && (review.lessons?.cards ?? []).length > 0 && (
         <>
           <p className={styles.note}>
             Lessons and recipes waiting for you ({review.lessons?.total}). No run can see these until you keep one. Keep
@@ -168,7 +191,8 @@ export const WeeklyReviewPanel = () => {
         </>
       )}
 
-      {(review.afterChecks ?? []).length > 0 && (
+      {shown === "changes" && counts.changes === 0 && <div className={styles.empty}>Nothing proposed this week.</div>}
+      {shown === "changes" && (review.afterChecks ?? []).length > 0 && (
         <>
           <p className={styles.note}>Jobs whose task changed three weeks or more ago. Going back asks for your approval first.</p>
           {(review.afterChecks ?? []).map((card) => (
@@ -191,7 +215,7 @@ export const WeeklyReviewPanel = () => {
         </>
       )}
 
-      {(review.retro ?? []).length > 0 && (
+      {shown === "changes" && (review.retro ?? []).length > 0 && (
         <>
           <p className={styles.note}>Ideas from your week. Nothing here has been changed.</p>
           {(review.retro ?? []).map((card) => (
@@ -214,6 +238,7 @@ export const WeeklyReviewPanel = () => {
         </>
       )}
 
+      {shown === "missed" && (
       <div className={styles.wish}>
         <input
           aria-label="Something I wish I'd been told"
@@ -227,16 +252,17 @@ export const WeeklyReviewPanel = () => {
           Save
         </button>
       </div>
+      )}
 
       {/* Always rendered, so an answer does not push the list down under the cursor. */}
       <div aria-live="polite" className={`${styles.status} ${styles.reserved}`}>
         {message}
       </div>
       {error && <div className={styles.error}>{error}</div>}
-      {review.items.length === 0 && <div className={styles.empty}>Nothing to review yet.</div>}
-      {review.items.length > 0 && <p className={styles.note}>Useful also clears an earlier Skip for that kind of message.</p>}
+      {shown === "sent" && review.items.length === 0 && <div className={styles.empty}>Nothing to review yet.</div>}
+      {shown === "sent" && review.items.length > 0 && <p className={styles.note}>Useful also clears an earlier Skip for that kind of message.</p>}
 
-      {review.items.map((item) => (
+      {shown === "sent" && review.items.map((item) => (
         <div className={styles.item} key={item.id}>
           <div className={styles.title}>{item.title}</div>
           <div className={styles.meta}>

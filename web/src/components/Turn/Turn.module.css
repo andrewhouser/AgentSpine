@@ -53,3 +53,10 @@
   top: 6px;
   width: 2px;
 }
+
+/* Where the turn ran (section 15, R10). */
+.where {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-left: 8px;
+}

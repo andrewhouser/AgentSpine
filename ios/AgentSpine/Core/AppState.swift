@@ -207,6 +207,8 @@ final class TodayStore {
     /// The spine's Ahead, kept apart because Later and Seen answer with Today alone.
     private(set) var ahead: [SpineAhead] = []
     private(set) var calendarAsOf: String?
+    /// Undo offers for the last few minutes (section 15, R10), kept apart like `ahead`.
+    private(set) var undo: [UndoOffer] = []
     /// Set while `screen` is the saved copy because the server is unreachable. An approval shown
     /// from it cannot be answered: it may already have been, or have changed.
     private(set) var cachedAt: Date?
@@ -232,6 +234,7 @@ final class TodayStore {
             screen = fresh.value
             ahead = fresh.value.ahead ?? []
             calendarAsOf = fresh.value.calendarAsOf
+            undo = fresh.value.undo ?? []
             cachedAt = fresh.cachedAt
             error = nil
             // A saved copy's count may be stale, and a stale badge is worse than yesterday's.
@@ -249,6 +252,17 @@ final class TodayStore {
         let conversation = try await api.createConversation(projectID: projectID)
         _ = try await api.send(message: text, to: conversation.id)
         return conversation.id
+    }
+
+    /// Undo one recent action; the screen is then read again.
+    func undoAction(_ offer: UndoOffer) async {
+        do {
+            let r = try await api.undoAction(offer.actionId)
+            error = r.ok ? nil : r.message
+        } catch {
+            self.error = error.localizedDescription
+        }
+        await load()
     }
 
     /// Hide one item until the next morning. The server answers with the whole screen.

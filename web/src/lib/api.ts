@@ -672,6 +672,8 @@ export const api = {
   toggleSchedule: (id: number, enabled: boolean) =>
     request<Schedule>(`/api/schedules/${id}`, { body: JSON.stringify({ enabled }), method: "PATCH" }),
 
+  /** Take back a reversible action from the last few minutes (section 15, R10). */
+  undoAction: (actionId: number) => post<{ message: string; ok: boolean }>(`/api/undo/${actionId}`),
   updateHeadsupDate: (id: number, edit: HeadsupDateEdit) => patch<HeadsupDates & { withdrawn: number }>(`/api/headsups/dates/${id}`, edit),
   updateProject: (id: number, fields: { instructions?: string; instructionsFile?: null | string; name?: string; transcriptRetentionDays?: null | number }) =>
     request<Project>(`/api/projects/${id}`, { body: JSON.stringify(fields), method: "PATCH" }),

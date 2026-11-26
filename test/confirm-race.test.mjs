@@ -130,7 +130,7 @@ console.log("\nEXECUTING IS LIVE — the sweep neither expires it nor lets a sec
   check("the claim succeeds once", store.claimConfirmation(id), true);
   check("and only once", store.claimConfirmation(id), false);
   check("the row is executing", stateOf(id), "executing");
-  await sweepConfirmations({ notifier: async () => ({ detail: "test", ok: true, via: "ntfy" }) });
+  await sweepConfirmations({ notifier: async () => ({ detail: "test", ok: true, via: "apns" }) });
   check("an old executing row is not expired by the sweep", stateOf(id), "executing");
   check("an executing row is not offered as pending", store.listConfirmations("pending").some((c) => c.id === id), false);
   const late = await approveConfirmation(id, noResume);

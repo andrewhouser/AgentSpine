@@ -22,6 +22,8 @@ struct Conversation: Codable, Identifiable, Hashable {
     /// Absent from older servers.
     let localOnly: Int?
     let projectID: Int?
+    /// 1 when any turn here was served by the cloud tier (section 15, R10). Absent from older servers.
+    let ranCloud: Int?
     let tier: String?
     let title: String?
     /// 1 when a reply finished after you last looked at this thread. Absent from older servers.
@@ -32,6 +34,7 @@ struct Conversation: Codable, Identifiable, Hashable {
         case archived, attention, created, id, tier, title, unread, updated
         case localOnly = "local_only"
         case projectID = "project_id"
+        case ranCloud = "ran_cloud"
     }
 
     /// Replies here run on the local model only.
@@ -869,7 +872,7 @@ struct ReviewItem: Codable, Identifiable, Hashable {
     var feedback: String?
     let id: Int
     let kind: String
-    /// What became of it: "opened" and "dismissed" come from the phone; ntfy and Mac banners say "unknown".
+    /// What became of it: "opened" and "dismissed" come from the phone; a Mac banner says "unknown".
     let outcome: String
     let source: String
     let title: String
@@ -2501,6 +2504,21 @@ struct TodayScreen: Codable {
     let calendarAsOf: String?
     /// A meeting recording now, which the line opens (section 15, R4).
     let live: SpineLive?
+    /// Reversible actions from the last few minutes that can be taken back (section 15, R10).
+    let undo: [UndoOffer]?
+}
+
+struct UndoOffer: Codable, Hashable, Identifiable {
+    let actionId: Int
+    let at: String
+    let line: String
+    let undoLine: String
+    var id: Int { actionId }
+}
+
+struct UndoResult: Codable, Hashable {
+    let message: String
+    let ok: Bool
 }
 
 struct SpineLive: Codable, Hashable {
@@ -2963,4 +2981,46 @@ enum MemoryWords {
     static func usesLine(_ uses: Int) -> String { uses <= 0 ? "Not used yet" : uses == 1 ? "Used once" : "Used \(uses) times" }
     static func cloudLine(_ cloudSafe: Bool) -> String { cloudSafe ? "May reach the cloud" : "Local only" }
     static func guessLine(_ guess: Bool) -> String { guess ? "Guess: nobody has confirmed this" : "" }
+}
+
+// MARK: - Privacy rail
+
+/// Where a thread or a turn ran (section 15, R10), from what the server recorded. Mirrors
+/// `web/src/lib/privacy.ts`; test/privacy-rail.test.mjs holds the two equal.
+enum PrivacyWords {
+    static func threadWhere(localOnly: Int?, projectID: Int?, ranCloud: Int?) -> String {
+        localOnly == 1 || projectID != nil ? "Local only" : ranCloud == 1 ? "Cloud used" : "Local so far"
+    }
+
+    static func turnWhere(cloud: Bool?, via: String?) -> String {
+        guard let cloud, let via else { return "" }
+        return cloud || via == "cloud" ? "Cloud" : "Local"
+    }
+}
+
+// MARK: - Review cards
+
+/// The weekly review as five cards (section 15, R10). Mirrors `web/src/lib/review-cards.ts`;
+/// test/review-cards.test.mjs holds the two equal. Counts are arithmetic on what the review returned.
+enum ReviewWords {
+    static let cards: [(key: String, title: String)] = [
+        ("sent", "What I sent you"), ("quiet", "What to quiet"), ("learned", "What I learned"),
+        ("changes", "What I would change"), ("missed", "What I missed"),
+    ]
+
+    private static func n(_ count: Int, _ one: String, _ many: String) -> String { "\(count) \(count == 1 ? one : many)" }
+
+    static func line(_ key: String, unrated: Int, quiet: Int, learned: Int, changes: Int) -> String {
+        switch key {
+        case "sent": return unrated == 0 ? "All rated" : "\(n(unrated, "message", "messages")) to rate"
+        case "quiet": return quiet == 0 ? "Nothing to quiet" : "\(n(quiet, "kind", "kinds")) you mostly skip"
+        case "learned": return learned == 0 ? "Nothing waiting" : "\(n(learned, "lesson", "lessons")) to keep or drop"
+        case "changes": return changes == 0 ? "No changes proposed" : "\(n(changes, "change", "changes")) proposed"
+        default: return "Anything you wish you had been told?"
+        }
+    }
+
+    static func firstOpen(unrated: Int, quiet: Int, learned: Int, changes: Int) -> String {
+        unrated > 0 ? "sent" : quiet > 0 ? "quiet" : learned > 0 ? "learned" : changes > 0 ? "changes" : "sent"
+    }
 }

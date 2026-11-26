@@ -101,8 +101,7 @@ Once a day at most, while any card is due, `sweepDueCards` sends one notificatio
 due"). It runs from the dashboard server beside the task sweep. It goes through the outbox as the
 `study` source, which is one of the governed ones: with `OUTBOX_ENFORCE` on, quiet hours hold it, a repeat
 inside 12 hours is collapsed, and it counts toward the daily cap (`docs/PLAN-open-work.md` section 2). A tap opens the Study screen: on
-the iPhone through the push's `screen: "study"`, and in ntfy through a click URL when
-`DASHBOARD_PUBLIC_URL` is set.
+the iPhone through the push's `screen: "study"`.
 
 ## Data
 

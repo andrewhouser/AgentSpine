@@ -34,7 +34,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { DASHBOARD_PUBLIC_URL, loadPolicy } from "../config.ts";
+import { loadPolicy } from "../config.ts";
 import { headsupEnabled } from "../modes.ts";
 import { notify } from "../notify.ts";
 import type { NotifyOpts } from "../notify.ts";
@@ -280,12 +280,10 @@ export const runSequences = async (now: Date = new Date(), deps: SequenceDeps = 
     const draftLine = payload.draftFile ? ` The message to send is under "${spec.label}" in ${payload.draftFile}.` : "";
     try {
       await deps.send(TITLE[spec.id](row.subject), `${whenWhere(row.due_at, (payload.location ?? "").trim())}.${draftLine}`, {
-        ...(DASHBOARD_PUBLIC_URL ? { click: `${DASHBOARD_PUBLIC_URL}/headsup` } : {}),
         dedupeKey: `booking-${row.id}-${spec.id}`,
         kind: "booking",
         priority: 3,
         push: { collapseId: `headsup-booking-${row.id}`, priority: 3, screen: "headsup" },
-        tags: ["bell"],
       });
     } catch (err) {
       console.warn(`[headsup] booking reminder failed to send: ${err instanceof Error ? err.message : String(err)}`);

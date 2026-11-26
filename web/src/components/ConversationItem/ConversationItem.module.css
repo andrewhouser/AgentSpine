@@ -92,3 +92,11 @@
 .item:hover .dot {
   display: none;
 }
+
+/* The privacy rail (section 15, R10): shown only where a turn used the cloud. */
+.cloud {
+  color: var(--accent);
+  flex: none;
+  font-size: 0.75rem;
+  padding: 0 4px;
+}

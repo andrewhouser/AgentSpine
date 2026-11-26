@@ -446,7 +446,7 @@ export const HEADSUP_ENABLED = (env.HEADSUP_ENABLED ?? "true") !== "false";
  */
 export const CHECKIN_MODE: "log" | "off" | "push" = env.CHECKIN_MODE === "log" || env.CHECKIN_MODE === "push" ? env.CHECKIN_MODE : "off";
 /**
- * What a check-in push says about mail. A push leaves the machine (APNs, and ntfy if it is
+ * What a check-in push says about mail. A push leaves the machine (APNs; formerly ntfy too, if it was
  * configured), so the default names senders and nothing else. "subjects" adds the subject
  * lines. The list in the app and the CLI shows subjects either way: that stays local.
  */
@@ -545,16 +545,10 @@ export const WEATHER_ALERTS = {
 // unattended enough that a bad interrupt actually costs you something.
 export const JUDGE_INTERRUPTIONS = (env.JUDGE_INTERRUPTIONS ?? "false") === "true";
 
-// --- Push notifications (ntfy) ---
-// Any ntfy server: the public https://ntfy.sh, or your own. Only the URL changes.
-export const NTFY_URL = (env.NTFY_URL ?? "https://ntfy.sh").replace(/\/$/, "");
-// The topic to publish to. Empty = push disabled; notify() falls back to a Mac banner.
-// On the PUBLIC ntfy.sh a topic name is the only secret there is — anyone who knows it
-// can read your notifications. Use a long random one, or self-host.
-export const NTFY_TOPIC = env.NTFY_TOPIC ?? "";
-// Bearer token for a protected (self-hosted or reserved) topic. Optional.
-export const NTFY_TOKEN = env.NTFY_TOKEN ?? "";
-export const NTFY_ENABLED = NTFY_TOPIC.length > 0;
+// --- Push notifications ---
+// ntfy was removed on 2026-11-26 (your decision): its Approve buttons approved a one-line summary through a
+// server that may be public, and the iPhone app (APNs, below) does the same job with Face ID. NTFY_* in an
+// old .env is ignored.
 
 // Who shows the Mac banner when no push delivered. "app" (the default) leaves it to the AgentSpine
 // Mac app, which polls the outbox and posts a local notification under its own icon. "osascript"
@@ -566,11 +560,9 @@ export const MAC_BANNER: "app" | "osascript" = env.MAC_BANNER === "osascript" ? 
 /**
  * Apple Push Notification service, for the AgentSpine app on your own phone.
  *
- * This exists because ntfy's delivery is only as good as your relationship with the ntfy
- * app, and a notification you have trained yourself to swipe away is not a notification.
- * A dedicated app gets its own Focus allowances, its own Time Sensitive permission, and a
- * tap that lands on the actual thread rather than on a generic client that has to be told
- * where to go.
+ * The only push transport since ntfy was removed (2026-11-26). A dedicated app gets its own
+ * Focus allowances, its own Time Sensitive permission, and a tap that lands on the actual
+ * thread rather than on a generic client that has to be told where to go.
  *
  * It needs four things from the Apple Developer portal, all of them from a *paid* account —
  * the Push Notifications capability is the one entitlement a free personal team cannot have,

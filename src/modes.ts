@@ -19,6 +19,7 @@
  * behaviour before this file existed. Read on every call: the file is a few bytes, and a change
  * from the screen must reach the broker's next call without a restart.
  */
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -62,6 +63,11 @@ const isLevel = (v: unknown): v is Level => v === "off" || v === "watch" || v ==
 const readStore = (): Partial<Record<Feature, Level>> => {
   let raw: string;
   try {
+    // A symlink is not the file a person's click wrote: something put it there, so it is not read.
+    if (fs.lstatSync(MODES_PATH).isSymbolicLink()) {
+      console.warn("[modes] modes.json is a symlink; ignoring it and using .env");
+      return {};
+    }
     raw = fs.readFileSync(MODES_PATH, "utf8");
   } catch {
     return {};
@@ -143,8 +149,10 @@ export const setMode = (feature: unknown, level: unknown): SetResult => {
   }
   const next = { ...readStore(), [spec.feature]: level };
   // Written whole and renamed into place, so a reader never sees half a file.
-  const tmp = path.join(path.dirname(MODES_PATH), `.modes.${process.pid}.tmp`);
-  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+  // A fresh, unguessable name opened exclusively ("wx"): a file or symlink planted at a known name in its place
+  // cannot redirect this write (security review, 2026-11-26). The rename replaces modes.json itself, never a target.
+  const tmp = path.join(path.dirname(MODES_PATH), `.modes.${process.pid}.${randomBytes(8).toString("hex")}.tmp`);
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { flag: "wx" });
   fs.renameSync(tmp, MODES_PATH);
   const dial = listDials().find((d) => d.feature === spec.feature);
   if (!dial) return { error: "the dial vanished", ok: false };

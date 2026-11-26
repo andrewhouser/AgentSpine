@@ -17,7 +17,7 @@
  * A message held back by quiet hours or the cap is never marked seen, so it is still new at
  * the next check. That is why the check-in enforces both itself and not through the outbox.
  */
-import { CHECKIN_PUSH_DETAIL, DASHBOARD_PUBLIC_URL } from "../config.ts";
+import { CHECKIN_PUSH_DETAIL } from "../config.ts";
 import { keepCalendar } from "../calendar-cache.ts";
 import { checkinMode } from "../modes.ts";
 import { searchMessages, upcomingEvents } from "../google/client.ts";
@@ -230,13 +230,11 @@ export const runCheckin = async (now: Date = new Date(), opts: { force?: boolean
   store.markSeen(items, now);
   try {
     await deps.send(title, body, {
-      ...(DASHBOARD_PUBLIC_URL ? { click: `${DASHBOARD_PUBLIC_URL}/checkin` } : {}),
       kind: "check-in",
       priority: 3,
       // `screen` opens the Check-in list on the phone, where the subjects are.
       push: { collapseId: "checkin", priority: 3, screen: "checkin" },
       source: "checkin",
-      tags: ["incoming_envelope"],
     });
   } catch (err) {
     console.warn(`[checkin] notification failed: ${err instanceof Error ? err.message : String(err)}`);

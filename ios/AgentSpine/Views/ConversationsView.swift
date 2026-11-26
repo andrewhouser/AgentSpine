@@ -127,6 +127,11 @@ struct ConversationsView: View {
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(SpineDate.relative(conversation.updated))
+                    // The privacy rail (section 15, R10): marked only where the cloud was used.
+                    if PrivacyWords.threadWhere(localOnly: conversation.localOnly, projectID: conversation.projectID, ranCloud: conversation.ranCloud) == "Cloud used" {
+                        Text("·")
+                        Label("cloud", systemImage: "cloud").labelStyle(.titleAndIcon)
+                    }
                     if let tier = conversation.tier {
                         Text("·")
                         Text(tier).textCase(.lowercase)

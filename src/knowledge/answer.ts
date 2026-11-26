@@ -118,13 +118,21 @@ const clock = (ms: null | number): string => {
   return ` @ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
+/**
+ * One line, always. The question is the model's words and a claim's text and passage are a transcript's, and
+ * each line of this output is read back by code (src/knowledge/sources.ts finds "- #N" lines): a newline inside
+ * any of them could forge a line, so every field is folded onto the line it belongs to (security review,
+ * 2026-11-26).
+ */
+export const oneLine = (s: unknown): string => String(s ?? "").replace(/\s+/g, " ").trim();
+
 const cite = (c: Claim): string =>
-  `#${c.id} ${c.kind}: ${c.text} (${k.evidenceLevel(c)}${c.said_on ? `, said ${c.said_on}` : ""}; source ${c.source_kind} ${c.source_ref}${clock(c.at_ms)}` +
-  `${c.source_state === "expired" ? ", the original has aged out" : ""}; exact words: "${c.passage}")`;
+  `#${c.id} ${c.kind}: ${oneLine(c.text)} (${k.evidenceLevel(c)}${c.said_on ? `, said ${c.said_on}` : ""}; source ${c.source_kind} ${c.source_ref}${clock(c.at_ms)}` +
+  `${c.source_state === "expired" ? ", the original has aged out" : ""}; exact words: "${oneLine(c.passage)}")`;
 
 /** The text a model reads. Every line is a claim with its citation, or a plain statement that there is none. */
 export const renderEvidence = (e: AnswerEvidence): string => {
-  const out = [`Knowledge store, for "${e.question}": ${e.status.toUpperCase()}`];
+  const out = [`Knowledge store, for "${oneLine(e.question)}": ${e.status.toUpperCase()}`];
   if (e.status === "insufficient") {
     out.push("INSUFFICIENT EVIDENCE: no reviewed claim answers this. Say so; do not fill the gap from memory or guess.");
   } else {
@@ -132,14 +140,14 @@ export const renderEvidence = (e: AnswerEvidence): string => {
     for (const c of e.reviewed) out.push(`- ${cite(c)}`);
   }
   for (const g of e.conflicts) {
-    out.push(`CONFLICT on "${g.topic}": reviewed claims disagree. Report both sides and their sources; do not choose one.`);
+    out.push(`CONFLICT on "${oneLine(g.topic)}": reviewed claims disagree. Report both sides and their sources; do not choose one.`);
     for (const c of g.claims) out.push(`  - ${cite(c)}`);
   }
   if (e.notFound.length)
     out.push(`NOT FOUND in the store: nothing recorded mentions ${e.notFound.join(", ")}. Say that part is not recorded; do not fill it in.`);
   if (e.leads.length) {
     out.push(`Unreviewed leads (NOT facts; call them leads and say nobody has reviewed them): ${e.leads.length}`);
-    for (const c of e.leads.slice(0, 3)) out.push(`- #${c.id} ${c.text} (machine-extracted, source ${c.source_kind} ${c.source_ref}${clock(c.at_ms)})`);
+    for (const c of e.leads.slice(0, 3)) out.push(`- #${c.id} ${oneLine(c.text)} (machine-extracted, source ${c.source_kind} ${c.source_ref}${clock(c.at_ms)})`);
   }
   return out.join("\n");
 };

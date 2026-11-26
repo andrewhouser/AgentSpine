@@ -2,8 +2,8 @@
  * The `notify` tool — how the agent decides to interrupt you.
  *
  * Distinct from `mac_control notify`, which only ever draws a banner on this machine.
- * This one goes through src/notify.ts, so it reaches your phone when ntfy is configured
- * and quietly degrades to a Mac banner when it isn't.
+ * This one goes through src/notify.ts, so it reaches your phone when the iPhone app (APNs) is
+ * set up and quietly degrades to a Mac banner when it isn't.
  *
  * Reversible and always allowed, on the same reasoning as the Mac banner: showing you a
  * message changes nothing in the world and can't be undone-into-harm. The real cost of a

@@ -149,6 +149,22 @@ export const TodayView = ({ onAsk, onChanged, onNewChat, onOpenConversation, onO
       {today && (
         <div className={own.band}>
           <div className={own.bandLabel}>Behind</div>
+          {(today.undo ?? []).map((u) => (
+            <div className={own.row} key={u.actionId}>
+              <span className={own.rowMain}>
+                <span className={own.when}>{timeOf(u.at)}</span>
+                <span className={own.who}>{u.line}</span>
+              </span>
+              <button
+                className={styles.button}
+                onClick={() => void run(() => api.undoAction(u.actionId))}
+                title="Offered for a few minutes after it happened"
+                type="button"
+              >
+                Undo: {u.undoLine}
+              </button>
+            </div>
+          ))}
           {today.since.length === 0 && <div className={own.quiet}>Nothing has run since you last looked.</div>}
       {today && today.since.length > 0 && (
         <section>

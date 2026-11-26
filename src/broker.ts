@@ -32,7 +32,7 @@ import type { BrokerResult, ClassifiedAction, Policy, RunContext, ToolCall } fro
 import { registry } from "./tools/index.ts";
 import * as store from "./memory/store.ts";
 import { publish } from "./events.ts";
-import { notify, confirmationActions, confirmationPush } from "./notify.ts";
+import { notify, confirmationPush } from "./notify.ts";
 import { NOTIFY_ON_CONFIRMATION } from "./config.ts";
 import { outgoingEnforce } from "./modes.ts";
 import { describeFindings, scanOutgoing } from "./outgoing.ts";
@@ -293,8 +293,6 @@ export const executeCall = async (
       void notify(`Approval needed (#${cid})`, classified.summary, {
         source: "confirmation",
         priority: 4,
-        tags: ["warning"],
-        actions: token ? confirmationActions(cid, token) : [],
         // The same question, in the shape the iOS app can answer: Approve/Reject on the
         // lock screen without unlocking the phone or finding a laptop.
         push: token

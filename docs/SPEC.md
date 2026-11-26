@@ -240,6 +240,11 @@ fuzzy semantic guessing (today's model-release watcher approximates this via `re
 
 ## 3. Reach & approve from your phone — push + remote approval  ✅ **BUILT**
 
+> **Amendment, 2026-11-26: ntfy removed.** Its Approve and Reject buttons answered a one-line summary
+> through a server that may be public, with no Face ID, against section 15's rule that Approve lives in the
+> full decision card. The iPhone app (APNs) is the only push, and its Approve asks for Face ID. The record
+> below is kept as history; `NTFY_*`, `actions`, `click` and `tags` no longer exist in `src/notify.ts`.
+
 > **Status: done.** What shipped, and where it diverges from the plan below:
 > - `src/notify.ts` — `notify(title, body, {priority, tags, actions})`. Publishes to any
 >   ntfy server (`NTFY_URL` defaults to ntfy.sh; self-hosting is one env var), falls back to

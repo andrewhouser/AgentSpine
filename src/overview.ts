@@ -25,7 +25,6 @@ import {
   LESSON_MEMORY_MAX,
   loadPolicy,
   LOCAL_BASE_URL,
-  NTFY_ENABLED,
   RECIPE_MEMORY_MAX,
   REFLECT_MEMORY_MAX,
   TAVILY_API_KEY,
@@ -133,8 +132,8 @@ const connectors = (): Connector[] => {
       name: "Google",
     },
     {
-      configured: APNS_ENABLED || NTFY_ENABLED,
-      detail: [APNS_ENABLED ? "iPhone app (APNs)" : "", NTFY_ENABLED ? "ntfy" : ""].filter(Boolean).join(" + ") || "no push; Mac banners only",
+      configured: APNS_ENABLED,
+      detail: APNS_ENABLED ? "iPhone app (APNs)" : "no push; Mac banners only",
       name: "Push",
     },
     { configured: !!TTS_BASE_URL, detail: TTS_BASE_URL ? "spoken replies" : "not set; no voice out", name: "Speech" },

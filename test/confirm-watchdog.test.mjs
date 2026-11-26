@@ -54,12 +54,12 @@ const stateOf = (id) => rawDb.prepare("SELECT state FROM confirmations WHERE id 
 const rungOf = (id) => rawDb.prepare("SELECT rung FROM confirmations WHERE id = ?").get(id).rung;
 const resolvedOf = (id) => rawDb.prepare("SELECT resolved FROM confirmations WHERE id = ?").get(id).resolved;
 
-/** A notifier that records instead of pushing. `ok: false` simulates an ntfy outage. */
+/** A notifier that records instead of pushing. `ok: false` simulates a push outage. */
 const recorder = (ok = true) => {
   const sent = [];
   const fn = async (title, body, opts = {}) => {
     sent.push({ body, priority: opts.priority, title });
-    return { detail: "test", ok, via: "ntfy" };
+    return { detail: "test", ok, via: "apns" };
   };
   fn.sent = sent;
   return fn;

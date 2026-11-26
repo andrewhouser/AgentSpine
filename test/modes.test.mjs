@@ -137,6 +137,29 @@ check("and never the text that tripped it", JSON.stringify(og).includes("4111"),
 check("heads-up keeps no would-have log", watch.isWatched("headsup"), false);
 check("days are held to 1..30", [watch.clampDays(0), watch.clampDays(400), watch.clampDays("x")], [7, 30, 7]);
 
+console.log("\nSYMLINKS (security review, 2026-11-26)");
+const copy = path.join(root, "copy.json");
+fs.writeFileSync(copy, JSON.stringify({ checkin: "off" }));
+fs.rmSync(process.env.MODES_PATH, { force: true });
+fs.symlinkSync(copy, process.env.MODES_PATH);
+check("a symlinked modes.json is not read", modes.checkinMode(), "log");
+fs.rmSync(process.env.MODES_PATH, { force: true });
+const planted = path.join(root, `.modes.${process.pid}.tmp`);
+fs.writeFileSync(path.join(root, "victim.txt"), "keep me");
+fs.symlinkSync(path.join(root, "victim.txt"), planted);
+check("a planted temp-file symlink is not followed", [modes.setMode("checkin", "off").ok, fs.readFileSync(path.join(root, "victim.txt"), "utf8")], [true, "keep me"]);
+check("and modes.json is a plain file", fs.lstatSync(process.env.MODES_PATH).isSymbolicLink(), false);
+const clone2 = path.join(root, "checkout2");
+fs.mkdirSync(clone2);
+fs.writeFileSync(path.join(clone2, "package.json"), JSON.stringify({ name: "agentspine" }));
+fs.writeFileSync(path.join(clone2, "modes.json"), '{"checkin":"off"}');
+await keepingProtected(clone2, async () => {
+  fs.writeFileSync(path.join(clone2, "elsewhere.json"), '{"checkin":"off"}');
+  fs.rmSync(path.join(clone2, "modes.json"));
+  fs.symlinkSync(path.join(clone2, "elsewhere.json"), path.join(clone2, "modes.json"));
+}, () => 0);
+check("a command that swaps it for a symlink to a copy is put back", fs.lstatSync(path.join(clone2, "modes.json")).isSymbolicLink(), false);
+
 fs.rmSync(root, { force: true, recursive: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

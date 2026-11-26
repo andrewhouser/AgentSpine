@@ -40,7 +40,7 @@ check("a schedule is a schedule", originOf(r("schedule"), r("schedule")), "sched
 check("the heartbeat is a schedule", originOf(r("heartbeat"), r("heartbeat")), "schedule");
 check("a helper inside your chat is still you", originOf(r("subagent", { parent_run_id: 1 }), r("chat")), "you-typed");
 check("a helper inside a job is that job", originOf(r("subagent", { parent_run_id: 1 }), r("schedule")), "schedule");
-check("a resumed approval is you", originOf(r("approval"), r("approval")), "you-typed");
+check("a resumed approval is its own origin, not you", originOf(r("approval"), r("approval")), "after-approval");
 
 console.log("\nTHE FOUR FACTS");
 const conv = store.createConversation("Card test");
@@ -105,6 +105,23 @@ check("the last points back to the oldest still waiting", last.nextId, pending[0
 check("an expiry from the configured window", Date.parse(first.expiresAt) - Date.parse(first.ts), 60 * 60_000);
 check("an unknown id has no card", decisionCard(99999), null);
 check("the card never carries the approval token", JSON.stringify(first).includes("token"), false);
+
+console.log("\nSECURITY REVIEW FIXES (2026-11-26)");
+const facts = (tool, args) => factsFor(store.getConfirmation(store.queueConfirmation({ args, tool }, tool, clean))).facts.leavesLine;
+check("a public post is never 'nothing leaves'", facts("instagram_publish", { id: 3 }), "A public post on Instagram.");
+check("a push says so", facts("git_write", { action: "push" }), "Commits pushed to a remote repository.");
+check("a local commit stays local", facts("git_write", { action: "commit", message: "x" }), "Nothing leaves this machine.");
+check("a tool that declares nothing is 'not declared', not 'nothing'", facts("subagent", { task: "x" }), "This tool does not declare what it sends. Read the details before approving.");
+const legacy = store.startRun({ conversationId: otherConv, kind: "chat", task: "old" });
+store.rawDb.prepare("UPDATE runs SET read_outside = NULL WHERE id = ?").run(legacy);
+check("a run from before the column is not taken as clean", store.readOutsideFor(legacy), true);
+check("a new run starts clean", store.readOutsideFor(store.startRun({ conversationId: store.createConversation("new"), kind: "chat", task: "n" })), false);
+
+console.log("\nNO NTFY (your decision, 2026-11-26)");
+const notifyMod = await import("../src/notify.ts");
+const configMod = await import("../src/config.ts");
+check("no ntfy buttons and no ntfy settings remain", [Object.keys(notifyMod).filter((k) => /confirmationActions|ntfy/i.test(k)), Object.keys(configMod).filter((k) => /NTFY/.test(k))], [[], []]);
+check("the iPhone push still carries the approval", Object.keys(notifyMod.confirmationPush(1, "t")).includes("approvalToken"), true);
 
 fs.rmSync(root, { force: true, recursive: true });
 console.log(`\n${passed} passed, ${failed} failed`);

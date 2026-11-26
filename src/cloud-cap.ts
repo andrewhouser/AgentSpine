@@ -214,7 +214,6 @@ export const guardCloudCall = (runId: null | number | undefined, deps: GuardDeps
         dedupeKey: `cloud-cap:${breach.cap}:${breach.period}`,
         priority: 3,
         source: "run",
-        tags: ["warning"],
       });
     }
   } catch (err) {

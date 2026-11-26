@@ -84,6 +84,8 @@ export interface Conversation {
   /** 1 once the thread has touched private material: every turn runs on the local model only. */
   local_only?: null | number;
   project_id: null | number;
+  /** 1 when any turn here was served by the cloud tier (section 15, R10). */
+  ran_cloud?: null | number;
   /** A pinned tier for this thread, or null to size each turn automatically. */
   tier: null | string;
   title: null | string;
@@ -111,7 +113,7 @@ export interface ReviewItem {
   feedback: "skip" | "useful" | null;
   id: number;
   kind: string;
-  /** What became of it: opened and dismissed come from the phone; ntfy and Mac banners say "unknown". */
+  /** What became of it: opened and dismissed come from the phone; a Mac banner says "unknown". */
   outcome: "dismissed" | "ignored" | "opened" | "pending" | "unknown";
   source: string;
   title: string;
@@ -1458,6 +1460,8 @@ export interface Spine extends Today {
   calendarAsOf: null | string;
   /** A meeting recording now, which the line opens (section 15, R4). */
   live?: { elapsedMs: number; meetingId: number; title: string } | null;
+  /** Reversible actions from the last few minutes that can be taken back (section 15, R10). */
+  undo?: { actionId: number; at: string; line: string; undoLine: string }[];
 }
 
 export interface Today {

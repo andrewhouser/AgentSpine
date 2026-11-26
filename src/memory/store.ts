@@ -294,6 +294,8 @@ export interface ConversationRow {
    * listConversations; absent elsewhere.
    */
   attention?: number;
+  /** 1 when any turn in this thread was served by the cloud tier (section 15, R10). listConversations only. */
+  ran_cloud?: number;
   /** 1 when a reply finished after the user last looked at this thread. listConversations only. */
   unread?: number;
   /** 1 once the thread has touched private material: its turns run on the local model only. */
@@ -332,7 +334,11 @@ export const markReadOutside = (runId: number): void => {
   ).run(root);
 };
 
-/** Whether this run, its tree, or its thread before it has read outside content. */
+/**
+ * Whether this run, its tree, or its thread before it has read outside content. A run row with NULL is from before
+ * this was recorded (every new run starts at 0), so it cannot show it is clean and counts as read: "Always allow" is
+ * then not offered for it (security review, 2026-11-26).
+ */
 export const readOutsideFor = (runId: number): boolean => {
   if (!Number.isFinite(runId) || runId <= 0) return false;
   const root = rootRunId(runId);
@@ -342,7 +348,7 @@ export const readOutsideFor = (runId: number): boolean => {
         "LEFT JOIN conversations c ON c.id = r.conversation_id WHERE r.id = ?",
     )
     .get(runId, root) as { mine: null | number; rootFlag: null | number; thread: null | number } | undefined;
-  return !!r && (r.mine === 1 || r.rootFlag === 1 || r.thread === 1);
+  return !r || r.mine !== 0 || r.rootFlag === 1 || r.thread === 1;
 };
 
 export const createConversation = (title: string | null = null, projectId: number | null = null): number => {
@@ -358,7 +364,9 @@ export const listConversations = (limit = 100, includeArchived = false): Convers
     .prepare(
       `SELECT c.*, (SELECT COUNT(*) FROM confirmations f WHERE f.conversation_id = c.id AND f.state = 'pending') AS attention,
          CASE WHEN COALESCE((SELECT MAX(r.id) FROM runs r WHERE r.conversation_id = c.id AND r.finished IS NOT NULL), 0)
-                   > COALESCE(c.seen_run, 0) THEN 1 ELSE 0 END AS unread
+                   > COALESCE(c.seen_run, 0) THEN 1 ELSE 0 END AS unread,
+         -- The privacy rail (section 15, R10): 1 when any turn here was served by the cloud tier (runs.served).
+         EXISTS (SELECT 1 FROM runs r WHERE r.conversation_id = c.id AND r.served LIKE '%"cloud":true%') AS ran_cloud
        FROM conversations c ${includeArchived ? "" : "WHERE c.archived = 0"} ORDER BY c.updated DESC LIMIT ?`,
     )
     .all(limit) as unknown as ConversationRow[];
@@ -664,8 +672,8 @@ export const startRun = (opts: StartRunOpts = {}): number => {
   const r = db
     .prepare(
       // `private` starts at 0, "seen from the start, not pinned so far"; see the run index above.
-      "INSERT INTO runs (started, status, kind, task, schedule_id, conversation_id, tier, parent_run_id, agent, private) " +
-        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, 0)",
+      "INSERT INTO runs (started, status, kind, task, schedule_id, conversation_id, tier, parent_run_id, agent, private, read_outside) " +
+        "VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, 0, 0)",
     )
     .run(
       now(),

@@ -426,7 +426,6 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
       kind: scheduleKind(opts.scheduleId),
       priority: 4,
       source: "run",
-      tags: ["rotating_light"],
       push: {
         category: "RUN",
         collapseId: `run-${runId}`,
@@ -552,6 +551,11 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     if (projectKnowledge) used.push("project documents");
     if (seen) used.push("the attached image");
     const knowledge = [projectKnowledge, seen].filter(Boolean).join("\n\n");
+    // Outside content enters here as a message, not a tool result, so the loop's check never sees it: a project's
+    // documents and an image's description are someone else's words (security review, 2026-11-26).
+    if (knowledge) store.markReadOutside(runId);
+    // An approval's continuation carries the approved call's result in its task, untagged when a command printed it.
+    if (kind === "approval") store.markReadOutside(runId);
 
     /**
      * Images from EARLIER turns, as a standing note.
@@ -752,7 +756,6 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
           {
             priority: 3,
             source: "run",
-            tags: ["white_check_mark"],
             push: {
               category: "RUN",
               collapseId: `run-${runId}`,
@@ -781,7 +784,6 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
           kind: scheduleKind(opts.scheduleId),
           priority: 4,
           source: "run",
-          tags: ["rotating_light"],
           push: {
             category: "RUN",
             collapseId: `run-${runId}`,

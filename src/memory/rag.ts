@@ -344,7 +344,7 @@ export const keepMemoryLocal = (id: number): boolean => {
 
 /**
  * A person corrects a memory's words. The text is theirs now, so it is confirmed; it is embedded again so recall
- * finds it by what it now says. `cloud_safe` is left as it was: a correction never makes a memory cloud-safe.
+ * finds it by what it now says. `cloud_safe` is cleared: the new words were never checked, so a fix keeps it local.
  */
 export const fixMemory = async (id: number, text: string): Promise<boolean> => {
   const t = String(text ?? "").trim().slice(0, 2000);
@@ -356,8 +356,10 @@ export const fixMemory = async (id: number, text: string): Promise<boolean> => {
   } catch (err) {
     console.warn(`[rag] embedding failed on a fix, keeping the old vector: ${err instanceof Error ? err.message : String(err)}`);
   }
-  if (vec) rawDb.prepare("UPDATE memories SET text = ?, embedding = ?, confirmed = 1 WHERE id = ?").run(t, vec, id);
-  else rawDb.prepare("UPDATE memories SET text = ?, confirmed = 1 WHERE id = ?").run(t, id);
+  // The new words are typed by a person on a screen, and nothing checked them for private material, so a fixed
+  // memory is local-only from here (security review, 2026-11-26): code never saw these words stay clean.
+  if (vec) rawDb.prepare("UPDATE memories SET text = ?, embedding = ?, confirmed = 1, cloud_safe = NULL WHERE id = ?").run(t, vec, id);
+  else rawDb.prepare("UPDATE memories SET text = ?, confirmed = 1, cloud_safe = NULL WHERE id = ?").run(t, id);
   return true;
 };
 

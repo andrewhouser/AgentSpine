@@ -142,9 +142,9 @@ check("silent for the full window: ignored", outcomeOf(row(apns.id), hoursLater(
 check("one minute short of the window: still pending", outcomeOf(row(apns.id), hoursLater(NOON, IGNORED_AFTER_HOURS - 1 / 60)), "pending");
 check("ignored is inferred, never stored", [row(apns.id).opened_at, row(apns.id).dismissed_at], [null, null]);
 
-const ntfy = admit({ body: "b", source: "tool", title: "ntfy one" }, NOON);
-complete(ntfy.id, { ok: true, via: "ntfy" });
-check("ntfy cannot report, so it is unknown and never 'ignored'", outcomeOf(row(ntfy.id), hoursLater(NOON, 100)), "unknown");
+const banner = admit({ body: "b", source: "tool", title: "banner one" }, NOON);
+complete(banner.id, { ok: true, via: "mac" });
+check("a Mac banner cannot report, so it is unknown and never 'ignored'", outcomeOf(row(banner.id), hoursLater(NOON, 100)), "unknown");
 const failedPush = admit({ body: "b", source: "tool", title: "failed one" }, NOON);
 complete(failedPush.id, { ok: false, via: "apns" });
 check("a push that did not deliver is not ignored, it was never seen", outcomeOf(row(failedPush.id), hoursLater(NOON, 100)), "unknown");

@@ -209,6 +209,19 @@ struct TodaySections: View {
                     }
                 }
             }
+            if !store.undo.isEmpty {
+                Section("Behind · just now") {
+                    ForEach(store.undo) { u in
+                        HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+                            label(title: u.line, detail: SpineDate.timeOfDay(u.at), urgent: false)
+                            Spacer(minLength: 0)
+                            Button("Undo: \(u.undoLine)") { Task { await store.undoAction(u) } }
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
             if screen.since.isEmpty {
                 Section("Behind") {
                     line("Nothing has run since you last looked.")

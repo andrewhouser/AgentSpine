@@ -500,6 +500,14 @@ private struct TurnBlock: View {
                 confirmations: turn.confirmations,
                 onDecided: onDecided
             )
+
+            // Where it ran (section 15, R10), from what the server recorded.
+            let whereRan = PrivacyWords.turnWhere(cloud: turn.served?.cloud, via: turn.served?.via)
+            if !whereRan.isEmpty {
+                Text(whereRan)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textFaint)
+            }
         }
     }
 }

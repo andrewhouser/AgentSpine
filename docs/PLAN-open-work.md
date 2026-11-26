@@ -1934,7 +1934,8 @@ leaves the machine stops and writes down what it found.
   pending cards, oldest first, and the next one's id. Approve is held for 0.8 s on all three clients, and
   the Mac's Return shortcut for Approve is gone. `src/decision-card.ts` is on the protected list, since it is
   what a person reads before approving. Tests: `decision-card`, `decision-screen`, and a loop case in
-  `private-output`. Open, for you: Approve and Reject buttons on a lock-screen push (ntfy and APNs, by
+  `private-output`. Decided 2026-11-26: Approve stays on the iPhone push (Face ID first) and ntfy is removed
+  altogether. The note that follows is what was open before. Open, for you: Approve and Reject buttons on a lock-screen push (ntfy and APNs, by
   approval token) still answer without the card, which section 15's rule says should not happen; removing
   them is a decision, not done here. A pinned or outside-content call can still be skipped by an existing
   `autoApprove`, `chatAutoTools` or schedule pre-approval; the card only withholds a new rule.
@@ -2076,6 +2077,18 @@ leaves the machine stops and writes down what it found.
 - [Opus] The privacy rail: a mark on each run and thread for where it ran, from `runs.private` and `served`.
 - [Opus] The weekly review as five cards, from what `src/outbox-review.ts` and the retro already produce.
 - [Opus] Undo inline on the spine for a few minutes after a reversible action, where the tool has an inverse.
+- **Built 2026-11-26**, the first four:
+  - The Mac menu bar's number is now Today's count, the same as the Dock and the iPhone badge (it was the larger
+    of unread threads and pending approvals). The menu bar's 30-second poll reloads Today.
+  - The privacy rail: a thread that any turn ran in the cloud shows a cloud mark (`ran_cloud` on the
+    conversation list, from `runs.served`); each turn says Local or Cloud. Web, iPhone and Mac.
+  - The weekly review is five cards, one open at a time: what I sent you, what to quiet, what I learned, what
+    I would change, what I missed; counts are arithmetic on what the review already returns.
+  - Undo (`src/undo.ts`, `POST /api/undo/:actionId`): for 10 minutes after an executed `task_add`, `task_done`,
+    `write_file` or `edit_file`, Today's Behind band offers to take it back, once. A task is dropped or
+    reopened, never deleted; a file gets its backup back, or is moved to backups if the action created it;
+    protected and control files and backups outside the backups folder are refused. Nothing else is offered.
+  - Tests: `privacy-rail`, `review-cards`, `undo`.
 - You: a Watch app, a widget or a Live Activity each need a new Xcode target.
 - The client page from the sketches waits. Section 14's U4 and U6 are unchanged and the client's project still
   cannot be set from a screen.
@@ -2087,6 +2100,23 @@ start beside R1 because its server half shares nothing with the spine.
 
 - [Fable] A security read of each item before it ships, in the manner of HANDOFF.md step 7, and of the whole
   section at the end. R2's "why", R3's mode store and R7's evidence rules are read before they are built.
+- **Security read of R0 to R9, 2026-11-26** (two independent reads of `4918333..18ba444`). Fixed, each with a test:
+  - The card said "Nothing leaves this machine" for tools that send but declare no `outgoingText` (an Instagram
+    post, a push, an unsubscribe). Now three states: declared text, a known way out (`SENDS_OUT`), or "does not
+    declare"; "nothing" only for tools known to stay local.
+  - "Read outside content" missed stored pages (`source_read`'s own header), project documents and image
+    descriptions (a message, not a tool result) and approval continuations. All now mark the run; a run row
+    from before the column counts as read; the turn after an approval is its own origin, not "you typed it".
+  - A command could swap `modes.json` (or any protected or control file) for a symlink to an identical copy and
+    keep it; `keepingProtected` now treats a new symlink as a change. The dial store's temp file had a guessable
+    name; it is now random and opened exclusively, and a symlinked `modes.json` is not read.
+  - A question or a passage with a newline could forge a "- #N" line, so a turn could show an unrelated claim as
+    a source. Every field in `renderEvidence` is kept on one line, and a source must match its claim's text.
+  - The person page's next 1:1 matched names as substrings; it now uses the spine's whole-word match.
+  - The meeting audio route now sends `Cache-Control: no-store`. A fixed memory is now local-only.
+  - Not fixed, yours: with `DASHBOARD_TOKEN` empty (the localhost default) any web page can send a plain POST to
+    any route, approvals included. That predates section 15. Setting a token closes it; requiring JSON or
+    checking `Origin` would too.
 
 Yours to decide:
 - The menu after R0: which of today's twelve places stay.

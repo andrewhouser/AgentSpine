@@ -150,7 +150,7 @@ npm run digest 168     # "What I sent you": per source, sent, opened, dismissed,
 
 - [ ] Ran log-only for about a week.
 - [ ] Read the "would be held or collapsed" counts and the opened, dismissed and ignored counts.
-      Opened and dismissed come from the iPhone only; ntfy and Mac banners report nothing.
+      Opened and dismissed come from the iPhone only; a Mac banner reports nothing. (ntfy was removed 2026-11-26.)
 - [ ] Switched on `OUTBOX_ENFORCE=true` only if the numbers say the rules would have helped.
 
 Approvals, reminders, run results and priority 5 are never held. Reversal:

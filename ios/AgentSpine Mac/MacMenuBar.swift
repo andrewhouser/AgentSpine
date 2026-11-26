@@ -55,6 +55,8 @@ final class MacApprovalWatcher {
         while !Task.isCancelled {
             await refresh()
             await state.refreshConversations()
+            // Today's count is the one number (section 15, R10): the Dock badge, the iPhone badge, and here.
+            await TodayStore.shared.load()
             try? await Task.sleep(for: .seconds(30))
         }
     }
@@ -68,7 +70,9 @@ struct MacMenuBarLabel: View {
     @Environment(MacApprovalWatcher.self) private var watcher
 
     private let recorder = MacRecorder.shared
-    private var waiting: Int { max(state.waitingThreads, watcher.pending.count) }
+    /// What needs you: Today's count, the same number as the Dock badge and the iPhone's icon (section 15,
+    /// R10). Before Today has loaded once, the older reckoning stands in so the icon is never blank.
+    private var waiting: Int { TodayStore.shared.screen?.count ?? max(state.waitingThreads, watcher.pending.count) }
 
     var body: some View {
         HStack(spacing: 3) {

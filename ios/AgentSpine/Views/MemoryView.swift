@@ -155,6 +155,8 @@ struct WeeklyReviewView: View {
     @State private var message: String?
     @State private var error: String?
     @State private var busy = false
+    /// Which of the five cards is open; nil opens the first with something waiting (section 15, R10).
+    @State private var card: String?
 
     var body: some View {
         List {
@@ -162,6 +164,30 @@ struct WeeklyReviewView: View {
                 ErrorNotice(message: error) { Task { await load() } }
             }
             if let review {
+                let unrated = review.items.filter { $0.feedback == nil }.count
+                let quietCount = review.quiet?.count ?? 0
+                let learned = review.lessons?.cards.count ?? 0
+                let changes = (review.retro?.count ?? 0) + (review.afterChecks?.count ?? 0)
+                let shown = card ?? ReviewWords.firstOpen(unrated: unrated, quiet: quietCount, learned: learned, changes: changes)
+                Section {
+                    ForEach(ReviewWords.cards, id: \.key) { c in
+                        Button { card = c.key } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(c.title).fontWeight(shown == c.key ? .semibold : .regular)
+                                    Text(ReviewWords.line(c.key, unrated: unrated, quiet: quietCount, learned: learned, changes: changes))
+                                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                        .foregroundStyle(Spine.Palette.textDim)
+                                }
+                                Spacer()
+                                if shown == c.key { Image(systemName: "chevron.down").foregroundStyle(Spine.Palette.accent) }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if shown == "sent" {
                 Section {
                     ForEach(review.tally, id: \.self) { t in
                         Text(tallyLine(t))
@@ -175,8 +201,9 @@ struct WeeklyReviewView: View {
                          + "clearly more important. It does not switch anything off, and you can forget the note "
                          + "under Memory. Looking at this list marks it as seen.")
                 }
+                }
 
-                if let quiet = review.quiet, !quiet.isEmpty {
+                if shown == "quiet", let quiet = review.quiet, !quiet.isEmpty {
                     Section {
                         ForEach(quiet, id: \.self) { q in
                             Text("\(q.topic): skipped \(q.skipped) of \(q.counted) (\(Int((q.rate * 100).rounded()))%)")
@@ -191,28 +218,31 @@ struct WeeklyReviewView: View {
                     }
                 }
 
-                if let lessons = review.lessons, !lessons.cards.isEmpty {
+                if shown == "learned", let lessons = review.lessons, !lessons.cards.isEmpty {
                     lessonSection(lessons)
                 }
 
-                if let cards = review.afterChecks, !cards.isEmpty {
+                if shown == "changes", let cards = review.afterChecks, !cards.isEmpty {
                     afterCheckSection(cards)
                 }
 
-                if let cards = review.retro, !cards.isEmpty {
+                if shown == "changes", let cards = review.retro, !cards.isEmpty {
                     retroSection(cards)
                 }
 
+                if shown == "missed" {
                 Section("Something I wish I'd been told") {
                     TextField("For example: a snow day notice", text: $wish, axis: .vertical)
                     Button("Save") { Task { await sendWish() } }
                         .disabled(busy || wish.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
                 }
 
                 if let message {
                     Section { Text(message).foregroundStyle(Spine.Palette.textDim) }
                 }
 
+                if shown == "sent" {
                 Section {
                     if review.items.isEmpty {
                         Text("Nothing to review yet.").foregroundStyle(Spine.Palette.textDim)
@@ -239,6 +269,7 @@ struct WeeklyReviewView: View {
                     Text("Messages")
                 } footer: {
                     Text("Useful also clears an earlier Skip for that kind of message.")
+                }
                 }
             } else if error == nil {
                 ProgressView()
