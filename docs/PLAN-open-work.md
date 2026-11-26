@@ -13,10 +13,12 @@ foundation (they are marked in section 3). Section 9 (harness awareness, added 2
 Sections 1 to 7 are the rest, mostly verification that needs you. Section 10 (added 2026-11-22: Claude Desktop
 parity on local models, self-change and self-learning) is proposed and not yet placed in this order; that is
 its first open decision. Section 12 (added 2026-11-24: what Claude Duet does that AgentSpine does not) is
-proposed and not placed either; its own "Sequence and decisions" says what waits on what.
+proposed and not placed either; its own "Sequence and decisions" says what waits on what. Section 13 (added
+2026-11-26: what Hermes Agent does that AgentSpine could learn from) is proposed and not placed; it extends
+section 10's LP3 and CP3 and section 4a's Phase 6.
 
-Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11 and
-12 are new, and 1 to 7 and 4a are as before.
+Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11, 12
+and 13 are new, and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -235,7 +237,8 @@ Section 0 is the priority in this area. What is left of the Nod items:
   pass, a rejected pair is never proposed again) and 6.2 (approval sets `memories.retired`, recall skips retired
   rows, `prune` hard-deletes after `CONSOLIDATE_GRACE_DAYS`, default 30, un-retire in Settings, Memory during
   the grace window; trigger from the daily prune tick with `CONSOLIDATE_EVERY_DAYS`, default 0). Three open
-  questions to settle before building are listed in `LEARNING.md`.
+  questions to settle before building are listed in `LEARNING.md`. Section 13 H3 proposes lifecycle rules for
+  6.2 taken from Hermes Agent's curator.
 - **The proposers have no trigger (decision).** Nothing in `src/` calls `runProposer` (`npm run propose`) or
   `runRewriter` (`npm run rewrite`) except their own command lines, so they run only when you run them
   (rechecked 2026-11-21). Decide whether a weekly trigger is wanted before turning on anything that depends on
@@ -899,6 +902,7 @@ is built. Every measurement named below needs the model host, so every item is *
   history is 8 turns in 6,000 characters. Replace the step cap with a token and wall-clock budget, and when a
   run's context passes a threshold, replace old tool results with short stubs (the full text stays reachable
   through `read_more`). Compact rarely, since each compaction rewrites the prefix and pays prefill again.
+  Section 13 H5 has Hermes Agent's threshold and order as a starting point.
 - **LP4 More than one tool call per step (measure first).** The protocol is one JSON action per turn and every
   step pays prefill. Bench native tool calling on the standard model through `mlx_lm.server` against the current
   protocol: parse failures, steps per task, seconds per task. Switch only if it wins. Not checked: how well
@@ -1279,6 +1283,118 @@ Open decisions for you:
 
 ---
 
+## 13. What Hermes Agent does that AgentSpine could learn from (added 2026-11-26)
+
+Source: the `nousresearch/hermes-agent` repository (MIT, Python), read at its `main` on 2026-11-26: the root and
+area `AGENTS.md` files, `agent/background_review.py`, `agent/review_signals.py`, `agent/curator.py`'s
+description in `skills/AGENTS.md`, `tools/memory_tool_store.py`, `tools/session_search_tool.py`,
+`tools/code_execution_tool.py` and `cron/AGENTS.md`. Hermes is a personal agent with one core behind a CLI,
+desktop app and 25+ messaging platforms; its headline is a self-improving skill and memory loop. Most of its
+ideas are already here (reflection, recipes, friction, subagents, a scheduler, MCP), so this section lists only
+where its version is better worked out. Nothing here is started; numbers are Hermes's, not measured here.
+
+**Not taking, so not work:** the messaging gateway (Telegram is already in "Not doing"); the provider sprawl;
+installing community skills from a hub (Hermes needs a regex scanner and trust tiers to make that safe, and it
+is outside code running under the broker).
+
+### H1. Keep the system prompt byte-stable across a thread (Code, measure first)
+
+Hermes treats this as its first invariant: the system prompt and tool list never change during a conversation,
+anything added mid-conversation rides a user message or a tool result, and compaction is the one allowed
+prefix break. A snapshot test of the stock prompt fails until the new snapshot is committed with the change.
+
+Here the contract is meant to be the cached prefix (`src/harness.ts`), but two things move it:
+- `toolDocs` appends `frictionDocs` (`src/learn/friction.ts`) to each tool's description inside the system
+  message (`src/agent.ts`). The line carries counts ("3× timeout"), so any tool error changes the prefix for
+  every later run and every later turn of the thread.
+- `settingTools` adds or removes `notify` and `look_at_image` per turn, from the goal's wording and whether the
+  thread holds an image.
+
+Proposed: first measure prefill seconds on a second turn with and without a friction line. If it costs, move
+friction notes into one block after the envelope (the note then sits further from its tool, so check SL5's
+signals do not get worse), and make the two tool toggles thread-level or gate-only. Then add a snapshot test
+of `system(tools, conversational)` for a fixed tool set, so a change to the contract is a reviewed change.
+
+### H2. Recipes are revised from use, not only created (Code; extends SL4b)
+
+Hermes runs a background review after a turn, on counters (every N user turns for memory, every N tool steps
+for skills), in a forked copy that never touches the live conversation. Its review prompt prefers, in order:
+patch a skill already loaded this run, extend a broader existing one, add a reference file under it, and only
+then create a new skill. A lesson is one rule plus one clause of why, with no dates, ticket ids or quoted text.
+
+Here `reflect` proposes a recipe only from a clean run, and a recipe records only `last_used`
+(`src/recipes/store.ts`). Proposed:
+- Count per recipe and per `reviewed_recipe` memory: times recalled, runs that used it and ended clean, runs
+  that used it and hit an error or rejection.
+- When a run that recalled a recipe ended badly, reflection proposes a patch to that recipe (a diff in the
+  approval queue, as the rewriter does) before it may propose a new one.
+- Give `reflect` the same preference order and lesson shape in its prompt. The counters and when to review are
+  code; the patch wording is the model's.
+
+### H3. A lifecycle for learned items, for LEARNING Phase 6.2 (Code, after 6.0 runs on the Mini)
+
+Hermes's curator tracks `use_count`, `view_count`, `patch_count` and last activity per skill, and moves skills
+active → stale → archived. Its rules: it touches only what the agent wrote, never deletes (archive is the
+limit, restorable), pinned items are exempt from every transition, and it snapshots before each pass.
+Proposed for 6.2 (section 4a): adopt those four rules, so retirement uses the H2 counters plus age rather than
+similarity alone, user-written memories and named recipes are never candidates, and a pin in Settings, Memory
+exempts a row. This answers part of the open questions in `LEARNING.md`; settle the rest there.
+
+### H4. Full-text search over past runs (Code)
+
+Hermes indexes every message with SQLite FTS5 and searches in four modes (find, scroll around a hit, read a
+session, browse), with no model call. It demotes scheduled-job sessions in the ranking because their repeated
+wording crowded out real conversations; it does not exclude them.
+
+Here `find_past_output` ANDs `LIKE` over `runs.task`, `note` and the conversation title (`searchRuns` in
+`src/memory/store.ts`), so it never sees answers or tool output. FTS5 is already used for project chunks
+(`src/projects/store.ts`), so no new dependency. Proposed: an FTS5 table over each run's goal, final answer
+and the text of its tool results (capped per result), ranked with scheduled runs demoted, behind the existing
+tool. Private runs stay searchable only by runs that are already pinned local, as recall is today.
+
+### H5. Compaction order for LP3 (Code; part of LP3)
+
+Hermes compacts at 50% of the context window: first it stubs old tool results (no model call), and only if that
+is not enough does it summarise with a side model. That is the order LP3 already proposes; take the threshold as
+a starting point to measure, and keep the summarising step out until stubbing alone is shown to fall short.
+
+### H6. Scheduler: a catch-up window and a stall watchdog (Code)
+
+Checked here 2026-11-26: the tick already re-arms a job before running it (`runScheduler` in `src/server.ts`),
+which is Hermes's at-most-once rule. Two of its rules are missing:
+- **Catch-up window.** A job missed while the Mini slept fires on the first tick after it wakes, however late,
+  so a morning brief can arrive at noon. Hermes skips a missed slot older than half the period, clamped to
+  2 minutes to 2 hours, and logs why. Proposed: the same, with a per-schedule override, in code.
+- **Stall watchdog on idle time, not wall clock.** Runs are serialized, so one stalled scheduled run holds up
+  everything behind it, chat included (LP5). Hermes interrupts a cron session after 600 s with no model or tool
+  activity, never one that is slow but active. Proposed: the same for unattended runs.
+
+Two Hermes job fields also fit here and are smaller: a pre-run script whose output is placed in the prompt (or
+is the whole job, with no model, as the check-in already is), and passing one job's last answer into
+another's prompt.
+
+### H7. A script that calls tools (Decision; folds into CP3)
+
+Hermes lets the model write a Python script that calls its tools over a local socket; only the script's output
+returns to the model, so a many-step pipeline costs one step of context. Here every call the script made would
+have to pass through the broker, policy, budgets and the confirmation queue exactly as a direct call does, and
+`privateOutput` would pin the run the same way. Proposed: not before LP4 and LP6 are measured, and only as part
+of CP3's decision.
+
+### Sequence and decisions
+
+Order: H1's measurement first, since it is small and the prefix is the slowest thing on the model host. H6 and
+H4 next, both plain code. H2 after SL1 has switched learning on, since revising recipes means nothing until
+recipes are recalled in real use. H3 waits on 6.0's numbers. H5 is LP3. H7 waits on CP3.
+
+Open decisions for you:
+- H1: if friction notes move out of the tool descriptions, accept that the note sits further from its tool?
+  Proposed: yes, if prefill shows a real cost.
+- H6: catch-up window default as Hermes's (half the period, 2 minutes to 2 hours)? Proposed: yes.
+- H4: index tool-result text, or only goals and answers? Proposed: both, capped per result.
+
+---
+
 ## Ground rules (settled; not work)
 
 **Settled decisions. Do not reopen without a new recorded decision.**
@@ -1318,3 +1434,4 @@ whose link needs a page click are listed as "unsubscribe by hand").
   targets. Do not hand-edit the `.pbxproj`; tick Target Membership to share a file with the Mac target.
   `Models.swift` must stay Foundation-only (`test/ios-models.test.mjs` compiles it alone), and shared files must
   not import UIKit unguarded.
+
