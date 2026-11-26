@@ -1362,6 +1362,15 @@ CHECKIN_MODE=push    # send
 Look at the preview for a few days first: if newsletters show up under Mail, or real people do
 not, the rule is wrong and should be fixed in `src/checkin/sources.ts`, not worked around.
 
+**Trust dials.** Settings → **What it may do** (first on all three clients) shows the check-in, the
+inbox sort, Heads-up, the notification limits and the outgoing-text check as Off, Watch or On, and
+lets you move them without a restart. `.env` stays in charge: a feature's `.env` value is the highest
+its dial can go, and a guard's (`OUTBOX_ENFORCE`, `OUTGOING_ENFORCE`) is the lowest, so a screen can
+turn a feature down or a guard up, never the reverse. Going past `.env` is still an edit there and a
+restart. In Watch, the dial lists what the feature would have done, from the same log `npm run
+checkin log` reads, with a thumbs-down per row and how many you agreed with. The choices live in
+`modes.json` at the root, which no tool may write (`src/modes.ts`).
+
 **Check-in** in the sidebar (web and Mac) and the tabs (iPhone, under More) is the same preview as
 a list: what is waiting by kind, the notification a check now would send or why it would not, a
 **Check now** button, and the past checks. Opening it reads and records nothing. A push opens it.

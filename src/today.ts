@@ -25,7 +25,8 @@
  */
 import { todayMail } from "./checkin/buckets.ts";
 import { sourcePrefs } from "./checkin/store.ts";
-import { CONFIRM_EXPIRE_AFTER_MIN, INBOX_SORT_MODE } from "./config.ts";
+import { CONFIRM_EXPIRE_AFTER_MIN } from "./config.ts";
+import { inboxSortMode } from "./modes.ts";
 import * as headsupLedger from "./headsup/ledger.ts";
 import type { HeadsupView } from "./headsup/ledger.ts";
 import * as store from "./memory/store.ts";
@@ -347,8 +348,8 @@ export const readToday = (now: Date = new Date()): Today => {
       later: readLater(),
       looked: store.kvGet(LOOKED_KEY)?.value ?? null,
       // Labelled mail still unread at the last inbox pass, read from the database and never
-      // from Gmail (checkin/buckets.ts). Empty unless INBOX_SORT_MODE is "on".
-      mail: todayMail(INBOX_SORT_MODE, sourcePrefs().mail),
+      // from Gmail (checkin/buckets.ts). Empty unless the inbox sort dial is On (src/modes.ts).
+      mail: todayMail(inboxSortMode(), sourcePrefs().mail),
       runs: store.rawDb
         .prepare(
           // Top-level unattended runs only: a helper's result is part of the job that started it.

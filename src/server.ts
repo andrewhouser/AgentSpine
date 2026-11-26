@@ -102,7 +102,9 @@ import * as checkinStore from "./checkin/store.ts";
 import { pruneHeadsup } from "./headsup/prune.ts";
 import { asBundleId, defaultApnsEnv, sendPush } from "./push/apns.ts";
 import { APNS_ENABLED, DASHBOARD_PUBLIC_URL, MAC_BANNER, NTFY_ENABLED } from "./config.ts";
-import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL, INBOX_SORT_MODE } from "./config.ts";
+import { CHECKIN_PUSH_DETAIL } from "./config.ts";
+import { checkinMode, inboxSortMode, listDials, setMode } from "./modes.ts";
+import { agreement, clampDays, isWatched, setThumbsDown, wouldHave } from "./modes-watch.ts";
 import { INBOX_MAX_BYTES, INBOX_WATCH_DIR } from "./config.ts";
 import { BASE, CLOUD_BASE_URL, LOCAL_BASE_URL, VISION_MAX_BYTES, VISION_MAX_IMAGES, VISION_MODEL } from "./config.ts";
 import * as store from "./memory/store.ts";
@@ -2147,24 +2149,58 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
       }
     }
 
+    /*
+     * /api/modes: the trust dials (src/modes.ts, PLAN-open-work section 15, R3).
+     *   GET  /api/modes                                   every dial, with what .env allows and, for a watched
+     *                                                     feature, the last 7 days' agreement count
+     *   POST /api/modes/:feature {mode}                   move one dial; refused past what .env allows
+     *   GET  /api/modes/:feature/would-have?days=7        what it would have done, newest first
+     *   POST /api/modes/:feature/would-have/thumbs-down {key, down}
+     * These are the only writers of modes.json. They sit behind the dashboard token like every other
+     * mutating route, and no tool reaches them: a mode is set by a person's click, as policy.json is.
+     */
+    if (seg[1] === "modes") {
+      if (m === "GET" && seg.length === 2)
+        return sendJson(
+          res,
+          200,
+          listDials().map((d) => (isWatched(d.feature) ? { ...d, agreement: agreement(d.feature, 7) } : d)),
+        );
+      if (m === "POST" && seg.length === 3) {
+        const out = setMode(seg[2], (await readBody(req))?.mode);
+        return out.ok ? sendJson(res, 200, out.dial) : sendJson(res, 400, { error: out.error });
+      }
+      if (seg.length >= 4 && seg[3] === "would-have") {
+        const feature = seg[2];
+        if (!isWatched(feature)) return sendJson(res, 404, { error: `${feature} keeps no would-have log` });
+        if (m === "GET" && seg.length === 4) return sendJson(res, 200, wouldHave(feature, clampDays(url.searchParams.get("days"))));
+        if (m === "POST" && seg.length === 5 && seg[4] === "thumbs-down") {
+          const b = await readBody(req);
+          return setThumbsDown(feature, b?.key, b?.down !== false)
+            ? sendJson(res, 200, agreement(feature, 7))
+            : sendJson(res, 400, { error: "key must name a row in this feature's log" });
+        }
+      }
+    }
+
     if (seg[1] === "checkin") {
       if (m === "GET" && seg.length === 2)
         return sendJson(res, 200, {
           intervalHours: CHECKIN_INTERVAL_HOURS,
           lastError: checkinStore.lastError(),
           lastRun: checkinStore.lastRun(),
-          mode: CHECKIN_MODE,
+          mode: checkinMode(),
           pushDetail: CHECKIN_PUSH_DETAIL,
           // Which sources a check-in reads; each can be switched off from the screen (POST /api/checkin/sources).
           sources: checkinStore.sourcePrefs(),
           runs: checkinStore.listRuns(Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))),
-          sortMode: INBOX_SORT_MODE,
+          sortMode: inboxSortMode(),
         });
       if (m === "POST" && seg.length === 3 && seg[2] === "sources") return sendJson(res, 200, checkinStore.setSourcePrefs(await readBody(req)));
       // The preview itself stays model-free: `buckets` are labels a sorting pass already stored
-      // (section 14, U7), joined by item key, and empty unless INBOX_SORT_MODE is "on".
+      // (section 14, U7), joined by item key, and empty unless the inbox sort dial is On.
       if (m === "GET" && seg.length === 3 && seg[2] === "preview")
-        return sendJson(res, 200, { ...(await previewCheckin()), buckets: shownLabels(INBOX_SORT_MODE) });
+        return sendJson(res, 200, { ...(await previewCheckin()), buckets: shownLabels(inboxSortMode()) });
       if (m === "POST" && seg.length === 3 && seg[2] === "run") {
         const ran = await runCheckin(new Date(), { force: true });
         // "Check now" also sorts what is unsorted, afterwards and apart: the check's result is
@@ -2604,7 +2640,7 @@ setInterval(() => void sweepReview(), 5 * 60_000).unref();
 // The morning heads-up: code-only, once a day, so a quiet morning costs one calendar read.
 void sweepHeadsup();
 setInterval(() => void sweepHeadsup(), 10 * 60_000).unref();
-// The check-in: code-only too, and a no-op unless CHECKIN_MODE is "log" or "push". The tick is
+// The check-in: code-only too, and a no-op unless the check-in dial is Watch or On (src/modes.ts). The tick is
 // short so a check lands soon after quiet hours end; the four-hour interval is its own gate.
 void sweepCheckin();
 setInterval(() => void sweepCheckin(), 10 * 60_000).unref();

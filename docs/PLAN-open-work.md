@@ -1919,6 +1919,17 @@ leaves the machine stops and writes down what it found.
 - [Sonnet] The dial screen on three clients, one row per feature, and the tests.
 - This is first after R0 because most of sections 12 to 14 is built and off, and a terminal is the only way to
   see any of it working.
+- **Built 2026-11-26.** You decided `.env` is the ceiling. `src/modes.ts` holds the rule: a feature's `.env`
+  value is the highest its dial goes, a guard's (`OUTBOX_ENFORCE`, `OUTGOING_ENFORCE`) the lowest, and a
+  hand-edited `modes.json` is held inside both. Heads-up is Off or On (it has no log-only mode); the guards
+  are Watch or On (they always record). `modes.json` is a control file (`write_file` refuses it,
+  `keepingProtected` puts it back) and `src/modes.ts` is on the protected list; the only writer is
+  `POST /api/modes/:feature`. The would-have lists (`src/modes-watch.ts`) read the logs each feature already
+  keeps, never the outgoing check's arguments, and the agreement count is the rows less your thumbs-down.
+  Screens: Settings → What it may do, first, on web, Mac and iPhone (`DialsView.swift`, one file shared by
+  both apps). Tests: `test/modes.test.mjs`, `test/dials-screen.test.mjs`. Not done: the Fable read of the
+  mode store that the section's last paragraph asks for before shipping, and nothing has been seen running
+  on the Mini.
 
 ### R4. Meetings on the line (Code; all three clients)
 

@@ -34,7 +34,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { DASHBOARD_PUBLIC_URL, HEADSUP_ENABLED, loadPolicy } from "../config.ts";
+import { DASHBOARD_PUBLIC_URL, loadPolicy } from "../config.ts";
+import { headsupEnabled } from "../modes.ts";
 import { notify } from "../notify.ts";
 import type { NotifyOpts } from "../notify.ts";
 import { sentToday } from "../outbox.ts";
@@ -323,7 +324,7 @@ export const reconcileSequences = (current: Candidate[], now: Date = new Date())
 
 /** Timer entry point. Logs, never throws. */
 export const sweepSequences = async (): Promise<void> => {
-  if (!HEADSUP_ENABLED) return;
+  if (!headsupEnabled()) return;
   try {
     const r = await runSequences();
     if (r.sent || r.skipped || r.withdrawn)

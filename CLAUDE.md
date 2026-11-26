@@ -77,8 +77,9 @@ Server code changes need a dashboard restart (see README → "Updating & restart
   content, the tools take a row id and no content, and the token is named only by
   `src/instagram/token.ts`. Don't add a third write (delete, comment, message) to
   `src/instagram/api.ts` without a new recorded decision.
-- **No tool may write** `policy.json`, `profile.md`, `goals.md` or `agents/*.md`. That's on
-  purpose (LEARNING invariant 1).
+- **No tool may write** `policy.json`, `profile.md`, `goals.md`, `modes.json` or `agents/*.md`. That's on
+  purpose (LEARNING invariant 1; `modes.json` holds the trust dials, `src/modes.ts`, where `.env` is a
+  feature's ceiling and a guard's floor).
 - **Scheduled runs are pre-approved, but they can't write standing work.** A tool that creates
   or edits what future unattended runs will follow (schedules today) sets
   `confirmWhenUnattended: true` so it still queues, or refuses non-chat runs outright, as

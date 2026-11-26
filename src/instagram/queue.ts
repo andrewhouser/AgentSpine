@@ -25,7 +25,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { OUTGOING_ENFORCE } from "../config.ts";
+import { outgoingEnforce } from "../modes.ts";
 import { rawDb } from "../memory/store.ts";
 import { describeFindings, scanOutgoing } from "../outgoing.ts";
 import {
@@ -537,8 +537,9 @@ export const seed = (
     // found until OUTGOING_ENFORCE is on; then it blocks approval, naming what matched and never the value.
     const found = caption ? scanOutgoing([caption]) : [];
     const outgoing = found.length ? `the caption contains a ${describeFindings(found)}` : "";
-    if (outgoing && OUTGOING_ENFORCE) rowProblems.push(outgoing);
-    const outgoingNote = outgoing && !OUTGOING_ENFORCE ? `outgoing check, log only: ${outgoing}` : "";
+    const enforce = outgoingEnforce();
+    if (outgoing && enforce) rowProblems.push(outgoing);
+    const outgoingNote = outgoing && !enforce ? `outgoing check, log only: ${outgoing}` : "";
 
     const next = {
       account,

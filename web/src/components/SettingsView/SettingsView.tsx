@@ -17,6 +17,7 @@ import {
 import { loadSpokenAlerts, LONG_RUN_SECONDS, saveSpokenAlerts } from "../../lib/spokenAlerts.ts";
 import { resolveVoiceSettings, saveVoiceSettings, TIMEOUT_MAX, TIMEOUT_MIN } from "../../lib/voiceSettings.ts";
 import { CloudUsagePanel } from "../CloudUsagePanel/CloudUsagePanel.tsx";
+import { DialsPanel } from "../DialsPanel/DialsPanel.tsx";
 import { HeadsupPrefsPanel } from "../HeadsupPrefsPanel/HeadsupPrefsPanel.tsx";
 import { NavOrderPanel } from "../NavOrderPanel/NavOrderPanel.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
@@ -52,6 +53,8 @@ const ORIGIN_LABELS: Record<string, string> = {
 const originLabel = (m: Memory): string => (m.origin === null ? "before provenance" : (ORIGIN_LABELS[m.origin] ?? m.origin));
 
 const TABS = [
+  // The dials come first (section 15, R0 and R3): what it may do is the setting that matters most.
+  { id: "dials", label: "What it may do" },
   { id: "general", label: "General" },
   { id: "memory", label: "Memory" },
   { id: "headsup", label: "Heads-up" },
@@ -63,7 +66,7 @@ type TabId = (typeof TABS)[number]["id"];
 /** The tab named in the address (?tab=memory), so a refresh or a link keeps your place. */
 const tabFromUrl = (): TabId => {
   const t = new URLSearchParams(window.location.search).get("tab");
-  return TABS.find((x) => x.id === t)?.id ?? "general";
+  return TABS.find((x) => x.id === t)?.id ?? "dials";
 };
 
 export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void }) => {
@@ -471,6 +474,7 @@ export const SettingsView = ({ onOpenRun }: { onOpenRun: (id: number) => void })
         </>
       )}
 
+      {tab === "dials" && <DialsPanel />}
       {tab === "menu" && <NavOrderPanel />}
 
       {tab === "system" && (

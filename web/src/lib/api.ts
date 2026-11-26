@@ -1,3 +1,4 @@
+import type { Dial, DialAgreement, DialLevel, WouldHave } from "./dials.ts";
 import type { FinishedRun } from "./spokenAlerts.ts";
 /**
  * The API client.
@@ -247,6 +248,8 @@ export const api = {
   deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
   deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
+  /** The trust dials (src/modes.ts). Moving one is refused past what .env allows; the error says why. */
+  dials: () => request<Dial[]>("/api/modes"),
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -564,6 +567,7 @@ export const api = {
 
   setDefaultStyle: (name: string) => request<{ defaultStyle: string }>("/api/style-default", { body: JSON.stringify({ name }), method: "PUT" }),
 
+  setDial: (feature: string, mode: DialLevel) => post<Dial>(`/api/modes/${encodeURIComponent(feature)}`, { mode }),
   setHeadsupPrefs: (patch: Record<string, unknown>) => post<HeadsupPrefs>("/api/headsups/prefs", patch),
 
   /** Change what a filed meeting keeps in its project: the full transcript, or only the summary. */
@@ -624,6 +628,8 @@ export const api = {
 
   thread: (id: number) => request<Thread>(`/api/conversations/${id}`),
 
+  thumbsDown: (feature: string, key: string, down: boolean) =>
+    post<DialAgreement>(`/api/modes/${encodeURIComponent(feature)}/would-have/thumbs-down`, { down, key }),
   today: () => request<Today>("/api/today"),
 
   todayLater: (key: string, undo = false) => post<Today>("/api/today/later", { key, undo }),
@@ -683,4 +689,5 @@ export const api = {
   visionStatus: () => request<VisionStatus>("/api/vision"),
 
   voiceStatus: () => request<VoiceStatus>("/api/voice"),
+  wouldHave: (feature: string, days = 7) => request<WouldHave[]>(`/api/modes/${encodeURIComponent(feature)}/would-have?days=${days}`),
 };

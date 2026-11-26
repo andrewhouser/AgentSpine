@@ -1074,6 +1074,8 @@ export const DB_PATH = env.SPINE_DB_PATH ?? path.join(BASE, "spine.db");
 // Overridable so a test can run against a scratch policy instead of the one you actually
 // grant capabilities with. Unset in normal operation.
 export const POLICY_PATH = env.POLICY_PATH ?? path.join(BASE, "policy.json");
+// The trust dials' store (src/modes.ts). Overridable for the same reason as POLICY_PATH.
+export const MODES_PATH = env.MODES_PATH ?? path.join(BASE, "modes.json");
 export const GOALS_PATH = path.join(BASE, "goals.md");
 export const AGENTS_DIR = env.AGENTS_DIR ?? path.join(BASE, "agents");
 export const PROFILE_PATH = env.PROFILE_PATH ?? path.join(BASE, "profile.md");

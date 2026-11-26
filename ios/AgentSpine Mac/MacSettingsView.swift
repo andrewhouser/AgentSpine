@@ -41,6 +41,8 @@ struct MacSettingsRoot: View {
 /// always on show. They are the same views the iPhone uses, so a change to one lands on both.
 struct MacAssistantSettings: View {
     private enum Screen: String, CaseIterable, Identifiable {
+        // Section 15, R3: what it may do comes first.
+        case dials = "What it may do"
         case recipes = "Recipes"
         case styles = "Styles"
         case proposals = "Auto-approval proposals"
@@ -56,6 +58,7 @@ struct MacAssistantSettings: View {
 
         var symbol: String {
             switch self {
+            case .dials: "dial.medium"
             case .recipes: "list.bullet.rectangle"
             case .styles: "textformat"
             case .proposals: "checkmark.shield"
@@ -70,7 +73,7 @@ struct MacAssistantSettings: View {
         }
     }
 
-    @State private var selection: Screen? = .recipes
+    @State private var selection: Screen? = .dials
 
     var body: some View {
         HStack(spacing: 0) {
@@ -81,7 +84,7 @@ struct MacAssistantSettings: View {
             .frame(width: 230)
             Divider()
             // A new identity per screen, so a page opened inside one doesn't stay open under the next.
-            NavigationStack { detail(selection ?? .recipes) }
+            NavigationStack { detail(selection ?? .dials) }
                 .id(selection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -90,6 +93,7 @@ struct MacAssistantSettings: View {
 
     @ViewBuilder private func detail(_ screen: Screen) -> some View {
         switch screen {
+        case .dials: DialsView()
         case .recipes: RecipesView()
         case .styles: StylesView()
         case .proposals: ProposalsView()

@@ -57,6 +57,7 @@
 				Views/AgentsView.swift,
 				Views/BuildsView.swift,
 				Views/ClientsView.swift,
+				Views/DialsView.swift,
 				Views/FilesView.swift,
 				Views/HeadsupPrefsView.swift,
 				Views/HeadsupView.swift,

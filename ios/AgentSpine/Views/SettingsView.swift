@@ -136,6 +136,8 @@ struct SettingsView: View {
             }
 
             Section {
+                // Section 15, R3: what it may do comes first.
+                NavigationLink("What it may do") { DialsView() }
                 NavigationLink("Auto-approval proposals") { ProposalsView() }
                 NavigationLink("Recipes") { RecipesView() }
                 NavigationLink("Styles") { StylesView() }

@@ -1045,6 +1045,31 @@ final class APIClient {
         try await send(request("/api/cloud-usage"), as: CloudUsage.self)
     }
 
+    // MARK: - Trust dials
+
+    /// Every dial, with what `.env` allows and, for a watched feature, the last week's agreement.
+    func dials() async throws -> [Dial] {
+        try await send(request("/api/modes"), as: [Dial].self)
+    }
+
+    /// Move one dial. The server refuses a level past what `.env` allows, and its reason is the error.
+    func setDial(_ feature: String, mode: String) async throws -> Dial {
+        try await send(jsonRequest("/api/modes/\(feature)", method: "POST", body: ["mode": mode]), as: Dial.self)
+    }
+
+    /// What a feature in Watch would have done, newest first.
+    func wouldHave(_ feature: String, days: Int = 7) async throws -> [WouldHave] {
+        try await send(request("/api/modes/\(feature)/would-have", query: ["days": String(days)]), as: [WouldHave].self)
+    }
+
+    /// Mark one row wrong, or take the mark back. Returns the new agreement count.
+    func thumbsDown(_ feature: String, key: String, down: Bool) async throws -> DialAgreement {
+        try await send(
+            jsonRequest("/api/modes/\(feature)/would-have/thumbs-down", method: "POST", body: ["down": down, "key": key]),
+            as: DialAgreement.self
+        )
+    }
+
     // MARK: - Weekly review
 
     /// The last 7 days of messages you can vote on. Opening it marks what it lists as seen.

@@ -9,6 +9,7 @@ profile.md
 # heartbeat works on, and your inbox rules. Each has a committed *.example copy, and
 # npm run setup copies it into place on a fresh clone.
 policy.json
+modes.json
 goals.md
 inbox-rules.md
 watch-list.md

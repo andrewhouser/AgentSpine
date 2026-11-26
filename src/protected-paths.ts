@@ -40,6 +40,7 @@ export const PROTECTED_PATHS = [
   "src/instagram/api.ts",
   "src/instagram/token.ts",
   "src/learn/promote.ts",
+  "src/modes.ts",
   "src/outgoing.ts",
   "src/projects/narrow-policy.ts",
   "src/protected-paths.ts",
@@ -59,7 +60,7 @@ export const PROTECTED_PATHS = [
  * the rule for the write tools). Named here as well because a command can write them too, and `keepingProtected`
  * puts them back. `agents/*.md` is matched as a folder.
  */
-const CONTROL_PATHS = ["policy.json", "profile.md", "goals.md", "src/area-map.md"] as const;
+const CONTROL_PATHS = ["policy.json", "profile.md", "goals.md", "modes.json", "src/area-map.md"] as const;
 // The units folder, relative to a checkout. Not config.ts's AGENTS_DIR (this install's own folder, which only
 // agents.ts reads): this is the same folder in whichever checkout a command ran in, and it is only ever put back.
 const UNITS_FOLDER = "agents";

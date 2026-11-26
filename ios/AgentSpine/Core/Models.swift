@@ -2494,3 +2494,73 @@ extension TodayApproval {
         Confirmation(args: args, conversationID: conversationId, id: id, result: nil, runID: nil, state: "pending", summary: text, tool: tool, ts: ts)
     }
 }
+
+// MARK: - Trust dials
+
+/// `GET /api/modes`: Off, Watch or On per feature (PLAN-open-work section 15, R3). The server says
+/// which levels a screen may choose: `.env` is a feature's ceiling and a guard's floor (src/modes.ts).
+struct Dial: Codable, Hashable, Identifiable {
+    let agreement: DialAgreement?
+    let allowed: [String]
+    let env: String
+    let envName: String
+    let feature: String
+    let guard_: Bool
+    let hint: String
+    let label: String
+    let levels: [String]
+    let mode: String
+
+    var id: String { feature }
+
+    enum CodingKeys: String, CodingKey {
+        case agreement, allowed, env, envName, feature, hint, label, levels, mode
+        case guard_ = "guard"
+    }
+}
+
+/// How often you agreed with a feature in Watch: arithmetic on the server, worded by `DialWords`.
+struct DialAgreement: Codable, Hashable {
+    let agreed: Int
+    let days: Int
+    let of: Int
+}
+
+/// One thing a feature in Watch would have done. `subject` is other people's text: shown only.
+struct WouldHave: Codable, Hashable, Identifiable {
+    let action: String
+    let at: String
+    let detail: String
+    let feature: String
+    let key: String
+    let subject: String
+    var thumbsDown: Bool
+
+    var id: String { key }
+}
+
+/// The dial screen's sentences. Mirrors `web/src/lib/dials.ts`; test/dials-screen.test.mjs runs
+/// one list of cases through both and compares every line.
+enum DialWords {
+    static func levelLabel(_ level: String) -> String {
+        level == "off" ? "Off" : level == "watch" ? "Watch" : "On"
+    }
+
+    private static func days(_ n: Int) -> String { n == 1 ? "today" : "the last \(n) days" }
+
+    static func agreementLine(_ a: DialAgreement) -> String {
+        a.of == 0 ? "Nothing to judge from \(days(a.days))." : "You agreed with \(a.agreed) of \(a.of), \(days(a.days))."
+    }
+
+    static func envLine(allowed: [String], env: String, envName: String, guard isGuard: Bool) -> String {
+        let at = levelLabel(env)
+        if isGuard {
+            return allowed.count == 1
+                ? "\(at) in .env (\(envName)). A guard cannot be loosened from here."
+                : ".env (\(envName)) keeps it at least \(at). You can tighten it here."
+        }
+        return allowed.count == 1
+            ? "\(at) in .env (\(envName)). To turn it up, change it there and restart."
+            : ".env (\(envName)) allows up to \(at)."
+    }
+}

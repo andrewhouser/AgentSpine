@@ -18,7 +18,8 @@ import { notify } from "./notify.ts";
 import { tallyBySource } from "./outbox.ts";
 import { headsupSection } from "./headsup/telemetry.ts";
 import { anyCapSet, CAPS, cloudCapLine } from "./cloud-cap.ts";
-import { CLOUD_ENABLED, OUTBOX_ENFORCE } from "./config.ts";
+import { CLOUD_ENABLED } from "./config.ts";
+import { outboxEnforce } from "./modes.ts";
 
 const sinceIso = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 const daysAgoIso = (days: number): string => sinceIso(days * 24);
@@ -263,9 +264,9 @@ export const buildDigest = ({ hours = 24 }: DigestOpts = {}): string => {
   const sent = tallyBySource(hours / 24);
   if (sent.length) {
     const total = sent.reduce((n, r) => n + r.sent, 0);
-    out.push(`\nWhat I sent you (${plural(total, "message")}${OUTBOX_ENFORCE ? "" : ", outbox log-only"}):`);
+    out.push(`\nWhat I sent you (${plural(total, "message")}${outboxEnforce() ? "" : ", outbox log-only"}):`);
     for (const r of sent) {
-      const extra = OUTBOX_ENFORCE
+      const extra = outboxEnforce()
         ? [r.held ? `${r.held} held` : "", r.deduped ? `${r.deduped} repeats collapsed` : ""].filter(Boolean)
         : r.wouldChange
           ? [`${r.wouldChange} would be held or collapsed`]

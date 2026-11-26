@@ -214,6 +214,8 @@ console.log("\nSC6: THE FILES THAT ENFORCE THE GATES ARE PROTECTED");
     "src/instagram/api.ts",
     "src/instagram/token.ts",
     "src/learn/promote.ts",
+    // The trust dials (section 15, R3): it decides whether the outgoing check refuses, so it is a gate.
+    "src/modes.ts",
     "src/outgoing.ts",
     "src/projects/narrow-policy.ts",
     "src/protected-paths.ts",

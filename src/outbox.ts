@@ -18,8 +18,8 @@
  *   2. Nothing is silently dropped. A held message is stored, listed, and sent later as one
  *      summary built by code. A cap that discarded messages would look exactly like a quiet day.
  */
-import { OUTBOX_ENFORCE } from "./config.ts";
 import { isQuietNow } from "./headsup/prefs.ts";
+import { outboxEnforce } from "./modes.ts";
 import { rawDb } from "./memory/store.ts";
 import type { NotifyOpts } from "./notify.ts";
 import {
@@ -151,8 +151,9 @@ export const admit = (input: AdmitInput, now: Date = new Date()): Admission => {
     const key = keyOf(source, input.title, input.dedupeKey);
     const verdict = judgeMessage({ key, priority, source }, now);
     // Log-only: remember what enforcement would have done, but let it through.
-    const decision: OutboxDecision = OUTBOX_ENFORCE ? verdict.decision : "sent";
-    const reason = OUTBOX_ENFORCE ? verdict.reason : verdict.decision === "sent" ? "" : `would have been ${verdict.decision}: ${verdict.reason}`;
+    const enforce = outboxEnforce();
+    const decision: OutboxDecision = enforce ? verdict.decision : "sent";
+    const reason = enforce ? verdict.reason : verdict.decision === "sent" ? "" : `would have been ${verdict.decision}: ${verdict.reason}`;
     const res = rawDb
       .prepare(
         `INSERT INTO outbox (created, source, title, body, priority, governed, decision, reason, would_be, dedupe_key, kind)
@@ -171,7 +172,7 @@ export const admit = (input: AdmitInput, now: Date = new Date()): Admission => {
         key,
         clip(String(input.kind ?? "").trim(), 80),
       );
-    return { decision, id: Number(res.lastInsertRowid), reason: OUTBOX_ENFORCE ? verdict.reason : "" };
+    return { decision, id: Number(res.lastInsertRowid), reason: enforce ? verdict.reason : "" };
   } catch (err) {
     console.warn(`[outbox] could not record a message, sending it anyway: ${err instanceof Error ? err.message : String(err)}`);
     return { decision: "sent", id: null, reason: "" };

@@ -11,7 +11,8 @@
  * Subjects are shown here whatever CHECKIN_PUSH_DETAIL says: this is your own terminal, and
  * that setting is about what leaves the machine in a push.
  */
-import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL } from "../config.ts";
+import { CHECKIN_PUSH_DETAIL } from "../config.ts";
+import { checkinMode, inboxSortMode } from "../modes.ts";
 import { INTERVAL_HOURS } from "./rules.ts";
 import { previewCheckin, runCheckin } from "./run.ts";
 import { lastRun, listRuns } from "./store.ts";
@@ -41,7 +42,7 @@ if (cmd === "preview") {
   }
   if (p.wouldSend) {
     console.log(`\nA check now would send:\n  ${p.title}\n${indent(p.body)}`);
-    if (p.heldBy === "off") console.log('\n  ...but the mode is off, so nothing runs. Set CHECKIN_MODE=log in .env and restart to start recording.');
+    if (p.heldBy === "off") console.log('\n  ...but the mode is off, so nothing runs. Set CHECKIN_MODE=log in .env and restart to start recording, or turn the Check-in dial up if .env already allows it.');
     if (p.heldBy === "quiet") console.log("\n  ...but it is quiet hours, so it would wait. The mail stays new until then.");
     if (p.heldBy === "cap") console.log("\n  ...but today's proactive messages are used up, so it would wait. The mail stays new.");
   } else {
@@ -52,10 +53,10 @@ if (cmd === "preview") {
   console.log(`Check-in: ${r.status}. Found ${r.total}, new mail ${r.fresh}.`);
   if (r.title) console.log(`  ${r.title}\n${indent(r.body)}`);
   for (const e of r.errors) console.log(`  could not read ${e}`);
-  if (r.status === "off") console.log("  The mode is off. Set CHECKIN_MODE=log (or push) in .env. `npm run checkin preview` reads without it.");
+  if (r.status === "off") console.log("  The mode is off: CHECKIN_MODE in .env, or the Check-in dial on the screen. `npm run checkin preview` reads without it.");
 } else if (cmd === "log") {
   const runs = listRuns(Math.min(400, Math.max(1, Number(arg) || 20)));
-  console.log(`Check-in log. Mode now: ${CHECKIN_MODE}. ${runs.length} check${runs.length === 1 ? "" : "s"} shown, newest first.`);
+  console.log(`Check-in log. Mode now: ${checkinMode()}. ${runs.length} check${runs.length === 1 ? "" : "s"} shown, newest first.`);
   for (const r of runs) {
     console.log(`\n${when(r.at)}  ${r.status} (${r.mode})  found ${r.total}, new mail ${r.fresh}`);
     if (r.title) console.log(`  ${r.title}\n${indent(r.body)}`);
@@ -71,20 +72,19 @@ if (cmd === "preview") {
   // has been stored, which in log mode is the thing to read before switching to "on".
   const { listLabels, previewSort, sortInbox } = await import("./buckets.ts");
   const { realSortDeps } = await import("./buckets-deps.ts");
-  const { INBOX_SORT_MODE } = await import("../config.ts");
   const show = (bucket: null | string, reason: null | string): string => (bucket ? `${bucket.padEnd(11)} ${reason}` : "unsorted");
   if (!arg) {
     const rows = await previewSort(realSortDeps);
-    console.log(`Inbox buckets preview. Mode: ${INBOX_SORT_MODE}. Nothing is stored.`);
+    console.log(`Inbox buckets preview. Mode: ${inboxSortMode()}. Nothing is stored.`);
     if (!rows.length) console.log("\nNo unread mail from a person (or mail is switched off).");
     for (const r of rows) console.log(`  ${show(r.bucket, r.reason).padEnd(36)} ${r.sender}: ${r.subject}`);
   } else if (arg === "run") {
     const r = await sortInbox(new Date(), realSortDeps);
     console.log(`Inbox buckets: ${r.status}. Labelled ${r.labelled}, unsorted ${r.unsorted}, left for later ${r.waiting}.`);
-    if (r.status === "off") console.log("  The mode is off. Set INBOX_SORT_MODE=log in .env. `npm run checkin sort` previews without it.");
+    if (r.status === "off") console.log("  The mode is off: INBOX_SORT_MODE in .env, or the Inbox sort dial on the screen. `npm run checkin sort` previews without it.");
   } else if (arg === "log") {
     const rows = listLabels(Math.min(500, Math.max(1, Number(process.argv[4]) || 50)));
-    console.log(`Inbox buckets log. Mode now: ${INBOX_SORT_MODE}. ${rows.length} shown, newest first.`);
+    console.log(`Inbox buckets log. Mode now: ${inboxSortMode()}. ${rows.length} shown, newest first.`);
     for (const r of rows) console.log(`  ${when(r.at)}  ${show(r.bucket, r.reason).padEnd(36)} ${r.sender}  (${r.mode})`);
     const n = (b: null | string): number => rows.filter((r) => r.bucket === b).length;
     console.log(`\nOf these ${rows.length}: ${n("urgent")} urgent, ${n("reply-today")} reply today, ${n("fyi")} for your information, ${n(null)} unsorted.`);

@@ -219,6 +219,8 @@ export const isManifest = (target: string): boolean => {
  *   - `profile.md`   — injected as a SYSTEM message on every run. Trusted context by design,
  *                      so a line written here outranks everything the model is told elsewhere.
  *   - `goals.md`     — the standing instruction every heartbeat reads, unattended.
+ *   - `modes.json`   — the trust dials (src/modes.ts). A run that could set one could switch a
+ *                      feature on, or a guard off, as far as .env allows (section 15, R3).
  *   - `agents/*.md`  — a unit's instructions AND its `tools:` ceiling.
  *   - `src/area-map.md` — the map of this codebase that a run working here is given as
  *                      trusted context (PLAN-open-work section 10, SC3). Same reason as
@@ -227,13 +229,14 @@ export const isManifest = (target: string): boolean => {
  * `.env` needs no entry: it is hidden, and hidden paths are refused below.
  *
  * Source under `src/` is deliberately NOT here. Changing this project's code is work the
- * builder is for, and a code change is reviewable as a diff; these four files change what
+ * builder is for, and a code change is reviewable as a diff; these files change what
  * runs or what is trusted with no diff anyone would see.
  */
 const controlFiles = (): string[] => [
   path.join(real(BASE), "policy.json"),
   path.join(real(BASE), "profile.md"),
   path.join(real(BASE), "goals.md"),
+  path.join(real(BASE), "modes.json"),
   real(AREA_MAP_PATH),
 ];
 
@@ -310,7 +313,7 @@ export const textTargetGate = (policy: Policy, target: string, { ext = true } = 
     return {
       allowed: false,
       reason:
-        `${target} is one of AgentSpine's own control files (policy.json, profile.md, goals.md, agents/*.md, src/area-map.md). ` +
+        `${target} is one of AgentSpine's own control files (policy.json, profile.md, goals.md, modes.json, agents/*.md, src/area-map.md). ` +
         `No tool may write them — permissions and trusted context are changed in the dashboard, by a person. ` +
         `Say what you would change and why, and let the user make the edit.`,
     };

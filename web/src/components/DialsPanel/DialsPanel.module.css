@@ -1,0 +1,147 @@
+/* Matches the Settings section chrome (SettingsView.module.css) and CloudUsagePanel. */
+.subhead {
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 26px 0 8px;
+  padding-top: 18px;
+  text-transform: uppercase;
+}
+
+.note {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin: 0 0 12px;
+}
+
+.error {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 0.8125rem;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+}
+
+.head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.guard {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  margin-left: 8px;
+  padding: 0 7px;
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+}
+
+.env {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.dial {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: flex;
+  flex: none;
+  padding: 2px;
+}
+
+.level {
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 4px 14px;
+}
+
+.level:disabled {
+  opacity: 0.35;
+}
+
+.levelOn {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.watch {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  margin-top: 6px;
+  padding: 0;
+  text-align: left;
+}
+
+.would {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.would li {
+  align-items: baseline;
+  border-top: 1px solid var(--border);
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.would li > span:first-child {
+  flex: 1;
+}
+
+.when {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.thumb {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  filter: grayscale(1);
+  opacity: 0.45;
+  padding: 0 6px;
+}
+
+.thumbOn {
+  border-color: var(--danger-line);
+  filter: none;
+  opacity: 1;
+}

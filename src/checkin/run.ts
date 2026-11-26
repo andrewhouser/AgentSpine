@@ -17,7 +17,8 @@
  * A message held back by quiet hours or the cap is never marked seen, so it is still new at
  * the next check. That is why the check-in enforces both itself and not through the outbox.
  */
-import { CHECKIN_MODE, CHECKIN_PUSH_DETAIL, DASHBOARD_PUBLIC_URL } from "../config.ts";
+import { CHECKIN_PUSH_DETAIL, DASHBOARD_PUBLIC_URL } from "../config.ts";
+import { checkinMode } from "../modes.ts";
 import { searchMessages, upcomingEvents } from "../google/client.ts";
 import { googleEnabled } from "../headsup/index.ts";
 import * as ledger from "../headsup/ledger.ts";
@@ -52,7 +53,7 @@ export const realDeps: CheckinDeps = {
   googleEnabled,
   headsups: () => ledger.listForClient("open"),
   mail: () => searchMessages(MAIL_QUERY, MAIL_MAX),
-  mode: () => CHECKIN_MODE,
+  mode: () => checkinMode(),
   quiet: (now) => isQuietNow(now),
   send: (title, body, opts) => notify(title, body, opts),
   sentToday: (now) => sentToday(now),

@@ -3,9 +3,10 @@
  * import no network client, no router and no policy.
  */
 import { executeCall } from "../broker.ts";
-import { INBOX_SORT_MODE, loadPolicy } from "../config.ts";
+import { loadPolicy } from "../config.ts";
 import { searchMessages } from "../google/client.ts";
 import { googleEnabled } from "../headsup/index.ts";
+import { inboxSortMode } from "../modes.ts";
 import { route } from "../router.ts";
 import { resolveStyle } from "../styles/store.ts";
 import { draftReply } from "./buckets.ts";
@@ -18,7 +19,7 @@ export const realSortDeps: SortDeps & ReplyDeps = {
   // The check-in's own query and cap: this reads nothing the check-in does not.
   mail: () => searchMessages(MAIL_QUERY, MAIL_MAX),
   mailOn: () => sourcePrefs().mail,
-  mode: () => INBOX_SORT_MODE,
+  mode: () => inboxSortMode(),
   route: (messages, opts) => route(messages, opts),
   style: (to) => resolveStyle(to),
 };

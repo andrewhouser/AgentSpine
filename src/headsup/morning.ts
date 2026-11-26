@@ -11,7 +11,8 @@
  * Same shape as the study-card sweep: a stamp in kv so a restart does not repeat the day, and
  * `send` and `fetchEvents` as seams so tests never touch Google or push a real notification.
  */
-import { DASHBOARD_PUBLIC_URL, HEADSUP_ENABLED } from "../config.ts";
+import { DASHBOARD_PUBLIC_URL } from "../config.ts";
+import { headsupEnabled } from "../modes.ts";
 import { notify } from "../notify.ts";
 import type { NotifyOpts } from "../notify.ts";
 import { dropCoveredByCalendar, rememberedEvents } from "./dates.ts";
@@ -128,7 +129,7 @@ export const runMorningHeadsup = async (
     ...extra,
   });
 
-  if (!HEADSUP_ENABLED) return result("disabled");
+  if (!headsupEnabled()) return result("disabled");
   if (isQuietNow(now)) return result("quiet");
   if (!opts.force) {
     const minutes = now.getHours() * 60 + now.getMinutes();

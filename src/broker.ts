@@ -33,7 +33,8 @@ import { registry } from "./tools/index.ts";
 import * as store from "./memory/store.ts";
 import { publish } from "./events.ts";
 import { notify, confirmationActions, confirmationPush } from "./notify.ts";
-import { NOTIFY_ON_CONFIRMATION, OUTGOING_ENFORCE } from "./config.ts";
+import { NOTIFY_ON_CONFIRMATION } from "./config.ts";
+import { outgoingEnforce } from "./modes.ts";
 import { describeFindings, scanOutgoing } from "./outgoing.ts";
 import { recordFriction } from "./learn/friction.ts";
 
@@ -165,7 +166,7 @@ export const executeCall = async (
     if (reason) return record(classified, "denied", `${REFUSED_PREFIX} ${reason}`);
   }
 
-  // The outgoing-text check (D3). Log-only unless OUTGOING_ENFORCE: the note rides on the audit
+  // The outgoing-text check (D3). Log-only unless the outgoing dial is On (OUTGOING_ENFORCE, or tightened from the screen; src/modes.ts): the note rides on the audit
   // row and nothing else changes. A tool whose declaration throws is skipped, because the
   // check is a net under the tool's own gates and must not turn a bug into a refused call.
   if (tool.outgoingText) {
@@ -173,7 +174,7 @@ export const executeCall = async (
       const found = scanOutgoing(tool.outgoingText(call.args));
       if (found.length) {
         const what = describeFindings(found);
-        if (OUTGOING_ENFORCE)
+        if (outgoingEnforce())
           return record(classified, "denied", `DENIED: the text this would send contains a ${what}. Take it out and try again, or ask the user to do this one themselves.`);
         outgoingNote = `[outgoing check, log only: contains a ${what}]`;
       }
