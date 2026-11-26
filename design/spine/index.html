@@ -1,0 +1,507 @@
+<!doctype html>
+<!--
+  R0 of docs/PLAN-open-work.md section 15: the spine, drawn in the app's own design system.
+  Nothing ships from this page. It reads the same generated tokens the web client does
+  (web/src/styles/tokens.generated.css, from design/tokens.json), so a retheme shows here too.
+  Every name and number below is invented. The API each screen reads is in CONTRACT.md beside it.
+  Open the file directly in a browser; the buttons at the top switch light/dark and phone/desktop.
+-->
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The spine — R0 drawings</title>
+<link rel="stylesheet" href="../../web/src/styles/tokens.generated.css">
+<style>
+@font-face { font-family: "Bricolage Grotesque"; src: url("../../web/public/fonts/BricolageGrotesque.ttf") format("truetype"); font-weight: 200 800; }
+@font-face { font-family: "Instrument Sans"; src: url("../../web/public/fonts/InstrumentSans.ttf") format("truetype"); font-weight: 400 700; }
+@font-face { font-family: "JetBrains Mono"; src: url("../../web/public/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 400 700; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-inset); color: var(--text); font: var(--font-size-body)/1.45 var(--font-sans); }
+.chrome { position: sticky; top: 0; z-index: 5; display: flex; gap: var(--space-md); align-items: center; padding: var(--space-md) var(--space-xl); background: var(--bg-elevated); border-bottom: 1px solid var(--border); }
+.chrome h1 { font: 600 var(--font-size-title3) var(--font-display); margin: 0 auto 0 0; }
+.chrome nav { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button { border: 0; background: none; color: var(--text-dim); font: inherit; font-size: var(--font-size-footnote); padding: 4px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.toc a { color: var(--accent); font-size: var(--font-size-footnote); text-decoration: none; padding: 2px 6px; }
+
+main { padding: var(--space-xl); display: grid; gap: var(--space-xxl); justify-items: center; }
+section.board { width: 100%; max-width: 1240px; }
+.board > h2 { font: 600 var(--font-size-title2) var(--font-display); margin: 0 0 var(--space-xs); }
+.board > p.note { color: var(--text-dim); margin: 0 0 var(--space-md); max-width: 80ch; }
+
+/* A frame is one screen at one width. */
+.frame { margin: 0 auto; background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-xl); box-shadow: var(--shadow); overflow: hidden; display: grid; }
+body.phone .frame { width: 390px; min-height: 700px; grid-template-columns: 1fr; }
+body.desk .frame { width: 1180px; min-height: 620px; grid-template-columns: 210px 1fr; }
+body.phone .side { display: none; }
+body.desk .tabbar { display: none; }
+.side { background: var(--bg-sidebar); border-right: 1px solid var(--border); padding: var(--space-lg) var(--space-sm); font-size: var(--font-size-footnote); }
+.side .brand { display: flex; gap: var(--space-sm); align-items: center; font: 700 var(--font-size-title3) var(--font-display); padding: 0 var(--space-sm) var(--space-lg); }
+.side .brand i { width: 4px; height: 22px; border-radius: 2px; background: var(--accent); }
+.side a { display: flex; justify-content: space-between; padding: 6px var(--space-sm); border-radius: var(--radius-sm); color: var(--text-dim); text-decoration: none; }
+.side a.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.side .group { margin-top: var(--space-lg); padding: 0 var(--space-sm) var(--space-xs); color: var(--text-faint); font-size: var(--font-size-caption); text-transform: uppercase; letter-spacing: .06em; }
+.count { background: var(--attention); color: var(--on-accent); border-radius: 999px; padding: 0 7px; font-size: var(--font-size-caption); font-weight: 700; }
+
+.screen { display: flex; flex-direction: column; min-width: 0; }
+.top { display: flex; align-items: baseline; gap: var(--space-md); padding: var(--space-lg) var(--space-xl) var(--space-sm); }
+body.phone .top { padding: var(--space-lg) var(--space-lg) var(--space-sm); }
+.top h3 { font: 600 var(--font-size-title1) var(--font-display); margin: 0; }
+body.phone .top h3 { font-size: var(--font-size-title2); }
+.top .sub { color: var(--text-faint); font-size: var(--font-size-footnote); }
+.body { padding: 0 var(--space-xl) var(--space-xl); flex: 1; }
+body.phone .body { padding: 0 var(--space-lg) var(--space-lg); }
+.cols { display: grid; gap: var(--space-xl); grid-template-columns: 1fr; }
+body.desk .cols.two { grid-template-columns: 1.4fr 1fr; }
+body.desk .cols.even { grid-template-columns: 1fr 1fr; }
+
+.ask { margin: 0 var(--space-xl) var(--space-lg); display: flex; gap: var(--space-sm); align-items: center; border: 1px solid var(--border-strong); background: var(--bg-elevated); border-radius: var(--radius-lg); padding: 10px var(--space-md); color: var(--text-faint); }
+body.phone .ask { margin: 0 var(--space-md) var(--space-sm); }
+.ask .scope { color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); padding: 1px 8px; font-size: var(--font-size-footnote); }
+.tabbar { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--border); background: var(--bg-elevated); font-size: var(--font-size-caption); text-align: center; color: var(--text-faint); }
+.tabbar span { padding: 8px 0 14px; }
+.tabbar span.on { color: var(--accent); font-weight: 600; }
+
+/* The line itself. */
+.band { margin-top: var(--space-lg); }
+.band h4 { margin: 0 0 var(--space-sm); font-size: var(--font-size-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); display: flex; gap: var(--space-sm); }
+.line { position: relative; padding-left: 26px; }
+.line::before { content: ""; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--spine); }
+.moment { position: relative; padding: 6px 0 10px; }
+.moment::before { content: ""; position: absolute; left: -23px; top: 11px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg); border: 2px solid var(--border-strong); }
+.moment.ok::before { border-color: var(--ok); background: var(--ok); }
+.moment.bad::before { border-color: var(--danger); background: var(--danger); }
+.moment.need::before { border-color: var(--attention); background: var(--attention); width: 13px; height: 13px; left: -25px; top: 9px; }
+.moment.ahead::before { border-style: dashed; }
+.moment .t { font-family: var(--font-mono); font-size: var(--font-size-caption); color: var(--text-faint); margin-right: var(--space-sm); }
+.moment .what { font-weight: 500; }
+.moment .why { color: var(--text-dim); font-size: var(--font-size-footnote); }
+.now-card { background: var(--bg-elevated); border: 1px solid var(--attention-line); border-radius: var(--radius); padding: var(--space-md); box-shadow: var(--shadow); }
+.now-card .row { display: flex; gap: var(--space-sm); margin-top: var(--space-sm); flex-wrap: wrap; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text); border-radius: var(--radius-sm); padding: 5px 12px; font: inherit; font-size: var(--font-size-footnote); font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.quiet { border-color: transparent; color: var(--text-dim); }
+.btn.hold { position: relative; overflow: hidden; }
+.btn.hold::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: 38%; background: var(--on-accent); opacity: .7; }
+.chip { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: var(--font-size-caption); font-weight: 600; border: 1px solid var(--border); color: var(--text-dim); }
+.chip.local { color: var(--ok); border-color: var(--ok-line); background: var(--ok-soft); }
+.chip.cloud { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.chip.warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }
+.chip.bad { color: var(--danger); border-color: var(--danger-line); background: var(--danger-soft); }
+.card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-lg); box-shadow: var(--shadow); }
+.card + .card { margin-top: var(--space-md); }
+.card h5 { margin: 0 0 var(--space-sm); font: 600 var(--font-size-title3) var(--font-display); }
+.muted { color: var(--text-dim); }
+.faint { color: var(--text-faint); font-size: var(--font-size-footnote); }
+.mono { font-family: var(--font-mono); font-size: var(--font-size-footnote); }
+.quote { border-left: 3px solid var(--spine); padding: 2px 0 2px var(--space-md); color: var(--text-dim); font-style: italic; margin: var(--space-sm) 0; }
+.play { color: var(--accent); font-style: normal; font-family: var(--font-mono); font-size: var(--font-size-caption); margin-left: 6px; }
+.facts { display: grid; grid-template-columns: 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: var(--space-md) 0; }
+body.desk .facts { grid-template-columns: 1fr 1fr; }
+.fact { background: var(--bg-elevated); padding: var(--space-md); }
+.fact b { display: block; font-size: var(--font-size-caption); text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); margin-bottom: 2px; }
+.preview { background: var(--bg-inset); border-radius: var(--radius); padding: var(--space-md); font-size: var(--font-size-footnote); white-space: pre-wrap; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { padding: var(--space-sm) 0; border-bottom: 1px solid var(--border); display: flex; gap: var(--space-sm); align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+.list li:last-child { border-bottom: 0; }
+.dial { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; font-size: var(--font-size-caption); font-weight: 600; }
+.dial span { padding: 3px 11px; color: var(--text-faint); }
+.dial span.on { background: var(--text); color: var(--bg); }
+.dial span.lock { opacity: .35; text-decoration: line-through; }
+.seg-line { display: flex; gap: var(--space-md); padding: 6px 0; }
+.seg-line .who { width: 64px; flex: none; font-weight: 600; font-size: var(--font-size-footnote); }
+.seg-line.me .who { color: var(--accent); }
+.mark { border-left: 3px solid var(--attention); padding-left: var(--space-sm); }
+.coach { background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius); padding: var(--space-md); font-size: var(--font-size-footnote); }
+.rec { display: inline-flex; gap: 6px; align-items: center; color: var(--danger); font-weight: 600; font-size: var(--font-size-footnote); }
+.rec i { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+.notfound { border: 1px dashed var(--warn-line); background: var(--warn-soft); border-radius: var(--radius); padding: var(--space-md); color: var(--warn); font-size: var(--font-size-footnote); }
+.kpis { display: flex; gap: var(--space-xl); flex-wrap: wrap; margin: var(--space-sm) 0 var(--space-md); }
+.kpis div b { display: block; font: 600 var(--font-size-title2) var(--font-display); }
+.kpis div span { color: var(--text-faint); font-size: var(--font-size-footnote); }
+table.menu { width: 100%; border-collapse: collapse; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; font-size: var(--font-size-footnote); }
+table.menu th, table.menu td { text-align: left; padding: 8px var(--space-md); border-bottom: 1px solid var(--border); vertical-align: top; }
+table.menu th { color: var(--text-faint); font-size: var(--font-size-caption); text-transform: uppercase; letter-spacing: .06em; }
+</style>
+</head>
+<body class="desk">
+
+<div class="chrome">
+  <h1>The spine — R0 drawings</h1>
+  <div class="seg" id="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark">Dark</button></div>
+  <div class="seg" id="width"><button data-v="phone">Phone</button><button data-v="desk" aria-pressed="true">Desktop</button></div>
+  <nav class="toc">
+    <a href="#menu">Menu</a><a href="#spine">Spine</a><a href="#card">Decision</a><a href="#dials">Dials</a><a href="#live">Live</a><a href="#closeout">Closeout</a><a href="#ask">Ask</a><a href="#memory">Memory</a><a href="#person">Person</a><a href="#project">Project</a>
+  </nav>
+</div>
+
+<template id="side">
+  <aside class="side">
+    <div class="brand"><i></i>AgentSpine</div>
+    <a data-k="spine" href="#">Today <span class="count">4</span></a>
+    <a data-k="ask" href="#">Ask</a>
+    <a data-k="meetings" href="#">Meetings</a>
+    <a data-k="people" href="#">People</a>
+    <a data-k="projects" href="#">Projects</a>
+    <a data-k="memory" href="#">Memory</a>
+    <div class="group">More</div>
+    <a href="#">Files</a><a href="#">Builds</a><a href="#">Study</a><a href="#">Instagram</a><a href="#">Activity</a>
+    <a data-k="settings" href="#">Settings</a>
+  </aside>
+</template>
+<template id="tabs">
+  <div class="tabbar"><span data-k="spine">Today</span><span data-k="ask">Ask</span><span data-k="meetings">Meetings</span><span data-k="people">People</span><span data-k="more">More</span></div>
+</template>
+
+<main>
+
+<!-- ───────────────────────── Menu ───────────────────────── -->
+<section class="board" id="menu">
+  <h2>The menu: moments on the line, and the places that stay</h2>
+  <p class="note">A proposal for you to agree before R1. Today's sixteen menu items become six places, a short More list and Settings. Anything that is "something happened" or "something needs you" becomes a moment on the line instead of a place you go and look.</p>
+  <table class="menu">
+    <tr><th>Today's item</th><th>Becomes</th><th>Where it shows</th></tr>
+    <tr><td>Overview</td><td>Place: <b>Today</b> (the spine)</td><td>Behind / Now / Ahead replaces the overview and the Today screen. Health moves to the dials screen.</td></tr>
+    <tr><td>Heads-up</td><td>Moments</td><td>Now (due soon) and Ahead (trips, birthdays). Its switches move to the dials.</td></tr>
+    <tr><td>Check-in</td><td>Moments</td><td>Now: mail from a person, with its bucket. Its sources and mode move to the dials.</td></tr>
+    <tr><td>Tasks</td><td>Moments, plus lists on a person and a project</td><td>Now (due, overdue). "You owe" / "they owe" on the person page.</td></tr>
+    <tr><td>Schedules</td><td>Moments; editing under Settings</td><td>Ahead: each schedule's next run. Behind: what each one did.</td></tr>
+    <tr><td>Knowledge</td><td>Three places: <b>People</b>, <b>Projects</b>, <b>Memory</b></td><td>Claims review happens in the meeting closeout, one card at a time.</td></tr>
+    <tr><td>Meetings</td><td>Place: <b>Meetings</b></td><td>Also a moment on the line when one is on the calendar or recording.</td></tr>
+    <tr><td>Search</td><td>Place: <b>Ask</b></td><td>One bar that answers with sources, or lists matches when you ask it to find.</td></tr>
+    <tr><td>Drop zone</td><td>An action</td><td>Drop a file anywhere, or the paperclip on the ask bar. Scoped to what is open.</td></tr>
+    <tr><td>Files, Builds, Study, Instagram, Activity</td><td>More</td><td>Unchanged places. Their events are moments (a build finished, a post waiting).</td></tr>
+    <tr><td>Clients</td><td>More, unchanged</td><td>Waits, as section 15 R10 says.</td></tr>
+    <tr><td>Settings</td><td>Settings, with the dials first</td><td>Off / Watch / On per feature (R3), then appearance, memory, recipes, policy.</td></tr>
+  </table>
+</section>
+
+<!-- ───────────────────────── Spine ───────────────────────── -->
+<section class="board" id="spine">
+  <h2>1 · The spine (replaces Today)</h2>
+  <p class="note">One line through the day. Behind is what ran since you last looked; Now is what needs you, in the order code sets; Ahead is the next run of each schedule and today's calendar with whether prep exists. No model call, and it never waits on Gmail or Calendar: it reads what the check-in and Heads-up stored.</p>
+  <div class="frame" data-k="spine">
+    <div class="screen">
+      <div class="top"><h3>Thursday</h3><span class="sub">4 need you · last looked 07:12</span></div>
+      <div class="body">
+        <div class="cols two">
+          <div>
+            <div class="band"><h4>Behind <span class="faint">since 07:12</span></h4>
+              <div class="line">
+                <div class="moment ok"><span class="t">07:30</span><span class="what">Morning brief</span> <span class="chip local">local</span><div class="why">Sent to your phone. 3 meetings, 1 overdue task.</div></div>
+                <div class="moment ok"><span class="t">08:05</span><span class="what">Inbox sorted</span><div class="why">14 messages: 2 reply today, 5 FYI, 7 archived.</div></div>
+                <div class="moment bad"><span class="t">08:40</span><span class="what">Release notes draft stalled</span><div class="why">No progress for 6 minutes; stopped. <a href="#">Open run</a></div></div>
+              </div>
+            </div>
+            <div class="band"><h4>Now</h4>
+              <div class="line">
+                <div class="moment need"><div class="now-card">
+                  <span class="t">expires 11:00</span><b>Send the hiring-panel invite draft to Gmail drafts</b>
+                  <div class="why">A decision. Leaves: a draft to 3 people. Can be undone.</div>
+                  <div class="row"><span class="btn primary">Open card</span><span class="btn quiet">Later</span></div>
+                </div></div>
+                <div class="moment need"><span class="t">overdue</span><span class="what">Feedback for Lee on the on-call write-up</span><div class="why">You said "by Tuesday" in the 1:1 on 18 Nov <span class="play">▶ 14:22</span></div></div>
+                <div class="moment need"><span class="t">mail</span><span class="what">Dana Ortiz — "Q1 headcount numbers"</span> <span class="chip warn">reply today</span></div>
+                <div class="moment need"><span class="t">heads-up</span><span class="what">Sam's work anniversary is Saturday</span></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="band"><h4>Ahead</h4>
+              <div class="line">
+                <div class="moment ahead"><span class="t">10:00</span><span class="what">1:1 with Lee Okafor</span> <span class="chip local">prep ready</span><div class="why">2 you owe, 1 they owe. Last 1:1 was 8 days ago.</div></div>
+                <div class="moment ahead"><span class="t">11:30</span><span class="what">Billing migration standup</span> <span class="chip">no prep</span><div class="why">1 decision open for 3 meetings.</div></div>
+                <div class="moment ahead"><span class="t">13:00</span><span class="what">Check-in</span><div class="why">Every 3 hours · Watch mode</div></div>
+                <div class="moment ahead"><span class="t">15:00</span><span class="what">Staff meeting</span> <span class="chip">no prep</span></div>
+                <div class="moment ahead"><span class="t">17:30</span><span class="what">Evening digest</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ask"><span>Ask about your day…</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Decision card ───────────────────────── -->
+<section class="board" id="card">
+  <h2>2 · The decision card (R2)</h2>
+  <p class="note">One card at a time, the whole action on screen before Approve is live, and Approve is held, not tapped. The four facts come from code, never from the model. "Always allow" is offered only where promote.ts may propose it: never for an always-confirm tool or a call made after outside content was read.</p>
+  <div class="frame" data-k="spine">
+    <div class="screen">
+      <div class="top"><h3>1 of 3</h3><span class="sub">needs you</span></div>
+      <div class="body">
+        <div class="card">
+          <h5>Save a draft reply to Dana Ortiz</h5>
+          <div class="facts">
+            <div class="fact"><b>What leaves</b>A Gmail draft to 1 person (dana@…). Not sent.</div>
+            <div class="fact"><b>Where it ran</b><span class="chip local">local model</span> after reading mail</div>
+            <div class="fact"><b>Can it be undone</b>Yes: the draft can be deleted in Gmail</div>
+            <div class="fact"><b>Why it is asking</b><span class="chip warn">read outside content</span> This run read an email before it made this call.</div>
+          </div>
+          <div class="preview">Subject: Re: Q1 headcount numbers
+
+Hi Dana, the numbers in your sheet match what finance sent on Monday. I'll bring the two open reqs to Thursday's staff meeting…</div>
+          <div class="row" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <span class="btn primary hold">Hold to approve</span><span class="btn">Edit</span><span class="btn quiet">Reject</span>
+          </div>
+          <p class="faint" style="margin:10px 0 0">Always allow is not offered: this call came after outside content was read.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Dials ───────────────────────── -->
+<section class="board" id="dials">
+  <h2>3 · Trust dials (R3)</h2>
+  <p class="note">Off, Watch or On per feature. Watch shows what it would have done, with a thumbs-down per row and an agreement count that code works out. Guards can only be tightened from a screen.</p>
+  <div class="frame" data-k="settings">
+    <div class="screen">
+      <div class="top"><h3>What it may do</h3></div>
+      <div class="body">
+        <div class="cols even">
+          <div class="card">
+            <ul class="list">
+              <li><span><b>Check-in</b><br><span class="faint">New mail from people, every 3 hours</span></span><span class="dial"><span>Off</span><span class="on">Watch</span><span>On</span></span></li>
+              <li><span><b>Inbox sort</b><br><span class="faint">Buckets mail into reply today / FYI</span></span><span class="dial"><span>Off</span><span>Watch</span><span class="on">On</span></span></li>
+              <li><span><b>Heads-up</b><br><span class="faint">Birthdays, bills, trips</span></span><span class="dial"><span>Off</span><span>Watch</span><span class="on">On</span></span></li>
+              <li><span><b>Notification limits</b><br><span class="faint">Quiet hours and daily caps</span></span><span class="dial"><span class="lock">Off</span><span>Watch</span><span class="on">On</span></span></li>
+              <li><span><b>Outgoing text check</b> <span class="chip">guard</span><br><span class="faint">Set in .env; a screen can only tighten it</span></span><span class="dial"><span class="lock">Off</span><span class="lock">Watch</span><span class="on">On</span></span></li>
+            </ul>
+          </div>
+          <div class="card">
+            <h5>Check-in · Watch</h5>
+            <div class="kpis"><div><b>17 of 19</b><span>you agreed, last 7 days</span></div><div><b>2</b><span>thumbs-down</span></div></div>
+            <ul class="list">
+              <li><span>Would have pushed: <b>Dana Ortiz</b> — Q1 headcount</span><span class="faint">08:05 👍 👎</span></li>
+              <li><span>Would have pushed: <b>Facilities</b> — badge renewal</span><span class="faint">05:00 👎 marked</span></li>
+              <li><span>Would have stayed quiet: 6 newsletters</span><span class="faint">05:00 👍 👎</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Live meeting ───────────────────────── -->
+<section class="board" id="live">
+  <h2>4 · A live meeting (R4)</h2>
+  <p class="note">Opens from its moment on the line. The coach speaks only when your own history adds something, such as an open commitment to someone in the room. "Mark this moment" stores a timestamp and nothing else. Local model only.</p>
+  <div class="frame" data-k="meetings">
+    <div class="screen">
+      <div class="top"><h3>1:1 with Lee Okafor</h3><span class="rec"><i></i>Recording 14:22</span></div>
+      <div class="body">
+        <div class="cols two">
+          <div class="card">
+            <div class="seg-line"><span class="who">Lee</span><span>The on-call rotation is fine now, but the handoff doc is still three pages.</span></div>
+            <div class="seg-line me"><span class="who">You</span><span>I owe you feedback on the write-up. I'll have it by Friday.</span></div>
+            <div class="seg-line mark"><span class="who">Lee</span><span>I'd like to lead the incident review in January.</span></div>
+            <div class="seg-line"><span class="who">Lee</span><span>And I want to talk about the staff engineer track at some point.</span></div>
+            <p class="faint">Marked at 13:58</p>
+          </div>
+          <div>
+            <div class="coach"><b>From your history</b><br>You told Lee "by Tuesday" on 18 Nov for this same feedback. It is now 2 days late. <span class="play">▶ 18 Nov 14:22</span></div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><span class="btn primary">Mark this moment</span><span class="btn">Stop</span></div>
+            <p class="faint">Runs on the local model. Nothing from this meeting reaches the cloud.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Closeout ───────────────────────── -->
+<section class="board" id="closeout">
+  <h2>5 · The closeout (R4)</h2>
+  <p class="note">A short review, not a report. Each proposed commitment with its quote and time; Add task or Not mine. Then "worth remembering?" one fact at a time. Extracted items are mostly false positives, so nothing reaches memory or RAG without a yes here.</p>
+  <div class="frame" data-k="meetings">
+    <div class="screen">
+      <div class="top"><h3>Closeout</h3><span class="sub">1:1 with Lee · 3 of 5</span></div>
+      <div class="body">
+        <div class="cols even">
+          <div class="card">
+            <span class="chip">commitment · you owe Lee</span>
+            <h5 style="margin-top:8px">Feedback on the on-call write-up by Friday</h5>
+            <div class="quote">"I owe you feedback on the write-up. I'll have it by Friday." <span class="play">▶ 12:40</span></div>
+            <p class="faint">Direction from the speaker (you) and who was in the room (Lee). Wrong? Swap it.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn primary">Add task</span><span class="btn">Swap direction</span><span class="btn quiet">Not mine</span></div>
+          </div>
+          <div class="card">
+            <span class="chip">worth remembering?</span>
+            <h5 style="margin-top:8px">Lee wants to lead the January incident review</h5>
+            <div class="quote">"I'd like to lead the incident review in January." <span class="play">▶ 13:58</span></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn primary">Remember</span><span class="btn quiet">Skip</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Ask ───────────────────────── -->
+<section class="board" id="ask">
+  <h2>6 · Ask, with answers that point at the moment (R5)</h2>
+  <p class="note">The ask bar is on every screen, scoped to what is open. The scope is passed as a project or filter, never pasted into the goal. Every supported line carries its meeting, speaker and time; the part nothing supports is said, not filled.</p>
+  <div class="frame" data-k="ask">
+    <div class="screen">
+      <div class="top"><h3>Ask</h3></div>
+      <div class="body">
+        <div class="card">
+          <p class="muted" style="margin-top:0"><b>You:</b> What did we decide about the invoice cutover date, and who is doing the data backfill?</p>
+          <p><b>Cutover is 3 February.</b> Proposed by Sam, agreed by Dana and you in the billing standup on 12 Nov.</p>
+          <div class="quote">"Let's lock the third, nobody objects?" — Sam <span class="play">▶ 12 Nov 06:31</span></div>
+          <div class="notfound"><b>Not found:</b> nothing recorded says who owns the data backfill. It came up on 19 Nov without an owner. <span class="play">▶ 19 Nov 22:05</span></div>
+          <p class="faint">From 2 reviewed claims. Local model.</p>
+        </div>
+      </div>
+      <div class="ask"><span class="scope">Billing migration</span><span>Ask a follow-up…</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Memory ───────────────────────── -->
+<section class="board" id="memory">
+  <h2>7 · Memory you can read (R6)</h2>
+  <p class="note">Each memory shows where it came from and how often it has been used. A guess no person confirmed says so. You may stop a memory from ever reaching the cloud; you may never mark one as cloud-safe.</p>
+  <div class="frame" data-k="memory">
+    <div class="screen">
+      <div class="top"><h3>Memory</h3><span class="sub">212 · 9 unused in 90 days</span></div>
+      <div class="body">
+        <div class="card">
+          <ul class="list">
+            <li><span><b>Prefers bullet summaries over prose in status updates</b><br><span class="faint">From you in chat, 2 Oct · used 31 times, last yesterday</span></span><span><span class="chip local">local only</span> <span class="btn quiet">Fix</span><span class="btn quiet">Forget</span></span></li>
+            <li><span><b>Staff meeting moved to Thursdays at 15:00</b> <span class="chip warn">guess</span><br><span class="faint">From the staff meeting, 6 Nov ▶ 03:12 · used 4 times</span></span><span><span class="btn primary">Confirm</span><span class="btn quiet">Fix</span><span class="btn quiet">Forget</span></span></li>
+            <li><span><b>Dana handles headcount questions for the org</b><br><span class="faint">From a run that stayed off private material · used 2 times</span></span><span><span class="chip cloud">cloud ok</span> <span class="btn quiet">Never use for the cloud</span></span></li>
+            <li><span><b>Old VPN client needs a restart after sleep</b><br><span class="faint">From you, 14 Jun · not used in 163 days</span></span><span><span class="btn quiet">Forget</span></span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="ask"><span class="scope">Memory</span><span>Ask what it knows about…</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Person ───────────────────────── -->
+<section class="board" id="person">
+  <h2>8 · A person (R7)</h2>
+  <p class="note">Built from what was said in meetings, each line with its source. Nothing about a person is collected automatically: a note becomes evidence only when you mark it, and evidence never reaches the cloud or a run about someone else. Evidence is drawn here as proposed; whether it exists at all is your decision.</p>
+  <div class="frame" data-k="people">
+    <div class="screen">
+      <div class="top"><h3>Lee Okafor</h3><span class="sub">Platform team · last 1:1 8 days ago · next today 10:00</span></div>
+      <div class="body">
+        <div class="cols two">
+          <div>
+            <div class="card">
+              <h5>Open between you</h5>
+              <ul class="list">
+                <li><span><span class="chip bad">you owe</span> Feedback on the on-call write-up</span><span class="faint">said 18 Nov, 2 days late <span class="play">▶ 14:22</span></span></li>
+                <li><span><span class="chip warn">you owe</span> Intro to the SRE lead at the partner team</span><span class="faint">said 4 Nov <span class="play">▶ 31:10</span></span></li>
+                <li><span><span class="chip">Lee owes</span> Shorter handoff doc</span><span class="faint">said 18 Nov <span class="play">▶ 09:02</span></span></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h5>Heard lately</h5>
+              <ul class="list">
+                <li><span>Wants to lead the January incident review</span><span class="faint">1:1, 26 Nov <span class="play">▶ 13:58</span></span></li>
+                <li><span>Raised the staff engineer track</span><span class="faint">1:1, 26 Nov <span class="play">▶ 15:40</span></span></li>
+                <li><span>Named the flaky deploy step as a risk, again</span><span class="faint">standup, 3 times since 1 Nov</span></span></li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <div class="card">
+              <h5>For today</h5>
+              <p class="muted" style="margin:0">1. Feedback on the write-up (late).<br>2. They are waiting to hear about the incident review.<br>3. Ask about the staff engineer track.</p>
+              <p class="faint">Built in code from the items on the left, oldest first. No model.</p>
+            </div>
+            <div class="card">
+              <h5>Evidence <span class="chip">only what you mark</span></h5>
+              <ul class="list">
+                <li><span><span class="chip local">strength</span> Ran the 14 Nov incident calmly</span><span class="faint">marked by you</span></li>
+              </ul>
+              <p class="faint">Local only. Never recalled into a run about someone else. Delete all for Lee in one step.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ask"><span class="scope">Lee Okafor</span><span>Ask about Lee…</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Project ───────────────────────── -->
+<section class="board" id="project">
+  <h2>9 · A project (R8)</h2>
+  <p class="note">A decision log from reviewed claims: what was decided, by whom, at which moment; what is open and how many meetings have raised it without settling it. Risks by who named them. Waiting in both directions.</p>
+  <div class="frame" data-k="projects">
+    <div class="screen">
+      <div class="top"><h3>Billing migration</h3><span class="sub">6 meetings · 4 people</span></div>
+      <div class="body">
+        <div class="cols even">
+          <div class="card">
+            <h5>Decisions</h5>
+            <ul class="list">
+              <li><span><span class="chip local">decided</span> Cutover on 3 February<br><span class="faint">Sam proposed, Dana and you agreed · 12 Nov <span class="play">▶ 06:31</span></span></span></li>
+              <li><span><span class="chip local">decided</span> Keep the old invoices read-only for a year<br><span class="faint">Dana proposed, you agreed · 5 Nov <span class="play">▶ 18:44</span></span></span></li>
+              <li><span><span class="chip warn">open</span> Who owns the data backfill<br><span class="faint">raised in 3 meetings, not settled · last 19 Nov <span class="play">▶ 22:05</span></span></span></li>
+            </ul>
+          </div>
+          <div>
+            <div class="card">
+              <h5>Risks</h5>
+              <ul class="list">
+                <li><span>Flaky deploy step</span><span class="faint">Lee, 3 times</span></li>
+                <li><span>Finance sign-off not scheduled</span><span class="faint">Dana, once</span></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h5>Waiting</h5>
+              <ul class="list">
+                <li><span><span class="chip">you owe</span> Backfill owner decision</span><span class="faint">to the team</span></li>
+                <li><span><span class="chip">Sam owes</span> Dry-run report</span><span class="faint">due 28 Nov</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ask"><span class="scope">Billing migration</span><span>Ask about this project…</span></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+// Put the shared sidebar and tab bar into each frame, and mark the place it belongs to.
+const side = document.getElementById("side");
+const tabs = document.getElementById("tabs");
+for (const frame of document.querySelectorAll(".frame")) {
+  const k = frame.dataset.k;
+  const s = side.content.cloneNode(true);
+  for (const a of s.querySelectorAll("a[data-k]")) if (a.dataset.k === k) a.classList.add("on");
+  frame.prepend(s);
+  const t = tabs.content.cloneNode(true);
+  for (const x of t.querySelectorAll("[data-k]")) if (x.dataset.k === k || (x.dataset.k === "more" && !["spine", "ask", "meetings", "people"].includes(k))) x.classList.add("on");
+  frame.querySelector(".screen").append(t);
+}
+const pick = (id, apply) => {
+  const g = document.getElementById(id);
+  g.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    for (const x of g.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+    apply(b.dataset.v);
+  });
+};
+pick("theme", (v) => document.documentElement.setAttribute("data-theme", v));
+pick("width", (v) => { document.body.classList.toggle("phone", v === "phone"); document.body.classList.toggle("desk", v === "desk"); });
+</script>
+</body>
+</html>

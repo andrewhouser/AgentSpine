@@ -1837,7 +1837,7 @@ Open decisions for you, each with the default the build will take:
 Decided 2026-11-26 as the direction: you said the sketches were closer to what you want from this project than
 the screens as they are, with strong meeting and memory support kept, and with the day job (people, 1:1s,
 projects, decisions) ahead of clients. The items and the order below are proposed; nothing here is built. The
-sketches were drawn in the chat and are not in the repository, so R0 redraws them in the app's own design.
+sketches were drawn in the chat; R0 has redrawn them in the app's own design in `design/spine/`.
 
 **The idea in four lines.** The twelve screens become one line through the day: what it did, what needs you
 now, what it will do. A decision comes as one card that says what leaves, where it ran, whether it can be undone
@@ -1868,10 +1868,17 @@ leaves the machine stops and writes down what it found.
 
 ### R0. Draw it properly first (Design; nothing ships from this)
 
-- [Opus] Redraw the spine, the decision card, the trust dial, the live meeting, the closeout, Ask, Memory, a
-  person and a project in the app's own design system, light and dark, at phone and desktop width. Say what
-  happens to each of today's menu items: which become moments on the line and which stay as places.
-- [Opus] Write the API shapes each screen reads, so the three clients are built against one contract.
+- [Opus] Done 2026-11-26: `design/spine/index.html` draws the spine, the decision card, the trust dials, the
+  live meeting, the closeout, Ask, Memory, a person and a project from the shared tokens, light and dark, at
+  phone and desktop width, with the menu proposal as its first table (sixteen items become six places, a
+  More list and Settings with the dials first). Serve the repository root and open it there; opened as a
+  bare file it loses the tokens.
+- [Opus] Done 2026-11-26: `design/spine/CONTRACT.md` gives the shape each screen reads, marking every field
+  as existing, new (with its R item) or still to check. It answers two of the unchecked questions above: a
+  claim does link to its moment (`source_ref` `meeting:<id>` plus `at_ms`), and audio is not kept by default
+  (`MEETING_KEEP_AUDIO_HOURS` is 0), so the transcript around a moment is the normal path and playback the
+  exception. Still to check: whether today's calendar events are stored anywhere (R1), and how a decision's
+  proposer and agreers are found when a claim has one speaker (R8).
 - You: agree the drawings and the menu change before R1 starts.
 
 ### R1. The spine replaces Today (Code; web, Mac and iPhone together)
