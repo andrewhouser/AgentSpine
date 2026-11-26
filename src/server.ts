@@ -89,6 +89,7 @@ import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { readSpine } from "./day-line.ts";
 import { decisionCard } from "./decision-card.ts";
 import { listPeople, readPerson } from "./knowledge/people.ts";
+import { readProjectPage } from "./knowledge/project-page.ts";
 import { sourcesForRuns } from "./knowledge/sources.ts";
 import { addMark, around, deleteMark, historyFor, listMarks } from "./meetings/moments.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
@@ -1950,6 +1951,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
     // /api/projects ...
     if (seg[1] === "projects") {
+      // GET /api/projects/:id/page: the decision log, open questions, risks and who is waiting, from reviewed claims
+      // (src/knowledge/project-page.ts, section 15 R8). Code only; work material, to your screens only.
+      if (m === "GET" && seg.length === 4 && seg[3] === "page") {
+        const pid = Number(seg[2]);
+        if (!Number.isInteger(pid) || !projects.getProject(pid)) return sendJson(res, 404, { error: "no such project" });
+        return sendJson(res, 200, readProjectPage(pid));
+      }
       if (m === "GET" && seg.length === 2)
         return sendJson(
           res,

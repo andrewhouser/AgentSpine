@@ -820,6 +820,11 @@ final class APIClient {
     }
 
     /// Accept (optionally corrected) or reject a proposed claim, or change its status.
+    /// A project's decision log, open questions, risks and who is waiting (section 15, R8).
+    func projectPage(_ id: Int) async throws -> ProjectPage {
+        try await send(request("/api/projects/\(id)/page"), as: ProjectPage.self)
+    }
+
     /// Everyone the knowledge store names, your team first (section 15, R7).
     func people() async throws -> [PersonRow] {
         try await send(request("/api/people"), as: [PersonRow].self)

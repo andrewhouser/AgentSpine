@@ -222,22 +222,21 @@ interface Person {
 
 `Moment` here has no `untrusted` flag field, but its `quote` and `meetingTitle` are other people's words.
 
-## 8. A project — `GET /api/projects/:id/page` **[new R8]**
+## 8. A project — `GET /api/projects/:id/page` **[built R8]**
+
+As built (`src/knowledge/project-page.ts`). There is no `agreedBy`: agreement is not recorded, so the
+page names who was present instead.
 
 ```ts
 interface ProjectPage {
-  id: number;
-  name: string;
+  decided: { claimId: number; moment: null | Moment; present: string[]; saidBy: null | string; text: string }[];
   meetings: number;
-  decided: { claimId: number; text: string; proposedBy: null | string; agreedBy: string[]; moment: null | Moment }[];
-  open: { claimId: number; text: string; raisedIn: number; last: null | Moment }[]; // raisedIn counted in code
-  risks: { text: string; namedBy: string; times: number }[];
-  waiting: { claimId: number; text: string; direction: Direction; who: string; due: null | string }[];
+  open: { claimId: number; last: null | Moment; raisedIn: number; text: string; topic: null | string }[];
+  projectId: number;
+  risks: { claimId: number; namedBy: string[]; text: string; times: number }[];
+  waiting: { claimId: number; direction: "they-owe" | "unknown" | "you-owe"; due: null | string; late: boolean; text: string; who: null | string }[];
 }
 ```
-
-`proposedBy` and `agreedBy` need the speakers of a decision's supporting claims **[check R8]**;
-`kn_claims.speaker` holds one speaker per claim today.
 
 ---
 

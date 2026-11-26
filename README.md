@@ -121,6 +121,11 @@ often enough the card offers **Always allow**, which is the existing auto-approv
 for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
 returns the card (`src/decision-card.ts`).
 
+**A project keeps its decision log** (section 15, R8). On a project's **Decision log** tab: what was
+decided, who said it and who else was in the room (agreement is not recorded, so it never claims any), the
+questions that keep coming up without a decision and in how many meetings, risks by who named them, and
+who is waiting on whom. All from reviewed meeting notes (`GET /api/projects/:id/page`).
+
 **Meetings sit on the line, and answers point at the moment** (section 15, R4 and R5). A meeting being
 recorded shows on Today; open it to **Mark this moment** (a timestamp, nothing more) and to see what you
 still owe the people named in the room. The closeout goes through what was extracted one item at a time,

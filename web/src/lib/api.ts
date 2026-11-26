@@ -2,6 +2,7 @@ import type { DecisionCard } from "./decision.ts";
 import type { Dial, DialAgreement, DialLevel, WouldHave } from "./dials.ts";
 import type { AroundLine, HistoryLine, MeetingMark } from "./moments.ts";
 import type { Person, PersonRow } from "./people.ts";
+import type { ProjectPage } from "./project-page.ts";
 import type { FinishedRun } from "./spokenAlerts.ts";
 /**
  * The API client.
@@ -501,6 +502,8 @@ export const api = {
     request<{ chunks: number; conversations: Conversation[]; project: Project; sources: ProjectSource[] }>(
       `/api/projects/${id}`,
     ),
+  /** A project's decision log, open questions, risks and who is waiting, from reviewed claims (section 15, R8). */
+  projectPage: (id: number) => request<ProjectPage>(`/api/projects/${id}/page`),
   reindexProject: (id: number, force = false) =>
     post<{ result: IngestResult }>(`/api/projects/${id}/sources/reindex`, { force }),
   rejectConfirmation: (id: number, reason: string) =>

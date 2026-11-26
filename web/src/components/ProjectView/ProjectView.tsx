@@ -7,12 +7,14 @@ import { api } from "../../lib/api.ts";
 import { AskBar } from "../AskBar/AskBar.tsx";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import { TasksView } from "../TasksView/TasksView.tsx";
+import { DecisionLog } from "./DecisionLog.tsx";
 import styles from "./ProjectView.module.css";
 
-type TabKey = "conversations" | "documents" | "settings" | "tasks";
+type TabKey = "conversations" | "decisions" | "documents" | "settings" | "tasks";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "conversations", label: "Conversations" },
+  { key: "decisions", label: "Decision log" },
   { key: "documents", label: "Documents" },
   { key: "tasks", label: "Tasks" },
   { key: "settings", label: "Settings" },
@@ -212,6 +214,8 @@ export const ProjectView = ({
           </section>
         </>
       )}
+
+      {tab === "decisions" && <DecisionLog projectId={projectId} />}
 
       {tab === "tasks" && (
         <>

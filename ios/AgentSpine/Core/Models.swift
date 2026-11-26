@@ -2836,3 +2836,89 @@ enum MomentWords {
         return "\(h > 0 ? "\(h):\(String(format: "%02d", m))" : "\(m)"):\(sec) into the meeting"
     }
 }
+
+// MARK: - Project page
+
+/// `GET /api/projects/:id/page` (section 15, R8): built in code from reviewed claims. Who agreed to a
+/// decision is not recorded, so nothing here says anyone agreed.
+struct ProjectPage: Codable, Hashable {
+    struct Decided: Codable, Hashable, Identifiable {
+        let claimId: Int
+        let moment: PageMoment?
+        let present: [String]
+        let saidBy: String?
+        let text: String
+        var id: Int { claimId }
+    }
+
+    struct Open: Codable, Hashable, Identifiable {
+        let claimId: Int
+        let last: PageMoment?
+        let raisedIn: Int
+        let text: String
+        let topic: String?
+        var id: Int { claimId }
+    }
+
+    struct Risk: Codable, Hashable, Identifiable {
+        let claimId: Int
+        let namedBy: [String]
+        let text: String
+        let times: Int
+        var id: Int { claimId }
+    }
+
+    struct Waiting: Codable, Hashable, Identifiable {
+        let claimId: Int
+        let direction: String
+        let due: String?
+        let late: Bool
+        let text: String
+        let who: String?
+        var id: Int { claimId }
+    }
+
+    let decided: [Decided]
+    let meetings: Int
+    let open: [Open]
+    let projectId: Int
+    let risks: [Risk]
+    let waiting: [Waiting]
+}
+
+/// Where a claim was said. The same shape as `MomentRef`, kept apart so this section compiles alone.
+struct PageMoment: Codable, Hashable {
+    let at: String?
+    let atMs: Int?
+    let audio: Bool
+    let meetingId: Int
+    let meetingTitle: String
+    let quote: String
+    let speaker: String?
+}
+
+/// Mirrors `web/src/lib/project-page.ts`; test/project-screen.test.mjs holds the two equal.
+enum ProjectWords {
+    private static func list(_ names: [String]) -> String {
+        names.count <= 1 ? (names.first ?? "") : "\(names.dropLast().joined(separator: ", ")) and \(names.last!)"
+    }
+
+    private static func times(_ n: Int) -> String { n == 1 ? "once" : n == 2 ? "twice" : "\(n) times" }
+
+    static func saidLine(_ saidBy: String?, present: [String]) -> String {
+        let who = saidBy.map { "Said by \($0)" } ?? "Speaker not recorded"
+        return present.isEmpty ? "\(who)." : "\(who), with \(list(present)) there."
+    }
+
+    static func raisedLine(_ n: Int) -> String { n == 1 ? "Raised once, not settled." : "Raised in \(n) meetings, not settled." }
+
+    static func riskLine(_ n: Int, namedBy: [String]) -> String { "Named \(times(n))\(namedBy.isEmpty ? "" : ", by \(list(namedBy))")." }
+
+    static func waitingLine(_ direction: String, who: String?) -> String {
+        switch direction {
+        case "you-owe": return who.map { "You owe \($0)" } ?? "You owe"
+        case "they-owe": return "\(who ?? "Someone") owes you"
+        default: return "\(who ?? "Someone") owes someone"
+        }
+    }
+}

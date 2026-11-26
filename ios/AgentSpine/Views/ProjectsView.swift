@@ -211,6 +211,7 @@ struct ProjectsView: View {
 /// The sections of a project, one at a time; the same four as the web project screen.
 private enum ProjectTab: String, CaseIterable, Identifiable {
     case conversations = "Conversations"
+    case decisions = "Decision log"
     case documents = "Documents"
     case tasks = "Tasks"
     case settings = "Settings"
@@ -401,6 +402,9 @@ struct ProjectDetailView: View {
             }
             if tab == .tasks {
                 ProjectTasksSection(projectID: projectID)
+            }
+            if tab == .decisions {
+                ProjectDecisionLog(projectID: projectID)
             }
             if tab == .conversations {
                 Section("Conversations") {
@@ -646,6 +650,75 @@ private struct ProjectTasksSection: View {
             await load()
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+}
+
+/// A project's decision log (section 15, R8), from reviewed meeting claims: what was decided and by whom
+/// it was said, what keeps coming up unsettled, risks by who named them, and who is waiting on whom.
+/// It never says anyone agreed: that is not recorded.
+private struct ProjectDecisionLog: View {
+    let projectID: Int
+
+    @State private var page: ProjectPage?
+    @State private var error: String?
+
+    var body: some View {
+        Group {
+            if let error {
+                Section { Text(error).foregroundStyle(Spine.Palette.danger) }
+            }
+            if let page {
+                if page.decided.isEmpty && page.open.isEmpty && page.risks.isEmpty && page.waiting.isEmpty {
+                    Section { Text("Nothing reviewed from this project's meetings yet.").foregroundStyle(Spine.Palette.textDim) }
+                }
+                if !page.decided.isEmpty {
+                    Section("Decided (\(page.decided.count))") {
+                        ForEach(page.decided) { d in
+                            row(d.text, ProjectWords.saidLine(d.saidBy, present: d.present), moment: d.moment)
+                        }
+                    }
+                }
+                if !page.open.isEmpty {
+                    Section("Open (\(page.open.count))") {
+                        ForEach(page.open) { o in row(o.text, ProjectWords.raisedLine(o.raisedIn), moment: o.last) }
+                    }
+                }
+                if !page.risks.isEmpty {
+                    Section("Risks (\(page.risks.count))") {
+                        ForEach(page.risks) { r in row(r.text, ProjectWords.riskLine(r.times, namedBy: r.namedBy), moment: nil) }
+                    }
+                }
+                if !page.waiting.isEmpty {
+                    Section("Waiting (\(page.waiting.count))") {
+                        ForEach(page.waiting) { w in
+                            row(w.text, ProjectWords.waitingLine(w.direction, who: w.who) + (w.late ? " · late" : ""), moment: nil)
+                        }
+                    }
+                }
+            } else if error == nil {
+                Section { ProgressView() }
+            }
+        }
+        .task(id: projectID) {
+            do {
+                page = try await APIClient.shared.projectPage(projectID)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func row(_ title: String, _ detail: String, moment: PageMoment?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).fontWeight(.semibold)
+            Text(detail)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+            if let m = moment {
+                MomentLinkView(moment: MomentRef(at: m.at, atMs: m.atMs, audio: m.audio, meetingId: m.meetingId, meetingTitle: m.meetingTitle, quote: m.quote, speaker: m.speaker))
+            }
         }
     }
 }

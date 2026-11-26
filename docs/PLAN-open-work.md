@@ -2040,6 +2040,14 @@ leaves the machine stops and writes down what it found.
   how many meetings have raised it without settling it. Risks by who named them and how often. Waiting, in
   both directions, from R7's direction field.
 - [Sonnet] The project page on three clients, and the tests.
+- **Built 2026-11-26** (`src/knowledge/project-page.ts`, `GET /api/projects/:id/page`). Decided: decisions in
+  force, newest first, each with who said it, who else was named in the room, and the moment. Who *agreed*
+  is not recorded (a claim has one speaker), so the page says "with X and Y there" and never "agreed".
+  Open: questions on a subject no decision settled, one row per subject, with how many meetings raised it.
+  Risks: grouped by subject, with who named them, most often first. Waiting: the project's commitments each
+  way, late first, using R7's direction. Reviewed, non-sensitive claims only. A "Decision log" tab on the
+  project screen on web, iPhone and Mac. Tests: `project-page`, `project-screen`. A question with no topic is
+  its own row, so the count of meetings only adds up across claims that share a subject.
 
 ### R9. "For today": the line before a 1:1 or a review (Code, then a decision)
 
