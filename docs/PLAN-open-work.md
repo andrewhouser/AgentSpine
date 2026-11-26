@@ -2007,6 +2007,15 @@ leaves the machine stops and writes down what it found.
 - [Fable] "Never use for the cloud" on a memory: today only code sets `cloud_safe`, and only when it saw the
   run stay off private material. A person may clear that flag from the screen and may never set it.
 - [Sonnet] The Memory screen on three clients: source, uses, Fix, Forget, Confirm.
+- **Built 2026-11-26** (`src/memory/rag.ts`). `memories.uses` and `last_used` count each time recall puts a
+  memory into a run (the runner's recall and the `memory_recall` tool); the duplicate check in `remember` does
+  not count. A memory written by a route no person took (reflection, summary, the model's save, friction, a
+  dismissal, or before provenance) and not confirmed is a guess; `confirmed` is set by Confirm or by Fix. Fix
+  is the person's words, re-embedded. "Never use for the cloud" clears `cloud_safe`; there is no route or
+  export that sets it, and a fix leaves it as it was. `GET /api/memories?unusedDays=90` lists what recall has
+  not used for that long. The Memory screen on web (Settings → Memory and the Memory place), iPhone and Mac
+  shows the source, uses, guess and where it may go, with Confirm, Fix, Never use for the cloud and Forget.
+  Tests: `memory-readable`, `memory-screen`.
 
 ### R7. A person (Code; the core of the manager work)
 

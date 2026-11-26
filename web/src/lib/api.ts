@@ -241,6 +241,8 @@ export const api = {
 
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
 
+  /** Memory you can read (section 15, R6): confirm, fix, and take cloud-safe away. There is no call that sets it. */
+  confirmMemory: (id: number) => post<{ id: number }>(`/api/memories/${id}/confirm`),
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
   createProject: (name: string, instructions = "") =>
     post<Project>("/api/projects", { instructions, name }),
@@ -291,6 +293,7 @@ export const api = {
   fileContent: (path: string) =>
     request<{ path: string; text: string; truncated: boolean }>(`/api/files/content?path=${encodeURIComponent(path)}`),
 
+  fixMemory: (id: number, text: string) => request<{ id: number }>(`/api/memories/${id}`, { body: JSON.stringify({ text }), method: "PATCH" }),
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
   headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
@@ -337,6 +340,7 @@ export const api = {
 
   instagramQueue: () => request<InstagramQueue>("/api/instagram/queue"),
 
+  keepMemoryLocal: (id: number) => post<{ id: number }>(`/api/memories/${id}/local-only`),
   /**
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
@@ -411,8 +415,8 @@ export const api = {
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
 
-  listMemories: (query?: string) =>
-    request<Memory[]>(`/api/memories${query ? `?query=${encodeURIComponent(query)}` : ""}`),
+  listMemories: (query?: string, unusedDays?: number) =>
+    request<Memory[]>(`/api/memories?${new URLSearchParams({ ...(query ? { query } : {}), ...(unusedDays ? { unusedDays: String(unusedDays) } : {}) })}`),
   listProjects: () => request<Project[]>("/api/projects"),
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),

@@ -271,3 +271,26 @@
   margin-top: 8px;
   padding-top: 0;
 }
+
+/* Memory you can read (section 15, R6). */
+.unusedToggle {
+  color: var(--text-dim);
+  display: block;
+  font-size: 0.8125rem;
+  margin: 6px 0 10px;
+}
+
+.guess {
+  color: var(--warn);
+}
+
+.memActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fixRow {
+  display: block;
+  margin-bottom: 4px;
+}

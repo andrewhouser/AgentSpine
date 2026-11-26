@@ -791,6 +791,12 @@ struct SavedPath: Codable {
 // MARK: - Memory, policy, proposals
 
 struct Memory: Codable, Identifiable, Hashable {
+    /// Section 15, R6. Optional so an older server still decodes. Cloud-safe is only ever set by code.
+    let cloudSafe: Bool?
+    let confirmed: Bool?
+    let guess: Bool?
+    let lastUsed: String?
+    let uses: Int?
     let id: Int
     let kind: String
     /// The route that wrote it (reflection, tool, profile ...), set by the server's code and never by the
@@ -2921,4 +2927,13 @@ enum ProjectWords {
         default: return "\(who ?? "Someone") owes someone"
         }
     }
+}
+
+// MARK: - Memory words
+
+/// Mirrors `web/src/lib/memory.ts` (section 15, R6); test/memory-screen.test.mjs holds the two equal.
+enum MemoryWords {
+    static func usesLine(_ uses: Int) -> String { uses <= 0 ? "Not used yet" : uses == 1 ? "Used once" : "Used \(uses) times" }
+    static func cloudLine(_ cloudSafe: Bool) -> String { cloudSafe ? "May reach the cloud" : "Local only" }
+    static func guessLine(_ guess: Bool) -> String { guess ? "Guess: nobody has confirmed this" : "" }
 }

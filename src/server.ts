@@ -139,7 +139,7 @@ import { ensureMorningBrief } from "./briefing.ts";
 import { pruneSources } from "./research/sources.ts";
 import { parseWhen } from "./tasks/when.ts";
 import { rawDb } from "./memory/store.ts";
-import { dedupeMemories, deleteMemory, listMemories, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
+import { confirmMemory, dedupeMemories, deleteMemory, fixMemory, keepMemoryLocal, listMemories, pruneMemories } from "./memory/rag.ts"; // also ensures the memories table exists
 import { summarizeConversation, summarizeIdleConversations } from "./memory/summarize.ts";
 import { deleteRecipe, listRecipes, updateRecipe } from "./recipes/store.ts";
 import * as styleStore from "./styles/store.ts";
@@ -1049,7 +1049,29 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     // /api/memories?query=
     if (m === "GET" && seg[1] === "memories" && seg.length === 2) {
       const q = url.searchParams.get("query");
-      return sendJson(res, 200, listMemories(100, q || undefined));
+      // ?unusedDays=90: what recall has not put into a run for that long (section 15, R6).
+      const unused = Number(url.searchParams.get("unusedDays") ?? 0);
+      return sendJson(res, 200, listMemories(unused > 0 ? 500 : 100, q || undefined, { unusedDays: unused > 0 ? Math.min(3650, unused) : undefined }));
+    }
+
+    /*
+     * Memory you can read (section 15, R6). A person's corrections, behind the dashboard token like Forget; no tool
+     * reaches them. There is no route that marks a memory cloud-safe: only code that saw its writer stay off private
+     * material may set that, so a screen can only take it away.
+     *   POST  /api/memories/:id/confirm      it is right: no longer a guess
+     *   POST  /api/memories/:id/local-only   never use it for the cloud
+     *   PATCH /api/memories/:id {text}       fix its words (confirmed, embedded again)
+     */
+    if (seg[1] === "memories" && seg.length >= 3) {
+      const memId = Number(seg[2]);
+      if (Number.isInteger(memId) && memId > 0) {
+        if (m === "POST" && seg.length === 4 && seg[3] === "confirm") return sendJson(res, confirmMemory(memId) ? 200 : 404, { id: memId });
+        if (m === "POST" && seg.length === 4 && seg[3] === "local-only") return sendJson(res, keepMemoryLocal(memId) ? 200 : 404, { id: memId });
+        if (m === "PATCH" && seg.length === 3) {
+          const ok = await fixMemory(memId, String((await readBody(req))?.text ?? ""));
+          return ok ? sendJson(res, 200, { id: memId }) : sendJson(res, 400, { error: "text is required, and the memory must exist" });
+        }
+      }
     }
 
     // /api/memories/:id  — retract a single learned memory. The human-facing correction for

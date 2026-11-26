@@ -196,8 +196,15 @@ export interface OutboxReview {
 }
 
 export interface Memory {
+  /** True only when code showed its writer saw nothing private (section 15, R6). A person can clear it, never set it. */
+  cloudSafe: boolean;
+  confirmed: boolean;
+  /** Written by a route no person took, and not confirmed since. */
+  guess: boolean;
   id: number;
   kind: string;
+  /** When recall last put it into a run, or null. */
+  lastUsed: null | string;
   /** The route that wrote it (reflection, tool, profile, ...), or null for a memory from before provenance. */
   origin: null | string;
   /** The run that wrote it, when there is one. */
@@ -206,6 +213,7 @@ export interface Memory {
   runPruned: boolean;
   text: string;
   ts: string;
+  uses: number;
 }
 
 /** GET /api/overview: everything installed, read-only, with the prune list (src/overview.ts). */

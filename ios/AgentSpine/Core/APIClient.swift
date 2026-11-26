@@ -1058,10 +1058,24 @@ final class APIClient {
 
     // MARK: - Memory, policy, proposals
 
-    func memories(query: String? = nil) async throws -> [Memory] {
+    func memories(query: String? = nil, unusedDays: Int? = nil) async throws -> [Memory] {
         var q: [String: String] = [:]
         if let query, !query.isEmpty { q["query"] = query }
+        if let unusedDays { q["unusedDays"] = String(unusedDays) }
         return try await send(request("/api/memories", query: q), as: [Memory].self)
+    }
+
+    /// Memory you can read (section 15, R6): confirm, fix, and take cloud-safe away. Nothing sets it.
+    func confirmMemory(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/memories/\(id)/confirm", method: "POST"))
+    }
+
+    func fixMemory(_ id: Int, text: String) async throws {
+        try await sendRaw(jsonRequest("/api/memories/\(id)", method: "PATCH", body: ["text": text]))
+    }
+
+    func keepMemoryLocal(_ id: Int) async throws {
+        try await sendRaw(jsonRequest("/api/memories/\(id)/local-only", method: "POST"))
     }
 
     /// Cloud tokens against the caps. Read-only: the caps are `.env` numbers, not preferences.

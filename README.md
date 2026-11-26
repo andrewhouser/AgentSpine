@@ -121,6 +121,12 @@ often enough the card offers **Always allow**, which is the existing auto-approv
 for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
 returns the card (`src/decision-card.ts`).
 
+**Memory you can read** (section 15, R6). Each memory shows where it came from, how many times recall has
+used it in a run and when last, whether it is a guess (written by a reflection or the assistant and never
+confirmed), and whether it may reach the cloud. **Confirm** says it is right, **Fix** corrects its words,
+**Never use for the cloud** keeps it local for good (nothing on a screen can do the reverse), and
+**Forget** removes it. "Only what has not been used in 90 days" lists what is worth a look.
+
 **A project keeps its decision log** (section 15, R8). On a project's **Decision log** tab: what was
 decided, who said it and who else was in the room (agreement is not recorded, so it never claims any), the
 questions that keep coming up without a decision and in how many meetings, risks by who named them, and

@@ -5,6 +5,7 @@ import type { Memory, VoiceStatus } from "../../lib/types.ts";
 import type { VoiceSettings } from "../../lib/voiceSettings.ts";
 
 import { api } from "../../lib/api.ts";
+import { cloudLine, guessLine, usesLine } from "../../lib/memory.ts";
 import { browserMicReason } from "../../lib/mic.ts";
 import {
   readPreferences,
@@ -77,6 +78,9 @@ export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id
   const [memories, setMemories] = useState<Memory[]>([]);
   const [policy, setPolicy] = useState<null | Record<string, unknown>>(null);
   const [query, setQuery] = useState("");
+  // Section 15, R6: show only what recall has not used in 90 days, and the row being fixed.
+  const [unusedOnly, setUnusedOnly] = useState(false);
+  const [fixing, setFixing] = useState<{ id: number; text: string } | null>(null);
   const [picked, setTab] = useState<TabId>(tabFromUrl);
   const tab = only ?? picked;
 
@@ -170,9 +174,11 @@ export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void api.listMemories(query || undefined).then(setMemories), 200);
+    const timer = window.setTimeout(() => void api.listMemories(query || undefined, unusedOnly ? 90 : undefined).then(setMemories), 200);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, unusedOnly]);
+
+  const reloadMemories = (): void => void api.listMemories(query || undefined, unusedOnly ? 90 : undefined).then(setMemories);
 
   // Retract one memory. Optimistic: drop it from the list immediately, and put it back if the
   // server rejects the delete, so a failed request doesn't silently look like a success.
@@ -434,13 +440,36 @@ export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id
           placeholder="Search memories…"
           value={query}
         />
-        {memories.length === 0 && <div className={styles.empty}>No memories{query ? " match" : " yet"}.</div>}
+        <label className={styles.unusedToggle}>
+          <input checked={unusedOnly} onChange={(e) => setUnusedOnly(e.target.checked)} type="checkbox" /> Only what has not been used in 90 days
+        </label>
+        {memories.length === 0 && <div className={styles.empty}>No memories{query || unusedOnly ? " match" : " yet"}.</div>}
         {memories.map((m) => (
           <div className={styles.memory} key={m.id}>
             <span className={styles.kind}>{m.kind}</span>
             <span className={styles.text}>
-              {m.text}
+              {fixing?.id === m.id ? (
+                <span className={styles.fixRow}>
+                  <input
+                    aria-label="Fix this memory"
+                    autoFocus
+                    className={styles.search}
+                    onChange={(e) => setFixing({ id: m.id, text: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setFixing(null);
+                      if (e.key === "Enter" && fixing.text.trim()) void api.fixMemory(m.id, fixing.text).then(() => { setFixing(null); reloadMemories(); });
+                    }}
+                    value={fixing.text}
+                  />
+                </span>
+              ) : (
+                m.text
+              )}
               <span className={styles.origin}>
+                {guessLine(m.guess) && <span className={styles.guess}>{guessLine(m.guess)} · </span>}
+                {usesLine(m.uses)}
+                {m.lastUsed && `, last ${new Date(m.lastUsed).toLocaleDateString()}`}
+                {` · ${cloudLine(m.cloudSafe)} · `}
                 {originLabel(m)}
                 {m.runId !== null && m.runPruned && " · run pruned"}
                 {m.runId !== null && !m.runPruned && (
@@ -454,6 +483,21 @@ export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id
               </span>
             </span>
             <span className={styles.when}>{new Date(m.ts).toLocaleDateString()}</span>
+            <span className={styles.memActions}>
+              {m.guess && (
+                <button className={styles.runLink} onClick={() => void api.confirmMemory(m.id).then(reloadMemories)} title="It is right: no longer a guess" type="button">
+                  Confirm
+                </button>
+              )}
+              <button className={styles.runLink} onClick={() => setFixing({ id: m.id, text: m.text })} title="Correct its words" type="button">
+                Fix
+              </button>
+              {m.cloudSafe && (
+                <button className={styles.runLink} onClick={() => void api.keepMemoryLocal(m.id).then(reloadMemories)} title="Keep it on the local model from now on" type="button">
+                  Never use for the cloud
+                </button>
+              )}
+            </span>
             <button
               aria-label={`Forget: ${m.text}`}
               className={styles.forget}

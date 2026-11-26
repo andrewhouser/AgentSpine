@@ -9,15 +9,30 @@ struct MemoryView: View {
     @State private var query = ""
     @State private var loading = false
     @State private var error: String?
+    /// Section 15, R6: only what recall has not used in 90 days, and the memory being fixed.
+    @State private var unusedOnly = false
+    @State private var fixing: Memory?
+    @State private var fixText = ""
 
     var body: some View {
         List {
             if let error {
                 ErrorNotice(message: error) { Task { await load() } }
             }
+            Toggle("Only what has not been used in 90 days", isOn: $unusedOnly)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .onChange(of: unusedOnly) { _, _ in Task { await load() } }
             ForEach(memories) { memory in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(memory.text)
+                    if memory.guess == true {
+                        Text(MemoryWords.guessLine(true))
+                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                            .foregroundStyle(Spine.Palette.warn)
+                    }
+                    Text([MemoryWords.usesLine(memory.uses ?? 0) + (memory.lastUsed.map { ", last \(SpineDate.relative($0))" } ?? ""), MemoryWords.cloudLine(memory.cloudSafe == true)].joined(separator: " · "))
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textDim)
                     HStack(spacing: 6) {
                         Text(memory.kind)
                         Text("·")
@@ -28,6 +43,27 @@ struct MemoryView: View {
                     provenance(memory)
                 }
                 .swipeActions {
+                    Button("Forget", role: .destructive) { Task { await forget(memory) } }
+                    Button("Fix") {
+                        fixText = memory.text
+                        fixing = memory
+                    }
+                    if memory.guess == true {
+                        Button("Confirm") { Task { await act { try await APIClient.shared.confirmMemory(memory.id) } } }
+                            .tint(Spine.Palette.ok)
+                    }
+                }
+                .contextMenu {
+                    if memory.guess == true {
+                        Button("Confirm") { Task { await act { try await APIClient.shared.confirmMemory(memory.id) } } }
+                    }
+                    Button("Fix") {
+                        fixText = memory.text
+                        fixing = memory
+                    }
+                    if memory.cloudSafe == true {
+                        Button("Never use for the cloud") { Task { await act { try await APIClient.shared.keepMemoryLocal(memory.id) } } }
+                    }
                     Button("Forget", role: .destructive) { Task { await forget(memory) } }
                 }
             }
@@ -45,6 +81,18 @@ struct MemoryView: View {
         .refreshable { await load() }
         .task { await load() }
         .overlay { if loading && memories.isEmpty { ProgressView() } }
+        .alert("Fix this memory", isPresented: Binding(get: { fixing != nil }, set: { if !$0 { fixing = nil } })) {
+            TextField("What it should say", text: $fixText)
+            Button("Save") {
+                let id = fixing?.id
+                Task {
+                    if let id, !fixText.trimmingCharacters(in: .whitespaces).isEmpty {
+                        await act { try await APIClient.shared.fixMemory(id, text: fixText) }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     /// Where this memory came from, with a way into the run that wrote it. A pruned run says so rather
@@ -72,8 +120,17 @@ struct MemoryView: View {
         loading = true
         defer { loading = false }
         do {
-            memories = try await APIClient.shared.memories(query: query)
+            memories = try await APIClient.shared.memories(query: query, unusedDays: unusedOnly ? 90 : nil)
             error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func act(_ call: () async throws -> Void) async {
+        do {
+            try await call()
+            await load()
         } catch {
             self.error = error.localizedDescription
         }

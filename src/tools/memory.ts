@@ -36,7 +36,8 @@ export const memoryRecall: Tool = {
   }),
   checkPolicy: (p) => always(p),
   run: async (a) => {
-    const hits = await recall(String(a?.query ?? ""), Number(a?.k ?? 5));
+    // The tracker counts these as uses (section 15, R6); the run is already pinned by `privateOutput` above.
+    const hits = await recall(String(a?.query ?? ""), Number(a?.k ?? 5), 0, { private: false });
     return hits.length ? hits.map((h, i) => `${i + 1}. ${h}`).join("\n") : "(no relevant memories)";
   },
 };

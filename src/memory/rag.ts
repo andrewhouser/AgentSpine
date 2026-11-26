@@ -81,8 +81,34 @@ export interface RecallSeen {
   private: boolean;
 }
 
-const noteRecalled = (rows: { cloud_safe?: null | number }[], seen?: RecallSeen): void => {
+/*
+ * Memory you can read (PLAN-open-work section 15, R6). `uses` and `last_used` count a memory each time recall
+ * puts it into a run (a recall with a `seen` tracker; the duplicate check in `remember` passes none and does not
+ * count). `confirmed` is 1 once a person has confirmed or corrected it. A memory written by a route a person did
+ * not take (a reflection, a summary, the model's own save) and not confirmed is shown as a guess.
+ */
+for (const col of ["uses INTEGER NOT NULL DEFAULT 0", "last_used TEXT", "confirmed INTEGER"]) {
+  try {
+    rawDb.exec(`ALTER TABLE memories ADD COLUMN ${col}`);
+  } catch {
+    /* column already exists */
+  }
+}
+
+/** Routes where a person chose the words or kept them: never a guess. */
+export const PERSON_ORIGINS: readonly string[] = ["date", "profile", "rejection", "review", "reviewed_lesson", "reviewed_recipe"];
+
+const noteRecalled = (rows: { cloud_safe?: null | number; id?: number }[], seen?: RecallSeen): void => {
   if (seen && rows.some((r) => r.cloud_safe !== 1)) seen.private = true;
+  // Counted only for a recall into a run, and never allowed to fail the recall.
+  if (!seen) return;
+  try {
+    const stamp = new Date().toISOString();
+    const bump = rawDb.prepare("UPDATE memories SET uses = uses + 1, last_used = ? WHERE id = ?");
+    for (const r of rows) if (typeof r.id === "number") bump.run(stamp, r.id);
+  } catch {
+    /* a counter must not cost a run its memories */
+  }
 };
 
 const sourceColumns = (source?: MemorySource): { origin: null | string; runId: null | number } => ({
@@ -247,7 +273,14 @@ export const remember = async (text: string, kind = "note", source?: MemorySourc
 
 /** A memory as Settings shows it: what it says, and where it came from. */
 export interface MemoryRow {
+  /** True only when code showed the writer saw nothing private (`cloud_safe` 1). A person may clear it, never set it. */
+  cloudSafe: boolean;
+  confirmed: boolean;
+  /** Written by a route no person took, and not confirmed since. */
+  guess: boolean;
   id: number;
+  lastUsed: null | string;
+  uses: number;
   kind: null | string;
   /** The route that wrote it, or null for a row that predates provenance. */
   origin: null | string;
@@ -264,17 +297,68 @@ export interface MemoryRow {
  * query, so every client says "run pruned" the same way instead of each one finding out by following
  * a link to a 404.
  */
-export const listMemories = (limit: number, query?: string): MemoryRow[] => {
+export const listMemories = (limit: number, query?: string, opts: { unusedDays?: number; now?: Date } = {}): MemoryRow[] => {
+  const where: string[] = [];
+  const params: (number | string)[] = [];
+  if (query) {
+    where.push("m.text LIKE ?");
+    params.push(`%${query}%`);
+  }
+  if (opts.unusedDays && opts.unusedDays > 0) {
+    // Not recalled into a run for that long: never used and older than that, or last used before it.
+    const cutoff = new Date((opts.now ?? new Date()).getTime() - opts.unusedDays * 86_400_000).toISOString();
+    where.push("COALESCE(m.last_used, m.ts) < ?");
+    params.push(cutoff);
+  }
   const rows = rawDb
     .prepare(
-      `SELECT m.id, m.ts, m.kind, m.text, m.origin, m.run_id AS runId,
+      `SELECT m.id, m.ts, m.kind, m.text, m.origin, m.run_id AS runId, m.uses, m.last_used AS lastUsed, m.confirmed, m.cloud_safe AS cloudSafe,
               (m.run_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.id = m.run_id)) AS runPruned
          FROM memories m
-        ${query ? "WHERE m.text LIKE ?" : ""}
+        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
         ORDER BY m.id DESC LIMIT ?`,
     )
-    .all(...(query ? [`%${query}%`, limit] : [limit])) as Array<Omit<MemoryRow, "runPruned"> & { runPruned: number }>;
-  return rows.map((r) => ({ ...r, runPruned: r.runPruned === 1 }));
+    .all(...params, limit) as unknown as Array<{ cloudSafe: null | number; confirmed: null | number; id: number; kind: null | string; lastUsed: null | string; origin: null | string; runId: null | number; runPruned: number; text: string; ts: string; uses: null | number }>;
+  return rows.map((r) => ({
+    ...r,
+    cloudSafe: r.cloudSafe === 1,
+    confirmed: r.confirmed === 1,
+    guess: r.confirmed !== 1 && !PERSON_ORIGINS.includes(r.origin ?? ""),
+    runPruned: r.runPruned === 1,
+    uses: r.uses ?? 0,
+  }));
+};
+
+/** A person confirms a memory is right. It stops being a guess. */
+export const confirmMemory = (id: number): boolean => rawDb.prepare("UPDATE memories SET confirmed = 1 WHERE id = ?").run(id).changes > 0;
+
+/**
+ * "Never use for the cloud": clears `cloud_safe`, so recall pins any run it reaches to the local model. There is
+ * deliberately no inverse: only code that saw the writer stay off private material may set it (section 15, R6).
+ */
+export const keepMemoryLocal = (id: number): boolean => {
+  if (!rawDb.prepare("SELECT 1 FROM memories WHERE id = ?").get(id)) return false;
+  rawDb.prepare("UPDATE memories SET cloud_safe = NULL WHERE id = ?").run(id);
+  return true;
+};
+
+/**
+ * A person corrects a memory's words. The text is theirs now, so it is confirmed; it is embedded again so recall
+ * finds it by what it now says. `cloud_safe` is left as it was: a correction never makes a memory cloud-safe.
+ */
+export const fixMemory = async (id: number, text: string): Promise<boolean> => {
+  const t = String(text ?? "").trim().slice(0, 2000);
+  if (!t || !rawDb.prepare("SELECT 1 FROM memories WHERE id = ?").get(id)) return false;
+  let vec: Buffer | null = null;
+  try {
+    const embed = await getEmbedder();
+    if (embed) vec = toBlob(await embed(t));
+  } catch (err) {
+    console.warn(`[rag] embedding failed on a fix, keeping the old vector: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (vec) rawDb.prepare("UPDATE memories SET text = ?, embedding = ?, confirmed = 1 WHERE id = ?").run(t, vec, id);
+  else rawDb.prepare("UPDATE memories SET text = ?, confirmed = 1 WHERE id = ?").run(t, id);
+  return true;
 };
 
 /**
@@ -374,8 +458,8 @@ export const recallScored = async (
 
   if (!embedder && !vector) {
     const rows = rawDb
-      .prepare(`SELECT text, cloud_safe FROM memories WHERE text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
-      .all(`%${query}%`, k) as { cloud_safe: null | number; text: string }[];
+      .prepare(`SELECT id, text, cloud_safe FROM memories WHERE text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
+      .all(`%${query}%`, k) as { cloud_safe: null | number; id: number; text: string }[];
     noteRecalled(rows, seen);
     // Keyword fallback has no meaningful similarity (score is NaN), so the floor cannot apply
     // here — filtering by `NaN >= minScore` would drop every row and turn recall into nothing.
@@ -387,7 +471,7 @@ export const recallScored = async (
   const rows = rawDb.prepare(`SELECT id, text, embedding, cloud_safe FROM memories WHERE ${RECALLABLE}`).all() as unknown as (MemRow & { cloud_safe: null | number })[];
   const hits = rows
     .filter((r) => r.embedding)
-    .map((r) => ({ cloud_safe: r.cloud_safe, text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))
+    .map((r) => ({ cloud_safe: r.cloud_safe, id: r.id, text: r.text, score: cosine(q, fromBlob(r.embedding as Buffer)) }))
     // Drop matches below the floor BEFORE the top-k cut, so a weak hit does not take a slot a
     // stronger one could have used. `minScore <= 0` is a fast no-op that keeps rank-only order.
     .filter((r) => minScore <= 0 || r.score >= minScore)
@@ -414,8 +498,8 @@ export const recallOfKind = async (kind: string, query: string, k = 3, minScore 
   const embedder = await getEmbedder();
   if (!embedder) {
     const rows = rawDb
-      .prepare(`SELECT text, cloud_safe FROM memories WHERE kind = ? AND text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
-      .all(kind, `%${query}%`, k) as { cloud_safe: null | number; text: string }[];
+      .prepare(`SELECT id, text, cloud_safe FROM memories WHERE kind = ? AND text LIKE ? AND ${RECALLABLE} ORDER BY id DESC LIMIT ?`)
+      .all(kind, `%${query}%`, k) as { cloud_safe: null | number; id: number; text: string }[];
     noteRecalled(rows, seen);
     return rows.map((r) => r.text);
   }
@@ -423,7 +507,7 @@ export const recallOfKind = async (kind: string, query: string, k = 3, minScore 
   const rows = rawDb.prepare(`SELECT id, text, embedding, cloud_safe FROM memories WHERE kind = ? AND ${RECALLABLE}`).all(kind) as unknown as (MemRow & { cloud_safe: null | number })[];
   const hits = rows
     .filter((r) => r.embedding)
-    .map((r) => ({ cloud_safe: r.cloud_safe, score: cosine(q, fromBlob(r.embedding as Buffer)), text: r.text }))
+    .map((r) => ({ cloud_safe: r.cloud_safe, id: r.id, score: cosine(q, fromBlob(r.embedding as Buffer)), text: r.text }))
     .filter((r) => r.score >= minScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, k);

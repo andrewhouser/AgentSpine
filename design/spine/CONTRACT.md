@@ -180,7 +180,7 @@ interface AnswerSources {                 // attached to the assistant turn [new
 }
 ```
 
-## 6. Memory — `GET /api/memories` (extended) **[R6]**
+## 6. Memory — `GET /api/memories` (extended) **[built R6]**
 
 ```ts
 interface MemoryRow {
@@ -188,15 +188,17 @@ interface MemoryRow {
   text: string;
   kind: string;                           // [exists]
   from: { route: string; runId: null | number; moment?: Moment } | null; // provenance [exists]; null = before provenance
-  uses: number;                           // [new R6] written by recall
-  lastUsed: null | string;                // [new R6]
-  confirmed: boolean;                     // [new R6] false = "guess"
+  uses: number;                           // [built R6] counted when recall puts it into a run
+  lastUsed: null | string;                // [built R6]
+  confirmed: boolean;                     // [built R6]
+  guess: boolean;                         // [built R6] no person wrote or confirmed it
   cloudSafe: boolean;                     // [exists] cloud_safe; set only by code
 }
-// POST /api/memories/:id/confirm          [new R6]
-// POST /api/memories/:id/local-only       [new R6] clears cloud_safe; there is no route that sets it
+// POST  /api/memories/:id/confirm         [built R6]
+// POST  /api/memories/:id/local-only      [built R6] clears cloud_safe; there is no route that sets it
+// PATCH /api/memories/:id {text}          [built R6] Fix: confirmed, embedded again
 // DELETE /api/memories/:id                [exists] Forget
-// GET /api/memories?unusedDays=90         [new R6]
+// GET   /api/memories?unusedDays=90       [built R6]
 ```
 
 ## 7. A person — `GET /api/people/:id`, `GET /api/people` **[built R7]**
