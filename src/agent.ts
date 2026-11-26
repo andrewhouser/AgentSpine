@@ -9,7 +9,7 @@
 import { answerPublisher, PROMISE_MAX_CHARS, PROMISE_ONLY } from "./answer-stream.ts";
 import { AGENT_STEP_MAX_TOKENS, COMPACT_AT_TOKENS, COMPACT_KEEP_RECENT, COMPACT_TO, LOCAL_DEEP_MAX_TOKENS, LOCAL_DEEP_THINKING, MAX_PARSE_FAILURES, MAX_STEPS, RUN_BUDGET_WARN_AT, RUN_MS_PER_STEP, RUN_TOKENS_PER_STEP } from "./config.ts";
 import { compactMessages, estimateTokens } from "./compact.ts";
-import { addRunNote, usageForRuns } from "./memory/store.ts";
+import { addRunNote, markReadOutside, usageForRuns } from "./memory/store.ts";
 import { holdText } from "./stash.ts";
 import { route } from "./router.ts";
 import type { RouteOpts, RouteResult } from "./router.ts";
@@ -939,6 +939,15 @@ const runAgentLoop = async (
         projectId: opts.projectId ?? null,
       });
       if (result.status === "executed") gathered.push(`${call.tool} -> ${result.output}`);
+      // Outside content is about to reach the model (section 15, R2). Recorded so a later card can say a
+      // run that had read an email or a page made the call, and so it never offers "Always allow" then.
+      if (runId != null && result.status === "executed" && result.output.includes("[UNTRUSTED CONTENT from ")) {
+        try {
+          markReadOutside(runId);
+        } catch (err) {
+          console.warn(`[agent] could not record outside content on run ${runId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       afterError = result.status === "error";
       const seen = nextRepeat(callCounts.get(key), result.output);
       callCounts.set(key, seen);

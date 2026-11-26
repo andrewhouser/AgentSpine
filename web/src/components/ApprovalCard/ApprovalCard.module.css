@@ -126,3 +126,102 @@
   top: 16px;
   width: 12px;
 }
+
+/* The decision card (section 15, R2): position, the four facts, the text that leaves, hold to approve. */
+.position {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.facts {
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 10px 0;
+  overflow: hidden;
+}
+
+.fact {
+  background: var(--bg-elevated);
+  padding: 8px 10px;
+}
+
+.fact dt {
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fact dd {
+  font-size: 0.8125rem;
+  margin: 2px 0 0;
+}
+
+.warnFact {
+  background: var(--warn-soft);
+}
+
+.warnFact dd {
+  color: var(--warn);
+}
+
+.leaves {
+  font-size: 0.8125rem;
+  margin: 8px 0;
+}
+
+.leaves pre {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+}
+
+.hold {
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+
+.holdFill {
+  background: var(--on-accent);
+  inset: 0 100% 0 0;
+  opacity: 0.25;
+  position: absolute;
+  transition: right 0s;
+}
+
+.holding .holdFill {
+  right: 0;
+  transition: right var(--hold-ms) linear;
+}
+
+.holdLabel {
+  position: relative;
+}
+
+.allow {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.allowNote {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  margin-top: 8px;
+}

@@ -448,3 +448,115 @@ struct AskBar: View {
         }
     }
 }
+
+/// The four facts of a decision card (PLAN-open-work section 15, R2), shared by the iPhone's
+/// `ApprovalCard` and the Mac's `MacApprovalCard`. The sentences are the server's.
+struct DecisionFactsView: View {
+    let card: DecisionCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.sm) {
+            fact("What leaves", card.facts.leavesLine, warn: false)
+            fact("Where it ran", card.facts.whereLine, warn: false)
+            fact("Can it be undone", card.facts.undoLine, warn: false)
+            fact("Why it is asking", card.facts.whyLine, warn: card.facts.readOutside)
+            if let leaves = card.facts.leaves, !leaves.isEmpty {
+                DisclosureGroup("The text that leaves (\(leaves.count))") {
+                    ForEach(Array(leaves.enumerated()), id: \.offset) { _, text in
+                        Text(text)
+                            .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Spine.Space.sm)
+                            .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm))
+                    }
+                }
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .tint(Spine.Palette.textDim)
+            }
+        }
+        .padding(Spine.Space.sm + 2)
+        .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.sm + 2))
+    }
+
+    private func fact(_ title: String, _ text: String, warn: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title.uppercased())
+                .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.bold))
+                .foregroundStyle(Spine.Palette.textFaint)
+            Text(text)
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                .foregroundStyle(warn ? Spine.Palette.warn : Spine.Palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Approve, held rather than tapped (section 15, R2): it fires only after `DecisionWords.holdSeconds`
+/// of pressing, and letting go early does nothing. No keyboard shortcut reaches it, on purpose: a
+/// Return pressed out of habit must not approve. VoiceOver gets a named action, which is deliberate.
+struct HoldToApprove: View {
+    var busy = false
+    let approve: () -> Void
+
+    @State private var holding = false
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Capsule().fill(Color.attention)
+            GeometryReader { geo in
+                Capsule()
+                    .fill(Color.white.opacity(0.28))
+                    .frame(width: holding ? geo.size.width : 0)
+                    .animation(holding ? .linear(duration: DecisionWords.holdSeconds) : .easeOut(duration: 0.15), value: holding)
+            }
+            Text(busy ? "Running…" : holding ? "Keep holding…" : "Hold to approve")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(height: 34)
+        .clipShape(Capsule())
+        .contentShape(Capsule())
+        .opacity(busy ? 0.6 : 1)
+        .onLongPressGesture(minimumDuration: DecisionWords.holdSeconds, maximumDistance: 30) {
+            if !busy { approve() }
+        } onPressingChanged: { pressing in
+            holding = pressing && !busy
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Hold to approve")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Approve") { if !busy { approve() } }
+    }
+}
+
+/// "Always allow this", when the server offers it: the existing auto-approval proposal, applied
+/// through `/api/proposals` by your tap. It applies from the next time; this card still needs an answer.
+struct AlwaysAllowRow: View {
+    let offer: DecisionCard.AlwaysAllow
+
+    @State private var note: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.xs) {
+            if let note {
+                Text("\(note). It applies from the next time; this one still needs your answer.")
+            } else {
+                Text(DecisionWords.alwaysAllowLine(offer))
+                Button("Always allow") {
+                    Task {
+                        do {
+                            note = try await APIClient.shared.applyProposal(tool: offer.tool, target: offer.target).message
+                        } catch {
+                            note = error.localizedDescription
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+        .foregroundStyle(Spine.Palette.textDim)
+    }
+}

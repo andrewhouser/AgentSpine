@@ -34,6 +34,7 @@ export const PROTECTED_PATHS = [
   "src/broker.ts",
   "src/config.ts",
   "src/confirmations.ts",
+  "src/decision-card.ts",
   "src/fs-scope.ts",
   "src/google/write.ts",
   "src/harness.ts",

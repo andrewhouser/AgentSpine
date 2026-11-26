@@ -112,6 +112,15 @@ carries it, stacks by where it came from (approvals, heads-ups, check-ins, finis
 it has no thread to stack under, and names that source in its subtitle, which is the line the
 Watch shows under the title.
 
+**Every approval is a decision card** (section 15, R2). Above the whole proposed action it says, in
+sentences code writes: what leaves the machine (the tool's own declaration of outgoing text), where the
+run was written (local or cloud), whether AgentSpine can undo it, and why it is asking: you typed it, a
+schedule you set up, a screen's button, or a helper, and whether that run had read an email, a page or
+a file first. Approve is held, not clicked, on all three clients. When you have approved the same shape
+often enough the card offers **Always allow**, which is the existing auto-approval proposal, and never
+for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
+returns the card (`src/decision-card.ts`).
+
 **Today is one line through the day** (section 15 of the plan). Below the three lines, **Behind**
 is what ran since you last looked, **Now** is what is waiting, and **Ahead** is the rest of today:
 each schedule's next run before midnight and today's calendar as it was last read. The spine never

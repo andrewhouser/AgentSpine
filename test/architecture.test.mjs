@@ -208,6 +208,8 @@ console.log("\nSC6: THE FILES THAT ENFORCE THE GATES ARE PROTECTED");
     "src/broker.ts",
     "src/config.ts",
     "src/confirmations.ts",
+    // The decision card (section 15, R2): what a person reads before approving, so it may not be edited unseen.
+    "src/decision-card.ts",
     "src/fs-scope.ts",
     "src/google/write.ts",
     "src/harness.ts",

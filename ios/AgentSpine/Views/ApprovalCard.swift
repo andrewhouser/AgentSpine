@@ -23,6 +23,8 @@ struct ApprovalCard: View {
     @State private var reason = ""
     @State private var error: String?
     @State private var showArgs = false
+    /// The four facts (section 15, R2), loaded beside the card. Approve waits for them.
+    @State private var card: DecisionCard?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -35,10 +37,17 @@ struct ApprovalCard: View {
                     .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .foregroundStyle(Spine.Palette.textDim)
                 Spacer()
+                if let card, !DecisionWords.positionLine(card.position).isEmpty {
+                    Text(DecisionWords.positionLine(card.position))
+                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
                 Text("#\(confirmation.id)")
                     .font(SpineFont.mono(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                     .foregroundStyle(Spine.Palette.textFaint)
             }
+
+            if let card { DecisionFactsView(card: card) }
 
             Text(confirmation.summary)
                 .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .callout))
@@ -72,18 +81,12 @@ struct ApprovalCard: View {
                     .buttonStyle(.bordered)
                     .tint(Spine.Palette.danger)
 
-                    Button {
+                    HoldToApprove(busy: busy || card == nil) {
                         Task { await decide(approve: true) }
-                    } label: {
-                        Group {
-                            if busy { ProgressView() } else { Text("Approve") }
-                        }
-                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.attention)
                 }
                 .disabled(busy)
+                if let offer = card?.alwaysAllow { AlwaysAllowRow(offer: offer) }
             } else {
                 Text("This can only be answered once you reconnect and the thread reloads. It may already have been answered.")
                     .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
@@ -94,6 +97,7 @@ struct ApprovalCard: View {
         .padding(Spine.Space.lg)
         .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))
         .overlay(RoundedRectangle(cornerRadius: Spine.Radius.lg).strokeBorder(Spine.Palette.attentionLine, lineWidth: 1))
+        .task(id: confirmation.id) { card = try? await APIClient.shared.decisionCard(confirmation.id) }
         .sheet(isPresented: $rejecting) {
             RejectSheet(confirmation: confirmation, reason: $reason) { text in
                 await decide(approve: false, reason: text)

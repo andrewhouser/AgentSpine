@@ -14,6 +14,8 @@ struct MacApprovalCard: View {
     @State private var reason = ""
     @State private var error: String?
     @State private var showArgs = false
+    /// The four facts (section 15, R2), loaded beside the card. Approve waits for them.
+    @State private var card: DecisionCard?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spine.Space.md) {
@@ -26,10 +28,17 @@ struct MacApprovalCard: View {
                     .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.textDim)
                 Spacer()
+                if let card, !DecisionWords.positionLine(card.position).isEmpty {
+                    Text(DecisionWords.positionLine(card.position))
+                        .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                        .foregroundStyle(Spine.Palette.textFaint)
+                }
                 Text("#\(confirmation.id)")
                     .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.textFaint)
             }
+
+            if let card { DecisionFactsView(card: card) }
 
             Text(confirmation.summary)
                 .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body))
@@ -61,20 +70,19 @@ struct MacApprovalCard: View {
                 }
                 .tint(Spine.Palette.danger)
 
-                Button {
+                // Held, not clicked, and no Return shortcut any more (section 15, R2).
+                HoldToApprove(busy: busy || card == nil) {
                     Task { await decide(approve: true) }
-                } label: {
-                    if busy { ProgressView().controlSize(.small) } else { Text("Approve") }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.attention)
-                .keyboardShortcut(.defaultAction)
+                .frame(width: 180)
             }
             .disabled(busy)
+            if let offer = card?.alwaysAllow { AlwaysAllowRow(offer: offer) }
         }
         .padding(Spine.Space.lg)
         .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.lg))
         .overlay(RoundedRectangle(cornerRadius: Spine.Radius.lg).strokeBorder(Spine.Palette.attentionLine, lineWidth: 1))
+        .task(id: confirmation.id) { card = try? await APIClient.shared.decisionCard(confirmation.id) }
         .sheet(isPresented: $rejecting) { rejectSheet }
     }
 

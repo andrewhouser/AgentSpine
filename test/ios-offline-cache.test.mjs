@@ -28,7 +28,8 @@ console.log("\nAPPROVALS AND WRITES (source)");
   const thread = read("ios/AgentSpine/Views/ThreadView.swift");
   const client = read("ios/AgentSpine/Core/APIClient.swift");
   check("the answer path refuses a saved copy", /func decide[\s\S]{0,180}guard answerable else/.test(card), true);
-  check("the buttons exist only when answerable", /if answerable \{[\s\S]*?Text\("Reject"\)[\s\S]*?Text\("Approve"\)/.test(card), true);
+  // Approve is held since section 15, R2 (HoldToApprove); it must still sit inside `if answerable`.
+  check("the buttons exist only when answerable", /if answerable \{[\s\S]*?Text\("Reject"\)[\s\S]*?HoldToApprove\(/.test(card), true);
   check("every card in a thread is told where it came from", thread.match(/ApprovalCard\(confirmation: confirmation\b[^)]*\)/g), Array(3).fill("ApprovalCard(confirmation: confirmation, answerable: cachedAt == nil)"));
   check("a saved thread never marks read or resumes a stream", /guard loaded\.cachedAt == nil else \{ return \}[\s\S]{0,300}markRead/.test(thread), true);
   check("the client never caches a write", (client.match(/sendKeepingCopy\(\s*(?:jsonRequest)/g) ?? []).length, 0);

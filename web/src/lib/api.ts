@@ -1,3 +1,4 @@
+import type { DecisionCard } from "./decision.ts";
 import type { Dial, DialAgreement, DialLevel, WouldHave } from "./dials.ts";
 import type { FinishedRun } from "./spokenAlerts.ts";
 /**
@@ -234,6 +235,8 @@ export const api = {
     post<Project>("/api/projects", { instructions, name }),
   createSchedule: (name: string, schedule: string, task: string) =>
     post<Schedule>("/api/schedules", { name, schedule, task }),
+  /** The decision card: one queued action and its four facts from code (section 15, R2). */
+  decisionCard: (id: number) => request<DecisionCard>(`/api/confirmations/${id}`),
   deleteClient: (id: number) => request<{ ok: boolean }>(`/api/clients/${id}`, { method: "DELETE" }),
   deleteConversation: (id: number) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: "DELETE" }),
   deleteHeadsupDate: (id: number) => request<{ ok: boolean }>(`/api/headsups/dates/${id}`, { method: "DELETE" }),

@@ -2583,3 +2583,66 @@ enum DialWords {
             : ".env (\(envName)) allows up to \(at)."
     }
 }
+
+// MARK: - Decision card
+
+/// `GET /api/confirmations/:id`: one queued action and its four facts, worked out in code on the
+/// server (src/decision-card.ts, section 15 R2). The facts' sentences come from the server, so the
+/// three clients cannot word them differently; `DecisionWords` is the little the client says itself.
+struct DecisionCard: Codable, Hashable {
+    struct Facts: Codable, Hashable {
+        let leaves: [String]?
+        let leavesLine: String
+        let origin: String
+        let readOutside: Bool
+        let undo: String
+        let undoLine: String
+        let where_: String
+        let whereLine: String
+        let whyLine: String
+
+        enum CodingKeys: String, CodingKey {
+            case leaves, leavesLine, origin, readOutside, undo, undoLine, whereLine, whyLine
+            case where_ = "where"
+        }
+    }
+
+    struct AlwaysAllow: Codable, Hashable {
+        let approvals: Int
+        let target: String
+        let tool: String
+    }
+
+    struct Position: Codable, Hashable {
+        let index: Int
+        let of: Int
+    }
+
+    let alwaysAllow: AlwaysAllow?
+    let args: String
+    let conversationId: Int?
+    let expiresAt: String?
+    let facts: Facts
+    let id: Int
+    let nextId: Int?
+    let pinned: Bool
+    let position: Position
+    let state: String
+    let summary: String
+    let tool: String
+    let ts: String
+}
+
+/// Mirrors `web/src/lib/decision.ts`; test/decision-screen.test.mjs holds the two equal.
+enum DecisionWords {
+    /// How long Approve must be held, in seconds. The web's HOLD_MS.
+    static let holdSeconds = 0.8
+
+    static func positionLine(_ p: DecisionCard.Position) -> String {
+        p.of > 1 && p.index > 0 ? "\(p.index) of \(p.of) waiting" : ""
+    }
+
+    static func alwaysAllowLine(_ a: DecisionCard.AlwaysAllow) -> String {
+        "You have approved this \(a.approvals) times and never said no. Always allow \(a.tool)\(a.target.isEmpty ? "" : " on \(a.target)")?"
+    }
+}

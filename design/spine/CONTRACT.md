@@ -75,30 +75,41 @@ Ahead is each enabled schedule's next run before midnight and today's events fro
 `src/calendar-cache.ts` that have not started, all-day first, at most 30. "Prep" from the R0 drawing
 is not in it: nothing defines prep yet, and its counts are R7's.
 
-## 2. The decision card — `GET /api/confirmations/:id` **[new R2]**
+## 2. The decision card — `GET /api/confirmations/:id` **[built R2]**
+
+As built (`src/decision-card.ts`). The facts' sentences are the server's, so no client words them.
 
 ```ts
 interface DecisionCard {
-  id: number;
-  position: { index: number; of: number };   // one at a time, oldest first
-  tool: string;
-  title: string;                             // confirmations.summary [exists]
-  text: string;                              // the whole proposed action [exists, TodayApproval.text]
-  expiresAt: null | string;                  // [exists]
+  alwaysAllow: null | { approvals: number; target: string; tool: string }; // only when offered
+  args: string;
+  conversationId: null | number;
+  expiresAt: null | string;
   facts: {
-    leaves: string[];                        // the tool's outgoingText parts [exists]; [] = nothing leaves
-    where: Where;                            // the run's pin [exists]
-    undo: "reversible" | "undoable" | "irreversible"; // the broker's tier [exists]
-    why: "you-typed" | "schedule" | "button" | "after-outside-content"; // [new R2] needs a run fact
+    leaves: null | string[];             // outgoingText parts; null when the declaration failed
+    leavesLine: string;
+    origin: "button" | "helper" | "schedule" | "unknown" | "you-typed";
+    readOutside: boolean;                 // runs.read_outside on the run, its root, or its thread
+    undo: "irreversible" | "reversible";
+    undoLine: string;
+    where: "cloud" | "local" | "none";
+    whereLine: string;
+    whyLine: string;
   };
-  /** Offered only when promote.ts would propose it: never for alwaysConfirm, never after outside content. */
-  alwaysAllow: boolean;                      // [new R2, Fable decides]
-  editable: boolean;
+  id: number;
+  nextId: null | number;                  // next pending card, oldest first
+  pinned: boolean;                        // alwaysConfirm: no rule may skip it
+  position: { index: number; of: number };
+  state: string;
+  summary: string;
+  tool: string;
+  ts: string;
 }
 ```
 
-`POST /api/confirmations/:id/approve` stays as it is **[exists]**. Hold-to-approve is client-side;
-the server still re-checks policy and `tool.refuse` at approval time **[exists]**.
+Approve and Reject stay on `POST /api/confirmations/:id/approve|reject`, which re-check policy and
+`tool.refuse`. "Always allow" posts `{tool, target}` to `/api/proposals` [exists]. Approve is held for
+0.8 s on every client (`HOLD_MS`, `DecisionWords.holdSeconds`).
 
 ## 3. Trust dials — `GET /api/modes`, `POST /api/modes/:feature` **[new R3]**
 

@@ -304,6 +304,47 @@ export const setConversationLocalOnly = (id: number): void => {
   db.prepare("UPDATE conversations SET local_only = 1 WHERE id = ? AND local_only IS NOT 1").run(id);
 };
 
+/*
+ * "Has read outside content" (PLAN-open-work section 15, R2): set by the loop when a tool result
+ * it is about to show the model is tagged untrusted (an email, a web page, a file). On the run, on
+ * the root of its tree, and on the thread, because a later turn's history may quote what was read,
+ * the same reasoning as `local_only`. The decision card reads it to say why it is asking, and to
+ * withhold "Always allow". NULL means nothing recorded, which on an old row is not proof of clean:
+ * the card says so rather than guessing.
+ */
+addColumn("runs", "read_outside", "INTEGER");
+addColumn("conversations", "read_outside", "INTEGER");
+
+// 1 when code, not a person, wrote the run's task (a screen's button: RunOpts.taskWrittenByCode). The card
+// then says a button asked, not that you typed it.
+addColumn("runs", "task_by_code", "INTEGER");
+
+export const markTaskByCode = (runId: number): void => {
+  db.prepare("UPDATE runs SET task_by_code = 1 WHERE id = ?").run(runId);
+};
+
+export const markReadOutside = (runId: number): void => {
+  if (!Number.isFinite(runId) || runId <= 0) return;
+  const root = rootRunId(runId);
+  db.prepare("UPDATE runs SET read_outside = 1 WHERE id IN (?, ?) AND read_outside IS NOT 1").run(runId, root);
+  db.prepare(
+    "UPDATE conversations SET read_outside = 1 WHERE id = (SELECT conversation_id FROM runs WHERE id = ?) AND read_outside IS NOT 1",
+  ).run(root);
+};
+
+/** Whether this run, its tree, or its thread before it has read outside content. */
+export const readOutsideFor = (runId: number): boolean => {
+  if (!Number.isFinite(runId) || runId <= 0) return false;
+  const root = rootRunId(runId);
+  const r = db
+    .prepare(
+      "SELECT (SELECT read_outside FROM runs WHERE id = ?) AS mine, r.read_outside AS rootFlag, c.read_outside AS thread FROM runs r " +
+        "LEFT JOIN conversations c ON c.id = r.conversation_id WHERE r.id = ?",
+    )
+    .get(runId, root) as { mine: null | number; rootFlag: null | number; thread: null | number } | undefined;
+  return !!r && (r.mine === 1 || r.rootFlag === 1 || r.thread === 1);
+};
+
 export const createConversation = (title: string | null = null, projectId: number | null = null): number => {
   const ts = now();
   const r = db

@@ -1181,6 +1181,11 @@ final class APIClient {
 
     /// Accept one proposal. A 409 carries a sentence saying why (read-only policy file, and
     /// so on), which `sendRaw` surfaces as the error text.
+    /// The decision card for one queued action: its four facts from code (section 15, R2). Read-only.
+    func decisionCard(_ id: Int) async throws -> DecisionCard {
+        try await send(request("/api/confirmations/\(id)"), as: DecisionCard.self)
+    }
+
     func applyProposal(tool: String, target: String) async throws -> ProposalResult {
         try await send(
             jsonRequest("/api/proposals", method: "POST", body: ["target": target, "tool": tool]),

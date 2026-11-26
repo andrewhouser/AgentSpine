@@ -1921,6 +1921,23 @@ leaves the machine stops and writes down what it found.
   or for a call made after outside content was read.
 - [Opus] `GET /api/confirmations/:id` returns the four facts; hold-to-approve and one-at-a-time ordering.
 - [Sonnet] The card on three clients, replacing the three approval cards there are now; tests for each fact.
+- **Built 2026-11-26.** `src/decision-card.ts` works out the four facts in code: what leaves (the tool's
+  `outgoingText`), where it ran (the pin, a project or local-only thread, and whether the cloud served any
+  step), whether it can be undone (the classifier's tier), and why it is asking: who started the run (you
+  typed it, a schedule, a screen's button, a helper; `runs.task_by_code` now records a code-written task) and,
+  separately, whether the run, its tree or its thread had read outside content first. The loop sets that
+  (`runs.read_outside`, `conversations.read_outside`) when a tool result it is about to show the model is
+  tagged untrusted; a later turn in the same thread counts, for the reason `local_only` does. The card shows
+  it as a highlighted line under "Why it is asking". "Always allow" is offered only when the promoter already
+  proposes that exact shape, the call is not pinned (`alwaysConfirm`), and nothing outside was read; it posts
+  to the existing `/api/proposals`. `GET /api/confirmations/:id` returns the card with its position among
+  pending cards, oldest first, and the next one's id. Approve is held for 0.8 s on all three clients, and
+  the Mac's Return shortcut for Approve is gone. `src/decision-card.ts` is on the protected list, since it is
+  what a person reads before approving. Tests: `decision-card`, `decision-screen`, and a loop case in
+  `private-output`. Open, for you: Approve and Reject buttons on a lock-screen push (ntfy and APNs, by
+  approval token) still answer without the card, which section 15's rule says should not happen; removing
+  them is a decision, not done here. A pinned or outside-content call can still be skipped by an existing
+  `autoApprove`, `chatAutoTools` or schedule pre-approval; the card only withholds a new rule.
 
 ### R3. Trust dials: Off, Watch, On, from a screen (Code; all three clients)
 

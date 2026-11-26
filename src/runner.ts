@@ -393,6 +393,8 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
   // Created BEFORE the queue, so the caller gets an id it can stream against immediately
   // rather than after the model frees up. Sits in 'queued' until the queue reaches it.
   const runId = store.startRun({ conversationId, kind, scheduleId: opts.scheduleId ?? null, task });
+  // So a card from this run can say a button wrote the task, not you (section 15, R2).
+  if (opts.taskWrittenByCode) store.markTaskByCode(runId);
 
   // A date the user states in a chat message ("Garrett's birthday is March 4") becomes a
   // proposal in the confirmation queue. Only kind "chat": a schedule's task text, an approval's

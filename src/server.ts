@@ -87,6 +87,7 @@ import { applyProposal, promotionProposals, proposalDiff } from "./learn/promote
 import { notify, pushConfigured, remoteApprovalConfigured } from "./notify.ts";
 import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { readSpine } from "./day-line.ts";
+import { decisionCard } from "./decision-card.ts";
 import { bannersAfter, latestOutboxId, markOutcome, pruneOutbox, releaseHeld } from "./outbox.ts";
 import { proposeSchedulesOff } from "./outbox-learn.ts";
 import { answerMessage, buildReview, recordWish, sendWeeklyReview } from "./outbox-review.ts";
@@ -823,6 +824,12 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
     if (seg[1] === "confirmations") {
       if (m === "GET" && seg.length === 2)
         return sendJson(res, 200, store.listConfirmations(url.searchParams.get("state") ?? undefined));
+      // GET /api/confirmations/:id: the decision card, with its four facts from code (src/decision-card.ts,
+      // section 15 R2). Read-only; approving stays on the POST routes below, which re-check policy.
+      if (m === "GET" && seg.length === 3 && /^\d+$/.test(seg[2])) {
+        const card = decisionCard(Number(seg[2]));
+        return card ? sendJson(res, 200, card) : sendJson(res, 404, { error: "no such confirmation" });
+      }
       // Answering resumes the conversation that asked (see resumeConversation). A lock-screen
       // button (approval token) or a client that says { notify: true } is not going to watch
       // that turn happen, so it finishes with a push.
