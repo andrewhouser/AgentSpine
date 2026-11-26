@@ -523,6 +523,20 @@ struct PersonView: View {
                         Task { await setTeam(!p.onTeam) }
                     }
                 }
+                if let items = p.forToday, !items.isEmpty {
+                    Section("For today") {
+                        ForEach(items) { f in
+                            HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
+                                (Text("\(PeopleWords.forTodayLabel(f.kind, name: p.name)): ").foregroundColor(Spine.Palette.textDim) + Text(f.text))
+                                if f.late {
+                                    Text("late")
+                                        .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.semibold))
+                                        .foregroundStyle(Spine.Palette.danger)
+                                }
+                            }
+                        }
+                    }
+                }
                 if p.open.isEmpty {
                     Section { Text("Nothing open between you.").foregroundStyle(Spine.Palette.textDim) }
                 }

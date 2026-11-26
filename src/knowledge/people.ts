@@ -53,8 +53,25 @@ export interface HeardItem {
   text: string;
 }
 
+/**
+ * "For today" (section 15, R9): what to bring to a 1:1, in code, no model. First what you owe them, oldest
+ * first; then the questions they raised that nothing has settled (what they are waiting to hear); then what
+ * they owe you. The words are the claims' own; a client adds only the label.
+ */
+export interface ForTodayItem {
+  claimId: number;
+  kind: "they-owe" | "waiting" | "you-owe";
+  late: boolean;
+  moment: Moment | null;
+  text: string;
+}
+
+/** The most rows "For today" shows: a 1:1 is half an hour. */
+export const FOR_TODAY_MAX = 8;
+
 export interface Person {
   aliases: string[];
+  forToday: ForTodayItem[];
   daysSince: null | number;
   heard: HeardItem[];
   id: number;
@@ -134,6 +151,48 @@ export const openBetween = (personId: number, claims: k.Claim[], now: Date): Ope
   return out.sort((a, b) => (a.direction === b.direction ? a.claimId - b.claimId : a.direction === "you-owe" ? -1 : 1));
 };
 
+/** Pure over the claims given, so the order is tested without a database. */
+export const forTodayFrom = (names: string[], open: OpenItem[], claims: k.Claim[]): ForTodayItem[] => {
+  const lower = names.map((n) => n.toLowerCase());
+  const decided = new Set(claims.filter((c) => c.kind === "decision").map(k.topicKey).filter((t) => t !== "words:"));
+  const asked = claims
+    .filter((c) => c.kind === "question" && c.speaker != null && lower.includes(c.speaker.trim().toLowerCase()))
+    .filter((c) => k.topicKey(c) === "words:" || !decided.has(k.topicKey(c)))
+    .sort((a, b) => a.id - b.id);
+  // Oldest by when it was said (the meeting), not by when it was stored.
+  const said = (o: OpenItem): string => o.moment?.at ?? "";
+  const oldest = (a: OpenItem, b: OpenItem): number => said(a).localeCompare(said(b)) || a.claimId - b.claimId;
+  const youOwe = open.filter((o) => o.direction === "you-owe").sort(oldest);
+  const theyOwe = open.filter((o) => o.direction === "they-owe").sort(oldest);
+  return [
+    ...youOwe.map((o) => ({ claimId: o.claimId, kind: "you-owe" as const, late: o.late, moment: o.moment, text: o.text })),
+    ...asked.map((c) => ({ claimId: c.id, kind: "waiting" as const, late: false, moment: momentOf(c), text: c.text })),
+    ...theyOwe.map((o) => ({ claimId: o.claimId, kind: "they-owe" as const, late: o.late, moment: o.moment, text: o.text })),
+  ].slice(0, FOR_TODAY_MAX);
+};
+
+/**
+ * The person a calendar event is a 1:1 with: the title reads as a 1:1 and names exactly one person the store
+ * knows (by name, alias or first name). Null otherwise. Code only; the title is someone's text, matched, never
+ * sent anywhere.
+ */
+export const personForEvent = (title: string): null | number => {
+  if (!ONE_TO_ONE_WORDS.test(title)) return null;
+  const t = title.toLowerCase();
+  const word = (n: string): boolean => n.length > 1 && new RegExp(`\\b${n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(t);
+  const people = k.listEntities("person").filter((p) => !k.isSelfName(p.name));
+  // A full name or an alias wins; a first name alone counts only when no full name matched and only one person has it.
+  const full = people.filter((p) => [p.name, ...p.aliases].some(word));
+  const hits = full.length ? full : people.filter((p) => word(p.name.split(" ")[0]));
+  return hits.length === 1 ? hits[0].id : null;
+};
+
+/** What is open each way with a person, as counts, for a spine row. */
+export const openCounts = (personId: number, now: Date = new Date()): { theyOwe: number; youOwe: number } => {
+  const open = openBetween(personId, k.reviewedActiveClaims(), now);
+  return { theyOwe: open.filter((o) => o.direction === "they-owe").length, youOwe: open.filter((o) => o.direction === "you-owe").length };
+};
+
 /** A 1:1: a meeting whose named speakers, other than you, are exactly this person. */
 const oneToOnes = (personId: number): { at: string; meetingId: number; title: string }[] => {
   let rows: { id: number; started: string; title: null | string }[] = [];
@@ -175,8 +234,10 @@ export const readPerson = (id: number, now: Date = new Date()): null | Person =>
     .slice(0, HEARD_MAX)
     .map((c) => ({ claimId: c.id, kind: c.kind, moment: momentOf(c), reviewed: c.reviewed, text: c.text }));
   const last = oneToOnes(id)[0] ?? null;
+  const open = openBetween(id, claims, now);
   return {
     aliases: p.aliases,
+    forToday: forTodayFrom([p.name, ...p.aliases], open, claims),
     daysSince: last ? daysBetween(last.at, now) : null,
     heard,
     id,
@@ -184,7 +245,7 @@ export const readPerson = (id: number, now: Date = new Date()): null | Person =>
     name: p.name,
     nextOneToOne: nextOneToOne(p, now),
     onTeam: k.myTeamIds().has(id),
-    open: openBetween(id, claims, now),
+    open,
   };
 };
 

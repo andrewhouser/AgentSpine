@@ -1444,6 +1444,9 @@ export interface SpineAhead {
   detail: string;
   key: string;
   kind: "event" | "schedule";
+  /** A 1:1 with someone the store knows (section 15, R9): whose page to open, and what is open. */
+  personId?: null | number;
+  prep?: { theyOwe: number; youOwe: number } | null;
   scheduleId: null | number;
   title: string;
   untrusted: boolean;

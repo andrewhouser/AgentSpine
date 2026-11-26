@@ -31,9 +31,19 @@ export interface PersonHeardItem {
   text: string;
 }
 
+/** One line of "For today" (section 15, R9), built in code. */
+export interface ForTodayItem {
+  claimId: number;
+  kind: "they-owe" | "waiting" | "you-owe";
+  late: boolean;
+  moment: null | PersonMoment;
+  text: string;
+}
+
 export interface Person {
   aliases: string[];
   daysSince: null | number;
+  forToday: ForTodayItem[];
   heard: PersonHeardItem[];
   id: number;
   lastOneToOne: { at: string; meetingId: number; title: string } | null;
@@ -76,3 +86,11 @@ export const atLine = (atMs: null | number): string => {
   const sec = String(s % 60).padStart(2, "0");
   return `${h > 0 ? `${h}:${String(m).padStart(2, "0")}` : m}:${sec} into the meeting`;
 };
+
+/** The label on a "For today" line: "You owe", "Waiting to hear", "Lee owes you". */
+export const forTodayLabel = (kind: ForTodayItem["kind"], name: string): string =>
+  kind === "you-owe" ? "You owe" : kind === "waiting" ? "Waiting to hear" : `${first(name)} owes you`;
+
+/** A 1:1 on the line: "Prep: 2 you owe · 1 they owe", or "Prep: nothing open". */
+export const prepLine = (prep: { theyOwe: number; youOwe: number }): string =>
+  prep.youOwe + prep.theyOwe === 0 ? "Prep: nothing open" : `Prep: ${prep.youOwe} you owe · ${prep.theyOwe} they owe`;

@@ -124,6 +124,8 @@ enum TodayTarget: Hashable {
     case headsup
     case schedules
     case meetings
+    /// A 1:1 on the line opens that person's page and its "For today" (section 15, R9).
+    case person(Int)
 }
 
 /// The sections of the Today screen, for a `List` (PLAN-open-work section 14, U1 and U2).
@@ -307,19 +309,19 @@ struct TodaySections: View {
                 }
                 ForEach(store.ahead) { a in
                     Button {
-                        if a.kind == "schedule" { open(.schedules) }
+                        if a.kind == "schedule" { open(.schedules) } else if let id = a.personId { open(.person(id)) }
                     } label: {
                         HStack(alignment: .firstTextBaseline, spacing: Spine.Space.sm) {
                             Text(a.allDay ? "all day" : SpineDate.timeOfDay(a.at))
                                 .font(SpineFont.mono(Spine.TypeSize.caption))
                                 .foregroundStyle(Spine.Palette.textFaint)
-                            label(title: a.title, detail: a.kind == "schedule" ? "runs: \(a.detail)" : a.detail, urgent: false)
+                            label(title: a.title, detail: a.kind == "schedule" ? "runs: \(a.detail)" : a.prep.map { PeopleWords.prepLine(youOwe: $0.youOwe, theyOwe: $0.theyOwe) } ?? a.detail, urgent: false)
                             Spacer(minLength: 0)
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(a.kind != "schedule")
+                    .disabled(a.kind != "schedule" && a.personId == nil)
                 }
             } header: {
                 Text("Ahead")

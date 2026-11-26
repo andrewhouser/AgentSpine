@@ -2063,6 +2063,12 @@ leaves the machine stops and writes down what it found.
 - [Opus] First version in code, no model: what you owe, oldest first, then what they are waiting to hear.
 - [Fable] Only if the code version is too blunt: a local model wording it from reviewed items. Quotes are other
   people's words, so they go in tagged, the output is shown to you only and never becomes a goal.
+- **Built 2026-11-26, the code version only** (`forTodayFrom` in `src/knowledge/people.ts`). On a person's page:
+  what you owe them, oldest by when it was said; then the questions they raised that no decision settled
+  (what they are waiting to hear); then what they owe you; at most 8 lines, each the claim's own words with
+  a label. A 1:1 on Today's line (a title that reads as a 1:1 and names exactly one known person, a full name
+  winning over a shared first name) links to that page and shows "Prep: 2 you owe · 1 they owe". The
+  model-worded version is not built: use the code version first and decide whether it is too blunt.
 
 ### R10. Smaller pieces, after the above
 

@@ -47,3 +47,19 @@
   font-size: 0.75rem;
   padding-left: 13px;
 }
+
+/* For today (section 15, R9). */
+.forToday {
+  font-size: 0.875rem;
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.forToday li {
+  margin: 4px 0;
+}
+
+.label {
+  color: var(--text-dim);
+  font-weight: 600;
+}

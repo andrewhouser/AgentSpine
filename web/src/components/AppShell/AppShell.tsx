@@ -159,7 +159,12 @@ export const AppShell = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
+  // The person a 1:1 on Today's line opens (section 15, R9). Any other navigation clears it, so the menu's
+  // People opens the list.
+  const [personToOpen, setPersonToOpen] = useState<null | number>(null);
+
   const go = useCallback((next: { conversationId?: null | number; projectId?: null | number; runId?: null | number; view: View }) => {
+    setPersonToOpen(null);
     const value = {
       conversationId: next.conversationId ?? null,
       projectId: next.projectId ?? null,
@@ -290,7 +295,7 @@ export const AppShell = () => {
             title="Ask"
           />
         )}
-        {route.view === "people" && <PeopleView />}
+        {route.view === "people" && <PeopleView initialId={personToOpen} key={personToOpen ?? "list"} />}
         {route.view === "projects" && (
           <ProjectsView onNewProject={() => setNamingProject(true)} onOpenProject={(id) => go({ projectId: id, view: "project" })} projects={projects} />
         )}
@@ -323,6 +328,10 @@ export const AppShell = () => {
               onChanged={onTurnComplete}
               onNewChat={() => void newChat()}
               onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}
+              onOpenPerson={(id) => {
+                go({ view: "people" });
+                setPersonToOpen(id);
+              }}
               onOpenRun={(id) => go({ runId: id, view: "activity" })}
               onOpenView={(view) => go({ view })}
             />

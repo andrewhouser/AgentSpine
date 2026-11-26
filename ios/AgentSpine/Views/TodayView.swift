@@ -56,6 +56,7 @@ struct TodayView: View {
                 switch target {
                 case .thread(let id): ThreadView(conversationID: id)
                 case .run(let id): RunDetailView(runID: id)
+                case .person(let id): PersonView(personID: id)
                 default: EmptyView()
                 }
             }
@@ -99,7 +100,7 @@ struct TodayView: View {
     private func open(_ target: TodayTarget) {
         switch target {
         case .approval(let a): reviewing = a
-        case .thread, .run: path.append(target)
+        case .thread, .run, .person: path.append(target)
         case .tasks: openTab(.tasks)
         case .headsup: openTab(.headsup)
         case .schedules: openTab(.schedules)

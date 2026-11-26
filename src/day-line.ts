@@ -13,6 +13,7 @@
  */
 import { calendarAsOf, eventsOnDay } from "./calendar-cache.ts";
 import type { DayEvent } from "./calendar-cache.ts";
+import { openCounts, personForEvent } from "./knowledge/people.ts";
 import * as store from "./memory/store.ts";
 import { readToday } from "./today.ts";
 import type { Today } from "./today.ts";
@@ -28,6 +29,9 @@ export interface SpineAhead {
   detail: string;
   key: string;
   kind: "event" | "schedule";
+  /** A 1:1 on the calendar with someone the store knows (section 15, R9): whose page to open, and what is open. */
+  personId?: null | number;
+  prep?: null | { theyOwe: number; youOwe: number };
   /** The schedule to open, for a schedule row. */
   scheduleId: null | number;
   title: string;
@@ -93,6 +97,11 @@ export const assembleAhead = (input: AheadInput, now: Date): SpineAhead[] => {
 
 export const readSpine = (now: Date = new Date()): Spine => ({
   ...readToday(now),
-  ahead: assembleAhead({ events: eventsOnDay(now), schedules: store.listSchedules() }, now),
+  // A 1:1 on the line links to that person's "For today" (R9), with the counts the R0 drawing showed as prep.
+  ahead: assembleAhead({ events: eventsOnDay(now), schedules: store.listSchedules() }, now).map((a) => {
+    if (a.kind !== "event") return a;
+    const personId = personForEvent(a.title);
+    return personId == null ? a : { ...a, personId, prep: openCounts(personId, now) };
+  }),
   calendarAsOf: calendarAsOf(),
 });

@@ -13,6 +13,8 @@ struct MacTodayView: View {
 
     @Environment(AppState.self) private var state
     @State private var reviewing: TodayApproval?
+    /// A 1:1 on the line opens that person in a sheet here (section 15, R9).
+    @State private var person: Int?
 
     private var store: TodayStore { TodayStore.shared }
 
@@ -43,6 +45,18 @@ struct MacTodayView: View {
             }
         }
         .task { await store.load() }
+        .sheet(item: Binding(get: { person.map { PersonSheetID(id: $0) } }, set: { person = $0?.id })) { p in
+            VStack(spacing: 0) {
+                NavigationStack { PersonView(personID: p.id) }
+                HStack {
+                    Spacer()
+                    Button("Close") { person = nil }.keyboardShortcut(.cancelAction)
+                }
+                .padding()
+            }
+            .frame(minWidth: 560, minHeight: 520)
+            .environment(state)
+        }
         .sheet(item: $reviewing) { approval in
             VStack(alignment: .leading, spacing: Spine.Space.md) {
                 ScrollView {
@@ -73,8 +87,15 @@ struct MacTodayView: View {
     private func route(_ target: TodayTarget) {
         if case .approval(let approval) = target {
             reviewing = approval
+        } else if case .person(let id) = target {
+            person = id
         } else {
             open(target)
         }
     }
+}
+
+/// Identifies the person sheet; `Int` itself is not `Identifiable`.
+private struct PersonSheetID: Identifiable {
+    let id: Int
 }

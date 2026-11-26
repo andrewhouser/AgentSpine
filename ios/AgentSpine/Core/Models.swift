@@ -2517,9 +2517,17 @@ struct SpineAhead: Codable, Hashable, Identifiable {
     let detail: String
     let key: String
     let kind: String
+    /// A 1:1 with someone the store knows (section 15, R9), and what is open each way.
+    let personId: Int?
+    let prep: Prep?
     let scheduleId: Int?
     let title: String
     let untrusted: Bool
+
+    struct Prep: Codable, Hashable {
+        let theyOwe: Int
+        let youOwe: Int
+    }
 
     var id: String { key }
 }
@@ -2726,6 +2734,8 @@ struct Person: Codable, Hashable {
 
     let aliases: [String]
     let daysSince: Int?
+    /// "For today" (section 15, R9): what to bring to a 1:1, built in code. Optional for an older server.
+    let forToday: [ForTodayItem]?
     let heard: [PersonHeardItem]
     let id: Int
     let lastOneToOne: Last?
@@ -2733,6 +2743,15 @@ struct Person: Codable, Hashable {
     let nextOneToOne: Next?
     let onTeam: Bool
     let open: [PersonOpenItem]
+}
+
+struct ForTodayItem: Codable, Hashable, Identifiable {
+    let claimId: Int
+    let kind: String
+    let late: Bool
+    let moment: PersonMoment?
+    let text: String
+    var id: String { "\(kind)-\(claimId)" }
 }
 
 /// Mirrors `web/src/lib/people.ts`; test/people-screen.test.mjs holds the two equal.
@@ -2748,6 +2767,14 @@ enum PeopleWords {
     static func oneToOneLine(_ daysSince: Int?) -> String {
         guard let d = daysSince else { return "No 1:1 recorded" }
         return d == 0 ? "Last 1:1 today" : d == 1 ? "Last 1:1 yesterday" : "Last 1:1 \(d) days ago"
+    }
+
+    static func forTodayLabel(_ kind: String, name: String) -> String {
+        kind == "you-owe" ? "You owe" : kind == "waiting" ? "Waiting to hear" : "\(first(name)) owes you"
+    }
+
+    static func prepLine(youOwe: Int, theyOwe: Int) -> String {
+        youOwe + theyOwe == 0 ? "Prep: nothing open" : "Prep: \(youOwe) you owe · \(theyOwe) they owe"
     }
 
     static func openCountLine(youOwe: Int, theyOwe: Int) -> String {

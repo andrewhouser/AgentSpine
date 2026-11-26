@@ -121,6 +121,10 @@ often enough the card offers **Always allow**, which is the existing auto-approv
 for a call made after outside content or one that must always show its card. `GET /api/confirmations/:id`
 returns the card (`src/decision-card.ts`).
 
+**For today, before a 1:1** (section 15, R9). A person's page starts with what to bring: what you owe
+them, oldest first, the questions they raised that nothing has settled, then what they owe you. A 1:1 on
+Today's line shows "Prep: 2 you owe · 1 they owe" and opens that page. All code, no model.
+
 **Memory you can read** (section 15, R6). Each memory shows where it came from, how many times recall has
 used it in a run and when last, whether it is a guess (written by a reflection or the assistant and never
 confirmed), and whether it may reach the cloud. **Confirm** says it is right, **Fix** corrects its words,

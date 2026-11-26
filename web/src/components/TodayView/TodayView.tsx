@@ -5,6 +5,7 @@ import type { Headsup, Spine, Today } from "../../lib/types.ts";
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
 import { liveLine } from "../../lib/moments.ts";
+import { prepLine } from "../../lib/people.ts";
 import {
   hoursUntil,
   todayBriefText,
@@ -36,6 +37,8 @@ interface TodayViewProps {
   onChanged: () => void;
   onNewChat: () => void;
   onOpenConversation: (id: number) => void;
+  /** A 1:1 on the line opens that person's page and its "For today" (section 15, R9). */
+  onOpenPerson: (id: number) => void;
   onOpenRun: (id: number) => void;
   onOpenView: (view: "headsup" | "meetings" | "schedules" | "tasks") => void;
 }
@@ -48,7 +51,7 @@ interface TodayViewProps {
  * same card a thread uses, and the buttons are there. A one-line preview with Approve beside
  * it would make approving a rubber stamp.
  */
-export const TodayView = ({ onAsk, onChanged, onNewChat, onOpenConversation, onOpenRun, onOpenView }: TodayViewProps) => {
+export const TodayView = ({ onAsk, onChanged, onNewChat, onOpenConversation, onOpenPerson, onOpenRun, onOpenView }: TodayViewProps) => {
   const [error, setError] = useState("");
   const [today, refresh, setToday] = useResource(
     () =>
@@ -315,13 +318,13 @@ export const TodayView = ({ onAsk, onChanged, onNewChat, onOpenConversation, onO
             <div className={own.row} key={a.key}>
               <button
                 className={own.rowMain}
-                disabled={a.kind !== "schedule"}
-                onClick={() => a.kind === "schedule" && onOpenView("schedules")}
+                disabled={a.kind !== "schedule" && a.personId == null}
+                onClick={() => (a.kind === "schedule" ? onOpenView("schedules") : a.personId != null && onOpenPerson(a.personId))}
                 type="button"
               >
                 <span className={own.when}>{a.allDay ? "all day" : timeOf(a.at)}</span>
                 <span className={own.who}>{a.title}</span>
-                <span className={own.detail}>{a.kind === "schedule" ? `runs: ${a.detail}` : a.detail}</span>
+                <span className={own.detail}>{a.kind === "schedule" ? `runs: ${a.detail}` : a.prep ? prepLine(a.prep) : a.detail}</span>
               </button>
             </div>
           ))}

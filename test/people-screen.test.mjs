@@ -38,17 +38,23 @@ const dirs = [["you-owe", "Lee Okafor"], ["they-owe", "Lee Okafor"], ["they-owe"
 const days = [null, 0, 1, 8];
 const counts = [[0, 0], [2, 1]];
 const ats = [null, 0, 862_000, 3_725_000, -5];
+const kinds = [["you-owe", "Lee Okafor"], ["waiting", "Lee Okafor"], ["they-owe", "Lee Okafor"]];
+const preps = [[0, 0], [2, 1]];
 const webLines = [
   ...dirs.map(([d, n]) => words.directionLabel(d, n)),
   ...days.map(words.oneToOneLine),
   ...counts.map(([a, b]) => words.openCountLine(a, b)),
   ...ats.map(words.atLine),
+  ...kinds.map(([k, n]) => words.forTodayLabel(k, n)),
+  ...preps.map(([y, t]) => words.prepLine({ theyOwe: t, youOwe: y })),
 ];
 
 console.log("\nTHE WEB'S WORDS");
 check("which way", dirs.map(([d, n]) => words.directionLabel(d, n)), ["You owe", "Lee owes", "Sam owes"]);
 check("the last 1:1", days.map(words.oneToOneLine), ["No 1:1 recorded", "Last 1:1 today", "Last 1:1 yesterday", "Last 1:1 8 days ago"]);
 check("the counts", counts.map(([a, b]) => words.openCountLine(a, b)), ["Nothing open", "You owe 2 · they owe 1"]);
+check("for today labels (R9)", kinds.map(([k, n]) => words.forTodayLabel(k, n)), ["You owe", "Waiting to hear", "Lee owes you"]);
+check("prep on a 1:1 (R9)", preps.map(([y, t]) => words.prepLine({ theyOwe: t, youOwe: y })), ["Prep: nothing open", "Prep: 2 you owe · 1 they owe"]);
 check("a time in the meeting", ats.map(words.atLine), ["", "0:00 into the meeting", "14:22 into the meeting", "1:02:05 into the meeting", ""]);
 
 // A real page and list, as the server builds them.
@@ -99,6 +105,10 @@ let counts: [(Int, Int)] = [${counts.map(([a, b]) => `(${a}, ${b})`).join(", ")}
 for c in counts { print(PeopleWords.openCountLine(youOwe: c.0, theyOwe: c.1)) }
 let ats: [Int?] = [${ats.map(opt).join(", ")}]
 for a in ats { print(PeopleWords.atLine(a)) }
+let kinds: [(String, String)] = [${kinds.map(([k, n]) => `(${s(k)}, ${s(n)})`).join(", ")}]
+for k in kinds { print(PeopleWords.forTodayLabel(k.0, name: k.1)) }
+let preps: [(Int, Int)] = [${preps.map(([y, t]) => `(${y}, ${t})`).join(", ")}]
+for p in preps { print(PeopleWords.prepLine(youOwe: p.0, theyOwe: p.1)) }
 print("--")
 let dir = URL(fileURLWithPath: CommandLine.arguments[1])
 do {

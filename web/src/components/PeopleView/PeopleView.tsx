@@ -4,7 +4,7 @@ import type { Person, PersonMoment, PersonOpenItem, PersonRow } from "../../lib/
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
-import { atLine, directionLabel, oneToOneLine, openCountLine } from "../../lib/people.ts";
+import { atLine, directionLabel, forTodayLabel, oneToOneLine, openCountLine } from "../../lib/people.ts";
 import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import own from "./PeopleView.module.css";
@@ -96,6 +96,19 @@ const PersonPage = ({ id, onBack }: { id: number; onBack: () => void }) => {
         </button>
       </PageHeader>
       {error && <div className={styles.error}>{error}</div>}
+      {person.forToday.length > 0 && (
+        <section>
+          <h2 className={own.subhead}>For today</h2>
+          <ol className={own.forToday}>
+            {person.forToday.map((f) => (
+              <li key={`${f.kind}-${f.claimId}`}>
+                <span className={own.label}>{forTodayLabel(f.kind, person.name)}:</span> {f.text}
+                {f.late && <span className={own.late}>late</span>}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       {person.open.length === 0 && <div className={styles.empty}>Nothing open between you.</div>}
       {section(directionLabel("you-owe", person.name), person.open.filter((o) => o.direction === "you-owe"))}
       {section(directionLabel("they-owe", person.name), person.open.filter((o) => o.direction === "they-owe"))}
@@ -121,9 +134,10 @@ const PersonPage = ({ id, onBack }: { id: number; onBack: () => void }) => {
  * People (section 15, R7): everyone the knowledge store names, your team first, with what is open
  * each way. Built from reviewed meeting claims only; nothing here collects anything about anyone.
  */
-export const PeopleView = () => {
+export const PeopleView = ({ initialId = null }: { initialId?: null | number }) => {
   const [people] = useResource(() => api.people().catch(() => NONE), NONE);
-  const [open, setOpen] = useState<null | number>(null);
+  // Opened straight to someone from a 1:1 on Today's line (section 15, R9).
+  const [open, setOpen] = useState<null | number>(initialId);
 
   if (open !== null) return <PersonPage id={open} key={open} onBack={() => setOpen(null)} />;
 
