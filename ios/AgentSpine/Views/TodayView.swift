@@ -46,7 +46,11 @@ struct TodayView: View {
                 }
                 TodaySections(store: store, open: open, readAloud: { reader.toggle($0) }, speaking: reader.speaking)
             }
+            .scrollContentBackground(.hidden)
+            .background(Spine.Palette.bg)
             .navigationTitle("Today")
+            // The greeting is the screen's heading now (2026-11-26 redesign), so the title stays small.
+            .navigationBarTitleDisplayMode(.inline)
             // The ask bar (section 15, R1): what you type, and nothing from the rows above, starts a thread.
             .safeAreaInset(edge: .bottom) {
                 AskBar(placeholder: "Ask about your day…") { id in path.append(.thread(id)) }

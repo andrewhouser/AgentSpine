@@ -50,16 +50,17 @@ func master() -> CGImage {
     let c = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: 0,
                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     let space = CGColorSpace(name: CGColorSpace.sRGB)!
-    // Background: bgElevated at the top to bgSidebar at the bottom (design/tokens.json, dark).
+    // Background: the rail's green, sidebarActive at the top to bgSidebar at the bottom (design/tokens.json,
+    // light), so the icon is the menu rail the apps open on (2026-11-26 redesign).
     let g = CGGradient(colorsSpace: space, colors: [
-        srgb(0x171C23),   // bgElevated, top
-        srgb(0x0B0E12)] as CFArray, locations: [0, 1])!
+        srgb(0x2F5A45),   // sidebarActive, top
+        srgb(0x1F4232)] as CFArray, locations: [0, 1])!
     c.drawLinearGradient(g, start: CGPoint(x: 0, y: CGFloat(n)), end: CGPoint(x: 0, y: 0), options: [])
     let h: CGFloat = 600, top = (CGFloat(n) - h) / 2
-    // Glow, then the mark in the accent with a light top-to-bottom gradient.
+    // A soft shadow, then the mark in the rail's text colour, as the sidebar draws it.
     c.saveGState()
-    c.setShadow(offset: .zero, blur: 60, color: srgb(0x86B6EA, 0.45))
-    c.setFillColor(srgb(0x86B6EA))
+    c.setShadow(offset: CGSize(width: 0, height: -8), blur: 40, color: srgb(0x0B1812, 0.45))
+    c.setFillColor(srgb(0xF3EFE6))
     fillMark(c, height: h, centerX: CGFloat(n) / 2, top: top)
     c.restoreGState()
     return c.makeImage()!

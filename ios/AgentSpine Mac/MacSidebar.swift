@@ -48,7 +48,7 @@ struct MacSidebar: View {
                     .badge(TodayStore.shared.screen?.count ?? 0)
                     .help(MacSection.today.hint)
                     .tag(MacSidebarItem.section(.today))
-                Section("Threads") { threadRows }
+                Section("Recent") { threadRows }
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -61,6 +61,9 @@ struct MacSidebar: View {
             MacSidebarMenu(selection: $selection)
             ConnectionFooter()
         }
+        // The sidebar is dark green in both themes (2026-11-26 redesign): every label in it takes the sidebar's
+        // light text, so the system list's own rows read on the green too.
+        .foregroundStyle(Spine.Palette.sidebarText)
         .background(Spine.Palette.bgSidebar)
         .alert(
             alertTitle,
@@ -113,12 +116,12 @@ struct MacSidebar: View {
         VStack(spacing: Spine.Space.sm) {
             HStack(spacing: Spine.Space.sm) {
                 SpineMark()
-                    .fill(Spine.Palette.accent)
+                    .fill(Spine.Palette.sidebarText)
                     .frame(width: 10, height: 26)
                     .accessibilityHidden(true)
                 Text("AgentSpine")
-                    .font(SpineFont.display(Spine.TypeSize.title3, relativeTo: .title3))
-                    .foregroundStyle(Spine.Palette.text)
+                    .font(SpineFont.headline(22))
+                    .foregroundStyle(Spine.Palette.sidebarText)
                 Spacer(minLength: 0)
             }
             .padding(.bottom, Spine.Space.xs)
@@ -130,11 +133,11 @@ struct MacSidebar: View {
                     Text("⌘N").font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption)).opacity(0.7)
                 }
                 .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
-                // Accent ground, page-coloured text: readable in both themes, as in the design.
-                .foregroundStyle(Spine.Palette.bg)
+                // The deep-green sidebar of the 2026-11-26 redesign: a lighter green ground, the sidebar's text.
+                .foregroundStyle(Spine.Palette.sidebarText)
                 .padding(.horizontal, Spine.Space.md)
                 .padding(.vertical, Spine.Space.sm)
-                .background(Spine.Palette.accent, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+                .background(Spine.Palette.sidebarActive, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
             }
             .buttonStyle(.plain)
             .keyboardShortcut("n", modifiers: .command)
@@ -148,11 +151,11 @@ struct MacSidebar: View {
                     Text("⌘K").font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
                 }
                 .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
-                .foregroundStyle(Spine.Palette.textDim)
+                .foregroundStyle(Spine.Palette.sidebarDim)
                 .padding(.horizontal, Spine.Space.md)
                 .padding(.vertical, Spine.Space.sm)
-                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
-                .overlay(RoundedRectangle(cornerRadius: Spine.Radius.md).strokeBorder(Spine.Palette.border))
+                .background(Spine.Palette.sidebarActive, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
+                .overlay(RoundedRectangle(cornerRadius: Spine.Radius.md).strokeBorder(Spine.Palette.sidebarLine))
             }
             .buttonStyle(.plain)
             .keyboardShortcut("k", modifiers: .command)
@@ -170,19 +173,19 @@ struct MacSidebar: View {
         if !settings.isConfigured {
             Text("Add your server in Settings (⌘,).")
                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                .foregroundStyle(Spine.Palette.textDim)
+                .foregroundStyle(Spine.Palette.sidebarDim)
             SettingsLink { Text("Open Settings…") }
                 .buttonStyle(.link)
         } else if let error = state.loadError, state.conversations.isEmpty {
             Text(error)
                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                .foregroundStyle(Spine.Palette.textDim)
+                .foregroundStyle(Spine.Palette.sidebarDim)
             Button("Try again") { Task { await state.refresh() } }
                 .buttonStyle(.link)
         } else if state.conversations.isEmpty && state.lastLoaded != nil {
             Text("No threads yet. Start one and it shows up here.")
                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                .foregroundStyle(Spine.Palette.textDim)
+                .foregroundStyle(Spine.Palette.sidebarDim)
         } else {
             ForEach(state.conversations) { conversation in
                 threadRow(conversation)
@@ -225,7 +228,7 @@ struct MacSidebar: View {
                 .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)
                     .weight(conversation.needsYou ? .semibold : .regular))
                 .lineLimit(1)
-                .foregroundStyle(Spine.Palette.text)
+                .foregroundStyle(Spine.Palette.sidebarText)
             Spacer(minLength: Spine.Space.xs)
             // The privacy rail (section 15, R10): marked only where the cloud was used.
             if PrivacyWords.threadWhere(localOnly: conversation.localOnly, projectID: conversation.projectID, ranCloud: conversation.ranCloud) == "Cloud used" {
@@ -236,7 +239,7 @@ struct MacSidebar: View {
             }
             Text(SpineDate.relative(conversation.updated))
                 .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
-                .foregroundStyle(Spine.Palette.textFaint)
+                .foregroundStyle(Spine.Palette.sidebarDim)
         }
         .accessibilityElement(children: .combine)
     }
@@ -262,12 +265,12 @@ private struct ConnectionFooter: View {
                 Circle().fill(dotColor).frame(width: 8, height: 8)
                 Text(label)
                     .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                    .foregroundStyle(Spine.Palette.textDim)
+                    .foregroundStyle(Spine.Palette.sidebarDim)
                 Spacer()
                 if reachable == true, let milliseconds {
                     Text("\(milliseconds) ms")
                         .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
-                        .foregroundStyle(Spine.Palette.textFaint)
+                        .foregroundStyle(Spine.Palette.sidebarDim)
                 }
             }
             if reachable == true, let modelHost {
@@ -275,19 +278,19 @@ private struct ConnectionFooter: View {
                     Circle().fill(modelHost.ok ? Spine.Palette.ok : Spine.Palette.attention).frame(width: 8, height: 8)
                     Text(modelHost.ok ? "Model host connected" : "Model host not answering")
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                        .foregroundStyle(Spine.Palette.textDim)
+                        .foregroundStyle(Spine.Palette.sidebarDim)
                     Spacer()
                     if modelHost.ok, let ms = modelHost.ms {
                         Text("\(ms) ms")
                             .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
-                            .foregroundStyle(Spine.Palette.textFaint)
+                            .foregroundStyle(Spine.Palette.sidebarDim)
                     }
                 }
             }
             if let host = settings.baseURL?.host {
                 Text(host)
                     .font(SpineFont.mono(Spine.TypeSize.caption, relativeTo: .caption))
-                    .foregroundStyle(Spine.Palette.textFaint)
+                    .foregroundStyle(Spine.Palette.sidebarDim)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -320,7 +323,7 @@ private struct ConnectionFooter: View {
         switch reachable {
         case .some(true): return Spine.Palette.ok
         case .some(false): return Spine.Palette.attention
-        case .none: return Spine.Palette.textFaint
+        case .none: return Spine.Palette.sidebarDim
         }
     }
 

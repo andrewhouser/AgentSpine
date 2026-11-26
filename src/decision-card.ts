@@ -43,6 +43,11 @@ export interface DecisionFacts {
   where: "cloud" | "local" | "none";
   whereLine: string;
   whyLine: string;
+  /**
+   * The four facts in a word or two, for the decision panel's table (the 2026-11-26 redesign). Code-written
+   * like the sentences; the sentences stay for the detail and the warning.
+   */
+  short: { leaves: string; requestedBy: string; undo: string; where: string };
 }
 
 export interface DecisionCard {
@@ -71,6 +76,18 @@ const LEAVE_CLIP = 400;
  * in words, from the call's own arguments. Found missing by the security review of 2026-11-26: without this the
  * card said "Nothing leaves this machine" for an Instagram post or a push.
  */
+/** The short "what leaves" for a tool that sends but declares no text. */
+const SENDS_SHORT: Record<string, string> = {
+  calendar_write: "a calendar change",
+  git_write: "a push",
+  gmail_triage: "a Gmail change",
+  gmail_unsubscribe: "an unsubscribe",
+  instagram_approve: "a public post",
+  instagram_publish: "a public post",
+  run_command: "whatever it sends",
+};
+const DECLARED_SHORT: Record<string, string> = { draft: "email text", notify: "a notification", web_search: "a search", web_read: "a web address", browser: "page input" };
+
 const SENDS_OUT: Record<string, (args: Record<string, unknown>) => null | string> = {
   calendar_write: () => "A change to your Google Calendar.",
   git_write: (a) => (a?.action === "push" ? "Commits pushed to a remote repository." : null),
@@ -198,6 +215,18 @@ export const factsFor = (row: store.ConfirmationRow): { facts: DecisionFacts; pi
         : where === "local"
           ? "Written on the local model."
           : "A cloud model took part in the run that asked.",
+    short: {
+      leaves: sendsLine
+        ? (SENDS_SHORT[row.tool] ?? "something")
+        : leaves === null
+          ? "not declared"
+          : leaves.length === 0
+            ? "nothing"
+            : (DECLARED_SHORT[row.tool] ?? (leaves.length === 1 ? "one piece of text" : `${leaves.length} pieces of text`)),
+      requestedBy: { "after-approval": "a follow-on run", button: "a button", helper: "a helper", schedule: "a schedule", unknown: "unknown", "you-typed": "you" }[origin],
+      undo: reversibility === "irreversible" ? "no" : "yes",
+      where: where === "none" ? "no run" : where === "local" ? "local model" : "cloud model",
+    },
     whyLine: `${WHY[origin]}${readOutside ? " Before asking, that run read outside content (an email, a page or a file), which may have shaped this." : ""}`,
   };
   return { facts, pinned, target };

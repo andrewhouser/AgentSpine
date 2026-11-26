@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Icon } from "../Icon/Icon.tsx";
 import styles from "./AskBar.module.css";
 
 interface AskBarProps {
@@ -53,8 +54,8 @@ export const AskBar = ({ onAsk, placeholder, scopeLabel }: AskBarProps) => {
         placeholder={placeholder}
         value={text}
       />
-      <button className={styles.send} disabled={busy || !text.trim()} type="submit">
-        {busy ? "Asking…" : "Ask"}
+      <button aria-label={busy ? "Asking" : "Ask"} className={styles.send} disabled={busy || !text.trim()} title="Ask" type="submit">
+        {busy ? "…" : <Icon name="arrow" />}
       </button>
       {error && (
         <div className={styles.error} role="alert">

@@ -66,7 +66,8 @@ check(
 
 // 3. Contrast. 4.5:1 is WCAG AA for body text; 3:1 is the floor for the spine line, a
 // non-text graphic that is decoration beside text that carries the meaning.
-const surfaces = ["bg", "bg-elevated", "bg-inset", "bg-sidebar"];
+// The sidebar is dark in both themes since the 2026-11-26 redesign, so it has its own text colours, checked below.
+const surfaces = ["bg", "bg-elevated", "bg-inset"];
 const textColours = ["text", "text-dim", "text-faint"];
 const statusColours = ["ok", "warn", "danger", "accent", "attention"];
 for (const theme of ["light", "dark"]) {
@@ -86,6 +87,7 @@ for (const theme of ["light", "dark"]) {
     need(`spine on ${s}`, contrast(t.spine, t[s]), 1.2); // a hairline: it must be visible, not loud
   }
   need("on-accent on accent", contrast(t["on-accent"], t.accent), 4.5);
+  for (const s of ["bg-sidebar", "sidebar-active"]) for (const c of ["sidebar-text", "sidebar-dim"]) need(`${c} on ${s}`, contrast(t[c], t[s]), 4.5);
   for (const c of statusColours) {
     const fill = over(t[c], tokens.alpha[theme].soft, t.bg);
     need(`${c} on its own soft fill`, contrast(t[c], fill), 4.5);

@@ -8,33 +8,37 @@ import SwiftUI
 enum Spine {
     /// Colours that follow the system appearance. Names match the web's custom properties.
     enum Palette {
-        static let accent = Color(light: SpineRGBA(0x2563A8), dark: SpineRGBA(0x86B6EA))
-        static let accentLine = Color(light: SpineRGBA(0x2563A8, 0.28), dark: SpineRGBA(0x86B6EA, 0.3))
-        static let accentSoft = Color(light: SpineRGBA(0x2563A8, 0.11), dark: SpineRGBA(0x86B6EA, 0.14))
-        static let attention = Color(light: SpineRGBA(0x8A5A0B), dark: SpineRGBA(0xF0B35A))
-        static let attentionLine = Color(light: SpineRGBA(0x8A5A0B, 0.28), dark: SpineRGBA(0xF0B35A, 0.3))
-        static let attentionSoft = Color(light: SpineRGBA(0x8A5A0B, 0.11), dark: SpineRGBA(0xF0B35A, 0.14))
-        static let bg = Color(light: SpineRGBA(0xF6F8FA), dark: SpineRGBA(0x0F1318))
-        static let bgElevated = Color(light: SpineRGBA(0xFFFFFF), dark: SpineRGBA(0x171C23))
-        static let bgInset = Color(light: SpineRGBA(0xEDF0F4), dark: SpineRGBA(0x141920))
-        static let bgSidebar = Color(light: SpineRGBA(0xEEF1F5), dark: SpineRGBA(0x0B0E12))
-        static let border = Color(light: SpineRGBA(0xDDE2E9), dark: SpineRGBA(0x262D36))
-        static let borderStrong = Color(light: SpineRGBA(0xBFC7D2), dark: SpineRGBA(0x3A4552))
-        static let danger = Color(light: SpineRGBA(0xB3342B), dark: SpineRGBA(0xF07A72))
-        static let dangerLine = Color(light: SpineRGBA(0xB3342B, 0.28), dark: SpineRGBA(0xF07A72, 0.3))
-        static let dangerSoft = Color(light: SpineRGBA(0xB3342B, 0.11), dark: SpineRGBA(0xF07A72, 0.14))
-        static let focus = Color(light: SpineRGBA(0x2563A8, 0.5), dark: SpineRGBA(0x86B6EA, 0.5))
-        static let ok = Color(light: SpineRGBA(0x15774A), dark: SpineRGBA(0x6FCF9B))
-        static let okLine = Color(light: SpineRGBA(0x15774A, 0.28), dark: SpineRGBA(0x6FCF9B, 0.3))
-        static let okSoft = Color(light: SpineRGBA(0x15774A, 0.11), dark: SpineRGBA(0x6FCF9B, 0.14))
-        static let onAccent = Color(light: SpineRGBA(0xFFFFFF), dark: SpineRGBA(0x0B1A2B))
-        static let spine = Color(light: SpineRGBA(0xC4CCD7), dark: SpineRGBA(0x2A323D))
-        static let text = Color(light: SpineRGBA(0x12171E), dark: SpineRGBA(0xE9E7E0))
-        static let textDim = Color(light: SpineRGBA(0x4B5563), dark: SpineRGBA(0xA0A9B4))
-        static let textFaint = Color(light: SpineRGBA(0x5F6775), dark: SpineRGBA(0x7F8995))
-        static let warn = Color(light: SpineRGBA(0x8A5A0B), dark: SpineRGBA(0xF0B35A))
-        static let warnLine = Color(light: SpineRGBA(0x8A5A0B, 0.28), dark: SpineRGBA(0xF0B35A, 0.3))
-        static let warnSoft = Color(light: SpineRGBA(0x8A5A0B, 0.11), dark: SpineRGBA(0xF0B35A, 0.14))
+        static let accent = Color(light: SpineRGBA(0x2C5D45), dark: SpineRGBA(0x8FC7A6))
+        static let accentLine = Color(light: SpineRGBA(0x2C5D45, 0.28), dark: SpineRGBA(0x8FC7A6, 0.3))
+        static let accentSoft = Color(light: SpineRGBA(0x2C5D45, 0.11), dark: SpineRGBA(0x8FC7A6, 0.14))
+        static let attention = Color(light: SpineRGBA(0x9A5410), dark: SpineRGBA(0xE9A75B))
+        static let attentionLine = Color(light: SpineRGBA(0x9A5410, 0.28), dark: SpineRGBA(0xE9A75B, 0.3))
+        static let attentionSoft = Color(light: SpineRGBA(0x9A5410, 0.11), dark: SpineRGBA(0xE9A75B, 0.14))
+        static let bg = Color(light: SpineRGBA(0xF7F3EC), dark: SpineRGBA(0x121915))
+        static let bgElevated = Color(light: SpineRGBA(0xFFFDF8), dark: SpineRGBA(0x18211C))
+        static let bgInset = Color(light: SpineRGBA(0xEFE9DE), dark: SpineRGBA(0x0F1512))
+        static let bgSidebar = Color(light: SpineRGBA(0x1F4232), dark: SpineRGBA(0x0B1812))
+        static let border = Color(light: SpineRGBA(0xE3DCCF), dark: SpineRGBA(0x25322B))
+        static let borderStrong = Color(light: SpineRGBA(0xCBC2B1), dark: SpineRGBA(0x3A4A40))
+        static let danger = Color(light: SpineRGBA(0xA8322A), dark: SpineRGBA(0xF07A72))
+        static let dangerLine = Color(light: SpineRGBA(0xA8322A, 0.28), dark: SpineRGBA(0xF07A72, 0.3))
+        static let dangerSoft = Color(light: SpineRGBA(0xA8322A, 0.11), dark: SpineRGBA(0xF07A72, 0.14))
+        static let focus = Color(light: SpineRGBA(0x2C5D45, 0.5), dark: SpineRGBA(0x8FC7A6, 0.5))
+        static let ok = Color(light: SpineRGBA(0x2D7148), dark: SpineRGBA(0x80CF9F))
+        static let okLine = Color(light: SpineRGBA(0x2D7148, 0.28), dark: SpineRGBA(0x80CF9F, 0.3))
+        static let okSoft = Color(light: SpineRGBA(0x2D7148, 0.11), dark: SpineRGBA(0x80CF9F, 0.14))
+        static let onAccent = Color(light: SpineRGBA(0xFFFFFF), dark: SpineRGBA(0x0B1D13))
+        static let sidebarActive = Color(light: SpineRGBA(0x2F5A45), dark: SpineRGBA(0x1C3A2C))
+        static let sidebarDim = Color(light: SpineRGBA(0xC3CFC6), dark: SpineRGBA(0xA3B6A9))
+        static let sidebarLine = Color(light: SpineRGBA(0x3A6150), dark: SpineRGBA(0x22372C))
+        static let sidebarText = Color(light: SpineRGBA(0xF3EFE6), dark: SpineRGBA(0xE8EFE9))
+        static let spine = Color(light: SpineRGBA(0xD4CAB9), dark: SpineRGBA(0x2E3D34))
+        static let text = Color(light: SpineRGBA(0x1F2420), dark: SpineRGBA(0xECE8DF))
+        static let textDim = Color(light: SpineRGBA(0x4C534D), dark: SpineRGBA(0xAAB3AB))
+        static let textFaint = Color(light: SpineRGBA(0x5F665F), dark: SpineRGBA(0x8F998F))
+        static let warn = Color(light: SpineRGBA(0x8A520E), dark: SpineRGBA(0xE9B05E))
+        static let warnLine = Color(light: SpineRGBA(0x8A520E, 0.28), dark: SpineRGBA(0xE9B05E, 0.3))
+        static let warnSoft = Color(light: SpineRGBA(0x8A520E, 0.11), dark: SpineRGBA(0xE9B05E, 0.14))
     }
 
     /// The broker's verdict on a tool call, mapped to a palette colour. Never the accent.
@@ -75,7 +79,7 @@ enum Spine {
 
     /// Family names. They fall back to the system font if the files are not bundled yet.
     enum Family {
-        static let display = "Bricolage Grotesque"
+        static let display = "New York"
         static let sans = "Instrument Sans"
         static let mono = "JetBrains Mono"
     }

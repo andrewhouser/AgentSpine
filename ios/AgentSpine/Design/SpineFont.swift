@@ -39,11 +39,15 @@ enum SpineFont {
         #endif
     }
 
-    /// Titles and the spine's headings.
+    /// Titles and the spine's headings: a serif since the 2026-11-26 redesign. The system's own serif
+    /// (New York on Apple platforms), so there is no font file to bundle; the web asks for the same face.
     static func display(_ size: CGFloat = Spine.TypeSize.title2, relativeTo style: Font.TextStyle = .title2) -> Font {
-        installed(Spine.Family.display)
-            ? .custom(Spine.Family.display, size: size, relativeTo: style)
-            : .system(style, design: .default).weight(.semibold)
+        .system(style, design: .serif)
+    }
+
+    /// The big greeting at the top of Today, larger than any text style.
+    static func headline(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .regular, design: .serif)
     }
 
     /// Reading text.

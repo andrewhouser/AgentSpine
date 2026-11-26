@@ -2398,6 +2398,15 @@ enum TodayWords {
             : "Scheduled jobs since you last looked: \(parts.joined(separator: ", "))."
     }
 
+    /// The redesign's one-line summary under the greeting. Mirrors `todaySummaryLine` on the web.
+    static func summaryLine(done: TodayBrief.Done, waiting: TodayBrief.Waiting) -> String {
+        let ran = done.ok == 0
+            ? "Nothing finished since you last looked."
+            : "\(done.ok) \(done.ok == 1 ? "job" : "jobs") finished\(done.failed > 0 ? ", \(done.failed) failed" : "")."
+        let need = waiting.approvals + waiting.tasks + waiting.headsups + waiting.threads
+        return "\(ran) \(need == 0 ? "Nothing needs you." : "\(need) \(need == 1 ? "thing needs" : "things need") you.")"
+    }
+
     /// Line two: what is waiting.
     static func waitingLine(_ waiting: TodayBrief.Waiting) -> String {
         let parts = [

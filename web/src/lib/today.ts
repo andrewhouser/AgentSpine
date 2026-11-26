@@ -25,6 +25,21 @@ export const todayDoneLine = (done: TodayBrief["done"]): string => {
   return parts.length ? `Scheduled jobs since you last looked: ${parts.join(", ")}.` : "No scheduled job has run since you last looked.";
 };
 
+/**
+ * The redesign's one-line summary under the greeting (2026-11-26): "4 jobs finished. 2 things need you."
+ * Counts are the brief's; failures are said, never folded into "finished".
+ */
+export const todaySummaryLine = (brief: Pick<TodayBrief, "done" | "waiting">): string => {
+  const { done, waiting } = brief;
+  const ran = done.ok === 0 ? "Nothing finished since you last looked." : `${done.ok} ${done.ok === 1 ? "job" : "jobs"} finished${done.failed ? `, ${done.failed} failed` : ""}.`;
+  const need = waiting.approvals + waiting.tasks + waiting.headsups + waiting.threads;
+  return `${ran} ${need === 0 ? "Nothing needs you." : `${need} ${need === 1 ? "thing needs" : "things need"} you.`}`;
+};
+
+/** The eyebrow over the greeting: "THURSDAY, NOVEMBER 26". */
+export const todayEyebrow = (nowIso: string): string =>
+  new Date(nowIso).toLocaleDateString("en-US", { day: "numeric", month: "long", weekday: "long" }).toUpperCase();
+
 /** Line two: what is waiting. */
 export const todayWaitingLine = (waiting: TodayBrief["waiting"]): string => {
   const parts = [

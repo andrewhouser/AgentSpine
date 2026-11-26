@@ -9,6 +9,8 @@ export interface DecisionFacts {
   leavesLine: string;
   origin: "button" | "helper" | "schedule" | "unknown" | "you-typed";
   readOutside: boolean;
+  /** The four facts in a word or two, for the decision panel (2026-11-26 redesign). Absent from an older server. */
+  short?: { leaves: string; requestedBy: string; undo: string; where: string };
   undo: "irreversible" | "reversible";
   undoLine: string;
   where: "cloud" | "local" | "none";
@@ -41,3 +43,20 @@ export const positionLine = (p: { index: number; of: number }): string => (p.of 
 /** The offer, in words: how many times you said yes to this shape. */
 export const alwaysAllowLine = (a: { approvals: number; target: string; tool: string }): string =>
   `You have approved this ${a.approvals} times and never said no. Always allow ${a.tool}${a.target ? ` on ${a.target}` : ""}?`;
+
+/**
+ * What the panel shows as the action's own text: a draft's subject and body when the arguments have them,
+ * else the whole summary. The words are the call's, shown as text; nothing here is sent anywhere.
+ */
+export const actionText = (argsJson: string, summary: string): { body: string; subject: null | string; to: null | string } => {
+  let a: Record<string, unknown> = {};
+  try {
+    const v: unknown = JSON.parse(argsJson);
+    if (v && typeof v === "object") a = v as Record<string, unknown>;
+  } catch {
+    /* an unreadable row shows its summary */
+  }
+  const str = (k: string): null | string => (typeof a[k] === "string" && (a[k] as string).trim() ? (a[k] as string) : null);
+  const body = str("body") ?? str("text") ?? str("content") ?? summary;
+  return { body, subject: str("subject") ?? str("title"), to: str("to") ?? str("recipient") };
+};

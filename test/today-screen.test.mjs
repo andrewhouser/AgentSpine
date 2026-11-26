@@ -86,10 +86,13 @@ const webLines = [
   ...skips.map(([slot, reason]) => words.scheduleSkipLine(slot, reason)),
   ...expiries.map((e) => String(words.hoursUntil(e, Date.parse(NOW)))),
   words.todayBriefText({ done: dones[2], first: firsts[2], waiting: waitings[2] }),
+  ...dones.flatMap((d) => waitings.map((w) => words.todaySummaryLine({ done: d, waiting: w }))),
 ];
 
 console.log("\nTHE WEB'S WORDS");
 check("nothing ran", webLines[0], "No scheduled job has run since you last looked.");
+check("the redesign's summary line", words.todaySummaryLine({ done: { failed: 0, ok: 4, skipped: 0, stalled: 0 }, waiting: { approvals: 1, headsups: 0, tasks: 1, threads: 0 } }), "4 jobs finished. 2 things need you.");
+check("one of each, and a failure", words.todaySummaryLine({ done: { failed: 1, ok: 1, skipped: 0, stalled: 0 }, waiting: { approvals: 1, headsups: 0, tasks: 0, threads: 0 } }), "1 job finished, 1 failed. 1 thing needs you.");
 check("what ran, only the kinds that happened", words.todayDoneLine(dones[3]), "Scheduled jobs since you last looked: 2 failed, 1 stalled, 1 skipped.");
 check("nothing waiting", words.todayWaitingLine(waitings[0]), "Nothing is waiting on you.");
 check("each kind, with its plural", words.todayWaitingLine(waitings[2]), "Waiting on you: 2 approvals, 1 task due, 1 heads-up, 1 unread reply.");
@@ -173,6 +176,7 @@ print(TodayWords.briefText(TodayBrief(
   done: TodayBrief.Done(failed: ${dones[2].failed}, ok: ${dones[2].ok}, skipped: ${dones[2].skipped}, stalled: ${dones[2].stalled}),
   first: TodayBrief.First(id: nil, kind: ${s(firsts[2].kind)}, reason: ${s(firsts[2].reason)}, title: ${s(firsts[2].title)}),
   waiting: TodayBrief.Waiting(approvals: ${waitings[2].approvals}, headsups: ${waitings[2].headsups}, tasks: ${waitings[2].tasks}, threads: ${waitings[2].threads}))))
+for d in dones { for w in waitings { print(TodayWords.summaryLine(done: TodayBrief.Done(failed: d.1, ok: d.0, skipped: d.3, stalled: d.2), waiting: TodayBrief.Waiting(approvals: w.0, headsups: w.2, tasks: w.1, threads: w.3))) } }
 print("--")
 let dir = URL(fileURLWithPath: CommandLine.arguments[1])
 func load<T: Decodable>(_ name: String, _ type: T.Type) throws -> T { try JSONDecoder().decode(type, from: Data(contentsOf: dir.appendingPathComponent(name))) }

@@ -69,12 +69,12 @@ struct MacSidebarMenu: View {
                     .accessibilityHidden(true)
             }
             .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
-            .foregroundStyle(active || moreExpanded ? Spine.Palette.text : Spine.Palette.textDim)
+            .foregroundStyle(active || moreExpanded ? Spine.Palette.sidebarText : Spine.Palette.sidebarDim)
             .padding(.horizontal, Spine.Space.sm)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity)
             .background(
-                active ? Spine.Palette.accent.opacity(0.18) : Spine.Palette.bgElevated,
+                active ? Spine.Palette.accent.opacity(0.18) : Spine.Palette.sidebarActive,
                 in: RoundedRectangle(cornerRadius: Spine.Radius.sm)
             )
             .overlay(RoundedRectangle(cornerRadius: Spine.Radius.sm).strokeBorder(Spine.Palette.border, lineWidth: 0.5))
@@ -93,12 +93,12 @@ struct MacSidebarMenu: View {
             Text(title)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .foregroundStyle(active ? Spine.Palette.text : Spine.Palette.textDim)
+                .foregroundStyle(active ? Spine.Palette.sidebarText : Spine.Palette.sidebarDim)
             Spacer(minLength: 0)
             if count > 0 {
                 Text("\(count)")
                     .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                    .foregroundStyle(Spine.Palette.textDim)
+                    .foregroundStyle(Spine.Palette.sidebarDim)
             }
         }
         .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
@@ -158,7 +158,7 @@ struct MacMenuSettingsView: View {
         return HStack(spacing: Spine.Space.md) {
             Image(systemName: item.symbol)
                 .frame(width: 24)
-                .foregroundStyle(isPinned ? Spine.Palette.accent : Spine.Palette.textDim)
+                .foregroundStyle(isPinned ? Spine.Palette.accent : Spine.Palette.sidebarDim)
                 .accessibilityHidden(true)
             Text(item.title)
             Spacer()

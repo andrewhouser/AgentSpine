@@ -2093,6 +2093,22 @@ leaves the machine stops and writes down what it found.
 - The client page from the sketches waits. Section 14's U4 and U6 are unchanged and the client's project still
   cannot be set from a screen.
 
+### R11. The redesign from the mock (Design and code; all three clients; built 2026-11-26)
+
+- New palette in `design/tokens.json`, light and dark: cream surfaces, a deep green rail with its own
+  `sidebar-*` tokens (checked for contrast against the rail, not the page), amber for what needs you, and a
+  serif display face (New York on Apple, Iowan or Georgia elsewhere).
+- Rail: brand and spine mark, places with icons, RECENT threads, then More, Settings and the model's state.
+  Project groups left the web rail; they are on Projects.
+- Today: eyebrow date, serif greeting, `todaySummaryLine` / `TodayWords.summaryLine` ("4 jobs finished. 2 things
+  need you."), the band labels with a "N NEED YOU" pill, approvals as amber-edged cards, task checkboxes, the
+  Ahead time column. Words are shared and tested in `today-screen`.
+- "Your decision" panel at 1100 points and up on web (`DecisionPanel`) and Mac (`MacTodayView`), using the card's
+  new `facts.short` (`src/decision-card.ts`); Request changes is Reject with a reason. Approve is still held.
+- App icons and the web favicon are the rail now: the cream spine mark on green (`ios/tools/make-icons.swift`).
+- Seen: web in light and dark at desktop and phone width; iPhone simulator in light and dark. The Mac app builds
+  but has not been looked at running.
+
 ### What has been seen working (2026-11-26)
 
 On the Mini, after `update.sh` with `0b82ac3` (R0 to R10, the security fixes, ntfy removed):

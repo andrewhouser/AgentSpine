@@ -4,9 +4,10 @@ import type { Status } from "../../hooks/useStatus.ts";
 import type { Conversation, Project } from "../../lib/types.ts";
 
 import { useNavOrder } from "../../hooks/useNavOrder.ts";
+import { VIEW_ICON } from "../../lib/icons.ts";
 import { foldedItems, NAV_ITEMS, pinnedItems } from "../../lib/navLayout.ts";
 import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
-import { ProjectGroup } from "../ProjectGroup/ProjectGroup.tsx";
+import { Icon } from "../Icon/Icon.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
 import styles from "./Sidebar.module.css";
 
@@ -57,29 +58,7 @@ interface SidebarProps {
   waiting: number;
 }
 
-const COLLAPSE_KEY = "sidebar-nav-collapsed";
-
 const MORE_KEY = "sidebar-nav-more-open";
-
-const PROJECTS_COLLAPSED_KEY = "sidebar-projects-collapsed";
-
-/** Ids of projects the user has folded shut. */
-const readCollapsedProjects = (): Set<number> => {
-  try {
-    const raw: unknown = JSON.parse(localStorage.getItem(PROJECTS_COLLAPSED_KEY) ?? "[]");
-    return new Set(Array.isArray(raw) ? raw.filter((n): n is number => typeof n === "number") : []);
-  } catch {
-    return new Set();
-  }
-};
-
-const readCollapsed = (): boolean => {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
 
 const readMoreOpen = (): boolean => {
   try {
@@ -89,43 +68,33 @@ const readMoreOpen = (): boolean => {
   }
 };
 
+/** How many recent conversations the sidebar lists; the rest are a search away under Ask. */
+const RECENT_MAX = 12;
+
+/**
+ * The sidebar (the 2026-11-26 redesign): the brand, the places with their icons, the recent conversations,
+ * then More, Settings and the server's status at the foot, on the deep green. Inside it the text colours are
+ * re-pointed at the sidebar tokens (Sidebar.module.css), so the thread rows and the status line adapt.
+ */
 export const Sidebar = ({
   activeConversation,
-  activeProject,
   conversations,
   onCollapse,
   onDeleteConversation,
   onNewChat,
-  onNewProject,
-  onNewProjectChat,
   onRenameConversation,
-  onRenameProject,
   onSelectConversation,
-  onSelectProject,
   onSelectView,
   onToday,
-  projects,
   status,
   view,
   waiting,
 }: SidebarProps) => {
-  const [collapsed, setCollapsed] = useState(readCollapsed);
   const [moreOpen, setMoreOpen] = useState(readMoreOpen);
-  const [foldedProjects, setFoldedProjects] = useState(readCollapsedProjects);
   const { order } = useNavOrder();
-  const pinned = pinnedItems(order);
-  const folded = foldedItems(order);
-  // Conversations inside a project live under it, not in the general list.
-  const loose = conversations.filter((c) => c.project_id === null || !projects.some((p) => p.id === c.project_id));
-  const toggle = (): void => {
-    const next = !collapsed;
-    setCollapsed(next);
-    try {
-      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-    } catch {
-      // storage blocked: the toggle still works for this session
-    }
-  };
+  const pinned = pinnedItems(order).filter((k) => k !== "settings");
+  const folded = foldedItems(order).filter((k) => k !== "settings");
+  const recent = conversations.slice(0, RECENT_MAX);
 
   const toggleMore = (): void => {
     const next = !moreOpen;
@@ -140,145 +109,110 @@ export const Sidebar = ({
   const navButton = (key: View) => {
     const item = NAV_ITEMS.find((entry) => entry.key === key);
     return (
-    <button
-      className={`${styles.navItem} ${view === key ? styles.navActive : ""}`}
-      key={key}
-      onClick={() => onSelectView(key)}
-      title={item?.hint}
-      type="button"
-    >
-      {item?.label ?? key}
-      {key === "schedules" && ` (${status.schedules})`}
-      {key === "headsup" && status.headsupsWaiting > 0 && (
-        <span aria-label={`${status.headsupsWaiting} waiting for you`} className={styles.badge}>
-          {status.headsupsWaiting}
+      <button
+        aria-current={view === key ? "page" : undefined}
+        className={`${styles.navItem} ${view === key ? styles.navActive : ""}`}
+        key={key}
+        onClick={() => onSelectView(key)}
+        title={item?.hint}
+        type="button"
+      >
+        <Icon name={VIEW_ICON[key] ?? "more"} />
+        <span className={styles.navLabel}>
+          {item?.label ?? key}
+          {key === "schedules" && ` (${status.schedules})`}
         </span>
-      )}
-    </button>
+        {key === "headsup" && status.headsupsWaiting > 0 && (
+          <span aria-label={`${status.headsupsWaiting} waiting for you`} className={styles.badge}>
+            {status.headsupsWaiting}
+          </span>
+        )}
+      </button>
     );
   };
 
-  const setProjectFolded = (id: number, folded: boolean): void => {
-    const next = new Set(foldedProjects);
-    if (folded) next.add(id);
-    else next.delete(id);
-    setFoldedProjects(next);
-    try {
-      localStorage.setItem(PROJECTS_COLLAPSED_KEY, JSON.stringify([...next]));
-    } catch {
-      // storage blocked: folding still works for this session
-    }
-  };
+  const todayActive = view === "chat" && activeConversation === null;
 
   return (
-  <nav className={styles.sidebar}>
-    <div className={styles.head}>
-      <span className={styles.brand}>AgentSpine</span>
-      <button
-        aria-label="Hide sidebar"
-        className={styles.collapse}
-        onClick={onCollapse}
-        title="Hide sidebar (⌘B)"
-        type="button"
-      >
-        ‹
-      </button>
-    </div>
-
-    <button className={styles.newChat} onClick={onNewChat} type="button">
-      <span className={styles.plus}>+</span> New conversation
-    </button>
-
-    <button
-      aria-current={view === "chat" && activeConversation === null ? "page" : undefined}
-      className={`${styles.today} ${view === "chat" && activeConversation === null ? styles.todayActive : ""}`}
-      onClick={onToday}
-      title="What is waiting on you, what is due, and what ran while you were away"
-      type="button"
-    >
-      Today
-      {waiting > 0 && (
-        <span aria-label={`${waiting} waiting on you`} className={styles.badge}>
-          {waiting}
+    <nav className={styles.sidebar}>
+      <div className={styles.head}>
+        <span className={styles.brand}>
+          <SpineMark />
+          AgentSpine
         </span>
-      )}
-    </button>
-
-    <div className={styles.scroll}>
-      <div className={styles.sectionHead}>
-        <span className={styles.sectionLabel}>Projects</span>
-        <button aria-label="New project" className={styles.addSmall} onClick={onNewProject} title="New project" type="button">
-          +
+        <button aria-label="Hide sidebar" className={styles.collapse} onClick={onCollapse} title="Hide sidebar (⌘B)" type="button">
+          ‹
         </button>
       </div>
-      {projects.length === 0 && <div className={styles.none}>None yet.</div>}
-      {projects.map((p) => (
-        <ProjectGroup
-          active={view === "project" && p.id === activeProject}
-          activeConversation={activeConversation}
-          chatActive={view === "chat"}
-          collapsed={foldedProjects.has(p.id)}
-          conversations={conversations.filter((c) => c.project_id === p.id)}
-          key={p.id}
-          onDeleteConversation={onDeleteConversation}
-          onNewConversation={() => {
-            // Open the group so the new conversation is visible when it appears.
-            setProjectFolded(p.id, false);
-            onNewProjectChat(p.id);
-          }}
-          onRename={(name) => onRenameProject(p.id, name)}
-          onRenameConversation={onRenameConversation}
-          onSelect={() => onSelectProject(p.id)}
-          onSelectConversation={onSelectConversation}
-          onToggle={() => setProjectFolded(p.id, !foldedProjects.has(p.id))}
-          project={p}
-        />
-      ))}
 
-      <div className={styles.sectionLabel} style={{ marginTop: 14 }}>Conversations</div>
-      {loose.length === 0 && <div className={styles.none}>Nothing yet.</div>}
-      {loose.map((c) => (
-        <ConversationItem
-          active={view === "chat" && c.id === activeConversation}
-          conversation={c}
-          key={c.id}
-          onDelete={() => onDeleteConversation(c.id)}
-          onRename={(title) => onRenameConversation(c.id, title)}
-          onSelect={() => onSelectConversation(c.id)}
-        />
-      ))}
-    </div>
+      <div className={styles.places}>
+        <button
+          aria-current={todayActive ? "page" : undefined}
+          className={`${styles.navItem} ${todayActive ? styles.navActive : ""}`}
+          onClick={onToday}
+          title="One line through the day: what ran, what needs you, what is ahead"
+          type="button"
+        >
+          <Icon name="calendar" />
+          <span className={styles.navLabel}>Today</span>
+          {waiting > 0 && (
+            <span aria-label={`${waiting} waiting on you`} className={styles.badge}>
+              {waiting}
+            </span>
+          )}
+        </button>
+        {pinned.map(navButton)}
+      </div>
 
-    <div className={styles.nav}>
-      <button
-        aria-expanded={!collapsed}
-        className={styles.navToggle}
-        onClick={toggle}
-        title={collapsed ? "Show menu" : "Hide menu"}
-        type="button"
-      >
-        <span>Menu</span>
-        <span className={styles.chevron}>{collapsed ? "▴" : "▾"}</span>
-      </button>
-      {!collapsed && (
-        <>
-          <div className={styles.navGrid}>{pinned.map(navButton)}</div>
-          {/* With More shut, the open view has no row of its own, so More carries the highlight. */}
-          <button
-            aria-expanded={moreOpen}
-            className={`${styles.moreToggle} ${!moreOpen && folded.includes(view) ? styles.navActive : ""}`}
-            onClick={toggleMore}
-            type="button"
-          >
-            More
-            <span className={styles.chevron}>{moreOpen ? "▴" : "▾"}</span>
+      <div className={styles.scroll}>
+        <div className={styles.sectionHead}>
+          <span className={styles.sectionLabel}>Recent</span>
+          <button aria-label="New conversation" className={styles.addSmall} onClick={onNewChat} title="New conversation" type="button">
+            <Icon name="plus" size={14} />
           </button>
-          {moreOpen && <div className={`${styles.navGrid} ${styles.overflow}`}>{folded.map(navButton)}</div>}
-        </>
-      )}
-    </div>
+        </div>
+        {recent.length === 0 && <div className={styles.none}>Nothing yet.</div>}
+        {recent.map((c) => (
+          <ConversationItem
+            active={view === "chat" && c.id === activeConversation}
+            conversation={c}
+            key={c.id}
+            onDelete={() => onDeleteConversation(c.id)}
+            onRename={(title) => onRenameConversation(c.id, title)}
+            onSelect={() => onSelectConversation(c.id)}
+          />
+        ))}
+      </div>
 
-    <StatusIndicator status={status} />
-  </nav>
+      <div className={styles.foot}>
+        {folded.length > 0 && (
+          <>
+            {/* With More shut, the open view has no row of its own, so More carries the highlight. */}
+            <button
+              aria-expanded={moreOpen}
+              className={`${styles.navItem} ${!moreOpen && (folded as View[]).includes(view) ? styles.navActive : ""}`}
+              onClick={toggleMore}
+              type="button"
+            >
+              <Icon name="more" />
+              <span className={styles.navLabel}>More</span>
+              <span className={styles.chevron}>{moreOpen ? "▾" : "▴"}</span>
+            </button>
+            {moreOpen && <div className={styles.overflow}>{folded.map(navButton)}</div>}
+          </>
+        )}
+        {navButton("settings")}
+        <StatusIndicator status={status} />
+      </div>
+    </nav>
   );
 };
+
+/** The spine mark beside the name: a short line with two joints, as in the mock. */
+const SpineMark = () => (
+  <svg aria-hidden="true" height="26" viewBox="0 0 12 26" width="12">
+    <line stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" x1="6" x2="6" y1="3" y2="23" />
+    <circle cx="6" cy="3" fill="currentColor" r="3" />
+    <circle cx="6" cy="23" fill="currentColor" r="3" />
+  </svg>
+);

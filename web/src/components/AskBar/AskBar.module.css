@@ -4,11 +4,12 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 28px 0 8px;
-  padding: 6px 6px 6px 12px;
+  margin: 32px 0 8px;
+  padding: 7px 7px 7px 18px;
 }
 
 .scope {
@@ -25,9 +26,10 @@
   color: var(--text);
   flex: 1;
   font: inherit;
+  font-size: 1.0625rem;
   min-width: 0;
   outline: none;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .send {
@@ -35,9 +37,10 @@
   border: 0;
   border-radius: var(--radius-sm);
   color: var(--on-accent);
+  display: inline-flex;
   font-size: 0.8125rem;
   font-weight: 600;
-  padding: 6px 14px;
+  padding: 9px 16px;
 }
 
 .send:disabled {

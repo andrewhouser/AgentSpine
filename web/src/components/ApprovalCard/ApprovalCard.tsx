@@ -21,7 +21,7 @@ const NONE: DecisionCard | null = null;
  * when the press lasts `HOLD_MS`, and letting go early does nothing. A stray click, a double tap
  * or Enter pressed out of habit cannot approve.
  */
-const HoldToApprove = ({ busy, onApprove }: { busy: boolean; onApprove: () => void }) => {
+export const HoldToApprove = ({ busy, onApprove }: { busy: boolean; onApprove: () => void }) => {
   const [holding, setHolding] = useState(false);
   const timer = useRef<null | number>(null);
   const stop = useCallback(() => {

@@ -168,6 +168,17 @@ project, so it stays on the local model. The menu is the places: **Ask**, **Meet
 Schedules and the rest) under More. On the iPhone the bar is Today, Ask (the threads), Meetings and
 People.
 
+**It looks the same on all three, light or dark** (the redesign of 2026-11-26). The menu is a deep
+green rail with the spine mark, the places with icons, your recent threads, and Settings and the
+model's state at the foot. Today opens on the date, a serif "A little clarity for your day.", and one
+line of what finished and what needs you, then the Behind, Now and Ahead bands; an approval is a card
+with an amber edge and a "Needs approval" chip. On a wide web window or Mac window (1100 points and
+up) the approval you pick, or the first one, opens in a **Your decision** panel beside the line: short
+facts (leaves this device, prepared with, can be undone, requested by; hover for the full sentence),
+the subject and text, Hold to approve and Request changes. Narrower, it opens where it did before.
+Colours live once in `design/tokens.json` (`node design/generate.mjs` writes the CSS and Swift), and
+`test/design-tokens.test.mjs` checks every text colour, the rail's included, reaches 4.5:1 in both modes.
+
 **You can speak instead of typing.** The dot beside the send button is push-to-talk: press,
 say the thing, press again. Whisper transcribes it locally and drops the words into the
 composer **for you to read and edit** — nothing is ever sent automatically, because the text is

@@ -148,24 +148,39 @@ struct TodaySections: View {
 
     var body: some View {
         if let screen = store.screen {
+            // The greeting (2026-11-26 redesign): the date, a serif line, then what happened and what needs you.
             Section {
                 VStack(alignment: .leading, spacing: Spine.Space.sm) {
-                    line(TodayWords.doneLine(screen.brief.done))
-                    line(TodayWords.waitingLine(screen.brief.waiting))
-                    Text(TodayWords.firstLine(screen.brief.first))
-                        .font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .subheadline).weight(.semibold))
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(Self.eyebrow(screen.now))
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
+                            .tracking(2.4)
+                            .foregroundStyle(Spine.Palette.textDim)
+                        Spacer(minLength: 0)
+                        if let readAloud {
+                            Button(speaking ? "Stop reading" : "Read aloud") { readAloud(TodayWords.briefText(screen.brief)) }
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(Spine.Palette.textDim)
+                        }
+                    }
+                    Text("A little clarity for your day.")
+                        .font(SpineFont.headline(Self.greetingSize))
                         .foregroundStyle(Spine.Palette.text)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let readAloud {
-                        Button(speaking ? "Stop reading" : "Read aloud") { readAloud(TodayWords.briefText(screen.brief)) }
-                            .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
-                            .buttonStyle(.bordered)
-                            .tint(Spine.Palette.accent)
-                    }
+                        .padding(.vertical, Spine.Space.xs)
+                    Text(TodayWords.summaryLine(done: screen.brief.done, waiting: screen.brief.waiting))
+                        .font(SpineFont.sans(Spine.TypeSize.title3, relativeTo: .title3).weight(.semibold))
+                        .foregroundStyle(Spine.Palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    line(TodayWords.firstLine(screen.brief.first))
                 }
+                .padding(.vertical, Spine.Space.sm)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Brief")
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
             if !screen.since.isEmpty {
                 Section {
@@ -201,7 +216,7 @@ struct TodaySections: View {
                     }
                 } header: {
                     HStack {
-                        Text("Behind · ran since you last looked (\(screen.since.count))")
+                        bandLabel("Behind")
                         Spacer()
                         Button("Seen") { Task { await store.seen() } }
                             .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption).weight(.semibold))
@@ -223,7 +238,7 @@ struct TodaySections: View {
                 }
             }
             if screen.since.isEmpty {
-                Section("Behind") {
+                Section {
                     line("Nothing has run since you last looked.")
                 }
             }
@@ -243,16 +258,44 @@ struct TodaySections: View {
                     line("Nothing needs you right now.")
                 }
             } header: {
-                Text("Now").foregroundStyle(Spine.Palette.attention)
+                HStack(spacing: Spine.Space.sm) {
+                    bandLabel("Now")
+                    let need = screen.approvals.count + screen.tasks.count + screen.headsups.count + screen.threads.count + screen.mail.count
+                    if need > 0 {
+                        Text("\(need) NEED YOU")
+                            .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2).weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(Spine.Palette.attention)
+                            .padding(.horizontal, Spine.Space.sm)
+                            .padding(.vertical, 3)
+                            .background(Spine.Palette.attentionSoft, in: Capsule())
+                    }
+                }
             }
 
             if !screen.approvals.isEmpty {
-                Section("Waiting on you (\(screen.approvals.count))") {
+                Section {
+                    // An approval is a card with the attention edge (2026-11-26 redesign); Approve is never on it.
                     ForEach(screen.approvals) { a in
-                        row(title: a.summary, detail: expiry(a), urgent: a.expiringSoon, target: .approval(a)) {
-                            action("Review", prominent: true) { open(.approval(a)) }
-                            action("Later") { Task { await store.later("approval:\(a.id)") } }
+                        HStack(spacing: Spine.Space.sm) {
+                            row(title: a.summary, detail: expiry(a), urgent: a.expiringSoon, target: .approval(a)) {
+                                action("Review", prominent: true) { open(.approval(a)) }
+                                action("Later") { Task { await store.later("approval:\(a.id)") } }
+                            }
+                            Text("Needs approval")
+                                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                .foregroundStyle(Spine.Palette.attention)
+                                .padding(.horizontal, Spine.Space.sm)
+                                .padding(.vertical, 3)
+                                .background(Spine.Palette.attentionSoft, in: RoundedRectangle(cornerRadius: Spine.Radius.sm))
+                                .overlay(RoundedRectangle(cornerRadius: Spine.Radius.sm).strokeBorder(Spine.Palette.attentionLine))
                         }
+                        .listRowBackground(
+                            HStack(spacing: 0) {
+                                Rectangle().fill(Spine.Palette.attention).frame(width: 4)
+                                Spine.Palette.attentionSoft
+                            }
+                        )
                     }
                 }
             }
@@ -337,11 +380,34 @@ struct TodaySections: View {
                     .disabled(a.kind != "schedule" && a.personId == nil)
                 }
             } header: {
-                Text("Ahead")
+                bandLabel("Ahead")
             } footer: {
                 if let asOf = store.calendarAsOf { Text("Calendar as of \(SpineDate.relative(asOf))") }
             }
         }
+    }
+
+    /// "THURSDAY, NOVEMBER 26", from the screen's own clock.
+    static func eyebrow(_ iso: String) -> String {
+        guard let d = TodayWords.parse(iso) else { return "" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "EEEE, MMMM d"
+        return f.string(from: d).uppercased()
+    }
+
+    #if os(iOS)
+    static let greetingSize: CGFloat = 34
+    #else
+    static let greetingSize: CGFloat = 44
+    #endif
+
+    /// A band's label on the line: BEHIND, NOW, AHEAD.
+    private func bandLabel(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.bold))
+            .tracking(2.2)
+            .foregroundStyle(Spine.Palette.text)
     }
 
     private func line(_ text: String) -> some View {
@@ -440,7 +506,12 @@ struct AskBar: View {
                     .textFieldStyle(.plain)
                     .disabled(busy)
                     .onSubmit { Task { await send() } }
-                Button(busy ? "Asking…" : "Ask") { Task { await send() } }
+                Button { Task { await send() } } label: {
+                    Image(systemName: busy ? "ellipsis" : "arrow.right")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 22, height: 22)
+                }
+                    .accessibilityLabel(busy ? "Asking" : "Ask")
                     .buttonStyle(.borderedProminent)
                     .tint(Spine.Palette.accent)
                     .disabled(busy || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

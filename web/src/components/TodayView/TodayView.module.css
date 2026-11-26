@@ -1,137 +1,89 @@
-/* Today: the brief, then a few short sections of one-line rows that can each be answered. */
-.brief {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+/*
+ * Today, redesigned 2026-11-26: a date, a serif greeting, one line of what happened and what needs you,
+ * then the spine's three bands on one line, and "Your decision" beside it on a wide screen.
+ */
+.layout {
   display: grid;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 12px 14px;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100%;
 }
 
-/* The third line is the one to act on, so it is the one that stands out. */
-.first {
-  font-weight: 600;
+.withPanel {
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 30rem);
 }
 
-.section {
-  color: var(--text-faint);
-  font-size: 0.7188rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  margin: 18px 0 6px;
-  text-transform: uppercase;
+.page {
+  margin: 0 auto;
+  max-width: 50rem;
+  padding: 36px 40px 28px;
+  width: 100%;
 }
 
-.sectionHead {
+.eyebrowRow {
   align-items: baseline;
   display: flex;
-  gap: 10px;
   justify-content: space-between;
 }
 
-.item {
-  border-bottom: 1px solid var(--border);
-}
-
-.row {
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  gap: 8px;
-  padding: 6px 2px;
-}
-
-.item .row {
-  border-bottom: 0;
-}
-
-/* The row's text is one button, so the whole line opens the thing it names. */
-.rowMain {
-  align-items: baseline;
-  background: none;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  font: inherit;
-  gap: 4px 10px;
-  min-width: 0;
-  padding: 2px 0;
-  text-align: left;
-}
-
-.who {
-  flex: 0 1 auto;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.rowMain:hover .who {
-  text-decoration: underline;
-}
-
-.detail {
+.eyebrow {
   color: var(--text-dim);
-  font-size: 0.8438rem;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.urgent {
-  color: var(--warn, var(--accent));
-  font-size: 0.8438rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  letter-spacing: 0.2em;
 }
 
-.when {
-  color: var(--text-faint);
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 0.7188rem;
-}
-
-/* The whole proposed action, under its row. Approve lives only in here. */
-.full {
-  padding: 2px 0 12px;
-}
-
-.laterLine {
-  align-items: center;
-  color: var(--text-dim);
+.tools {
   display: flex;
-  font-size: 0.8438rem;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 4px;
 }
 
-/*
- * The spine (section 15, R1): three bands on one line. The line is the app's own mark, the
- * `--spine` token; Now is drawn heavier because it is the part that needs you.
- */
+.greeting {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 4.2vw, 3.6rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  margin: 18px 0 14px;
+}
+
+.summary {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.first {
+  color: var(--text-dim);
+  font-size: 1.0625rem;
+  margin: 4px 0 6px;
+}
+
+.error {
+  background: var(--danger-soft);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  margin: 12px 0;
+  padding: 8px 12px;
+}
+
+/* The line: one rule down the left, a hollow joint for Behind and Ahead, a filled one for Now. */
 .band {
-  border-left: 3px solid var(--spine);
-  margin: 22px 0 0 6px;
-  padding: 0 0 4px 18px;
+  border-left: 2px solid var(--spine);
+  margin: 30px 0 0 7px;
+  padding: 0 0 4px 26px;
   position: relative;
 }
 
 .band::before {
   background: var(--bg);
-  border: 2px solid var(--border-strong);
+  border: 2px solid var(--text-faint);
   border-radius: 50%;
   content: "";
-  height: 9px;
+  height: 12px;
   left: -8px;
   position: absolute;
-  top: 2px;
-  width: 9px;
-}
-
-.now {
-  border-left-color: var(--attention);
+  top: 3px;
+  width: 12px;
 }
 
 .now::before {
@@ -139,26 +91,313 @@
   border-color: var(--attention);
 }
 
-.ahead::before {
-  border-style: dashed;
-}
-
 .bandLabel {
-  color: var(--text-faint);
-  font-size: 0.75rem;
+  align-items: center;
+  display: flex;
+  font-size: 0.9375rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  gap: 14px;
+  letter-spacing: 0.18em;
+  margin: 0 0 12px;
   text-transform: uppercase;
 }
 
-.quiet {
+.needPill {
+  background: var(--attention-soft);
+  border-radius: 999px;
+  color: var(--attention);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  padding: 3px 12px;
+}
+
+.row {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  font: inherit;
+  gap: 16px;
+  padding: 12px 4px;
+  text-align: left;
+  width: 100%;
+}
+
+.mark {
+  align-items: center;
+  background: var(--ok-soft);
+  border-radius: 50%;
+  color: var(--ok);
+  display: inline-flex;
+  flex: none;
+  font-weight: 700;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.markBad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.main {
+  background: none;
+  border: 0;
+  color: inherit;
+  display: grid;
+  flex: 1;
+  font: inherit;
+  font-size: 1.0625rem;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.title {
+  font-weight: 600;
+}
+
+button.row:hover .main,
+button.main:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+}
+
+.sub {
+  color: var(--text-dim);
+  font-size: 0.9375rem;
+}
+
+.time {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+}
+
+.bad {
+  color: var(--danger);
+}
+
+.dueText {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.check {
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  flex: none;
+  height: 22px;
+  width: 22px;
+}
+
+.check:hover {
+  border-color: var(--accent);
+}
+
+/* An approval: a card with the attention edge, never with Approve on it. */
+.card {
+  align-items: center;
+  background: var(--attention-soft);
+  border: 1px solid var(--attention-line);
+  border-left: 4px solid var(--attention);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 12px;
+  margin: 4px 0 8px;
+  padding: 14px 16px 14px 18px;
+  width: 100%;
+}
+
+.cardSelected {
+  box-shadow: 0 0 0 2px var(--attention-line);
+}
+
+.cardLive {
+  border: 1px solid var(--danger-line);
+  border-left: 4px solid var(--danger);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.cardMain {
+  background: none;
+  border: 0;
+  color: var(--text);
+  display: grid;
+  flex: 1;
+  font: inherit;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.cardTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cardSub {
+  color: var(--text-dim);
+}
+
+.chip {
+  background: var(--attention-soft);
+  border: 1px solid var(--attention-line);
+  border-radius: var(--radius-sm);
+  color: var(--attention);
+  font-size: 0.8125rem;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.chipQuiet {
+  background: var(--bg-inset);
+  border-radius: var(--radius-sm);
   color: var(--text-dim);
   font-size: 0.8125rem;
-  padding: 8px 0;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.chipButton {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.8125rem;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.quiet {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  padding: 4px 8px;
+}
+
+.quiet:hover {
+  background: var(--bg-inset);
+  color: var(--text);
+}
+
+.iconButton {
+  background: none;
+  border: 0;
+  color: var(--text);
+  display: inline-flex;
+  padding: 4px;
+}
+
+.link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 0.9375rem;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bandFoot {
+  display: flex;
+  gap: 18px;
+  padding: 10px 0 0;
+}
+
+.quietLine {
+  color: var(--text-dim);
+  padding: 6px 0 10px;
+}
+
+.laterLine {
+  align-items: center;
+  color: var(--text-dim);
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.aheadRow {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  font: inherit;
+  gap: 22px;
+  padding: 12px 4px;
+  text-align: left;
+  width: 100%;
+}
+
+.aheadRow:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.aheadTime {
+  border-right: 1px solid var(--border-strong);
+  color: var(--text);
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 1.0625rem;
+  padding-right: 22px;
+  width: 6rem;
 }
 
 .asOf {
   color: var(--text-faint);
-  font-size: 0.75rem;
-  margin-top: 6px;
+  font-size: 0.8125rem;
+  padding-top: 8px;
+}
+
+@media (width <= 720px) {
+  .page {
+    padding: 22px 18px 18px;
+  }
+
+  .summary {
+    font-size: 1.1875rem;
+  }
+
+  .eyebrowRow {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .card {
+    flex-wrap: wrap;
+  }
+
+  .cardMain {
+    flex-basis: 100%;
+  }
+
+  .band {
+    padding-left: 18px;
+  }
+
+  .aheadTime {
+    padding-right: 12px;
+    width: 4.5rem;
+  }
+}
+
+/* Beside the panel the line fills its column, as the mock draws it, rather than floating centred. */
+.withPanel .page {
+  margin: 0;
+  max-width: 58rem;
 }

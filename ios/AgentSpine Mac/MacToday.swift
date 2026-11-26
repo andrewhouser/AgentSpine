@@ -4,21 +4,45 @@ import SwiftUI
 ///
 /// The Mac twin of the iPhone's `TodayView`: the rows are the shared `TodaySections`, and what
 /// is the Mac's own is how a row opens. A thread, a run or a section changes the detail pane,
-/// which `MacRootView` owns, so those go to `open`. An approval is reviewed here, in a sheet
-/// holding the same `MacApprovalCard` a thread shows, with the whole proposed action above
-/// the buttons. There is no Approve on a row.
+/// which `MacRootView` owns, so those go to `open`. An approval is reviewed here with the same
+/// `MacApprovalCard` a thread shows, the whole proposed action above the buttons: in the
+/// "Your decision" panel beside the line when the window is wide (the 2026-11-26 redesign,
+/// as the web draws it at 1100 points), and in a sheet when it is not. There is no Approve on a row.
 struct MacTodayView: View {
     /// Open a thread, a run or another section in the window.
     let open: (TodayTarget) -> Void
 
     @Environment(AppState.self) private var state
     @State private var reviewing: TodayApproval?
+    /// The approval the panel shows; nil means the first one waiting.
+    @State private var chosen: Int?
+    @State private var wide = false
     /// A 1:1 on the line opens that person in a sheet here (section 15, R9).
     @State private var person: Int?
 
     private var store: TodayStore { TodayStore.shared }
 
+    /// Matches the web's breakpoint, so the two clients agree on when the panel appears.
+    private static let panelWidth: CGFloat = 1100
+
+    private var panelApproval: TodayApproval? {
+        let all = store.screen?.approvals ?? []
+        return all.first { $0.id == chosen } ?? all.first
+    }
+
     var body: some View {
+        HStack(spacing: 0) {
+            line
+            if wide, let approval = panelApproval {
+                Divider()
+                decisionPanel(approval)
+                    .frame(width: 420)
+            }
+        }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= Self.panelWidth } action: { wide = $0 }
+    }
+
+    private var line: some View {
         List {
             if let error = store.error {
                 ErrorNotice(message: error) { Task { await store.load() } }
@@ -84,9 +108,40 @@ struct MacTodayView: View {
         }
     }
 
+    /// "Your decision": the card for one approval, with a way into its thread.
+    private func decisionPanel(_ approval: TodayApproval) -> some View {
+        VStack(alignment: .leading, spacing: Spine.Space.md) {
+            Text("YOUR DECISION")
+                .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.bold))
+                .tracking(2.2)
+                .foregroundStyle(Spine.Palette.textDim)
+            ScrollView {
+                MacApprovalCard(confirmation: approval.confirmation) {
+                    chosen = nil
+                    await store.load()
+                }
+                .id(approval.id)
+            }
+            HStack {
+                if approval.conversationId != nil {
+                    Button("Open the thread") { open(.approval(approval)) }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Spine.Palette.accent)
+                }
+                Spacer()
+                Text("Review the full message before sending.")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.textFaint)
+            }
+        }
+        .padding(Spine.Space.lg)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Spine.Palette.bgElevated)
+    }
+
     private func route(_ target: TodayTarget) {
         if case .approval(let approval) = target {
-            reviewing = approval
+            if wide { chosen = approval.id } else { reviewing = approval }
         } else if case .person(let id) = target {
             person = id
         } else {
