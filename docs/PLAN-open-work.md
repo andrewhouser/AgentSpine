@@ -2093,6 +2093,20 @@ leaves the machine stops and writes down what it found.
 - The client page from the sketches waits. Section 14's U4 and U6 are unchanged and the client's project still
   cannot be set from a screen.
 
+### What has been seen working (2026-11-26)
+
+On the Mini, after `update.sh` with `0b82ac3` (R0 to R10, the security fixes, ntfy removed):
+- **Verified:** the server runs the new code; a test push (`POST /api/push/test`) reached the iPhone over
+  APNs, with ntfy gone.
+- **Seen in a browser against a scratch server only, not on the Mini:** the spine's three bands and its 1:1
+  prep row, the ask bar, the dials, the decision card's facts and hold to approve, the people, project and
+  memory pages, sources under an answer, the one-at-a-time closeout, Undo, the cloud mark and the five
+  review cards.
+- **Not yet seen anywhere:** Approve and Reject on a real approval push (Approve should ask for Face ID);
+  the Ahead band filled from a real calendar read (it needs Heads-up's morning pass or a check-in first);
+  playback of a kept recording; any of the iPhone or Mac screens on a device (both apps build; neither was
+  run); the Mac menu bar count against the Dock.
+
 ### Sequence and decisions
 
 Order: R0, then R3 (so what is already built can be seen), R1, R2, R7, R4 with R5, R8, R6, R9, R10. R7 can
