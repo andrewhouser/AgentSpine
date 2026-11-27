@@ -1,7 +1,6 @@
 import type { Project } from "../../lib/types.ts";
 
 import styles from "../ListPage/ListPage.module.css";
-import { PageHeader } from "../PageHeader/PageHeader.tsx";
 
 interface ProjectsViewProps {
   onNewProject: () => void;
@@ -10,12 +9,14 @@ interface ProjectsViewProps {
 }
 
 /**
- * Projects as a place (PLAN-open-work section 15). Each opens the project screen there is today;
- * the decision log, risks and who is waiting on whom are R8.
+ * Settings → Projects (a menu place until the 2026-11-27 review, section 15, R12). Each opens the
+ * project's own screen, where it is renamed or deleted; a project thread's header links there too.
  */
 export const ProjectsView = ({ onNewProject, onOpenProject, projects }: ProjectsViewProps) => (
-  <div className={styles.page}>
-    <PageHeader subtitle="Each one keeps its own conversations, sources and meetings, and runs inside it stay on the local model." title="Projects" />
+  <section>
+    <p className={styles.meta}>
+      Each project keeps its own conversations, sources and meetings, and runs inside it stay on the local model.
+    </p>
     <div className={styles.toolbar}>
       <button className={`${styles.button} ${styles.primary}`} onClick={onNewProject} type="button">
         New project
@@ -29,5 +30,5 @@ export const ProjectsView = ({ onNewProject, onOpenProject, projects }: Projects
         </span>
       </button>
     ))}
-  </div>
+  </section>
 );

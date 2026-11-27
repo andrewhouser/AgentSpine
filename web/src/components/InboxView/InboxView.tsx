@@ -9,6 +9,8 @@ import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 
 interface InboxViewProps {
+  /** Drawn inside a tab of another place (TabbedPlace), which owns the title. */
+  embedded?: boolean;
   projects: Project[];
 }
 
@@ -43,7 +45,7 @@ const when = (iso: string): string => new Date(iso).toLocaleString([], { dateSty
 const whoOf = (who: Who): { person?: number; team?: number } =>
   who.startsWith("person:") ? { person: Number(who.slice(7)) } : who.startsWith("team:") ? { team: Number(who.slice(5)) } : {};
 
-export const InboxView = ({ projects }: InboxViewProps) => {
+export const InboxView = ({ embedded = false, projects }: InboxViewProps) => {
   const load = useCallback(() => api.inboxList(), []);
   const [items, reload] = useResource<InboxItem[]>(load, []);
   const [status] = useResource(
@@ -139,8 +141,9 @@ export const InboxView = ({ projects }: InboxViewProps) => {
   const projectName = (id: number): string => projects.find((p) => p.id === id)?.name ?? "";
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? undefined : styles.page}>
       <PageHeader
+        compact={embedded}
         subtitle="Add anything you want to remember. It is read on this Mac, kept private, and searchable at once; you decide which project it belongs to."
         title="Drop zone"
       />

@@ -15,7 +15,7 @@ import styles from "./ActivityView.module.css";
  * watchers, and heartbeats never appear in a conversation, so this is where they surface —
  * with the same tool-call detail and the same broker decisions.
  */
-export const ActivityView = ({ onSelectRun, runId }: { onSelectRun: (id: null | number) => void; runId: null | number }) => {
+export const ActivityView = ({ embedded = false, onSelectRun, runId }: { embedded?: boolean; onSelectRun: (id: null | number) => void; runId: null | number }) => {
   const [runs, setRuns] = useState<Run[]>([]);
   const [refusals, setRefusals] = useState<Refusal[]>([]);
 
@@ -31,8 +31,9 @@ export const ActivityView = ({ onSelectRun, runId }: { onSelectRun: (id: null | 
   if (runId !== null) return <RunDetail onBack={() => onSelectRun(null)} runId={runId} />;
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? undefined : styles.page}>
       <PageHeader
+        compact={embedded}
         subtitle="Every agent cycle — chat turns, scheduled jobs, watchers — with the broker's decision on each tool call."
         title="Activity"
       />

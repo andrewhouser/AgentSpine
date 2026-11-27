@@ -565,7 +565,8 @@ export interface MeetingExtraction {
  * the rest are kept so the extraction's false-positive rate stays visible rather than
  * being quietly edited out of the record.
  */
-export type WorkItemVerdict = "already-done" | "filed" | "not-a-task" | "queued" | "unanchored" | "unverified";
+/** `review` waits on the meeting's "To-dos found" list; `dismissed` is a person saying no (section 15, R12). */
+export type WorkItemVerdict = "already-done" | "dismissed" | "filed" | "not-a-task" | "queued" | "review" | "unanchored" | "unverified";
 
 export interface MeetingWorkItem {
   confirmation_id: null | number;
@@ -1471,6 +1472,8 @@ export interface Today {
   headsups: Headsup[];
   later: number;
   mail: TodayMail[];
+  /** Meetings whose to-dos wait on "To-dos found" (section 15, R12). Absent from an older server. */
+  meetingTodos?: { count: number; meetingId: number; started: string; title: null | string }[];
   now: string;
   since: TodaySince[];
   sinceFrom: string;

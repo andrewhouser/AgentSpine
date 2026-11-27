@@ -48,6 +48,8 @@ struct MacAssistantSettings: View {
         case proposals = "Auto-approval proposals"
         case agents = "Agents"
         case headsup = "Heads-up"
+        // Projects and Memory were sidebar sections until the 2026-11-27 menu review (section 15, R12).
+        case projects = "Projects"
         case memory = "Memory"
         case weeklyReview = "Weekly review"
         case cloudUsage = "Cloud usage"
@@ -64,6 +66,7 @@ struct MacAssistantSettings: View {
             case .proposals: "checkmark.shield"
             case .agents: "person.2"
             case .headsup: "sparkles"
+            case .projects: "folder"
             case .memory: "brain"
             case .weeklyReview: "calendar"
             case .cloudUsage: "cloud"
@@ -99,6 +102,7 @@ struct MacAssistantSettings: View {
         case .proposals: ProposalsView()
         case .agents: AgentsView()
         case .headsup: HeadsupPrefsView()
+        case .projects: ProjectsView()
         case .memory: MemoryView()
         case .weeklyReview: WeeklyReviewView()
         case .cloudUsage: CloudUsageView()

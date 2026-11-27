@@ -73,6 +73,7 @@ const when = (iso: string): string =>
 /** Plain-English reason a candidate never reached the queue. */
 const REJECTION: Record<string, string> = {
   "already-done": "already done",
+  dismissed: "you said not a to-do",
   "not-a-task": "not a task",
   unanchored: "quote not in the transcript",
   unverified: "not checked",
@@ -88,6 +89,50 @@ interface MeetingDetail {
 }
 
 const NO_DETAIL: MeetingDetail = { chat: [], extraction: null, questions: [], segments: [], speakers: [], workItems: [] };
+
+/**
+ * One to-do on "To-dos found" (section 15, R12): the words and owner can be fixed first, because the
+ * meeting's phrasing is rarely the task's best title. Add puts it on Tasks; Not a to-do keeps the row.
+ */
+const TodoReview = ({ item, onAnswered }: { item: MeetingWorkItem; onAnswered: (items: MeetingWorkItem[]) => void }) => {
+  const [task, setTask] = useState(item.task);
+  const [owner, setOwner] = useState(item.owner ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const answer = async (action: "add" | "dismiss"): Promise<void> => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api.answerWorkItem(item.meeting_id, item.id, { action, owner: owner.trim() || null, task });
+      onAnswered(r.workItems);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className={`${styles.item} ${styles.todo}`}>
+      <input aria-label="To-do" className={styles.todoTask} disabled={busy} onChange={(e) => setTask(e.target.value)} value={task} />
+      <input aria-label="Whose it is" className={styles.todoOwner} disabled={busy} onChange={(e) => setOwner(e.target.value)} placeholder="whose" value={owner} />
+      {item.quote && (
+        <span className={styles.quote}>
+          {clock(item.start_ms ?? 0)} · “{item.quote}”
+        </span>
+      )}
+      <span className={styles.todoActions}>
+        <button className={styles.todoAdd} disabled={busy || !task.trim()} onClick={() => void answer("add")} type="button">
+          Add to tasks
+        </button>
+        <button className={styles.todoSkip} disabled={busy} onClick={() => void answer("dismiss")} type="button">
+          Not a to-do
+        </button>
+        {error && <span className={styles.hint}>{error}</span>}
+      </span>
+    </li>
+  );
+};
 
 interface Turn {
   segments: MeetingSegment[];
@@ -224,6 +269,7 @@ interface ExtractionPanelProps {
   busy: boolean;
   detail: MeetingDetail;
   onExtract: () => void;
+  onWorkItems: (items: MeetingWorkItem[]) => void;
 }
 
 /**
@@ -235,13 +281,14 @@ interface ExtractionPanelProps {
  */
 const NO_STATUS = null;
 
-const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
-  // Work items with no project are asked about in the AgentSpine thread, like any approval.
+const ExtractionPanel = ({ busy, detail, onExtract, onWorkItems }: ExtractionPanelProps) => {
+  // Older work items (before 2026-11-27) were asked about in the AgentSpine thread, like any approval.
   const [status] = useResource(api.status, NO_STATUS);
   const { extraction, segments, workItems } = detail;
+  const review = workItems.filter((w) => w.verdict === "review");
   const queued = workItems.filter((w) => w.verdict === "queued");
   const filed = workItems.filter((w) => w.verdict === "filed");
-  const rejected = workItems.filter((w) => w.verdict !== "queued" && w.verdict !== "filed");
+  const rejected = workItems.filter((w) => w.verdict !== "review" && w.verdict !== "queued" && w.verdict !== "filed");
 
   if (!extraction) {
     return segments.length ? (
@@ -250,8 +297,7 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
           Extract work items
         </button>
         <span className={styles.hint}>
-          Runs locally — a summary and decisions are saved, work items go to the project's tasks (or the AgentSpine conversation when there is no
-          project) for you to confirm.
+          Runs locally. A summary and decisions are saved; the to-dos it finds wait here for you, and only the ones you add go on Tasks.
         </span>
       </div>
     ) : null;
@@ -294,6 +340,19 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
         </>
       )}
 
+      {review.length > 0 && (
+        <>
+          <h3 className={styles.extractHead}>
+            To-dos found <span className={styles.hint}>nothing goes on Tasks until you add it</span>
+          </h3>
+          <ul className={styles.list}>
+            {review.map((w) => (
+              <TodoReview item={w} key={w.id} onAnswered={onWorkItems} />
+            ))}
+          </ul>
+        </>
+      )}
+
       {queued.length > 0 && (
         <>
           <h3 className={styles.extractHead}>
@@ -323,7 +382,7 @@ const ExtractionPanel = ({ busy, detail, onExtract }: ExtractionPanelProps) => {
       {filed.length > 0 && (
         <>
           <h3 className={styles.extractHead}>
-            Added to the project's tasks <a className={styles.queueLink} href="/tasks">Tasks →</a>
+            Added to your tasks <a className={styles.queueLink} href="/tasks">Tasks →</a>
           </h3>
           <ul className={styles.list}>
             {filed.map((w) => (
@@ -376,17 +435,19 @@ type MeetingDialog =
   | { kind: "speaker"; meetingId: number; name: null | string; speaker: number };
 
 interface MeetingsViewProps {
+  /** Opened straight to one meeting, from its "To-dos found" card on Today (section 15, R12). */
+  initialId?: null | number;
   projects: Project[];
 }
 
-export const MeetingsView = ({ projects }: MeetingsViewProps) => {
+export const MeetingsView = ({ initialId = null, projects }: MeetingsViewProps) => {
   const [meetings, reloadMeetings] = useResource(api.listMeetings, NO_MEETINGS);
   const [devices] = useResource(api.meetingDevices, NO_DEVICES);
   const [chosenDevice, setDevice] = useState<string>("");
   const [projectId, setProjectId] = useState<null | number>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<null | string>(null);
-  const [open, setOpen] = useState<null | number>(null);
+  const [open, setOpen] = useState<null | number>(initialId);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [tagging, setTagging] = useState<Meeting | null>(null);
   const [dialog, setDialog] = useState<MeetingDialog | null>(null);
@@ -398,6 +459,18 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
     const { chat, extraction, questions, segments, speakers, workItems } = await api.meeting(id);
     setDetail({ chat: chat ?? [], extraction, questions: questions ?? [], segments, speakers: speakers ?? [], workItems });
   }, []);
+
+  // Opened from Today's "To-dos found" card: load that meeting's detail once.
+  useEffect(() => {
+    if (initialId === null) return;
+    let cancelled = false;
+    void api.meeting(initialId).then(({ chat, extraction, questions, segments, speakers, workItems }) => {
+      if (!cancelled) setDetail({ chat: chat ?? [], extraction, questions: questions ?? [], segments, speakers: speakers ?? [], workItems });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialId]);
 
   // Extraction finishes minutes after the meeting does, so it arrives on the stream rather
   // than on a click. Reloading only the meeting that is open keeps a background extraction
@@ -944,7 +1017,12 @@ export const MeetingsView = ({ projects }: MeetingsViewProps) => {
 
           {open === m.id && (
             <>
-              <ExtractionPanel busy={busy} detail={detail} onExtract={() => void extract(m.id)} />
+              <ExtractionPanel
+                busy={busy}
+                detail={detail}
+                onExtract={() => void extract(m.id)}
+                onWorkItems={(workItems) => setDetail((d) => ({ ...d, workItems }))}
+              />
               <MeetingCloseout
                 key={m.id}
                 meeting={m}

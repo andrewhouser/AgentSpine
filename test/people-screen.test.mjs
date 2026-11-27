@@ -22,7 +22,7 @@ const words = await import("../web/src/lib/people.ts");
 const store = await import("../src/memory/store.ts");
 await import("../src/meetings/store.ts");
 const k = await import("../src/knowledge/store.ts");
-const { listPeople, readPerson } = await import("../src/knowledge/people.ts");
+const { listDue, listPeople, readPerson } = await import("../src/knowledge/people.ts");
 
 const MODELS = path.join(path.dirname(import.meta.dirname), "ios/AgentSpine/Core/Models.swift");
 
@@ -40,6 +40,7 @@ const counts = [[0, 0], [2, 1]];
 const ats = [null, 0, 862_000, 3_725_000, -5];
 const kinds = [["you-owe", "Lee Okafor"], ["waiting", "Lee Okafor"], ["they-owe", "Lee Okafor"]];
 const preps = [[0, 0], [2, 1]];
+const dues = [null, "2026-11-24", "2026-01-05T00:00:00Z", "next sprint", "2026-13-01"];
 const webLines = [
   ...dirs.map(([d, n]) => words.directionLabel(d, n)),
   ...days.map(words.oneToOneLine),
@@ -47,6 +48,8 @@ const webLines = [
   ...ats.map(words.atLine),
   ...kinds.map(([k, n]) => words.forTodayLabel(k, n)),
   ...preps.map(([y, t]) => words.prepLine({ theyOwe: t, youOwe: y })),
+  ...dirs.map(([d, n]) => words.dueOwnerLine(d, n)),
+  ...dues.map(words.dueWhenLine),
 ];
 
 console.log("\nTHE WEB'S WORDS");
@@ -55,6 +58,8 @@ check("the last 1:1", days.map(words.oneToOneLine), ["No 1:1 recorded", "Last 1:
 check("the counts", counts.map(([a, b]) => words.openCountLine(a, b)), ["Nothing open", "You owe 2 · they owe 1"]);
 check("for today labels (R9)", kinds.map(([k, n]) => words.forTodayLabel(k, n)), ["You owe", "Waiting to hear", "Lee owes you"]);
 check("prep on a 1:1 (R9)", preps.map(([y, t]) => words.prepLine({ theyOwe: t, youOwe: y })), ["Prep: nothing open", "Prep: 2 you owe · 1 they owe"]);
+check("whose it is, on a Due row (R12)", dirs.map(([d, n]) => words.dueOwnerLine(d, n)), ["You owe Lee", "Lee owes you", "Sam owes you"]);
+check("when it is due (R12)", dues.map(words.dueWhenLine), ["", "due 24 Nov", "due 5 Jan", "due next sprint", "due 2026-13-01"]);
 check("a time in the meeting", ats.map(words.atLine), ["", "0:00 into the meeting", "14:22 into the meeting", "1:02:05 into the meeting", ""]);
 
 // A real page and list, as the server builds them.
@@ -67,6 +72,7 @@ k.setMyTeam(lee.id, true);
 const NOW = new Date("2026-11-26T15:00:00Z");
 const person = readPerson(lee.id, NOW);
 const list = listPeople(NOW);
+const due = listDue(NOW);
 
 const swiftc = (() => {
   try {
@@ -109,6 +115,9 @@ let kinds: [(String, String)] = [${kinds.map(([k, n]) => `(${s(k)}, ${s(n)})`).j
 for k in kinds { print(PeopleWords.forTodayLabel(k.0, name: k.1)) }
 let preps: [(Int, Int)] = [${preps.map(([y, t]) => `(${y}, ${t})`).join(", ")}]
 for p in preps { print(PeopleWords.prepLine(youOwe: p.0, theyOwe: p.1)) }
+for d in dirs { print(PeopleWords.dueOwnerLine(d.0, name: d.1)) }
+let dues: [String?] = [${dues.map((v) => (v === null ? "nil" : s(v))).join(", ")}]
+for d in dues { print(PeopleWords.dueWhenLine(d)) }
 print("--")
 let dir = URL(fileURLWithPath: CommandLine.arguments[1])
 do {
@@ -116,12 +125,15 @@ do {
   print("\\(p.name) \\(p.onTeam) \\(p.open.count) \\(p.open.first?.direction ?? "") \\(p.open.first?.late ?? false) \\(p.open.first?.moment?.atMs ?? -1) \\(PeopleWords.oneToOneLine(p.daysSince))")
   let rows = try JSONDecoder().decode([PersonRow].self, from: Data(contentsOf: dir.appendingPathComponent("list.json")))
   print(rows.map { "\\($0.name):\\($0.youOwe)/\\($0.theyOwe)" }.joined(separator: ","))
+  let due = try JSONDecoder().decode(DueGroups.self, from: Data(contentsOf: dir.appendingPathComponent("due.json")))
+  print(due.sections.map { "\\($0.label):\\($0.items.map { $0.personName }.joined(separator: "+"))" }.joined(separator: ","))
 } catch { print("DECODE FAILED: \\(error)") }
 `;
     fs.writeFileSync(path.join(tmp, "People.swift"), section);
     fs.writeFileSync(path.join(tmp, "main.swift"), main);
     fs.writeFileSync(path.join(tmp, "person.json"), JSON.stringify(person));
     fs.writeFileSync(path.join(tmp, "list.json"), JSON.stringify(list));
+    fs.writeFileSync(path.join(tmp, "due.json"), JSON.stringify(due));
     const bin = path.join(tmp, "run");
     const env = { ...process.env, CLANG_MODULE_CACHE_PATH: path.join(tmp, "mc") };
     execFileSync(swiftc.cmd, [...swiftc.args, "-module-cache-path", path.join(tmp, "mc"), path.join(tmp, "People.swift"), path.join(tmp, "main.swift"), "-o", bin], { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -132,6 +144,7 @@ do {
     const d = decoded.split("\n");
     check("a real person decodes", d[0], `Lee Okafor true 1 you-owe true 862000 ${words.oneToOneLine(person.daysSince)}`);
     check("and the list", d[1], list.map((r) => `${r.name}:${r.youOwe}/${r.theyOwe}`).join(","));
+    check("and Due (R12)", d[2], "Late:Lee Okafor,This week:,Later:,No date said:");
   } catch (err) {
     check("the Swift half compiles and runs", String(err?.stderr ?? err?.message ?? err).slice(0, 400), "");
   }

@@ -631,7 +631,12 @@ export type ExtractionStatus = "running" | "done" | "failed";
  * noise with a timestamp, and pushing it at a human would spend the one thing the
  * confirmation queue runs on, which is their willingness to read it.
  */
-export type Verdict = "already-done" | "filed" | "not-a-task" | "queued" | "unanchored" | "unverified";
+/**
+ * `review` (2026-11-27, section 15, R12): passed every check and waits on the meeting's "To-dos found"
+ * list for a person to add it to Tasks (`filed`) or say it is not one (`dismissed`). `queued` is the
+ * older route, an approval in the queue; rows already queued keep it.
+ */
+export type Verdict = "already-done" | "dismissed" | "filed" | "not-a-task" | "queued" | "review" | "unanchored" | "unverified";
 
 export interface Decision {
   quote: null | string;
@@ -758,6 +763,26 @@ export const setWorkItemVerdict = (id: number, verdict: Verdict, note: null | st
   rawDb.prepare("UPDATE meeting_work_items SET verdict = ?, verdict_note = ? WHERE id = ?").run(verdict, note, id);
 };
 
+export const getWorkItem = (id: number): undefined | WorkItemRow =>
+  rawDb.prepare("SELECT * FROM meeting_work_items WHERE id = ?").get(id) as undefined | WorkItemRow;
+
+/** Edit a to-do before it is added: the words as the meeting said them are rarely the task's best title. */
+export const editWorkItem = (id: number, edits: { owner?: null | string; task?: string }): void => {
+  if (edits.task !== undefined) rawDb.prepare("UPDATE meeting_work_items SET task = ? WHERE id = ?").run(edits.task, id);
+  if (edits.owner !== undefined) rawDb.prepare("UPDATE meeting_work_items SET owner = ? WHERE id = ?").run(edits.owner, id);
+};
+
+/** Meetings with to-dos waiting for review, newest first: one card each on Today. */
+export const meetingsWithTodos = (): { count: number; meetingId: number; started: string; title: null | string }[] =>
+  rawDb
+    .prepare(
+      `SELECT m.id AS meetingId, m.title AS title, m.started AS started, COUNT(*) AS count
+         FROM meeting_work_items w JOIN meetings m ON m.id = w.meeting_id
+        WHERE w.verdict = 'review'
+        GROUP BY m.id ORDER BY m.started DESC`,
+    )
+    .all() as unknown as { count: number; meetingId: number; started: string; title: null | string }[];
+
 export const setWorkItemConfirmation = (id: number, confirmationId: number): void => {
   rawDb.prepare("UPDATE meeting_work_items SET confirmation_id = ? WHERE id = ?").run(confirmationId, id);
 };
@@ -770,7 +795,7 @@ export const setWorkItemConfirmation = (id: number, confirmationId: number): voi
 export const workItems = (meetingId: number): WorkItemRow[] =>
   rawDb
     .prepare(
-      "SELECT * FROM meeting_work_items WHERE meeting_id = ? ORDER BY (verdict = 'queued') DESC, start_ms IS NULL, start_ms, id",
+      "SELECT * FROM meeting_work_items WHERE meeting_id = ? ORDER BY (verdict IN ('review', 'queued')) DESC, start_ms IS NULL, start_ms, id",
     )
     .all(meetingId) as unknown as WorkItemRow[];
 

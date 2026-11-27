@@ -757,7 +757,20 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
-    private func workItemsSection(_ items: [MeetingWorkItem]) -> some View {
+    private func workItemsSection(_ all: [MeetingWorkItem]) -> some View {
+        let review = all.filter(\.awaitsReview)
+        let items = all.filter { !$0.awaitsReview }
+        if !review.isEmpty {
+            Section {
+                ForEach(review) { item in
+                    TodoReviewRow(meetingID: meetingID, item: item) { Task { await load() } }
+                }
+            } header: {
+                Text("To-dos found")
+            } footer: {
+                Text("Nothing goes on Tasks until you add it. Fix the words or whose it is first if they are off.")
+            }
+        }
         if !items.isEmpty {
             Section {
                 ForEach(items) { item in
@@ -765,7 +778,7 @@ struct MeetingDetailView: View {
                         HStack(alignment: .firstTextBaseline) {
                             Text(item.task)
                             Spacer()
-                            Text(item.wasFiled ? "added to project tasks" : item.verdict)
+                            Text(item.wasFiled ? "added to tasks" : item.verdict == "dismissed" ? "not a to-do" : item.verdict)
                                 .font(SpineFont.sans(Spine.TypeSize.caption - 1, relativeTo: .caption2))
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(item.wasQueued || item.wasFiled ? Color.green.opacity(0.2)
@@ -786,8 +799,8 @@ struct MeetingDetailView: View {
             } header: {
                 Text("Work items")
             } footer: {
-                Text("“Queued” items are waiting in the AgentSpine thread; “added to project tasks” went straight "
-                     + "onto the project's list. The rest are kept, with their "
+                Text("“Added to tasks” went on your task list; “queued” items, from before the review list, wait "
+                     + "in the AgentSpine thread. The rest are kept, with their "
                      + "reasons, so the false-positive rate stays visible.")
             }
         }
@@ -1202,5 +1215,72 @@ struct MeetingCloseoutView: View {
             await load()
             onSaved()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// One to-do on a meeting's "To-dos found" list (section 15, R12), on iPhone and Mac. The words and
+/// whose it is can be fixed first, because the meeting's phrasing is rarely the task's best title.
+/// "Add to tasks" is the only way a meeting's to-do reaches Tasks; "Not a to-do" keeps the row.
+struct TodoReviewRow: View {
+    let meetingID: Int
+    let item: MeetingWorkItem
+    let onAnswered: () -> Void
+
+    @State private var task: String
+    @State private var owner: String
+    @State private var busy = false
+    @State private var error: String?
+
+    init(meetingID: Int, item: MeetingWorkItem, onAnswered: @escaping () -> Void) {
+        self.meetingID = meetingID
+        self.item = item
+        self.onAnswered = onAnswered
+        _task = State(initialValue: item.task)
+        _owner = State(initialValue: item.owner ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spine.Space.xs) {
+            TextField("To-do", text: $task, axis: .vertical)
+                .disabled(busy)
+            TextField("Whose it is", text: $owner)
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .foregroundStyle(Spine.Palette.textDim)
+                .disabled(busy)
+            if let quote = item.quote {
+                Text("“\(quote)”")
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .italic()
+                    .foregroundStyle(Spine.Palette.textDim)
+            }
+            HStack(spacing: Spine.Space.sm) {
+                Button("Add to tasks") { Task { await answer(add: true) } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(busy || task.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Not a to-do") { Task { await answer(add: false) } }
+                    .buttonStyle(.bordered)
+                    .disabled(busy)
+            }
+            .controlSize(.small)
+            if let error {
+                Text(error)
+                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                    .foregroundStyle(Spine.Palette.attention)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func answer(add: Bool) async {
+        busy = true
+        defer { busy = false }
+        do {
+            let trimmed = owner.trimmingCharacters(in: .whitespaces)
+            _ = try await APIClient.shared.answerWorkItem(meetingID: meetingID, itemID: item.id, add: add, task: task, owner: trimmed.isEmpty ? nil : trimmed)
+            error = nil
+            onAnswered()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 }

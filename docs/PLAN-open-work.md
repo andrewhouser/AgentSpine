@@ -2140,6 +2140,38 @@ leaves the machine stops and writes down what it found.
 - Seen: web in light and dark at desktop and phone width; iPhone simulator in light and dark. The Mac app builds
   but has not been looked at running.
 
+### R12. The menu review: fewer places, one Ask box, drag to reorder, meeting to-dos reviewed (Code; all three clients; built 2026-11-27)
+
+Andrew's review of the menu after R11, proposal approved as written on 2026-11-27.
+- **Menu.** Web pins Ask, Meetings, Tasks, People, Knowledge, Heads-up; More holds Schedules, Files, Study,
+  Clients, Activity, Instagram, Overview; Settings is at the foot and no longer takes a slot. Mac pins Meetings,
+  Tasks, People, Knowledge, Heads-up, Schedules (the threads above are Ask). iPhone's bar is Today, Ask,
+  Meetings, Tasks. Saved orders start again once (`sidebar-nav-order-v3`, `sidebarMenuOrder3`, `tabOrder3`).
+- **Gone from the menu, code kept:** Projects and Memory are tabs in Settings on all three; a project's thread
+  shows "In <project> ›" on web. Check-in is the "From your mail" half of Heads-up, beside "Coming up";
+  Drop zone is Knowledge's "Add files"; Builds is Activity's "Coding runs" (web `TabbedPlace`, Swift
+  `PlacePicker`). Search is inside Ask. Old web addresses (`/checkin`, `/inbox`, `/builds`, `/search`,
+  `/memory`, `/projects`) open where each now lives; the check-in push opens Heads-up's mail half.
+- **Drag to reorder.** The order stays per device (localStorage on web, UserDefaults on Mac and iPhone, as
+  before; nothing on the server). Web: drag in the sidebar and in Settings → Menu (arrows stay for the
+  keyboard). Mac: drag in the sidebar as well as Settings → Sidebar menu; dropping on More unpins. One rule,
+  `placeItem` / `MenuLayout.place`, tested against both in `menu-layout`.
+- **Ask is one box.** Enter asks; as you type, "Said before" lists matching past conversations under it, and
+  starred replies show while it is empty. iPhone's Ask tab has the same search on its thread list; the Mac
+  keeps ⌘K.
+- **People leads with Due.** `GET /api/people/due`: every open commitment from reviewed claims, grouped
+  Late, This week (7 days), Later, No date said, each with whose it is. Words shared and tested in
+  `people-screen`; grouping in `people`.
+- **Meeting to-dos are reviewed before Tasks.** Every work item that passes the checks is now `review` on the
+  meeting's "To-dos found" list (words and owner editable, Add to tasks / Not a to-do), and Today shows one
+  card per meeting with any waiting (`meetingTodos`, not in the badge count). This replaces both older
+  routes: a project meeting's items went straight onto Tasks, and the rest became `memory_save` approvals that
+  saved a memory, not a task. `POST /api/meetings/:id/work-items/:itemId`; test `meeting-tasks`. Already-queued
+  approvals are left as they were. SPEC §15 records the amendment.
+- Not done: nothing has been seen running on a device or against the Mini. A dismiss does not yet ask why, so
+  "stop turning retros into tasks" is not learned from it the way a rejected approval's reason was. Swift has
+  no project link above a project's thread (the iPhone thread list already groups threads under their project).
+
 ### What has been seen working (2026-11-26)
 
 On the Mini, after `update.sh` with `0b82ac3` (R0 to R10, the security fixes, ntfy removed):
@@ -2182,7 +2214,7 @@ start beside R1 because its server half shares nothing with the spine.
     `http-guard`; checked against a live scratch server (apps and the web client pass, the rest get 403).
 
 Yours to decide:
-- The menu after R0: which of today's twelve places stay.
+- ~~The menu after R0: which of today's twelve places stay.~~ Decided 2026-11-27 (R12).
 - R3: whether `.env` is the ceiling for a dial or only its starting value.
 - R7: whether evidence exists at all, and if so its retention. It can be left out and the rest still stands.
 - R7: whether people come from the calendar and meetings as they appear, or only when you add them.

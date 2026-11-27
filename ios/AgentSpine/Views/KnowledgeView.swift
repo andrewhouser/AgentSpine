@@ -447,19 +447,45 @@ struct ClientCommitmentsView: View {
 /// nothing here collects anything about anyone.
 struct PeopleView: View {
     @State private var people: [PersonRow] = []
+    @State private var due = DueGroups.empty
     @State private var loaded = false
     @State private var error: String?
 
+    /// "Due" leads (section 15, R12, Andrew's 2026-11-27 review): what is owed and whose it is
+    /// matters more than who. The people follow, each a tap from their page.
     var body: some View {
         List {
             if let error {
                 ErrorNotice(message: error) { Task { await load() } }
                     .listRowBackground(Color.clear)
             }
+            if loaded && error == nil && due.sections.allSatisfy({ $0.items.isEmpty }) {
+                Section("Due") {
+                    Text("Nothing open either way.").foregroundStyle(Spine.Palette.textDim)
+                }
+            }
+            ForEach(due.sections.filter { !$0.items.isEmpty }, id: \.label) { section in
+                Section("Due · \(section.label)") {
+                    ForEach(section.items) { d in
+                        NavigationLink {
+                            PersonView(personID: d.personId)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(d.text)
+                                Text([PeopleWords.dueOwnerLine(d.direction, name: d.personName), PeopleWords.dueWhenLine(d.due)]
+                                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                                    .foregroundStyle(d.late ? Spine.Palette.attention : Spine.Palette.textDim)
+                            }
+                        }
+                    }
+                }
+            }
             if loaded && people.isEmpty && error == nil {
                 EmptyNotice(symbol: "person.2", title: "No one yet", detail: "People appear here as meetings are reviewed.")
                     .listRowBackground(Color.clear)
             }
+            Section("People") {
             ForEach(people) { p in
                 NavigationLink {
                     PersonView(personID: p.id)
@@ -480,6 +506,7 @@ struct PeopleView: View {
                     }
                 }
             }
+            }
         }
         .navigationTitle("People")
         .spineInlineTitle()
@@ -490,6 +517,8 @@ struct PeopleView: View {
     private func load() async {
         do {
             people = try await APIClient.shared.people()
+            // An older server has no Due list; the people still show.
+            due = (try? await APIClient.shared.peopleDue()) ?? .empty
             error = nil
         } catch {
             self.error = error.localizedDescription

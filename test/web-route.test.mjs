@@ -9,7 +9,10 @@
 let pathname = "/";
 const pushed = [];
 globalThis.window = {
-  history: { pushState: (_s, _t, p) => (pathname = p, pushed.push(p)) },
+  history: {
+    pushState: (_s, _t, p) => (pathname = p, pushed.push(p)),
+    replaceState: (_s, _t, p) => (pathname = p.split("?")[0]),
+  },
   location: { get pathname() { return pathname; } },
 };
 const { readRoute, writeRoute } = await import("../web/src/lib/route.ts");
@@ -32,6 +35,15 @@ check("/settings is still settings", read("/settings"), { conversationId: null, 
 check("/ is a new chat", read("/"), { conversationId: null, projectId: null, runId: null, view: "chat" });
 check("a run id that is not a number falls back to a new chat", read("/activity/abc").view, "chat");
 check("a trailing path on a run is not mistaken for the run", read("/activity/12/extra").view, "chat");
+
+
+console.log("\nPLACES THAT LEFT THE MENU (2026-11-27)");
+check("/checkin opens Heads-up", read("/checkin").view, "headsup");
+check("/inbox opens Knowledge", read("/inbox").view, "knowledge");
+check("/builds opens Activity", read("/builds").view, "activity");
+check("/search opens Ask", read("/search").view, "ask");
+check("/memory opens Settings", read("/memory").view, "settings");
+check("/projects opens Settings", read("/projects").view, "settings");
 
 console.log("\nWRITING A ROUTE");
 const writes = (route) => ((pathname = "/__start__"), (pushed.length = 0), writeRoute(route), pushed[0]);

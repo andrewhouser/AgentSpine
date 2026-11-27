@@ -94,3 +94,38 @@ export const forTodayLabel = (kind: ForTodayItem["kind"], name: string): string 
 /** A 1:1 on the line: "Prep: 2 you owe · 1 they owe", or "Prep: nothing open". */
 export const prepLine = (prep: { theyOwe: number; youOwe: number }): string =>
   prep.youOwe + prep.theyOwe === 0 ? "Prep: nothing open" : `Prep: ${prep.youOwe} you owe · ${prep.theyOwe} they owe`;
+
+/** One row of "Due" (section 15, R12): an open commitment with whose it is. */
+export interface DueItem extends PersonOpenItem {
+  personId: number;
+  personName: string;
+}
+
+export interface DueGroups {
+  late: DueItem[];
+  later: DueItem[];
+  soon: DueItem[];
+  undated: DueItem[];
+}
+
+/** The groups in the order the screen shows them, with their headings. */
+export const DUE_SECTIONS: { key: keyof DueGroups; label: string }[] = [
+  { key: "late", label: "Late" },
+  { key: "soon", label: "This week" },
+  { key: "later", label: "Later" },
+  { key: "undated", label: "No date said" },
+];
+
+/** Whose it is: "You owe Lee" or "Lee owes you". */
+export const dueOwnerLine = (direction: PersonOpenItem["direction"], name: string): string =>
+  direction === "you-owe" ? `You owe ${first(name)}` : `${first(name)} owes you`;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "due 24 Nov" from the claim's date as written; a date it cannot read is shown as said. */
+export const dueWhenLine = (due: null | string): string => {
+  if (!due) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(due);
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `due ${Number(m[3])} ${month}` : `due ${due}`;
+};

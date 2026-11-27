@@ -6,6 +6,8 @@ import styles from "./AskBar.module.css";
 interface AskBarProps {
   /** Start the turn. The caller owns the scope (a project id, or none); this only ever hands over what you typed. */
   onAsk: (text: string) => Promise<void>;
+  /** Every keystroke, for the Ask place, which finds what was said before as you type (section 15, R12). */
+  onTextChange?: (text: string) => void;
   placeholder: string;
   /** Shown as a chip when the question will run inside something, such as a project's name. */
   scopeLabel?: string;
@@ -17,7 +19,7 @@ interface AskBarProps {
  * you typed, and nothing on the screen around it (a calendar title, a mail subject) is copied
  * in: the text sent is exactly the text in the box.
  */
-export const AskBar = ({ onAsk, placeholder, scopeLabel }: AskBarProps) => {
+export const AskBar = ({ onAsk, onTextChange, placeholder, scopeLabel }: AskBarProps) => {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +32,7 @@ export const AskBar = ({ onAsk, placeholder, scopeLabel }: AskBarProps) => {
     try {
       await onAsk(t);
       setText("");
+      onTextChange?.("");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -50,7 +53,10 @@ export const AskBar = ({ onAsk, placeholder, scopeLabel }: AskBarProps) => {
         aria-label="Ask"
         className={styles.input}
         disabled={busy}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          onTextChange?.(e.target.value);
+        }}
         placeholder={placeholder}
         value={text}
       />

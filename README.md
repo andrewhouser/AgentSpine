@@ -163,10 +163,26 @@ calls Google to draw that: Heads-up's morning pass and the check-in keep a copy 
 (`src/calendar-cache.ts`), and the line says when that copy is from. `GET /api/spine` is Today plus
 that list (`src/day-line.ts`). At the foot of Today, and at the top of a project's screen, an
 **ask bar** starts a new conversation with exactly what you typed; on a project it belongs to that
-project, so it stays on the local model. The menu is the places: **Ask**, **Meetings**, **People**,
-**Projects**, **Memory** and **Settings**, with the older screens (Heads-up, Check-in, Tasks,
-Schedules and the rest) under More. On the iPhone the bar is Today, Ask (the threads), Meetings and
-People.
+project, so it stays on the local model.
+
+**The menu** (reviewed 2026-11-27): **Ask**, **Meetings**, **Tasks**, **People**, **Knowledge** and
+**Heads-up**, then Schedules, Files, Study, Clients, Activity and the rest under More, with Settings at
+the foot. On the Mac the threads above the menu are Ask, so Schedules takes the sixth slot; on the
+iPhone the bar is Today, Ask, Meetings and Tasks. **Drag** an item in the sidebar (web and Mac) or in
+Settings → Menu / Sidebar menu / Tab bar to reorder it; the first six are pinned and the rest fold
+under More. The order is kept on each device, not on the server. Some screens moved rather than went:
+**Projects** and **Memory** are tabs in Settings (a project's thread links to its page on web);
+**Check-in** is Heads-up's "From your mail", beside "Coming up"; the **Drop zone** is Knowledge's
+"Add files"; **Builds** is Activity's "Coding runs"; and **Search** is part of Ask.
+
+**Ask is one box.** Press Enter to start a conversation. As you type, matching past conversations
+appear under it as "Said before", so a question already answered is found before it is asked again;
+with the box empty, your starred replies show. On the iPhone the Ask tab's search field does the same
+over the thread list; on the Mac, ⌘K.
+
+**People leads with what is due.** Every open commitment from meetings you reviewed, grouped Late, This
+week, Later and No date said, each with whose it is ("You owe Lee", "Lee owes you"); the people follow,
+each a tap from their page (`GET /api/people/due`).
 
 **It looks the same on all three, light or dark** (the redesign of 2026-11-26). The menu is a deep
 green rail with the spine mark, the places with icons, your recent threads, and Settings and the
@@ -214,8 +230,8 @@ the microphone button, "This iPhone"), and keeps recording with the screen locke
 
 **Deleting a meeting** (web: "Delete meeting" on the row; iPhone: swipe, or the ⋯ menu; Mac: right-click
 or the ⋯ menu) removes its transcript, summary, chat, tags, kept audio and the copy filed into its
-project, and rejects any of its work items still waiting in Approvals. Tasks it already added to a
-project stay. It is refused while the meeting is recording or being processed
+project, and rejects any of its older work items still waiting in Approvals. Tasks already added from
+it stay. It is refused while the meeting is recording or being processed
 (`DELETE /api/meetings/:id`).
 
 The picker only appears when both are actually available. Dictation uses the **accurate**
@@ -519,7 +535,7 @@ A project is a workspace: standing instructions, a set of indexed documents, its
 conversations, and optionally a narrower policy.
 
 ```
-Sidebar → Projects → +
+Settings → Projects → New project
 ```
 
 **Documents come from paths already on disk**, indexed only if they sit inside
@@ -668,8 +684,8 @@ compare against: if a transcript looks thin, compare it with the original.
 ### What the transcript becomes
 
 When the final pass finishes, the meeting is extracted from: a summary, topics and decisions,
-which save automatically, and candidate work items, which **are asked about in the AgentSpine
-thread instead**. That
+which save automatically, and candidate to-dos, which **wait on the meeting's "To-dos found" list
+for you instead**. That
 split is a measurement, not caution. On a real recording, one extraction pass produced **5
 work items and all 5 were false positives**, every one stamped `confidence: high`. The quotes
 were real; each described something already *finished* — "we **came up with** guidelines", "we
@@ -682,18 +698,20 @@ Every candidate passes three gates, cheapest first:
 |---|---|---|
 | **Anchoring** — is this quote actually in the transcript? | free | a quote the model wrote itself |
 | **Strict second pass** — future commitment, or already done? | ~2.3s each | past achievements phrased as tasks |
-| **You** | Approvals | everything else |
+| **You** | "To-dos found" on the meeting | everything else |
 
 Measured after this was built: on the conference talk (correct answer ≈ zero work items) the
 second pass rejected **4 of 4**, citing the deciding words each time. On a sprint review with
 two genuine commitments and three accomplishments, both commitments reached the queue with
 their owners and the accomplishments were never proposed. A half-hour meeting takes ~30-60s.
 
-Approving a work item runs `memory_save` — that is the *only* way one reaches long-term
-memory. Rejecting it with a reason saves the reason as a preference, so "stop turning our
-retrospectives into tasks" is something the assistant carries rather than something you say
-again next week. Rejected candidates stay visible on the meeting with the verifier's reason,
-because a UI that hides its own error rate is asking for trust it has not earned.
+**Nothing from a meeting goes on Tasks until you add it** (since 2026-11-27). Each to-do that passes
+the checks waits on the meeting under "To-dos found": fix the words or whose it is, then **Add to
+tasks** (under the meeting's project, if it has one) or **Not a to-do**. Today shows one card for each
+meeting with to-dos waiting. Before, a project meeting's items went straight onto its task list and the
+rest became approvals, which filled Tasks with exactly the false positives measured above. To-dos never
+reach long-term memory. Rejected candidates, and the ones you turned down, stay visible on the meeting
+with their reasons, because a UI that hides its own error rate is asking for trust it has not earned.
 
 Extraction is **local only** by construction: every call is `sensitivity: "private"`, which
 `resolveTier` refuses to resolve to the cloud tier whatever `CLOUD_ENABLED` says. Point
@@ -1438,8 +1456,8 @@ restart. In Watch, the dial lists what the feature would have done, from the sam
 checkin log` reads, with a thumbs-down per row and how many you agreed with. The choices live in
 `modes.json` at the root, which no tool may write (`src/modes.ts`).
 
-**Check-in** in the sidebar (web and Mac) and the tabs (iPhone, under More) is the same preview as
-a list: what is waiting by kind, the notification a check now would send or why it would not, a
+**Heads-up → From your mail** (web, Mac and iPhone; it was its own Check-in screen until 2026-11-27)
+is the same preview as a list: what is waiting by kind, the notification a check now would send or why it would not, a
 **Check now** button, and the past checks. Opening it reads and records nothing. A push opens it.
 It always shows subjects, since that page is yours and the push setting is about what leaves the
 machine. The numbers are in
@@ -1466,10 +1484,10 @@ lists in `src/checkin/buckets.ts`; anything else is thrown away and the mail sho
 npm run checkin sort        # preview: reads mail, asks the model, stores nothing. Works with the mode off.
 # INBOX_SORT_MODE=log       labels on the check-in's interval, records them, shows none
 npm run checkin sort log    # what it has recorded: read a week of this first
-# INBOX_SORT_MODE=on        the labels show on the Check-in screens, urgent first
+# INBOX_SORT_MODE=on        the labels show under Heads-up → From your mail, urgent first
 ```
 
-With the mode `on`, each mail on the Check-in screen (web and Mac: a button; iPhone: swipe the
+With the mode `on`, each mail under Heads-up → From your mail (web and Mac: a button; iPhone: swipe the
 row) has **Draft a reply**. Code picks the mail, addresses the reply to its sender and nobody
 else, sets the subject and looks up your writing style; the local model writes only the body,
 from the same sender, subject and preview, leaving a `[placeholder]` where it lacks a fact. The
@@ -1947,7 +1965,7 @@ queued as a card (a control file's changed copy is kept under `data/put-back/`).
 
 ### Reviewing it — the Builds page
 
-`Builds` in the sidebar, and a Builds tab on the phone. One row per run that ran a command
+**Activity → Coding runs** on all three (it was its own Builds page until 2026-11-27). One row per run that ran a command
 or touched git: the repo, the verdict, the branch, every command with what it returned, and
 a **Diff** button.
 
@@ -2191,8 +2209,8 @@ red, since a lookup that misses before a search that finds it is the loop workin
 heuristic: a denial, an error with nothing after it, and any error in a turn that itself failed are
 never softened. The rule is in `web/src/lib/recovery.ts` and `ios/AgentSpine/Core/TurnHelpers.swift`.
 
-**Memory and search** — `find_past_output` searches every old conversation; the Search page
-does too; replies can be starred; **Context used** under a reply shows which memories,
+**Memory and search** — `find_past_output` searches every old conversation; Ask's "Said
+before" does too; replies can be starred; **Context used** under a reply shows which memories,
 documents and earlier turns it had. Idle threads are summarised into long-term memory by
 default (`CONVERSATION_SUMMARY_ENABLED=false` to stop).
 
@@ -2200,10 +2218,10 @@ Both searches use one full-text index (SQLite FTS5, no model call) over what eac
 what it answered and what its tools returned, so a thread can be found by something it only read.
 Every word must match, as a prefix, so the box searches as you type. A match in the question ranks
 above one in the answer, and that above one in tool text; a thread whose title matches comes first;
-a scheduled job is found too but ranked lower, because it repeats itself daily (the Search page
-shows threads only; `GET /api/search?scope=all` adds scheduled jobs). Indexed text is capped (2,000
+a scheduled job is found too but ranked lower, because it repeats itself daily (Ask shows threads
+only; `GET /api/search?scope=all` adds scheduled jobs). Indexed text is capped (2,000
 characters a tool result) and follows retention: a pruned audit row, a pruned run and a deleted
-thread each leave the index. The Search page is you reading your own ledger and shows everything.
+thread each leave the index. Ask's search is you reading your own ledger and shows everything.
 The agent's tool is stricter: a run that touched private material (a project, mail, calendar,
 files, meetings) is recorded as private, and its matches are shown only to a run that is already
 pinned to the local model. Any other run is told how many matches were held back and nothing else.

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { useCallback, useEffect, useState } from "react";
 
 import type { ThemeChoice } from "../../lib/preferences.ts";
@@ -57,6 +59,7 @@ const TABS = [
   // The dials come first (section 15, R0 and R3): what it may do is the setting that matters most.
   { id: "dials", label: "What it may do" },
   { id: "general", label: "General" },
+  { id: "projects", label: "Projects" },
   { id: "memory", label: "Memory" },
   { id: "headsup", label: "Heads-up" },
   { id: "menu", label: "Menu" },
@@ -71,18 +74,18 @@ const tabFromUrl = (): TabId => {
 };
 
 /**
- * `only` shows one tab as a place of its own, with no tab strip: Memory is a menu place
- * (section 15, R1) and is the same screen as Settings → Memory.
+ * Projects and Memory were menu places until the 2026-11-27 review (section 15, R12): projects are made
+ * and named rarely, and Memory is opened to find out why it believes something. Both are tabs here now.
+ * `projects` is the list, drawn by AppShell, which owns the project list and the naming dialog.
  */
-export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id: number) => void; }) => {
+export const SettingsView = ({ onOpenRun, projects }: { onOpenRun: (id: number) => void; projects: ReactNode }) => {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [policy, setPolicy] = useState<null | Record<string, unknown>>(null);
   const [query, setQuery] = useState("");
   // Section 15, R6: show only what recall has not used in 90 days, and the row being fixed.
   const [unusedOnly, setUnusedOnly] = useState(false);
   const [fixing, setFixing] = useState<{ id: number; text: string } | null>(null);
-  const [picked, setTab] = useState<TabId>(tabFromUrl);
-  const tab = only ?? picked;
+  const [tab, setTab] = useState<TabId>(tabFromUrl);
 
   const pickTab = (t: TabId): void => {
     setTab(t);
@@ -190,9 +193,8 @@ export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id
 
   return (
     <div className={styles.page}>
-      <PageHeader title={only ? (TABS.find((t) => t.id === only)?.label ?? "Settings") : "Settings"} />
+      <PageHeader title="Settings" />
 
-      {!only && (
       <div aria-label="Settings sections" className={styles.tabs} role="tablist">
         {TABS.map((t) => (
           <button
@@ -207,9 +209,9 @@ export const SettingsView = ({ only, onOpenRun }: { only?: TabId; onOpenRun: (id
           </button>
         ))}
       </div>
-      )}
 
       <div className={styles.panel} role="tabpanel">
+      {tab === "projects" && projects}
       {tab === "general" && (
         <>
       <section>

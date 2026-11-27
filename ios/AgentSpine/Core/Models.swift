@@ -1823,8 +1823,16 @@ struct MeetingWorkItem: Codable, Identifiable, Hashable {
     }
 
     var wasQueued: Bool { verdict == "queued" }
-    /// Went straight onto a project's task list instead of being asked about in a thread.
+    /// Added to Tasks: by you from "To-dos found", or, before 2026-11-27, straight onto a project's list.
     var wasFiled: Bool { verdict == "filed" }
+    /// Waiting on the meeting's "To-dos found" list for you to add it or turn it down (section 15, R12).
+    var awaitsReview: Bool { verdict == "review" }
+}
+
+/// What answering one to-do returns: the task it made, if any, and the meeting's list as it now is.
+struct WorkItemAnswer: Codable {
+    let taskId: Int?
+    let workItems: [MeetingWorkItem]
 }
 
 /// A person in a finished meeting, as detected from the audio.
@@ -2481,6 +2489,11 @@ enum TodayWords {
         later > 0 ? "\(count(later, "item")) put off until the morning." : ""
     }
 
+    /// A meeting's card on Today (section 15, R12): "2 to-dos found", to review before they go on Tasks.
+    static func todosLine(_ n: Int) -> String {
+        "\(count(n, "to-do")) found"
+    }
+
     /// A schedule's last skipped run (section 13, H6). `slot` is the time the run was due, already
     /// formatted by the client, or empty. The reason is the server's sentence.
     static func scheduleSkipLine(slot: String, reason: String?) -> String {
@@ -2494,6 +2507,16 @@ enum TodayWords {
 
 /// Everything `GET /api/today` returns. Apart from `TodayWords` above because it holds
 /// heads-ups, whose model lives with the rest of Heads-up.
+/// One meeting with to-dos waiting for review: a card on Today.
+struct TodayMeetingTodos: Codable, Hashable, Identifiable {
+    let count: Int
+    let meetingId: Int
+    let started: String
+    let title: String?
+
+    var id: Int { meetingId }
+}
+
 struct TodayScreen: Codable {
     let approvals: [TodayApproval]
     let brief: TodayBrief
@@ -2511,6 +2534,8 @@ struct TodayScreen: Codable {
     /// Seen answers, which are Today alone, so the store keeps the last list it had.
     let ahead: [SpineAhead]?
     let calendarAsOf: String?
+    /// Meetings whose to-dos wait on "To-dos found" (section 15, R12). Absent from an older server.
+    let meetingTodos: [TodayMeetingTodos]?
     /// A meeting recording now, which the line opens (section 15, R4).
     let live: SpineLive?
     /// Reversible actions from the last few minutes that can be taken back (section 15, R10).
@@ -2736,6 +2761,34 @@ struct PersonOpenItem: Codable, Hashable, Identifiable {
     var id: Int { claimId }
 }
 
+/// One row of "Due" (section 15, R12): an open commitment, with whose it is.
+struct DueItem: Codable, Hashable, Identifiable {
+    let claimId: Int
+    let direction: String
+    let due: String?
+    let late: Bool
+    let personId: Int
+    let personName: String
+    let text: String
+
+    var id: Int { claimId }
+}
+
+/// `GET /api/people/due`: late, this week, later, and no date said.
+struct DueGroups: Codable, Hashable {
+    let late: [DueItem]
+    let soon: [DueItem]
+    let later: [DueItem]
+    let undated: [DueItem]
+
+    static let empty = DueGroups(late: [], soon: [], later: [], undated: [])
+
+    /// In the order the screen shows them, with their headings.
+    var sections: [(label: String, items: [DueItem])] {
+        [("Late", late), ("This week", soon), ("Later", later), ("No date said", undated)]
+    }
+}
+
 struct PersonHeardItem: Codable, Hashable, Identifiable {
     let claimId: Int
     let kind: String
@@ -2806,6 +2859,23 @@ enum PeopleWords {
 
     static func openCountLine(youOwe: Int, theyOwe: Int) -> String {
         youOwe + theyOwe == 0 ? "Nothing open" : "You owe \(youOwe) · they owe \(theyOwe)"
+    }
+
+    /// Whose it is, on a "Due" row (section 15, R12): "You owe Lee" or "Lee owes you".
+    static func dueOwnerLine(_ direction: String, name: String) -> String {
+        direction == "you-owe" ? "You owe \(first(name))" : "\(first(name)) owes you"
+    }
+
+    private static let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    /// "due 24 Nov" from the claim's date as written; a date it cannot read is shown as said.
+    static func dueWhenLine(_ due: String?) -> String {
+        guard let due, !due.isEmpty else { return "" }
+        let parts = due.prefix(10).split(separator: "-")
+        if parts.count == 3, parts[0].count == 4, let mo = Int(parts[1]), let day = Int(parts[2]), (1...12).contains(mo), parts[1].count == 2, parts[2].count == 2 {
+            return "due \(day) \(months[mo - 1])"
+        }
+        return "due \(due)"
     }
 
     static func atLine(_ atMs: Int?) -> String {

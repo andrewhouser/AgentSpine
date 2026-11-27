@@ -16,6 +16,11 @@ struct ConversationsView: View {
     /// Projects folded shut, as comma-separated ids. Kept in defaults so the list opens the
     /// way it was left; a `Set<Int>` is not an `@AppStorage` type, hence the string.
     @AppStorage("conversations-folded-projects") private var foldedRaw = ""
+    /// The Ask tab's own search (2026-11-27, section 15, R12): Search was a tab of its own, and on
+    /// the web two boxes on one page could not be told apart. Matches show above the threads under
+    /// "Said before"; the pencil still starts a new thread.
+    @State private var query = ""
+    @State private var hits: [SearchHit] = []
 
     /// Rename and delete share one `.alert`, for the same reason the schedules screen shares
     /// one `.sheet`: two presentation modifiers of the same kind on one view silently do not
@@ -215,6 +220,28 @@ struct ConversationsView: View {
 
     var body: some View {
         List {
+            if query.trimmingCharacters(in: .whitespaces).count >= 2 {
+                Section("Said before") {
+                    if hits.isEmpty {
+                        Text("Nothing said before matches these words.")
+                            .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
+                            .foregroundStyle(Spine.Palette.textDim)
+                    }
+                    ForEach(hits) { hit in
+                        Button {
+                            if let id = hit.conversationId { openThread = id }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(hit.conversationTitle ?? "Untitled conversation").font(SpineFont.sans(Spine.TypeSize.body, relativeTo: .body).weight(.semibold))
+                                Text("asked: \(hit.task)").font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption)).foregroundStyle(Spine.Palette.textFaint).lineLimit(1)
+                                Text(hit.snippet).font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote)).foregroundStyle(Spine.Palette.textDim).lineLimit(3)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             if let error = state.loadError {
                 Section {
                     ErrorNotice(message: error) { Task { await state.refresh() } }
@@ -259,6 +286,16 @@ struct ConversationsView: View {
         }
         .listStyle(.insetGrouped)
         .navigationTitle("AgentSpine")
+        .searchable(text: $query, prompt: "Find what was said before")
+        // `.task(id:)` cancels the previous search when the text changes, and the sleep makes that a
+        // debounce: only a pause in typing reaches the server.
+        .task(id: query) {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            let q = query.trimmingCharacters(in: .whitespaces)
+            guard q.count >= 2 else { hits = []; return }
+            hits = (try? await APIClient.shared.search(q)) ?? []
+        }
         .refreshable { await state.refresh() }
         // Keep the dots current while the list is on screen: a reply finishing, a question
         // being asked. Cancelled when the list goes away, so it costs nothing elsewhere.

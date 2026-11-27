@@ -20,3 +20,11 @@
   margin: 4px 0 0;
   max-width: 46rem;
 }
+
+.compact {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}

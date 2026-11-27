@@ -23,6 +23,7 @@
  * `readToday` only fetches, from stores: mail too, which the inbox pass records, so opening
  * Today never waits on Gmail.
  */
+import { meetingsWithTodos } from "./meetings/store.ts";
 import { todayMail } from "./checkin/buckets.ts";
 import { sourcePrefs } from "./checkin/store.ts";
 import { CONFIRM_EXPIRE_AFTER_MIN } from "./config.ts";
@@ -118,6 +119,11 @@ export interface Today {
   /** How many items "Later" is hiding right now. */
   later: number;
   mail: TodayMail[];
+  /**
+   * Meetings whose to-dos wait on their "To-dos found" list (section 15, R12): one card each. Not in
+   * `count`, which is what interrupts you; a meeting's to-dos keep until you look.
+   */
+  meetingTodos?: { count: number; meetingId: number; started: string; title: null | string }[];
   now: string;
   since: TodaySince[];
   sinceFrom: string;
@@ -340,7 +346,7 @@ export const markLooked = (now: Date = new Date()): void => store.kvSet(LOOKED_K
 
 export const readToday = (now: Date = new Date()): Today => {
   const from = sinceStart(store.kvGet(LOOKED_KEY)?.value ?? null, now);
-  return assembleToday(
+  const today = assembleToday(
     {
       approvals: store.listConfirmations("pending"),
       expireAfterMin: CONFIRM_EXPIRE_AFTER_MIN,
@@ -368,6 +374,7 @@ export const readToday = (now: Date = new Date()): Today => {
     },
     now,
   );
+  return { ...today, meetingTodos: meetingsWithTodos() };
 };
 
 /**

@@ -143,6 +143,8 @@ struct SettingsView: View {
                 NavigationLink("Styles") { StylesView() }
                 NavigationLink("Agents") { AgentsView() }
                 NavigationLink("Heads-up") { HeadsupPrefsView() }
+                // Projects and Memory were tabs until the 2026-11-27 menu review (section 15, R12).
+                NavigationLink("Projects") { ProjectsView() }
                 NavigationLink("Memory") { MemoryView() }
                 NavigationLink("Weekly review") { WeeklyReviewView() }
                 NavigationLink("Cloud usage") { CloudUsageView() }

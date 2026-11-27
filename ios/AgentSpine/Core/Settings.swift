@@ -18,7 +18,8 @@ final class Settings {
         static let token = "dashboardToken"
         // "2" since the tabs became the spine's places (section 15, R1): an order saved for the old
         // tabs would keep Tasks and Study in the bar and the new places under More, so it starts again once.
-        static let tabOrder = "tabOrder2"
+        // "3" since the 2026-11-27 menu review (section 15, R12) took six tabs away.
+        static let tabOrder = "tabOrder3"
     }
 
     /// e.g. `http://mini.tail1234.ts.net:8787`, or `https://mini.tail1234.ts.net` behind

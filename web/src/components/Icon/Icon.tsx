@@ -5,6 +5,7 @@
 const PATHS: Record<string, string> = {
   arrow: "M5 12h14M13 6l6 6-6 6",
   ask: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.4A8 8 0 1 1 21 12z",
+  bell: "M6 16v-5a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 21h4",
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   check: "M5 12.5l4.5 4.5L19 7.5",
   doc: "M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5",

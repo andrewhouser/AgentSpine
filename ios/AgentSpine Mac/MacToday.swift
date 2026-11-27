@@ -19,6 +19,8 @@ struct MacTodayView: View {
     @State private var wide = false
     /// A 1:1 on the line opens that person in a sheet here (section 15, R9).
     @State private var person: Int?
+    /// A meeting opened from its "To-dos found" card (section 15, R12), in a sheet like a person.
+    @State private var meeting: Int?
 
     private var store: TodayStore { TodayStore.shared }
 
@@ -79,6 +81,22 @@ struct MacTodayView: View {
                 .padding()
             }
             .frame(minWidth: 560, minHeight: 520)
+            .environment(state)
+        }
+        .sheet(item: Binding(get: { meeting.map { PersonSheetID(id: $0) } }, set: { meeting = $0?.id })) { m in
+            VStack(spacing: 0) {
+                NavigationStack { MeetingDetailView(meetingID: m.id) }
+                HStack {
+                    Spacer()
+                    Button("Close") {
+                        meeting = nil
+                        Task { await store.load() }
+                    }
+                    .keyboardShortcut(.cancelAction)
+                }
+                .padding()
+            }
+            .frame(minWidth: 620, minHeight: 600)
             .environment(state)
         }
         .sheet(item: $reviewing) { approval in
@@ -144,6 +162,8 @@ struct MacTodayView: View {
             if wide { chosen = approval.id } else { reviewing = approval }
         } else if case .person(let id) = target {
             person = id
+        } else if case .meeting(let id) = target {
+            meeting = id
         } else {
             open(target)
         }

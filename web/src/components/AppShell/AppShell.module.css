@@ -143,3 +143,21 @@
     transition: none;
   }
 }
+
+/* "In <project> ›" above a project's thread: the way to the project's page now it is not in the menu. */
+.projectLink {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  margin: 12px 28px 0;
+  padding: 2px 0;
+}
+
+.projectLink:hover {
+  color: var(--text);
+  text-decoration: underline;
+}

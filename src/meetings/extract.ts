@@ -472,34 +472,18 @@ export const extractMeeting = async (meetingId: number): Promise<ExtractionResul
         continue;
       }
 
-      // A project meeting's commitments belong on that project's task list, not in the
-      // approval box. They have already passed the anchor and strict checks, a task is
-      // reversible (delete it), and the project list is where they will be looked for.
-      if (meeting.project_id) {
-        const taskId = fileAsTask(meeting, candidate, startMs, meeting.project_id);
-        store.addWorkItem(meetingId, {
-          owner: candidate.owner,
-          quote: candidate.quote,
-          startMs,
-          task: candidate.task,
-          verdict: "filed",
-          verdictNote: `added to the project's tasks (#${taskId})`,
-        });
-        queued++;
-        continue;
-      }
-
-      // Gate three: a human. Approving runs `memory_save`, which is the only way one of
-      // these reaches long-term memory.
-      const workItemId = store.addWorkItem(meetingId, {
+      // Gate three: a person, on the meeting's "To-dos found" list (2026-11-27, section 15, R12).
+      // Until then a project meeting's items went straight onto its task list and the rest became
+      // `memory_save` approvals; Andrew found Tasks flooded, and approving an item saved a memory, not
+      // a task. Now nothing reaches Tasks until someone adds it, and nothing reaches memory at all.
+      store.addWorkItem(meetingId, {
         owner: candidate.owner,
         quote: candidate.quote,
         startMs,
         task: candidate.task,
-        verdict: "queued",
+        verdict: "review",
         verdictNote: ruling.why || null,
       });
-      store.setWorkItemConfirmation(workItemId, queueWorkItem(meeting, candidate, startMs));
       queued++;
     }
 
@@ -507,7 +491,7 @@ export const extractMeeting = async (meetingId: number): Promise<ExtractionResul
     if (windows.length > 1) notes.push(`${windows.length} windows`);
     if (usedLivePass) notes.push("from the rough live transcript — no final pass exists");
     if (checked >= MEETING_EXTRACT_MAX_ITEMS) notes.push(`stopped checking at ${MEETING_EXTRACT_MAX_ITEMS} candidates`);
-    notes.push(`${candidates.length} candidate work items, ${queued} queued`);
+    notes.push(`${candidates.length} candidate work items, ${queued} to review`);
 
     store.saveExtraction(meetingId, {
       decisions,
@@ -528,32 +512,7 @@ export const extractMeeting = async (meetingId: number): Promise<ExtractionResul
   }
 };
 
-/**
- * Put one surviving work item in front of a human.
- *
- * The confirmation carries a `memory_save` call, so approving it is what writes the item to
- * long-term memory and rejecting it writes nothing. Rejecting *with a reason* additionally
- * saves that reason as a preference (see confirmations.ts), which is how "stop turning our
- * retrospectives into tasks" becomes something the assistant carries rather than something
- * you have to say again next week.
- */
-const queueWorkItem = (meeting: store.MeetingRow, item: Candidate, startMs: number): number => {
-  const where = meeting.title ?? `meeting ${meeting.id}`;
-  const day = meeting.started.slice(0, 10);
-  const owner = item.owner ? ` Owner: ${item.owner}.` : "";
-  return memory.queueConfirmation(
-    {
-      args: {
-        kind: "task",
-        text: `Work item from "${where}" on ${day}: ${item.task}.${owner} Said at ${clock(startMs)}: "${item.quote}"`,
-      },
-      tool: "memory_save",
-    },
-    `Work item from "${where}": ${item.task}${item.owner ? ` (${item.owner})` : ""}`,
-  );
-};
-
-const fileAsTask = (meeting: store.MeetingRow, item: Candidate, startMs: number, projectId: number): number => {
+const fileAsTask = (meeting: store.MeetingRow, item: Candidate, startMs: number, projectId: null | number): number => {
   const where = meeting.title ?? `meeting ${meeting.id}`;
   const notes = `From "${where}" on ${meeting.started.slice(0, 10)}, said at ${clock(startMs)}: "${item.quote}"`;
   return addTask({
@@ -561,6 +520,40 @@ const fileAsTask = (meeting: store.MeetingRow, item: Candidate, startMs: number,
     projectId,
     title: item.owner ? `${item.task} (${item.owner})` : item.task,
   });
+};
+
+/**
+ * A person's answer on a meeting's "To-dos found" list (section 15, R12). `add` puts it on Tasks, under
+ * the meeting's project if it has one by then, with the words as edited; `dismiss` keeps the row, so
+ * the meeting still shows what was found and turned down. Only an item waiting for review can be
+ * answered, so a double click cannot add it twice. Returns the task id for `add`.
+ */
+export const answerWorkItem = (
+  meetingId: number,
+  itemId: number,
+  action: "add" | "dismiss",
+  edits: { owner?: null | string; task?: string } = {},
+): { error: string } | { taskId: null | number } => {
+  const meeting = store.getMeeting(meetingId);
+  const item = store.getWorkItem(itemId);
+  if (!meeting || !item || item.meeting_id !== meetingId) return { error: "no such to-do" };
+  if (item.verdict !== "review") return { error: "already answered" };
+  const task = edits.task?.trim();
+  if (edits.task !== undefined && !task) return { error: "a to-do needs words" };
+  const owner = edits.owner === undefined ? undefined : edits.owner?.trim() || null;
+  store.editWorkItem(itemId, { owner, task });
+  if (action === "dismiss") {
+    store.setWorkItemVerdict(itemId, "dismissed", null);
+    return { taskId: null };
+  }
+  const taskId = fileAsTask(
+    meeting,
+    { owner: owner === undefined ? item.owner : owner, quote: item.quote ?? "", task: task ?? item.task },
+    item.start_ms ?? 0,
+    meeting.project_id ?? null,
+  );
+  store.setWorkItemVerdict(itemId, "filed", `added to your tasks (#${taskId})`);
+  return { taskId };
 };
 
 /**

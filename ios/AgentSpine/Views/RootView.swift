@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Seventeen tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
+/// Thirteen tabs (iOS folds all but four into "More"), and a deep link that can reach into any of them.
 /// The app opens on Today, the one screen that says what is waiting on you (section 14, U1).
 ///
 /// Approvals are not a tab: they are asked in the thread that wanted them, and a thread with a
@@ -15,6 +15,11 @@ struct RootView: View {
     @State private var tab: AppTab = .today
     @State private var threadPath: [Int] = []
     @State private var showingWeeklyReview = false
+    /// Which half of the places that hold two screens is showing (section 15, R12). Heads-up opens
+    /// on its mail half, as the check-in's push expects; the morning push flips it.
+    @State private var headsupComingUp = false
+    @State private var knowledgeAdd = false
+    @State private var activityCoding = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -75,9 +80,11 @@ struct RootView: View {
             case .headsup:
                 // The morning summary, or "gift ideas ready".
                 tab = .headsup
+                headsupComingUp = true
             case .checkin:
-                // "New message from…": the list behind the push.
-                tab = .checkin
+                // "New message from…": the list behind the push, now Heads-up's mail half.
+                tab = .headsup
+                headsupComingUp = false
             case .weeklyReview:
                 // A sheet, because the review lives two levels into Settings and the Settings tab
                 // may be folded under More, where pushing onto its stack is not ours to do.
@@ -133,28 +140,37 @@ struct RootView: View {
                 ConversationsView()
                     .navigationDestination(for: Int.self) { ThreadView(conversationID: $0) }
             }
-        case .headsup: stacked(tab) { HeadsupView() }
-        case .checkin: stacked(tab) { CheckinView() }
+        case .headsup:
+            stacked(tab) {
+                PlacePicker(title: "Heads-up", firstLabel: "From your mail", secondLabel: "Coming up", showSecond: $headsupComingUp) {
+                    CheckinView()
+                } second: {
+                    HeadsupView()
+                }
+            }
         case .tasks: stacked(tab) { TasksView() }
         case .study: stacked(tab) { StudyView() }
         case .schedules: stacked(tab) { SchedulesView() }
-        case .projects: stacked(tab) { ProjectsView() }
         case .files: stacked(tab) { FilesView() }
-        case .inbox: stacked(tab) { InboxView() }
-        case .knowledge: stacked(tab) { KnowledgeView() }
-        case .people: stacked(tab) { PeopleView() }
-        case .memory: stacked(tab) { MemoryView() }
-        case .clients: stacked(tab) { ClientsView() }
-        case .search:
+        case .knowledge:
             stacked(tab) {
-                SearchView(openThread: { id in
-                    self.tab = .threads
-                    threadPath = [id]
-                })
+                PlacePicker(title: "Knowledge", firstLabel: "Review", secondLabel: "Add files", showSecond: $knowledgeAdd) {
+                    KnowledgeView()
+                } second: {
+                    InboxView()
+                }
             }
+        case .people: stacked(tab) { PeopleView() }
+        case .clients: stacked(tab) { ClientsView() }
         case .meetings: stacked(tab) { MeetingsView() }
-        case .builds: stacked(tab) { BuildsView() }
-        case .activity: stacked(tab) { ActivityView() }
+        case .activity:
+            stacked(tab) {
+                PlacePicker(title: "Activity", firstLabel: "All runs", secondLabel: "Coding runs", showSecond: $activityCoding) {
+                    ActivityView()
+                } second: {
+                    BuildsView()
+                }
+            }
         case .settings: stacked(tab) { SettingsView() }
         }
     }

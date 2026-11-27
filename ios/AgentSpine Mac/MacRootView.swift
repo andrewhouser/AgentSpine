@@ -149,6 +149,7 @@ struct MacRootView: View {
         case .schedules: section = .schedules
         case .meetings: section = .meetings
         case .person: section = .people // MacTodayView opens the person itself; this is the fallback
+        case .meeting: section = .meetings // likewise: MacTodayView opens the meeting in a sheet
         }
     }
 

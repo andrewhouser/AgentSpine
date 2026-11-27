@@ -1,7 +1,7 @@
 import type { DecisionCard } from "./decision.ts";
 import type { Dial, DialAgreement, DialLevel, WouldHave } from "./dials.ts";
 import type { AroundLine, HistoryLine, MeetingMark } from "./moments.ts";
-import type { Person, PersonRow } from "./people.ts";
+import type { DueGroups, Person, PersonRow } from "./people.ts";
 import type { ProjectPage } from "./project-page.ts";
 import type { FinishedRun } from "./spokenAlerts.ts";
 /**
@@ -204,6 +204,10 @@ export const api = {
   /** Keep or dismiss a retrospective card. Accepting a routine only queues it for approval. */
   answerRetro: (id: number, answer: "accept" | "reject") =>
     post<{ message: string; queued: null | number }>(`/api/outbox/retro/${id}`, { answer }),
+  /** Everyone the knowledge store names, your team first (section 15, R7). */
+  /** Answer one to-do on a meeting's "To-dos found" list (section 15, R12): the only way one reaches Tasks. */
+  answerWorkItem: (meetingId: number, itemId: number, body: { action: "add" | "dismiss"; owner?: null | string; task?: string }) =>
+    post<{ taskId: null | number; workItems: MeetingWorkItem[] }>(`/api/meetings/${meetingId}/work-items/${itemId}`, body),
   /**
    * Accept one auto-approval proposal.
    *
@@ -236,11 +240,11 @@ export const api = {
   checkinStatus: () => request<CheckinStatus>("/api/checkin"),
   /** The reviewed commitments in a client's project, each with the task made from it. */
   clientCommitments: (id: number) => request<ClientCommitments>(`/api/clients/${id}/commitments`),
+
   /** Cloud tokens against the caps (src/cloud-cap.ts). Read-only. */
   cloudUsage: () => request<CloudUsage>("/api/cloud-usage"),
 
   coachMeeting: (id: number) => post<{ started: boolean }>(`/api/meetings/${id}/coach`),
-
   /** Memory you can read (section 15, R6): confirm, fix, and take cloud-safe away. There is no call that sets it. */
   confirmMemory: (id: number) => post<{ id: number }>(`/api/memories/${id}/confirm`),
   createConversation: (projectId?: number) => post<Conversation>("/api/conversations", { projectId }),
@@ -259,14 +263,15 @@ export const api = {
   deleteMeetingAudio: (id: number) => request<{ deleted: boolean }>(`/api/meetings/${id}/audio`, { method: "DELETE" }),
   deleteMemory: (id: number) => request<{ id: number; removed: boolean }>(`/api/memories/${id}`, { method: "DELETE" }),
   deleteProject: (id: number) => request<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
-  deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
 
+  deleteRecipe: (id: number) => request<{ id: number; removed: boolean }>(`/api/recipes/${id}`, { method: "DELETE" }),
   deleteSchedule: (id: number) => request<{ ok: boolean }>(`/api/schedules/${id}`, { method: "DELETE" }),
   deleteStyle: (name: string) => request<{ name: string; removed: boolean }>(`/api/styles/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
 
+  deleteTask: (id: number) => request<{ ok: boolean }>(`/api/tasks/${id}`, { method: "DELETE" }),
   /** The trust dials (src/modes.ts). Moving one is refused past what .env allows; the error says why. */
   dials: () => request<Dial[]>("/api/modes"),
+
   /**
    * Upload a recording made in the browser and get the words back.
    *
@@ -279,21 +284,21 @@ export const api = {
       headers: { "Content-Type": audio.type || "application/octet-stream" },
       method: "POST",
     }),
-
   dictationStatus: () => request<DictationStatus>("/api/dictate"),
   dismissMeetingQuestion: (id: number) => post<{ ok: boolean }>(`/api/study/questions/${id}/dismiss`),
+
   // "Draft a reply" on one unread mail (section 14, U7). Queues a draft to read; sends nothing.
   draftCheckinReply: (messageId: string) => post<CheckinReply>(`/api/checkin/mail/${encodeURIComponent(messageId)}/reply`),
-
   /** Ask for a draft of first outreach to one prospect. It arrives in a new thread as an approval; nothing is sent. */
   draftOutreach: (id: number) => post<{ conversationId: number; runId: number }>(`/api/clients/${id}/outreach`, {}),
+
   /** Re-run extraction. Returns as soon as it has started; the event stream reports the end. */
   extractMeeting: (id: number) => post<{ meetingId: number; started: boolean }>(`/api/meetings/${id}/extract`),
 
   fileContent: (path: string) =>
     request<{ path: string; text: string; truncated: boolean }>(`/api/files/content?path=${encodeURIComponent(path)}`),
-
   fixMemory: (id: number, text: string) => request<{ id: number }>(`/api/memories/${id}`, { body: JSON.stringify({ text }), method: "PATCH" }),
+
   formats: () => request<{ pdf: boolean; rich: boolean }>("/api/formats"),
 
   headsupPrefs: () => request<HeadsupPrefs>("/api/headsups/prefs"),
@@ -339,8 +344,8 @@ export const api = {
     request<InboxItem>(`/api/inbox/${id}`, { body: JSON.stringify({ tags }), method: "PATCH" }),
 
   instagramQueue: () => request<InstagramQueue>("/api/instagram/queue"),
-
   keepMemoryLocal: (id: number) => post<{ id: number }>(`/api/memories/${id}/local-only`),
+
   /**
    * Upload a recording made elsewhere (Voice Memos, say) as a new meeting. The raw file is the
    * body, as with dictation. 202 means decoded and queued; the meeting stream reports the rest.
@@ -376,8 +381,8 @@ export const api = {
 
   /** Runs that built or tested something, newest first. */
   listBuilds: (limit = 40) => request<Build[]>(`/api/builds?limit=${limit}`),
-
   listClients: () => request<Client[]>("/api/clients"),
+
   /**
    * The approval queue. With no `state` the server answers the hundred most recent of any
    * state, which is what the Approvals view wants; `"done"` asks for every resolved
@@ -386,8 +391,8 @@ export const api = {
    */
   listConfirmations: (state?: string) =>
     request<Confirmation[]>(`/api/confirmations${state ? `?state=${encodeURIComponent(state)}` : ""}`),
-
   listConversations: () => request<Conversation[]>("/api/conversations"),
+
   listenForTurn: (audio: Blob, wake: string, aliases: string[], sounds: boolean) =>
     request<{ text: string }>(voiceListenPath("turn", wake, aliases, sounds), {
       body: audio,
@@ -406,36 +411,36 @@ export const api = {
       headers: { "Content-Type": audio.type || "audio/wav" },
       method: "POST",
     }),
-
   listFiles: () => request<SavedFile[]>("/api/files"),
+
   listHeadsupDates: () => request<HeadsupDates>("/api/headsups/dates"),
 
   listHeadsups: (state: "all" | "open" = "open") => request<Headsup[]>(`/api/headsups?state=${state}`),
 
   listMeetings: (limit = 50, tags: string[] = []) =>
     request<Meeting[]>(`/api/meetings?limit=${limit}${tags.length ? `&tag=${encodeURIComponent(tags.join(","))}` : ""}`),
-
   listMemories: (query?: string, unusedDays?: number) =>
     request<Memory[]>(`/api/memories?${new URLSearchParams({ ...(query ? { query } : {}), ...(unusedDays ? { unusedDays: String(unusedDays) } : {}) })}`),
   listProjects: () => request<Project[]>("/api/projects"),
   /** Shapes that have earned an auto-approval rule. Recomputed server-side on every call. */
   listProposals: () => request<PromotionProposal[]>("/api/proposals"),
+
   /** Prospects only, in the order to look at them (ranked by the server over each one's site audit). */
   listProspects: () => request<Client[]>("/api/clients/prospects"),
-
   listRecipes: () => request<Recipe[]>("/api/recipes"),
   listRefusals: (limit = 20) => request<Refusal[]>(`/api/refusals?limit=${limit}`),
-  listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
 
+  listRuns: (limit = 100) => request<Run[]>(`/api/runs?limit=${limit}`),
   listSchedules: () => request<Schedule[]>("/api/schedules"),
+
   listStudyDue: (topic?: number) => request<StudyDueCard[]>(`/api/study/due${topic ? `?topic=${topic}` : ""}`),
 
   /** One utterance said to an assistant that is already listening. */
   listStyles: () => request<StylesState>("/api/styles"),
-
   listTasks: (status: "all" | "done" | "open" = "open", projectId?: number) =>
     request<Task[]>(`/api/tasks?status=${status}${projectId ? `&projectId=${projectId}` : ""}`),
   listTime: (days = 30) => request<TimeSummary>(`/api/time?days=${days}`),
+
   /** You are looking at this thread: its finished replies are read (clears the unread dot). */
   markConversationRead: (id: number) => post<{ ok: boolean }>(`/api/conversations/${id}/read`),
 
@@ -449,20 +454,20 @@ export const api = {
       speakers: MeetingSpeaker[];
       workItems: MeetingWorkItem[];
     }>(`/api/meetings/${id}?pass=${pass}`),
-
   meetingAround: (id: number, atMs: number) => request<AroundLine[]>(`/api/meetings/${id}/around?atMs=${Math.max(0, Math.floor(atMs))}`),
+
   /** The saved in-meeting chat, oldest first. */
   meetingChat: (id: number) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
-
   /** What a close-out needs. `project` asks which earlier claims could be replaced if it were filed there. */
   meetingCloseout: (id: number, project: null | number) =>
     request<CloseoutState>(`/api/meetings/${id}/closeout?project=${project ?? ""}`),
   meetingDevices: () => request<AudioDevices>("/api/meetings/devices"),
   /** What you still owe the people in this meeting, from reviewed claims. Code, not the coach. */
   meetingHistory: (id: number) => request<HistoryLine[]>(`/api/meetings/${id}/history`),
-  meetingLive: () => request<LiveStatus>("/api/meetings/live"),
 
+  meetingLive: () => request<LiveStatus>("/api/meetings/live"),
   meetingMarks: (id: number) => request<MeetingMark[]>(`/api/meetings/${id}/marks`),
+
   /**
    * Look (again) for questions put to you in a meeting. A 409 carries the reason it can't
    * (no project, nobody named "me"), worth showing as is.
@@ -481,9 +486,9 @@ export const api = {
 
   /** Everything installed, read-only, with the prune list. */
   overview: () => request<Overview>("/api/overview"),
-
-  /** Everyone the knowledge store names, your team first (section 15, R7). */
   people: () => request<PersonRow[]>("/api/people"),
+  /** Every open commitment, grouped late, this week, later, undated (section 15, R12). */
+  peopleDue: () => request<DueGroups>("/api/people/due"),
   person: (id: number) => request<Person>(`/api/people/${id}`),
   /**
    * What to say aloud for a reply: cleaned of markup and cut into pieces to synthesise in turn,

@@ -63,3 +63,11 @@
   color: var(--text-dim);
   font-weight: 600;
 }
+
+/* Late, This week, Later, No date said: quieter than the section heading above them. */
+.dueHead {
+  color: var(--text-dim);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}

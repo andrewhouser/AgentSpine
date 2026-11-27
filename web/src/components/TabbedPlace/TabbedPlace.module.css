@@ -1,0 +1,32 @@
+.page {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 28px 28px 60px;
+  width: 100%;
+}
+
+/* The same strip as Settings' tabs, so a place with sections reads the same everywhere. */
+.tabs {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  margin-bottom: -1px;
+  padding: 6px 12px;
+}
+
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}

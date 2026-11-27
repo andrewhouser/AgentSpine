@@ -10,6 +10,8 @@ struct MacSidebarMenu: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(MacSection.orderKey) private var storedOrder = ""
     @AppStorage("sidebarMoreExpanded") private var moreExpanded = false
+    /// The section a drag is over, outlined so you can see where it will land.
+    @State private var dropTarget: MacSection?
 
     private let columns = [GridItem(.flexible(), spacing: 2), GridItem(.flexible(), spacing: 2)]
 
@@ -50,10 +52,34 @@ struct MacSidebarMenu: View {
             selection = .section(item)
         } label: {
             cell(title: item.title, symbol: item.symbol, count: count(for: item), active: selection == .section(item))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Spine.Radius.sm)
+                        .strokeBorder(Spine.Palette.accent, lineWidth: dropTarget == item ? 1.5 : 0)
+                )
         }
         .buttonStyle(.plain)
         .help(item.hint)
         .accessibilityAddTraits(selection == .section(item) ? .isSelected : [])
+        // Drag a section onto another to take its place (2026-11-27, section 15, R12), as the web's
+        // sidebar does. Dropping across the line into More, or onto More, unpins it; the item it
+        // displaces slides over the line. Settings → Sidebar menu still has the list and arrows.
+        .draggable(item.rawValue)
+        .dropDestination(for: String.self) { names, _ in
+            dropTarget = nil
+            guard let name = names.first, MacSection(rawValue: name) != nil else { return false }
+            drop(name, on: item)
+            return true
+        } isTargeted: { over in
+            if over { dropTarget = item } else if dropTarget == item { dropTarget = nil }
+        }
+    }
+
+    /// The dragged section takes the target's slot: after it when coming from above, before it
+    /// when coming from below. `MenuLayout.place` is the rule the web shares.
+    private func drop(_ name: String, on target: MacSection) {
+        let raw = order.map(\.rawValue)
+        guard let from = raw.firstIndex(of: name), let to = raw.firstIndex(of: target.rawValue) else { return }
+        storedOrder = MenuLayout.encode(MenuLayout.place(raw, item: name, target: target.rawValue, after: from < to))
     }
 
     private var moreRow: some View {
@@ -82,6 +108,12 @@ struct MacSidebarMenu: View {
         }
         .buttonStyle(.plain)
         .accessibilityValue(moreExpanded ? "Expanded" : "Collapsed")
+        // With More shut, dropping on it puts the section first under More: the way to unpin one.
+        .dropDestination(for: String.self) { names, _ in
+            guard let name = names.first, let first = folded.first, name != first.rawValue else { return false }
+            storedOrder = MenuLayout.encode(MenuLayout.place(order.map(\.rawValue), item: name, target: first.rawValue, after: false))
+            return true
+        }
     }
 
     private func cell(title: String, symbol: String, count: Int, active: Bool) -> some View {
@@ -142,7 +174,7 @@ struct MacMenuSettingsView: View {
             } header: {
                 Text("Order")
             } footer: {
-                Text("Drag, or use the arrows. The first six are in the sidebar menu; the rest are under More.")
+                Text("Drag here or in the sidebar, or use the arrows. The first six are in the sidebar menu; the rest are under More.")
             }
 
             Section {

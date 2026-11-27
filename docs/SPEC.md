@@ -964,6 +964,15 @@ npm run tick | loop    # legacy single-goal heartbeat
 > **Therefore work items must land in the confirmation queue, never straight into RAG.**
 > Extraction proposes; the human disposes. Summary, topics and decisions may auto-save.
 >
+> **Amended 2026-11-27 (PLAN-open-work §15, R12).** The human gate stays; where it sits moved. A
+> work item that passes the anchor and strict checks is now `review` on its meeting's "To-dos
+> found" list, and only a person's "Add to tasks" there puts it on Tasks (`answerWorkItem` in
+> `src/meetings/extract.ts`). Two routes had grown up instead: a project meeting's items went
+> straight onto its task list with no person in between, and the rest became `memory_save`
+> approvals, so approving one saved a memory rather than a task. Tasks filled up with the
+> false positives this section measured. Work items no longer reach memory at all; approvals
+> already queued before the change are left to be answered as they were.
+>
 > Caveat on the sample: the test recording is a *conference talk*, so the correct answer was
 > near-zero work items. It measures over-extraction well and says nothing about recall.
 > **Re-run Phase 0 against a real multi-person meeting before building Phase 2.**
@@ -1353,9 +1362,10 @@ npm run tick | loop    # legacy single-goal heartbeat
   its first non-`path` value, `meeting`.
 - `meeting_extractions` + `meeting_work_items` (§15 Phase 2): what was made of a transcript.
   Work items keep their `verdict` — including the refusals — so the extraction's
-  false-positive rate stays visible rather than being edited out of the record. A queued item
-  holds the `confirmation_id` it raised; approving that confirmation is what runs
-  `memory_save`, and is the only path from a meeting into long-term memory.
+  false-positive rate stays visible rather than being edited out of the record. Since
+  2026-11-27 a survivor is `review` until a person adds it to Tasks (`filed`) or turns it down
+  (`dismissed`); an older `queued` item holds the `confirmation_id` it raised, and approving that
+  runs `memory_save`.
 - `memories` gains heavier use (kinds: `reflection`, `preference`, `profile`); consider an index on
   `kind`.
 - No schema change needed for push/auth/digest (use existing `actions`/`confirmations`).

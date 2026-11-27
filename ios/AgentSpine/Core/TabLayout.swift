@@ -5,30 +5,25 @@ import Foundation
 /// Raw values are what gets saved in `UserDefaults`, so they are stable identifiers: renaming a
 /// case here would silently reset everyone's tab order.
 enum AppTab: String, CaseIterable, Codable, Hashable {
-    // Today leads (PLAN-open-work section 14, U1). Since section 15, R1 the default is the spine's
-    // places: Today, Ask (the threads), Meetings and People in the bar, then Projects, Memory and
-    // Settings first under More. Heads-up, check-in, tasks and schedules are moments on Today.
-    case today, threads, meetings, people, projects, memory, settings, headsup, checkin, tasks, schedules, knowledge, search, inbox, files, study, clients, builds, activity
+    // Today leads (PLAN-open-work section 14, U1). Since the 2026-11-27 menu review (section 15,
+    // R12): Today, Ask, Meetings and Tasks in the bar. Projects and Memory are in Settings, Check-in
+    // is inside Heads-up, Drop zone inside Knowledge, Builds inside Activity, and Search is the Ask
+    // tab's own search field.
+    case today, threads, meetings, tasks, people, headsup, knowledge, schedules, files, study, clients, activity, settings
 
     var title: String {
         switch self {
         case .today: return "Today"
         case .threads: return "Ask"
         case .people: return "People"
-        case .memory: return "Memory"
         case .headsup: return "Heads-up"
         case .tasks: return "Tasks"
         case .study: return "Study"
-        case .checkin: return "Check-in"
         case .schedules: return "Schedules"
-        case .projects: return "Projects"
         case .files: return "Files"
-        case .inbox: return "Drop zone"
         case .knowledge: return "Knowledge"
         case .clients: return "Clients"
-        case .search: return "Search"
         case .meetings: return "Meetings"
-        case .builds: return "Builds"
         case .activity: return "Activity"
         case .settings: return "Settings"
         }
@@ -39,20 +34,14 @@ enum AppTab: String, CaseIterable, Codable, Hashable {
         case .today: return "sun.max"
         case .threads: return "bubble.left.and.text.bubble.right"
         case .people: return "person.2"
-        case .memory: return "brain"
         case .headsup: return "sparkles"
         case .tasks: return "checklist"
         case .study: return "brain.head.profile"
-        case .checkin: return "envelope.badge"
         case .schedules: return "clock"
-        case .projects: return "folder"
         case .files: return "doc.text"
-        case .inbox: return "tray.and.arrow.down"
         case .knowledge: return "books.vertical"
         case .clients: return "person.crop.rectangle.stack"
-        case .search: return "magnifyingglass"
         case .meetings: return "person.2.wave.2"
-        case .builds: return "hammer"
         case .activity: return "list.bullet.rectangle"
         case .settings: return "gearshape"
         }

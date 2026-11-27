@@ -835,6 +835,11 @@ final class APIClient {
         try await send(request("/api/people"), as: [PersonRow].self)
     }
 
+    /// Every open commitment, grouped late, this week, later, undated (section 15, R12).
+    func peopleDue() async throws -> DueGroups {
+        try await send(request("/api/people/due"), as: DueGroups.self)
+    }
+
     func person(_ id: Int) async throws -> Person {
         try await send(request("/api/people/\(id)"), as: Person.self)
     }
@@ -1494,6 +1499,13 @@ final class APIClient {
 
     func meeting(_ id: Int) async throws -> MeetingDetail {
         try await send(request("/api/meetings/\(id)"), as: MeetingDetail.self)
+    }
+
+    /// Answer one to-do on a meeting's "To-dos found" list (section 15, R12): the only way one reaches Tasks.
+    func answerWorkItem(meetingID: Int, itemID: Int, add: Bool, task: String, owner: String?) async throws -> WorkItemAnswer {
+        var body: [String: Any] = ["action": add ? "add" : "dismiss", "task": task]
+        body["owner"] = owner ?? NSNull()
+        return try await send(jsonRequest("/api/meetings/\(meetingID)/work-items/\(itemID)", method: "POST", body: body), as: WorkItemAnswer.self)
     }
 
     func meetingContext(_ id: Int) async throws -> ContextCards {

@@ -66,6 +66,7 @@ const taskLines = [
 ];
 const sinceKinds = ["ok", "failed", "stalled", "stopped", "skipped", "something-new"];
 const laters = [0, 1, 5];
+const todos = [1, 3];
 const skips = [
   ["7:00 AM", "It was 3 hours late, past 2 hours, most likely because the server was asleep or stopped. It will run at its next scheduled time."],
   ["", "It was 3 hours late."],
@@ -83,6 +84,7 @@ const webLines = [
   ...taskLines.map(words.todayTaskLine),
   ...sinceKinds.map(words.todaySinceLabel),
   ...laters.map(words.todayLaterLine),
+  ...todos.map(words.todayTodosLine),
   ...skips.map(([slot, reason]) => words.scheduleSkipLine(slot, reason)),
   ...expiries.map((e) => String(words.hoursUntil(e, Date.parse(NOW)))),
   words.todayBriefText({ done: dones[2], first: firsts[2], waiting: waitings[2] }),
@@ -90,6 +92,7 @@ const webLines = [
 ];
 
 console.log("\nTHE WEB'S WORDS");
+check("a meeting's to-dos on Today (R12)", todos.map(words.todayTodosLine), ["1 to-do found", "3 to-dos found"]);
 check("nothing ran", webLines[0], "No scheduled job has run since you last looked.");
 check("the redesign's summary line", words.todaySummaryLine({ done: { failed: 0, ok: 4, skipped: 0, stalled: 0 }, waiting: { approvals: 1, headsups: 0, tasks: 1, threads: 0 } }), "4 jobs finished. 2 things need you.");
 check("one of each, and a failure", words.todaySummaryLine({ done: { failed: 1, ok: 1, skipped: 0, stalled: 0 }, waiting: { approvals: 1, headsups: 0, tasks: 0, threads: 0 } }), "1 job finished, 1 failed. 1 thing needs you.");
@@ -167,6 +170,7 @@ let taskLines: [(Bool, String?)] = [${taskLines.map((t) => `(${t.overdue}, ${opt
 for t in taskLines { print(TodayWords.taskLine(overdue: t.0, waitingOn: t.1)) }
 for k in [${sinceKinds.map(s).join(", ")}] { print(TodayWords.sinceLabel(k)) }
 for n in [${laters.join(", ")}] { print(TodayWords.laterLine(n)) }
+for n in [${todos.join(", ")}] { print(TodayWords.todosLine(n)) }
 let skips: [(String, String?)] = [${skips.map(([slot, reason]) => `(${s(slot)}, ${opt(reason)})`).join(", ")}]
 for k in skips { print(TodayWords.scheduleSkipLine(slot: k.0, reason: k.1)) }
 let now = TodayWords.parse(${s(NOW)})!

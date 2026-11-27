@@ -20,7 +20,7 @@ const store = await import("../src/memory/store.ts");
 await import("../src/meetings/store.ts");
 const k = await import("../src/knowledge/store.ts");
 const cache = await import("../src/calendar-cache.ts");
-const { listPeople, openBetween, readPerson } = await import("../src/knowledge/people.ts");
+const { dueGroups, listDue, listPeople, openBetween, readPerson } = await import("../src/knowledge/people.ts");
 
 let passed = 0;
 let failed = 0;
@@ -105,6 +105,17 @@ check("with what is open each way", [list[2].youOwe, list[2].theyOwe], [2, 2]);
 check("you owe Sam the dry-run numbers", [list[0].youOwe, list[0].theyOwe], [1, 0]);
 check("a team flag on a non-person is refused", k.setMyTeam(k.upsertEntity("team", "Platform").id, true), false);
 check("an unknown id has no page", readPerson(99999, NOW), null);
+
+console.log("\nDUE (R12): what is owed, and whose");
+const due = listDue(NOW);
+const all = [...due.late, ...due.soon, ...due.later, ...due.undated];
+check("every open item appears once, across everyone", all.length, list.reduce((n, p) => n + p.youOwe + p.theyOwe, 0));
+check("the late one is first, with whose it is", due.late.map((d) => [d.text, d.personName, d.direction]), [["Feedback on the on-call write-up", "Lee Okafor", "you-owe"]]);
+check("you are never the person on a row", all.some((d) => d.personName === "Robin"), false);
+const item = (due, extra = {}) => ({ claimId: 1, direction: "you-owe", due, inferred: false, late: false, moment: null, personId: 1, personName: "Ada", text: "x", ...extra });
+const g = dueGroups([item("2026-12-30", { claimId: 4 }), item(null, { claimId: 3 }), item("2026-11-28", { claimId: 2 }), item("2026-11-20", { claimId: 1, late: true })], NOW);
+check("grouped late, this week, later, undated", [g.late, g.soon, g.later, g.undated].map((x) => x.map((d) => d.claimId)), [[1], [2], [4], [3]]);
+check("a date it cannot read is undated, not lost", dueGroups([item("next sprint")], NOW).undated.length, 1);
 
 fs.rmSync(root, { force: true, recursive: true });
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -421,7 +421,7 @@ struct MacLiveMeeting: View {
                     }
                 }
 
-                let items = (detail?.workItems ?? []).filter(\.wasQueued)
+                let items = (detail?.workItems ?? []).filter { $0.awaitsReview || $0.wasQueued }
                 if !items.isEmpty {
                     HStack {
                         label("Possible action items")
@@ -443,7 +443,7 @@ struct MacLiveMeeting: View {
                         .background(Spine.Palette.bgElevated, in: RoundedRectangle(cornerRadius: Spine.Radius.md))
                         .overlay(RoundedRectangle(cornerRadius: Spine.Radius.md).strokeBorder(Spine.Palette.border))
                     }
-                    Text("These go to your confirmation queue after the meeting. Nothing is saved until you approve it.")
+                    Text("These wait on the meeting's To-dos found list. Nothing goes on Tasks until you add it.")
                         .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                         .foregroundStyle(Spine.Palette.textFaint)
                 }

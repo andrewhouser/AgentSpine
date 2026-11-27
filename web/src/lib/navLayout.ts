@@ -11,36 +11,37 @@ import type { View } from "../components/Sidebar/Sidebar.tsx";
 
 export const PINNED_SLOTS = 6;
 
-/** In the order a fresh browser shows them. `hint` is the hover tooltip: what the page is for, in a line. */
+/**
+ * In the order a fresh browser shows them. `hint` is the hover tooltip: what the page is for, in a line.
+ * Settings is not here: it sits at the foot of the sidebar on every order, so it never takes a slot.
+ *
+ * 2026-11-27 (Andrew's menu review, PLAN-open-work section 15, R12): Projects went to Settings →
+ * Projects, Memory to Settings → Memory, Check-in into Heads-up, Drop zone into Knowledge, Builds into
+ * Activity, and Search into Ask. Their old addresses still open where each now lives (lib/route.ts).
+ */
 export const NAV_ITEMS: { hint: string; key: View; label: string }[] = [
-  // The places (section 15, R0 and R1). Today, the spine, is the button above the menu.
   { hint: "Ask anything, or find something said before", key: "ask", label: "Ask" },
-  { hint: "Recorded meetings, transcripts and summaries", key: "meetings", label: "Meetings" },
-  { hint: "The people your meetings name", key: "people", label: "People" },
-  { hint: "Each project's conversations, sources and meetings", key: "projects", label: "Projects" },
-  { hint: "What it has learned, and where each fact came from", key: "memory", label: "Memory" },
-  { hint: "What it may do, appearance, recipes and policy", key: "settings", label: "Settings" },
-  // More. Heads-up, check-in, tasks and schedules are moments on Today's line; their own screens stay here.
-  { hint: "Birthdays, bills and trips it spotted", key: "headsup", label: "Heads-up" },
-  { hint: "New mail from people, and what else is waiting", key: "checkin", label: "Check-in" },
+  { hint: "Recorded meetings, transcripts and the to-dos they found", key: "meetings", label: "Meetings" },
   { hint: "To-dos and follow-ups", key: "tasks", label: "Tasks" },
+  { hint: "What is due, whose it is, and the people behind it", key: "people", label: "People" },
+  { hint: "Decisions and commitments to review, and files to add", key: "knowledge", label: "Knowledge" },
+  { hint: "New mail from people, and birthdays, bills and trips coming up", key: "headsup", label: "Heads-up" },
+  // More.
   { hint: "Recurring jobs and watchers", key: "schedules", label: "Schedules" },
-  { hint: "Decisions and commitments to review", key: "knowledge", label: "Knowledge" },
-  { hint: "Drop in files, scans or notes for it to remember", key: "inbox", label: "Drop zone" },
   { hint: "Files the assistant wrote for you", key: "files", label: "Files" },
-  { hint: "Commands and diffs from coding runs", key: "builds", label: "Builds" },
   { hint: "Flash cards and learning topics", key: "study", label: "Study" },
-  { hint: "Posts waiting for their slot, to read and approve", key: "instagram", label: "Instagram" },
-  { hint: "Every run, with its full trace", key: "activity", label: "Activity" },
   { hint: "Clients and time tracking", key: "clients", label: "Clients" },
+  { hint: "Every run with its full trace, and coding runs with their diffs", key: "activity", label: "Activity" },
+  { hint: "Posts waiting for their slot, to read and approve", key: "instagram", label: "Instagram" },
   { hint: "Health summary and what is worth a look", key: "overview", label: "Overview" },
-  { hint: "Search every conversation by its words", key: "search", label: "Search" },
 ];
 
-// "-v2" since the menu became the spine's places (section 15, R1): an order saved for the old menu
-// would keep Heads-up and Check-in pinned and hide the new places under More, so it starts again once.
-const KEY = "sidebar-nav-order-v2";
-const CHANGED = "sidebar-nav-order-changed-v2";
+export const SETTINGS_ITEM = { hint: "What it may do, appearance, projects, memory and policy", key: "settings", label: "Settings" } as const;
+
+// "-v3" since the 2026-11-27 menu review (section 15, R12): six items left the menu, and an older
+// order would pull whatever followed them up into the pinned six, so it starts again once.
+const KEY = "sidebar-nav-order-v3";
+const CHANGED = "sidebar-nav-order-changed-v3";
 
 /**
  * Unknown names dropped (an item a later version removed), repeats dropped, and anything the saved
@@ -57,6 +58,19 @@ export const reconcileOrder = <T extends string>(saved: readonly unknown[], all:
     if (!result.includes(name)) result.push(name);
   }
   return result;
+};
+
+/**
+ * A drag and drop: `item` moves to just before `target`, or just after it with `after`. Dropping across
+ * the line between the pinned six and More is how something is pinned or unpinned, so the item it
+ * displaces simply slides over the line. Dropping on itself, or naming an item not in the order,
+ * changes nothing. `MenuLayout.place` in MacMenuLayout.swift is the same rule.
+ */
+export const placeItem = <T>(order: readonly T[], item: T, target: T, after: boolean): T[] => {
+  if (item === target || !order.includes(item) || !order.includes(target)) return [...order];
+  const rest = order.filter((x) => x !== item);
+  const at = rest.indexOf(target) + (after ? 1 : 0);
+  return [...rest.slice(0, at), item, ...rest.slice(at)];
 };
 
 export const pinnedItems = <T>(order: readonly T[]): T[] => order.slice(0, PINNED_SLOTS);

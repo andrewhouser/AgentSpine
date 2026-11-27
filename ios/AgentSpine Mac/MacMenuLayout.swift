@@ -19,6 +19,17 @@ enum MenuLayout {
         return result
     }
 
+    /// A drag and drop: `item` moves to just before `target`, or just after it with `after`.
+    /// Dropping across the line between the pinned six and More pins or unpins it; the item it
+    /// displaces slides over the line. `placeItem` in web/src/lib/navLayout.ts is the same rule.
+    static func place(_ order: [String], item: String, target: String, after: Bool) -> [String] {
+        guard item != target, order.contains(item), order.contains(target) else { return order }
+        var rest = order.filter { $0 != item }
+        let at = rest.firstIndex(of: target)! + (after ? 1 : 0)
+        rest.insert(item, at: at)
+        return rest
+    }
+
     static func pinned(_ order: [String]) -> [String] { Array(order.prefix(pinnedSlots)) }
     static func folded(_ order: [String]) -> [String] { Array(order.dropFirst(pinnedSlots)) }
 

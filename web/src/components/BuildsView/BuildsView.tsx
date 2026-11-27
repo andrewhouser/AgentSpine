@@ -20,7 +20,7 @@ const verdict = (b: Build): string => (b.ok === null ? "no command ran" : b.ok ?
 
 const shortRepo = (repo: null | string): string => (repo ? (repo.split("/").pop() ?? repo) : "—");
 
-export const BuildsView = () => {
+export const BuildsView = ({ embedded = false }: { embedded?: boolean }) => {
   const [builds] = useResource(api.listBuilds, NONE);
   const [diff, setDiff] = useState<{ runId: number; value: BuildDiff } | null>(null);
   const [error, setError] = useState("");
@@ -36,8 +36,9 @@ export const BuildsView = () => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? undefined : styles.page}>
       <PageHeader
+        compact={embedded}
         subtitle="Runs that built or tested something. Each one is a branch you can read as a diff — nothing here is committed to main."
         title="Builds"
       />

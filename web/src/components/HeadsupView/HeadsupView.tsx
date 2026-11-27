@@ -96,7 +96,7 @@ const stateNote = (h: Headsup): string => {
  * this is the full list, and where you answer. "Got it" and the other two are the same three
  * answers the phone will offer on the notification itself.
  */
-export const HeadsupView = () => {
+export const HeadsupView = ({ embedded = false }: { embedded?: boolean }) => {
   const [showAll, setShowAll] = useState(false);
   const [items, refresh] = useResource(() => api.listHeadsups(showAll ? "all" : "open"), NONE);
   const [dates, refreshDates] = useResource(() => api.listHeadsupDates(), NO_DATES);
@@ -203,8 +203,9 @@ export const HeadsupView = () => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? undefined : styles.page}>
       <PageHeader
+        compact={embedded}
         subtitle="Birthdays, anniversaries, bills, appointments, bookings and trips it noticed on your calendar. You get one summary each morning; answer here."
         title="Heads-up"
       />

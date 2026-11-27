@@ -158,3 +158,21 @@
 .chevron {
   font-size: 0.7rem;
 }
+
+/* Drag to reorder: a line where the item will land, and the row being dragged dimmed. */
+.dropBefore {
+  box-shadow: inset 0 2px 0 var(--sidebar-text);
+}
+
+.dropAfter {
+  box-shadow: inset 0 -2px 0 var(--sidebar-text);
+}
+
+.dragging {
+  opacity: 0.45;
+}
+
+.dropTarget {
+  outline: 1px dashed var(--sidebar-dim);
+  outline-offset: -2px;
+}

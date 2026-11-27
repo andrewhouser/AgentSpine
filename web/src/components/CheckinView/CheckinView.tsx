@@ -45,7 +45,7 @@ const SOURCE_LABELS: [CheckinSource, string][] = [
   ["headsup", "Heads-up"],
 ];
 
-export const CheckinView = () => {
+export const CheckinView = ({ embedded = false }: { embedded?: boolean }) => {
   const [status, refreshStatus] = useResource(() => api.checkinStatus().catch(() => NO_STATUS), NO_STATUS);
   const [error, setError] = useState("");
   const [preview, refreshPreview] = useResource(
@@ -114,8 +114,9 @@ export const CheckinView = () => {
   const offLine = checkinOffLine(checkinOffKinds(status?.sources));
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? undefined : styles.page}>
       <PageHeader
+        compact={embedded}
         subtitle="New mail from people, and what else is waiting: approvals, the next few hours, tasks due, open heads-ups. You get one notification when there is new mail; the rest rides along."
         title="Check-in"
       />

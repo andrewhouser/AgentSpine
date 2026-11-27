@@ -16,6 +16,7 @@ import {
   todaySinceLabel,
   todaySummaryLine,
   todayTaskLine,
+  todayTodosLine,
 } from "../../lib/today.ts";
 import { ApprovalCard } from "../ApprovalCard/ApprovalCard.tsx";
 import { AskBar } from "../AskBar/AskBar.tsx";
@@ -44,6 +45,8 @@ interface TodayViewProps {
   onChanged: () => void;
   onNewChat: () => void;
   onOpenConversation: (id: number) => void;
+  /** A meeting's "To-dos found" card opens that meeting (section 15, R12). */
+  onOpenMeeting: (id: number) => void;
   /** A 1:1 on the line opens that person's page and its "For today" (section 15, R9). */
   onOpenPerson: (id: number) => void;
   onOpenRun: (id: number) => void;
@@ -57,7 +60,7 @@ interface TodayViewProps {
  * inline, in the same card a thread uses. The server decides what is here and in what order; no model is
  * asked. Approve is never on a row: it lives only in the card, held.
  */
-export const TodayView = ({ onAsk, onChanged, onOpenConversation, onOpenPerson, onOpenRun, onOpenView }: TodayViewProps) => {
+export const TodayView = ({ onAsk, onChanged, onOpenConversation, onOpenMeeting, onOpenPerson, onOpenRun, onOpenView }: TodayViewProps) => {
   const [error, setError] = useState("");
   const [today, refresh, setToday] = useResource(
     () =>
@@ -240,6 +243,18 @@ export const TodayView = ({ onAsk, onChanged, onOpenConversation, onOpenPerson, 
               <span className={t.overdue ? own.bad : own.dueText}>{t.overdue ? "Overdue" : `Due ${timeOf(t.due)}`}</span>
               <button className={own.quiet} onClick={() => void act(() => api.todayLater(`task:${t.id}`))} type="button">
                 Later
+              </button>
+            </div>
+          ))}
+
+          {(today.meetingTodos ?? []).map((m) => (
+            <div className={own.row} key={`m-${m.meetingId}`}>
+              <span className={own.mark}>
+                <Icon name="check" size={14} />
+              </span>
+              <button className={own.main} onClick={() => onOpenMeeting(m.meetingId)} type="button">
+                <span className={own.title}>{m.title ?? "Untitled meeting"}</span>
+                <span className={own.sub}>{todayTodosLine(m.count)}, to review before they go on Tasks</span>
               </button>
             </div>
           ))}

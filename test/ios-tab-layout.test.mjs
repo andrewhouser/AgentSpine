@@ -34,8 +34,8 @@ if (!swiftc) {
   process.exit(0);
 }
 
-// The spine's places first since section 15, R1: Today, Ask (the threads), Meetings and People in the bar.
-const all = ["today", "threads", "meetings", "people", "projects", "memory", "settings", "headsup", "checkin", "tasks", "schedules", "knowledge", "search", "inbox", "files", "study", "clients", "builds", "activity"];
+// Since the 2026-11-27 menu review (section 15, R12): Today, Ask (the threads), Meetings and Tasks in the bar.
+const all = ["today", "threads", "meetings", "tasks", "people", "headsup", "knowledge", "schedules", "files", "study", "clients", "activity", "settings"];
 
 // Each case: what was saved, and the order that must come out.
 const rest = (...first) => [...first, ...all.filter((t) => !first.includes(t))];
@@ -43,15 +43,17 @@ const rest = (...first) => [...first, ...all.filter((t) => !first.includes(t))];
 // Each case: what was saved, and the order that must come out.
 const cases = [
   { name: "nothing saved gives the default order", saved: [], expect: all },
-  { name: "a fresh install has Today, Ask, Meetings and People in the bar", saved: [], expect: rest("today", "threads", "meetings", "people") },
+  { name: "a fresh install has Today, Ask, Meetings and Tasks in the bar", saved: [], expect: rest("today", "threads", "meetings", "tasks") },
   { name: "a saved order is kept, behind Today and Threads", saved: ["threads", "study", "tasks"], expect: rest("today", "threads", "study", "tasks") },
   { name: "Today and Threads are forced first even if saved elsewhere", saved: ["tasks", "threads", "today"], expect: rest("today", "threads", "tasks") },
   {
     name: "an order saved before Today existed keeps its sequence",
-    saved: ["threads", "headsup", "projects", "tasks"],
-    expect: rest("today", "threads", "headsup", "projects", "tasks"),
+    saved: ["threads", "headsup", "people", "tasks"],
+    expect: rest("today", "threads", "headsup", "people", "tasks"),
   },
   { name: "a tab a later version removed is dropped", saved: ["threads", "gone", "study"], expect: rest("today", "threads", "study") },
+  // The six that left the menu in R12 are just unknown names now: an old saved order loses them.
+  { name: "the tabs R12 retired drop out of an old order", saved: ["threads", "checkin", "projects", "search", "study"], expect: rest("today", "threads", "study") },
   { name: "repeats are dropped", saved: ["threads", "study", "study", "tasks", "study"], expect: rest("today", "threads", "study", "tasks") },
   {
     name: "a tab the saved list lacks (a newer version's) lands under More",
@@ -92,10 +94,10 @@ try {
     }
   });
   const split = lines[cases.length];
-  if (split === "4 15") console.log("  PASS  four tabs in the bar, the other fifteen under More");
+  if (split === "4 9") console.log("  PASS  four tabs in the bar, the other nine under More");
   else {
     failed++;
-    console.log(`  FAIL  bar/more split: want "4 15", got "${split}"`);
+    console.log(`  FAIL  bar/more split: want "4 9", got "${split}"`);
   }
 } catch (error) {
   failed++;

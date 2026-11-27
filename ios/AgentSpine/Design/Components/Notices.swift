@@ -126,6 +126,8 @@ enum TodayTarget: Hashable {
     case meetings
     /// A 1:1 on the line opens that person's page and its "For today" (section 15, R9).
     case person(Int)
+    /// A meeting's "To-dos found" card opens that meeting (section 15, R12).
+    case meeting(Int)
 }
 
 /// The sections of the Today screen, for a `List` (PLAN-open-work section 14, U1 and U2).
@@ -318,6 +320,17 @@ struct TodaySections: View {
                         row(title: t.title, detail: taskDetail(t), urgent: t.overdue, target: .tasks) {
                             action("Done", prominent: true) { Task { await store.done(t) } }
                             action("Later") { Task { await store.later("task:\(t.id)") } }
+                        }
+                    }
+                }
+            }
+
+            if let todos = screen.meetingTodos, !todos.isEmpty {
+                // Section 15, R12: a meeting's to-dos wait here until you review them on the meeting.
+                Section("To-dos found in meetings") {
+                    ForEach(todos) { m in
+                        row(title: m.title ?? "Untitled meeting", detail: "\(TodayWords.todosLine(m.count)), to review before they go on Tasks", urgent: false, target: .meeting(m.meetingId)) {
+                            action("Review", prominent: true) { open(.meeting(m.meetingId)) }
                         }
                     }
                 }

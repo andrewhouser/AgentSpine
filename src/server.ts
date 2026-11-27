@@ -24,7 +24,7 @@ import { loadPolicy } from "./config.ts";
 import { syncMcpTools } from "./mcp/register.ts";
 import { probeModelHost } from "./model-probe.ts";
 import { audioPath, deleteAudio, pruneAudio } from "./meetings/audio.ts";
-import { fileQueuedItems } from "./meetings/extract.ts";
+import { answerWorkItem, fileQueuedItems } from "./meetings/extract.ts";
 import { cardsFor } from "./meetings/context.ts";
 import * as meetings from "./meetings/session.ts";
 import * as meetingStore from "./meetings/store.ts";
@@ -89,7 +89,7 @@ import { clearLater, markLooked, readToday, setLater } from "./today.ts";
 import { readSpine } from "./day-line.ts";
 import { decisionCard } from "./decision-card.ts";
 import { undoAction, undoOffers } from "./undo.ts";
-import { listPeople, readPerson } from "./knowledge/people.ts";
+import { listDue, listPeople, readPerson } from "./knowledge/people.ts";
 import { readProjectPage } from "./knowledge/project-page.ts";
 import { sourcesForRuns } from "./knowledge/sources.ts";
 import { addMark, around, deleteMark, historyFor, listMarks } from "./meetings/moments.ts";
@@ -843,11 +843,13 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
      * /api/people (section 15, R7): everyone the knowledge store names, your team first, and one person's page.
      * Built in code from reviewed claims (src/knowledge/people.ts); work material, served to your screens only.
      *   GET  /api/people              the list, with what is open each way
+     *   GET  /api/people/due          every open commitment, grouped late, this week, later, undated (R12)
      *   GET  /api/people/:id          one person
      *   POST /api/people/:id/team     {on}: put them on your team or take them off; a person's click only
      */
     if (seg[1] === "people") {
       if (m === "GET" && seg.length === 2) return sendJson(res, 200, listPeople());
+      if (m === "GET" && seg.length === 3 && seg[2] === "due") return sendJson(res, 200, listDue());
       const personId = Number(seg[2]);
       if (seg.length >= 3 && Number.isInteger(personId)) {
         if (m === "GET" && seg.length === 3) {
@@ -1756,6 +1758,23 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
           // Questions you were asked, as study candidates awaiting review (src/study/meeting-questions.ts).
           questions: listQuestions(id),
         });
+      }
+
+      /**
+       * POST /api/meetings/:id/work-items/:itemId {action: "add" | "dismiss", task?, owner?} — answer one
+       * to-do on the meeting's "To-dos found" list (section 15, R12). A person's click, from your own
+       * screens: it is the only way a meeting's to-do reaches Tasks.
+       */
+      if (m === "POST" && seg.length === 5 && seg[3] === "work-items" && /^\d+$/.test(seg[4])) {
+        const b = await readBody(req);
+        const action = b?.action === "add" || b?.action === "dismiss" ? b.action : null;
+        if (!action) return sendJson(res, 400, { error: "action must be add or dismiss" });
+        const edits: { owner?: null | string; task?: string } = {};
+        if (typeof b?.task === "string") edits.task = b.task.slice(0, 500);
+        if (typeof b?.owner === "string" || b?.owner === null) edits.owner = b.owner === null ? null : String(b.owner).slice(0, 120);
+        const result = answerWorkItem(id, Number(seg[4]), action, edits);
+        if ("error" in result) return sendJson(res, result.error === "no such to-do" ? 404 : 409, result);
+        return sendJson(res, 200, { ...result, workItems: meetingStore.workItems(id) });
       }
 
       /**

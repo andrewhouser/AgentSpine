@@ -1,23 +1,24 @@
-import type { ReactNode } from "react";
-
 import { useEffect, useState } from "react";
 
 import type { SearchHit } from "../../lib/types.ts";
 
 import { api } from "../../lib/api.ts";
+import { AskBar } from "../AskBar/AskBar.tsx";
 import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 
-interface SearchViewProps {
-  /** Shown under the header: the Ask place puts its ask bar here (section 15, R1). */
-  lead?: ReactNode;
+interface AskViewProps {
+  onAsk: (text: string) => Promise<void>;
   onOpenConversation: (id: number) => void;
-  subtitle?: string;
-  title?: string;
 }
 
-/** Search every conversation — what you asked and what it answered. */
-export const SearchView = ({ lead, onOpenConversation, subtitle, title }: SearchViewProps) => {
+/**
+ * Ask: one box (2026-11-27, section 15, R12). It used to sit above a second, search-only box, and
+ * nobody could tell the two apart. Now Enter asks, and while you type, what was said before about
+ * the same words shows underneath under its own heading, so a question already answered is found
+ * before it is asked again. With the box empty, the starred replies show instead.
+ */
+export const AskView = ({ onAsk, onOpenConversation }: AskViewProps) => {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [starred, setStarred] = useState<{ conversationId: number; conversationTitle: null | string; id: number; note: null | string; task: null | string }[]>([]);
@@ -48,20 +49,13 @@ export const SearchView = ({ lead, onOpenConversation, subtitle, title }: Search
 
   return (
     <div className={styles.page}>
-      <PageHeader subtitle={subtitle ?? "Across every conversation — your questions and its answers."} title={title ?? "Search"} />
-      {lead}
-      <div className={styles.form}>
-        <input
-          aria-label="Search conversations"
-          autoFocus
-          className={`${styles.input} ${styles.grow}`}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="e.g. business plan"
-          value={q}
-        />
-      </div>
+      <PageHeader subtitle="Press Enter to start a conversation. As you type, what was said before shows below." title="Ask" />
+      <AskBar onAsk={onAsk} onTextChange={setQ} placeholder="Ask anything…" />
 
-      {q.trim().length >= 2 && hits.length === 0 && <div className={styles.empty}>No matches.</div>}
+      {q.trim().length >= 2 && (
+        <div className={styles.toolbar}>Said before{hits.length > 0 ? ` (${hits.length})` : ""}</div>
+      )}
+      {q.trim().length >= 2 && hits.length === 0 && <div className={styles.empty}>Nothing said before matches these words.</div>}
       {hits.map((h) => (
         <button
           className={styles.cardStack}

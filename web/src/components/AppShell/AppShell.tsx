@@ -12,7 +12,7 @@ import { api } from "../../lib/api.ts";
 import { isWaiting, needsYou } from "../../lib/attention.ts";
 import { readRoute, writeRoute } from "../../lib/route.ts";
 import { ActivityView } from "../ActivityView/ActivityView.tsx";
-import { AskBar } from "../AskBar/AskBar.tsx";
+import { AskView } from "../AskView/AskView.tsx";
 import { BuildsView } from "../BuildsView/BuildsView.tsx";
 import { ChatView } from "../ChatView/ChatView.tsx";
 import { CheckinView } from "../CheckinView/CheckinView.tsx";
@@ -29,10 +29,10 @@ import { ProjectsView } from "../ProjectsView/ProjectsView.tsx";
 import { ProjectView } from "../ProjectView/ProjectView.tsx";
 import { PromptDialog } from "../PromptDialog/PromptDialog.tsx";
 import { SchedulesView } from "../SchedulesView/SchedulesView.tsx";
-import { SearchView } from "../SearchView/SearchView.tsx";
 import { SettingsView } from "../SettingsView/SettingsView.tsx";
 import { Sidebar } from "../Sidebar/Sidebar.tsx";
 import { StudyView } from "../StudyView/StudyView.tsx";
+import { TabbedPlace } from "../TabbedPlace/TabbedPlace.tsx";
 import { TasksView } from "../TasksView/TasksView.tsx";
 import { TodayView } from "../TodayView/TodayView.tsx";
 import styles from "./AppShell.module.css";
@@ -42,19 +42,14 @@ const NO_PROJECTS: Project[] = [];
 const VIEW_TITLES: Record<string, string> = {
   activity: "Activity",
   ask: "Ask",
-  checkin: "Check-in",
   clients: "Clients",
   files: "Files",
   headsup: "Heads-up",
-  inbox: "Drop zone",
   knowledge: "Knowledge",
   meetings: "Meetings",
-  memory: "Memory",
   overview: "Overview",
   people: "People",
-  projects: "Projects",
   schedules: "Schedules",
-  search: "Search",
   settings: "Settings",
   study: "Study",
   tasks: "Tasks",
@@ -162,6 +157,7 @@ export const AppShell = () => {
   // The person a 1:1 on Today's line opens (section 15, R9). Any other navigation clears it, so the menu's
   // People opens the list.
   const [personToOpen, setPersonToOpen] = useState<null | number>(null);
+  const [meetingToOpen, setMeetingToOpen] = useState<null | number>(null);
 
   const go = useCallback((next: { conversationId?: null | number; projectId?: null | number; runId?: null | number; view: View }) => {
     setPersonToOpen(null);
@@ -271,35 +267,57 @@ export const AppShell = () => {
           <span className={styles.topBarTitle}>{barTitle(route, conversations, projects)}</span>
         </div>
 
-        {route.view === "activity" && <ActivityView onSelectRun={(id) => go({ runId: id, view: "activity" })} runId={route.runId} />}
-        {route.view === "builds" && <BuildsView />}
+        {route.view === "activity" &&
+          (route.runId !== null ? (
+            <ActivityView onSelectRun={(id) => go({ runId: id, view: "activity" })} runId={route.runId} />
+          ) : (
+            <TabbedPlace
+              subtitle="Every run, with the broker's decision on each tool call; coding runs with their diffs."
+              tabs={[
+                { content: <ActivityView embedded onSelectRun={(id) => go({ runId: id, view: "activity" })} runId={null} />, id: "all", label: "All runs" },
+                { content: <BuildsView embedded />, id: "coding", label: "Coding runs" },
+              ]}
+              title="Activity"
+            />
+          ))}
         {route.view === "schedules" && <SchedulesView />}
-        {route.view === "meetings" && <MeetingsView projects={projects} />}
-        {route.view === "settings" && <SettingsView onOpenRun={(id) => go({ runId: id, view: "activity" })} />}
-        {route.view === "headsup" && <HeadsupView />}
-        {route.view === "checkin" && <CheckinView />}
+        {route.view === "meetings" && <MeetingsView initialId={meetingToOpen} key={meetingToOpen ?? "list"} projects={projects} />}
+        {route.view === "settings" && (
+          <SettingsView
+            onOpenRun={(id) => go({ runId: id, view: "activity" })}
+            projects={
+              <ProjectsView onNewProject={() => setNamingProject(true)} onOpenProject={(id) => go({ projectId: id, view: "project" })} projects={projects} />
+            }
+          />
+        )}
+        {route.view === "headsup" && (
+          <TabbedPlace
+            subtitle="What it noticed for you: new mail from people every few hours, and birthdays, bills and trips each morning."
+            tabs={[
+              { content: <CheckinView embedded />, id: "mail", label: "From your mail" },
+              { content: <HeadsupView embedded />, id: "coming", label: "Coming up" },
+            ]}
+            title="Heads-up"
+          />
+        )}
         {route.view === "tasks" && <TasksView projects={projects} />}
         {route.view === "study" && <StudyView />}
         {route.view === "overview" && <OverviewView />}
         {route.view === "files" && <FilesView />}
         {route.view === "clients" && <ClientsView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
-        {route.view === "inbox" && <InboxView projects={projects} />}
         {route.view === "instagram" && <InstagramView />}
-        {route.view === "knowledge" && <KnowledgeView projects={projects} />}
-        {route.view === "search" && <SearchView onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
-        {route.view === "ask" && (
-          <SearchView
-            lead={<AskBar onAsk={(text) => ask(text)} placeholder="Ask anything…" />}
-            onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}
-            subtitle="Ask starts a conversation. Below it, find what was said before in any conversation."
-            title="Ask"
+        {route.view === "knowledge" && (
+          <TabbedPlace
+            subtitle="What your meetings and documents say, once you have reviewed it, and the files you add for it to read."
+            tabs={[
+              { content: <KnowledgeView embedded projects={projects} />, id: "review", label: "Review" },
+              { content: <InboxView embedded projects={projects} />, id: "add", label: "Add files" },
+            ]}
+            title="Knowledge"
           />
         )}
+        {route.view === "ask" && <AskView onAsk={(text) => ask(text)} onOpenConversation={(id) => go({ conversationId: id, view: "chat" })} />}
         {route.view === "people" && <PeopleView initialId={personToOpen} key={personToOpen ?? "list"} />}
-        {route.view === "projects" && (
-          <ProjectsView onNewProject={() => setNamingProject(true)} onOpenProject={(id) => go({ projectId: id, view: "project" })} projects={projects} />
-        )}
-        {route.view === "memory" && <SettingsView only="memory" onOpenRun={(id) => go({ runId: id, view: "activity" })} />}
         {route.view === "project" && route.projectId !== null && (
           <ProjectView
             key={route.projectId}
@@ -315,19 +333,35 @@ export const AppShell = () => {
         )}
         {route.view === "chat" &&
           (route.conversationId ? (
-            <ChatView
+            <>
+              {/* Projects left the menu on 2026-11-27 (section 15, R12), so a project's thread is the way back to its page. */}
+              {(() => {
+                const pid = conversations.find((c) => c.id === route.conversationId)?.project_id ?? null;
+                const project = pid === null ? undefined : projects.find((p) => p.id === pid);
+                return project ? (
+                  <button className={styles.projectLink} onClick={() => go({ projectId: project.id, view: "project" })} type="button">
+                    In {project.name} ›
+                  </button>
+                ) : null;
+              })()}
+              <ChatView
               attention={conversations.find((c) => c.id === route.conversationId)?.attention ?? 0}
               conversationId={route.conversationId}
               key={route.conversationId}
               onTitleMayHaveChanged={onTurnComplete}
               unread={(conversations.find((c) => c.id === route.conversationId)?.unread ?? 0) > 0}
             />
+            </>
           ) : (
             <TodayView
               onAsk={(text) => ask(text)}
               onChanged={onTurnComplete}
               onNewChat={() => void newChat()}
               onOpenConversation={(id) => go({ conversationId: id, view: "chat" })}
+              onOpenMeeting={(id) => {
+                go({ view: "meetings" });
+                setMeetingToOpen(id);
+              }}
               onOpenPerson={(id) => {
                 go({ view: "people" });
                 setPersonToOpen(id);

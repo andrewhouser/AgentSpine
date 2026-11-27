@@ -8,6 +8,8 @@ import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 
 interface KnowledgeViewProps {
+  /** Drawn inside a tab of another place (TabbedPlace), which owns the title. */
+  embedded?: boolean;
   projects: Project[];
 }
 
@@ -29,7 +31,7 @@ const source = (c: KnowledgeClaim): string =>
  * (correcting it if needed) or reject it; when something replaces an earlier decision, you say so here. Briefs are
  * assembled from reviewed claims only, each line with its cited words.
  */
-export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
+export const KnowledgeView = ({ embedded = false, projects }: KnowledgeViewProps) => {
   const proposed = useCallback(() => api.knowledgeClaims({ review: "proposed", status: "active" }), []);
   const [claims, reload] = useResource<KnowledgeClaim[]>(proposed, []);
   const conflictsLoad = useCallback(() => api.knowledgeConflicts(), []);
@@ -138,8 +140,9 @@ export const KnowledgeView = ({ projects }: KnowledgeViewProps) => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? undefined : styles.page}>
       <PageHeader
+        compact={embedded}
         subtitle="Decisions, commitments, risks and questions found in your meetings and documents. Nothing counts as known until you review it."
         title="Knowledge"
       />

@@ -1,16 +1,17 @@
 import { useState } from "react";
 
-import type { Person, PersonMoment, PersonOpenItem, PersonRow } from "../../lib/people.ts";
+import type { DueGroups, Person, PersonMoment, PersonOpenItem, PersonRow } from "../../lib/people.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
-import { atLine, directionLabel, forTodayLabel, oneToOneLine, openCountLine } from "../../lib/people.ts";
+import { atLine, directionLabel, DUE_SECTIONS, dueOwnerLine, dueWhenLine, forTodayLabel, oneToOneLine, openCountLine } from "../../lib/people.ts";
 import styles from "../ListPage/ListPage.module.css";
 import { PageHeader } from "../PageHeader/PageHeader.tsx";
 import own from "./PeopleView.module.css";
 
 const NONE: PersonRow[] = [];
 const NO_ONE: null | Person = null;
+const NOTHING_DUE: DueGroups = { late: [], later: [], soon: [], undated: [] };
 
 const day = (iso: null | string): string => (iso ? new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" }) : "");
 const when = (iso: string): string => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -131,11 +132,14 @@ const PersonPage = ({ id, onBack }: { id: number; onBack: () => void }) => {
 };
 
 /**
- * People (section 15, R7): everyone the knowledge store names, your team first, with what is open
- * each way. Built from reviewed meeting claims only; nothing here collects anything about anyone.
+ * People (section 15, R7): what is due and whose it is first (R12, Andrew's 2026-11-27 review: the
+ * list of what is owed matters more than who), then everyone the knowledge store names, your team
+ * first. Built from reviewed meeting claims only; nothing here collects anything about anyone.
  */
 export const PeopleView = ({ initialId = null }: { initialId?: null | number }) => {
   const [people] = useResource(() => api.people().catch(() => NONE), NONE);
+  const [due] = useResource(() => api.peopleDue().catch(() => NOTHING_DUE), NOTHING_DUE);
+  const anyDue = DUE_SECTIONS.some((s) => due[s.key].length > 0);
   // Opened straight to someone from a 1:1 on Today's line (section 15, R9).
   const [open, setOpen] = useState<null | number>(initialId);
 
@@ -143,7 +147,27 @@ export const PeopleView = ({ initialId = null }: { initialId?: null | number }) 
 
   return (
     <div className={styles.page}>
-      <PageHeader subtitle="The people your meetings name, your team first. Each page shows what is open between you, from claims you reviewed." title="People" />
+      <PageHeader subtitle="What is due and whose it is, then the people behind it. Built from meeting claims you reviewed." title="People" />
+      <h2 className={own.subhead}>Due</h2>
+      {!anyDue && <div className={styles.empty}>Nothing open either way.</div>}
+      {DUE_SECTIONS.filter((s) => due[s.key].length > 0).map((s) => (
+        <section key={s.key}>
+          <h3 className={own.dueHead}>{s.label}</h3>
+          {due[s.key].map((d) => (
+            <button className={`${styles.card} ${styles.fullWidth}`} key={d.claimId} onClick={() => setOpen(d.personId)} type="button">
+              <span className={styles.body}>
+                <span className={styles.title}>{d.text}</span>
+                <span className={styles.meta}>
+                  {dueOwnerLine(d.direction, d.personName)}
+                  {d.due && ` · ${dueWhenLine(d.due)}`}
+                  {d.late && <span className={own.late}>late</span>}
+                </span>
+              </span>
+            </button>
+          ))}
+        </section>
+      ))}
+      <h2 className={own.subhead}>People</h2>
       {people.length === 0 && <div className={styles.empty}>No one yet. People appear here as meetings are reviewed.</div>}
       {people.map((p) => (
         <button className={`${styles.card} ${styles.fullWidth}`} key={p.id} onClick={() => setOpen(p.id)} type="button">

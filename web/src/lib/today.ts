@@ -97,6 +97,9 @@ export const todaySinceLabel = (kind: TodaySince["kind"]): string =>
 export const todayLaterLine = (later: number): string =>
   later > 0 ? `${count(later, "item")} put off until the morning.` : "";
 
+/** A meeting's card on Today (section 15, R12): "2 to-dos found", to review before they go on Tasks. */
+export const todayTodosLine = (n: number): string => `${count(n, "to-do")} found`;
+
 /**
  * A schedule's last skipped run (section 13, H6). `slot` is the time the run was due, already
  * formatted by the client, or empty when it is not known. The reason is the server's sentence.

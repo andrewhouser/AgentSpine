@@ -18,27 +18,36 @@ export interface Route {
 const VIEW_PATHS: Record<Exclude<View, "chat" | "project">, string> = {
   activity: "/activity",
   ask: "/ask",
-  builds: "/builds",
-  checkin: "/checkin",
   clients: "/clients",
   files: "/files",
   headsup: "/headsup",
-  inbox: "/inbox",
   instagram: "/instagram",
   knowledge: "/knowledge",
   meetings: "/meetings",
-  memory: "/memory",
   overview: "/overview",
   people: "/people",
-  projects: "/projects",
   schedules: "/schedules",
-  search: "/search",
   settings: "/settings",
   study: "/study",
   tasks: "/tasks",
 };
 
+/**
+ * Places that left the menu in the 2026-11-27 review (PLAN-open-work section 15, R12), and where each
+ * now lives, so a bookmark or a link in an old notification still lands somewhere sensible.
+ */
+const MOVED: Record<string, string> = {
+  "/builds": "/activity?tab=coding",
+  "/checkin": "/headsup",
+  "/inbox": "/knowledge?tab=add",
+  "/memory": "/settings?tab=memory",
+  "/projects": "/settings?tab=projects",
+  "/search": "/ask",
+};
+
 export const readRoute = (): Route => {
+  const moved = MOVED[window.location.pathname];
+  if (moved) window.history.replaceState(null, "", moved);
   const path = window.location.pathname;
 
   const conversation = /^\/c\/(\d+)$/.exec(path);

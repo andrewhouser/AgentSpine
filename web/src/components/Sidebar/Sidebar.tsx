@@ -1,3 +1,5 @@
+import type { DragEvent } from "react";
+
 import { useState } from "react";
 
 import type { Status } from "../../hooks/useStatus.ts";
@@ -5,7 +7,7 @@ import type { Conversation, Project } from "../../lib/types.ts";
 
 import { useNavOrder } from "../../hooks/useNavOrder.ts";
 import { VIEW_ICON } from "../../lib/icons.ts";
-import { foldedItems, NAV_ITEMS, pinnedItems } from "../../lib/navLayout.ts";
+import { foldedItems, NAV_ITEMS, pinnedItems, placeItem, saveNavOrder, SETTINGS_ITEM } from "../../lib/navLayout.ts";
 import { ConversationItem } from "../ConversationItem/ConversationItem.tsx";
 import { Icon } from "../Icon/Icon.tsx";
 import { StatusIndicator } from "../StatusIndicator/StatusIndicator.tsx";
@@ -14,23 +16,17 @@ import styles from "./Sidebar.module.css";
 export type View =
   | "activity"
   | "ask"
-  | "builds"
   | "chat"
-  | "checkin"
   | "clients"
   | "files"
   | "headsup"
-  | "inbox"
   | "instagram"
   | "knowledge"
   | "meetings"
-  | "memory"
   | "overview"
   | "people"
   | "project"
-  | "projects"
   | "schedules"
-  | "search"
   | "settings"
   | "study"
   | "tasks";
@@ -92,9 +88,56 @@ export const Sidebar = ({
 }: SidebarProps) => {
   const [moreOpen, setMoreOpen] = useState(readMoreOpen);
   const { order } = useNavOrder();
-  const pinned = pinnedItems(order).filter((k) => k !== "settings");
-  const folded = foldedItems(order).filter((k) => k !== "settings");
+  const pinned = pinnedItems(order);
+  const folded = foldedItems(order);
   const recent = conversations.slice(0, RECENT_MAX);
+  // Drag to reorder (2026-11-27, section 15, R12), as on the Mac. The order is this browser's, in
+  // localStorage, the same store Settings → Menu edits. Settings itself does not move.
+  const [dragging, setDragging] = useState<null | View>(null);
+  const [dropAt, setDropAt] = useState<{ after: boolean; key: View } | null>(null);
+
+  const endDrag = (): void => {
+    setDragging(null);
+    setDropAt(null);
+  };
+
+  const dropOn = (target: View, after: boolean): void => {
+    if (dragging) saveNavOrder(placeItem(order, dragging, target, after));
+    endDrag();
+  };
+
+  /** Above or below the middle of the row under the pointer. */
+  const lowerHalf = (e: DragEvent<HTMLElement>): boolean => {
+    const box = e.currentTarget.getBoundingClientRect();
+    return e.clientY > box.top + box.height / 2;
+  };
+
+  const dragProps = (key: View) =>
+    key === "settings"
+      ? {}
+      : {
+          draggable: true,
+          onDragEnd: endDrag,
+          onDragOver: (e: DragEvent<HTMLButtonElement>) => {
+            if (!dragging) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            const after = lowerHalf(e);
+            if (dropAt?.key !== key || dropAt.after !== after) setDropAt({ after, key });
+          },
+          onDragStart: (e: DragEvent<HTMLButtonElement>) => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", key);
+            setDragging(key);
+          },
+          onDrop: (e: DragEvent<HTMLButtonElement>) => {
+            e.preventDefault();
+            dropOn(key, lowerHalf(e));
+          },
+        };
+
+  const dropClass = (key: View): string =>
+    dropAt?.key === key && dragging !== key ? (dropAt.after ? styles.dropAfter : styles.dropBefore) : "";
 
   const toggleMore = (): void => {
     const next = !moreOpen;
@@ -107,13 +150,14 @@ export const Sidebar = ({
   };
 
   const navButton = (key: View) => {
-    const item = NAV_ITEMS.find((entry) => entry.key === key);
+    const item = key === "settings" ? SETTINGS_ITEM : NAV_ITEMS.find((entry) => entry.key === key);
     return (
       <button
         aria-current={view === key ? "page" : undefined}
-        className={`${styles.navItem} ${view === key ? styles.navActive : ""}`}
+        className={`${styles.navItem} ${view === key ? styles.navActive : ""} ${dropClass(key)} ${dragging === key ? styles.dragging : ""}`}
         key={key}
         onClick={() => onSelectView(key)}
+        {...dragProps(key)}
         title={item?.hint}
         type="button"
       >
@@ -190,8 +234,17 @@ export const Sidebar = ({
             {/* With More shut, the open view has no row of its own, so More carries the highlight. */}
             <button
               aria-expanded={moreOpen}
-              className={`${styles.navItem} ${!moreOpen && (folded as View[]).includes(view) ? styles.navActive : ""}`}
+              className={`${styles.navItem} ${!moreOpen && (folded as View[]).includes(view) ? styles.navActive : ""} ${dragging && !moreOpen ? styles.dropTarget : ""}`}
               onClick={toggleMore}
+              // With More shut, dropping on it puts the item first under More: the way to unpin one.
+              onDragOver={(e) => {
+                if (dragging && !moreOpen) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragging && folded[0]) dropOn(folded[0], false);
+              }}
+              title={dragging ? "Drop here to move it under More" : undefined}
               type="button"
             >
               <Icon name="more" />

@@ -271,3 +271,54 @@ export const listPeople = (now: Date = new Date()): PersonRow[] => {
     })
     .sort((a, b) => Number(b.onTeam) - Number(a.onTeam) || a.name.localeCompare(b.name));
 };
+
+/**
+ * "Due" (2026-11-27, section 15, R12): every open commitment across everyone, so People answers "what is
+ * due, and whose is it" before "who". Andrew's review: the who-and-what tracking was less use than the
+ * list of what is owed. Built from the same reviewed claims and the same direction rule as a person's page.
+ */
+export interface DueItem extends OpenItem {
+  personId: number;
+  personName: string;
+}
+
+export interface DueGroups {
+  late: DueItem[];
+  /** Due within the next DUE_SOON_DAYS days. */
+  soon: DueItem[];
+  later: DueItem[];
+  /** No due date was said. Kept, because "I'll send it" with no date is still owed. */
+  undated: DueItem[];
+}
+
+export const DUE_SOON_DAYS = 7;
+
+/** Pure: sorts open items into the four groups, each earliest due first (undated: oldest claim first). */
+export const dueGroups = (items: DueItem[], now: Date): DueGroups => {
+  const soonEnd = now.getTime() + DUE_SOON_DAYS * 86_400_000;
+  const groups: DueGroups = { late: [], later: [], soon: [], undated: [] };
+  for (const item of items) {
+    const due = item.due ? Date.parse(item.due) : NaN;
+    if (!Number.isFinite(due)) groups.undated.push(item);
+    else if (item.late) groups.late.push(item);
+    else if (due <= soonEnd) groups.soon.push(item);
+    else groups.later.push(item);
+  }
+  const byDue = (a: DueItem, b: DueItem): number => Date.parse(a.due ?? "") - Date.parse(b.due ?? "") || a.claimId - b.claimId;
+  groups.late.sort(byDue);
+  groups.soon.sort(byDue);
+  groups.later.sort(byDue);
+  groups.undated.sort((a, b) => a.claimId - b.claimId);
+  return groups;
+};
+
+/** Everything open, each way, with whose it is. */
+export const listDue = (now: Date = new Date()): DueGroups => {
+  const claims = usable();
+  const items: DueItem[] = [];
+  for (const p of k.listEntities("person")) {
+    if (k.isSelfName(p.name)) continue;
+    for (const o of openBetween(p.id, claims, now)) items.push({ ...o, personId: p.id, personName: p.name });
+  }
+  return dueGroups(items, now);
+};
