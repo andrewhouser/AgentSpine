@@ -211,7 +211,8 @@ export const Composer = ({
           )}
           <textarea
             className={styles.input}
-            disabled={busy}
+            // Never disabled while a turn runs: you can type the next message as the answer
+            // streams in. `send` still refuses until the turn ends, so Enter does nothing early.
             hidden={voice.listening && voice.levels.length > 0}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
@@ -301,8 +302,7 @@ export const Composer = ({
               ? "Listening — press the dot again to transcribe into the box."
               : voice.busy
                 ? "Transcribing…"
-                : (voice.error ??
-                  "Every action is gated by the capability broker — irreversible ones wait for your approval.")}
+                : voice.error}
         </span>
         {/* Only offered when there is a real choice: one microphone needs no picker. */}
         {voice.status && voice.browserReason === null && voice.status.serverMic && (

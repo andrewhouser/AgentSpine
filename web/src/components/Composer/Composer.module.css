@@ -289,7 +289,7 @@
   text-align: left;
 }
 
-/* The broker hint is the first thing to drop; the tier picker is interactive and stays. */
+/* The status hint (uploading, listening, a voice error) is the first thing to drop; the tier picker is interactive and stays. */
 @media (width <= 620px) {
   .hintRow .hint {
     display: none;
