@@ -155,6 +155,48 @@
   width: 32px;
 }
 
+/* A message waiting for the running reply to end. */
+.queued {
+  align-items: center;
+  background: var(--bg-inset);
+  border-radius: 9px;
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 10px;
+  margin-right: 6px;
+  padding: 6px 6px 6px 10px;
+}
+
+.queuedLabel {
+  color: var(--text-dim);
+  flex: none;
+  font-weight: 600;
+}
+
+.queuedText {
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queuedAction {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  flex: none;
+  font: inherit;
+  padding: 2px 8px;
+}
+
+.queuedAction:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
 .stop {
   background: var(--text);
   border: 0;

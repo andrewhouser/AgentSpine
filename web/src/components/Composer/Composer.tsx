@@ -102,13 +102,53 @@ export const Composer = ({
    * an upload is still in flight: the id does not exist yet, and the image would be silently
    * left behind by a turn that then answered as though nothing had been attached.
    */
-  const canSend = (!!value.trim() || images.ready.length > 0) && !busy && !images.uploading;
+  const canSend = (!!value.trim() || images.ready.length > 0) && !images.uploading;
+
+  /**
+   * A message sent while a reply is still running waits here and goes out by itself when that
+   * turn ends (Andrew's choice, 2026-11-27, over "stop and send"). One slot: a second send
+   * while waiting joins the first, so two thoughts typed during a long answer arrive as one
+   * message rather than racing as two turns. Held with its thread, so switching threads drops
+   * it instead of sending it into the wrong conversation.
+   */
+  const [queued, setQueued] = useState<{ attachments: Attachment[]; conversationId: number; text: string } | null>(
+    null,
+  );
+  if (queued && queued.conversationId !== conversationId) setQueued(null);
+  // A tick after the turn ends, so the finished answer is drawn before the next one starts.
+  // The cleanup cancels it if anything changes first (a cancel, a new turn, a re-render).
+  useEffect(() => {
+    if (busy || !queued) return;
+    const timer = setTimeout(() => {
+      setQueued(null);
+      onSend(queued.text, queued.attachments);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [busy, queued, onSend]);
 
   const send = (): void => {
     if (!canSend) return;
-    onSend(value.trim(), images.ready);
+    const text = value.trim();
+    if (busy) {
+      setQueued((q) => ({
+        attachments: [...(q?.attachments ?? []), ...images.ready],
+        conversationId,
+        text: q?.text ? (text ? `${q.text}\n\n${text}` : q.text) : text,
+      }));
+    } else {
+      onSend(text, images.ready);
+    }
     setValue("");
     images.clear();
+  };
+
+  // Back into the box to change it. Only the words: a staged image cannot be un-uploaded into
+  // the picker, so a queued message with images offers Cancel alone.
+  const editQueued = (): void => {
+    if (!queued) return;
+    setValue((v) => (v.trim() ? `${queued.text}\n\n${v}` : queued.text));
+    setQueued(null);
+    ref.current?.focus();
   };
 
   /**
@@ -176,6 +216,25 @@ export const Composer = ({
         }}
         onDrop={onDrop}
       >
+        {queued && (
+          <div className={styles.queued}>
+            <span className={styles.queuedLabel}>Sends when this reply ends</span>
+            <span className={styles.queuedText}>
+              {queued.text || "(image)"}
+              {queued.attachments.length > 0 && queued.text
+                ? ` + ${queued.attachments.length} image${queued.attachments.length === 1 ? "" : "s"}`
+                : ""}
+            </span>
+            {queued.attachments.length === 0 && (
+              <button className={styles.queuedAction} onClick={editQueued} type="button">
+                Edit
+              </button>
+            )}
+            <button className={styles.queuedAction} onClick={() => setQueued(null)} type="button">
+              Cancel
+            </button>
+          </div>
+        )}
         {images.items.length > 0 && (
           <div className={styles.thumbs}>
             {images.items.map((image) => (
@@ -212,7 +271,7 @@ export const Composer = ({
           <textarea
             className={styles.input}
             // Never disabled while a turn runs: you can type the next message as the answer
-            // streams in. `send` still refuses until the turn ends, so Enter does nothing early.
+            // streams in, and Enter queues it (see `queued`).
             hidden={voice.listening && voice.levels.length > 0}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
@@ -275,7 +334,7 @@ export const Composer = ({
             </button>
           )}
 
-          {showsStop ? (
+          {showsStop && (
             <button
               aria-label="Stop this turn"
               className={styles.stop}
@@ -286,8 +345,17 @@ export const Composer = ({
             >
               ■
             </button>
-          ) : (
-            <button aria-label="Send" className={styles.send} disabled={!canSend} onClick={send} type="button">
+          )}
+          {/* While a turn runs, send appears beside stop once there is something to queue. */}
+          {(!showsStop || canSend) && (
+            <button
+              aria-label={busy ? "Queue: sends when this reply ends" : "Send"}
+              className={styles.send}
+              disabled={!canSend}
+              onClick={send}
+              title={busy ? "Queue: sends when this reply ends" : undefined}
+              type="button"
+            >
               ↑
             </button>
           )}

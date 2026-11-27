@@ -21,6 +21,11 @@ struct MacComposer: View {
     /// enabled while the rest of the box is disabled, since stopping is the one thing to do then.
     var stop: (() -> Void)?
     var isStopping = false
+    /// A message waiting for the running turn to end, as one line, with ways to change it.
+    /// Edit is nil when the message carries images (they cannot go back into the picker).
+    var queued: String?
+    var editQueued: (() -> Void)?
+    var cancelQueued: () -> Void = {}
     let send: () -> Void
 
     @State private var choosing = false
@@ -45,6 +50,26 @@ struct MacComposer: View {
                 Text(error)
                     .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
                     .foregroundStyle(Spine.Palette.danger)
+            }
+            if let queued {
+                HStack(spacing: Spine.Space.sm) {
+                    Text("Sends when this reply ends")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Spine.Palette.textDim)
+                    Text(queued)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(Spine.Palette.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let editQueued {
+                        Button("Edit", action: editQueued).buttonStyle(.borderless)
+                    }
+                    Button("Cancel", action: cancelQueued).buttonStyle(.borderless)
+                }
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .padding(.horizontal, Spine.Space.sm)
+                .padding(.vertical, Spine.Space.xs)
+                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 8))
             }
             if !staged.isEmpty || uploading > 0 {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -107,7 +132,9 @@ struct MacComposer: View {
                     .keyboardShortcut(.escape, modifiers: [])
                     .help("Stop this turn (Esc)")
                     .accessibilityLabel("Stop this turn")
-                } else {
+                }
+                // While a turn runs, send appears beside stop once there is something to queue.
+                if stop == nil || canSend {
                 Button(action: send) {
                     if isBusy {
                         ProgressView().controlSize(.small)
@@ -119,8 +146,8 @@ struct MacComposer: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(canSend ? Spine.Palette.accent : Spine.Palette.textFaint)
                 .disabled(!canSend)
-                .help("Send (Return)")
-                .accessibilityLabel("Send")
+                .help(stop == nil ? "Send (Return)" : "Queue: sends when this reply ends (Return)")
+                .accessibilityLabel(stop == nil ? "Send" : "Queue message")
                 }
             }
         }

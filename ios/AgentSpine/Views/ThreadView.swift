@@ -36,6 +36,8 @@ struct ThreadView: View {
     /// photo is chosen, not on send, so picking three and then writing a question does not
     /// end in a wait.
     @State private var staged: [Attachment] = []
+    /// Sent while a turn was running; goes out when it ends (see QueuedMessage).
+    @State private var queued: QueuedMessage?
     @State private var uploading = 0
     @State private var dictation = Dictation()
     @State private var handsFree = HandsFree()
@@ -153,6 +155,10 @@ struct ThreadView: View {
                     await load()
                     isSettling = false
                     liveTask = nil
+                    if let next = queued {
+                        queued = nil
+                        await deliver(next.text, attachments: next.attachments)
+                    }
                     await state.refreshConversations()
                     Task { await state.refreshUntilTitled(conversationID) }
                     if handsFree.phase == .busy { await speakReplyThenResume() }
@@ -366,7 +372,7 @@ struct ThreadView: View {
     }
 
     /// While a turn is running and there is nothing new to send, the send button becomes stop.
-    /// With a draft it stays send, so a follow-up can still be queued behind the running turn.
+    /// With a draft it stays send, which queues the follow-up until the running turn ends.
     private var showsStop: Bool {
         stream.isLive && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && staged.isEmpty
     }
@@ -451,6 +457,30 @@ struct ThreadView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal)
+            }
+
+            if let queued {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Sends when this reply ends")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Spine.Palette.textDim)
+                        Text(queued.preview)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .foregroundStyle(Spine.Palette.text)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if queued.attachments.isEmpty {
+                        Button("Edit") { editQueued() }
+                    }
+                    Button("Cancel") { self.queued = nil }
+                }
+                .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Spine.Palette.bgInset, in: RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
             }
 
@@ -668,24 +698,52 @@ struct ThreadView: View {
             if spoken { handsFree.resume() }
             return
         }
+        // Typed mid-turn: wait for the turn instead of starting a second one, which used to
+        // swap the live view to the new run and drop the answer still streaming.
+        if !spoken, stream.isLive || isSettling {
+            queued = (queued ?? QueuedMessage(text: "", attachments: [])).adding(text: task, attachments: staged)
+            draft = ""
+            staged = []
+            return
+        }
+        if await deliver(task, attachments: staged) {
+            draft = ""
+            staged = []
+        } else if spoken {
+            handsFree.resume()
+        }
+    }
+
+    /// Back into the box to change it. Only offered without images: a staged image cannot be
+    /// put back into the picker.
+    private func editQueued() {
+        guard let q = queued else { return }
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = typed.isEmpty ? q.text : "\(q.text)\n\n\(draft)"
+        queued = nil
+        composerFocused = true
+    }
+
+    @discardableResult
+    private func deliver(_ task: String, attachments: [Attachment]) async -> Bool {
+        guard !isSending else { return false }
         isSending = true
         defer { isSending = false }
         do {
             let started = try await APIClient.shared.send(
                 message: task,
                 to: conversationID,
-                attachmentIDs: staged.map(\.id)
+                attachmentIDs: attachments.map(\.id)
             )
-            draft = ""
-            staged = []
             // The server answers an image with no words as "What is this?", so the live
             // turn should say that rather than show an empty bubble.
             liveTask = task.isEmpty ? "What is this?" : task
             stream.start(runID: started.runID)
             composerError = nil
+            return true
         } catch {
             composerError = error.localizedDescription
-            if spoken { handsFree.resume() }
+            return false
         }
     }
 }

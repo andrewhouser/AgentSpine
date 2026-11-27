@@ -228,3 +228,25 @@ final class RunStream {
         }
     }
 }
+
+/// A message sent while a reply is still running. It waits and goes out by itself when that
+/// turn ends (Andrew's choice, 2026-11-27, over "stop and send"); web, Mac and iPhone behave
+/// the same. One slot: a second send while waiting joins the first, so two thoughts typed
+/// during a long answer arrive as one message rather than racing as two turns.
+struct QueuedMessage: Equatable {
+    var text: String
+    var attachments: [Attachment]
+
+    /// This message with another send folded in.
+    func adding(text more: String, attachments extra: [Attachment]) -> QueuedMessage {
+        let joined = text.isEmpty ? more : (more.isEmpty ? text : "\(text)\n\n\(more)")
+        return QueuedMessage(text: joined, attachments: attachments + extra)
+    }
+
+    /// One line for the composer: the words, or "(image)", plus how many images ride along.
+    var preview: String {
+        let words = text.isEmpty ? "(image)" : text.replacingOccurrences(of: "\n", with: " ")
+        guard !attachments.isEmpty, !text.isEmpty else { return words }
+        return "\(words) + \(attachments.count) image\(attachments.count == 1 ? "" : "s")"
+    }
+}

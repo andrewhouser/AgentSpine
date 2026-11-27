@@ -34,6 +34,8 @@ struct MacThreadDetail: View {
     @State private var isStopping = false
     @State private var composerError: String?
     @State private var staged: [Attachment] = []
+    /// Sent while a turn was running; goes out when it ends (see QueuedMessage).
+    @State private var queued: QueuedMessage?
     @State private var uploading = 0
     @State private var reader = ReadAloud()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -110,7 +112,8 @@ struct MacThreadDetail: View {
             MacComposer(
                 draft: $draft,
                 isBusy: isSending,
-                isDisabled: thread == nil || stream.isLive,
+                // Not disabled while a turn runs: what you send then is queued.
+                isDisabled: thread == nil,
                 error: composerError,
                 staged: staged,
                 uploading: uploading,
@@ -119,6 +122,9 @@ struct MacThreadDetail: View {
                 focusRequest: focusRequest,
                 stop: stream.isLive ? { Task { await stopTurn() } } : nil,
                 isStopping: isStopping,
+                queued: queued?.preview,
+                editQueued: queued?.attachments.isEmpty == true ? { editQueued() } : nil,
+                cancelQueued: { queued = nil },
                 send: { Task { await send() } }
             )
         }
@@ -152,6 +158,10 @@ struct MacThreadDetail: View {
                     await load()
                     isSettling = false
                     liveTask = nil
+                    if let next = queued {
+                        queued = nil
+                        await deliver(next.text, attachments: next.attachments)
+                    }
                     hub.nudge(conversationID, from: viewID)
                     await state.refreshConversations()
                     Task { await state.refreshUntilTitled(conversationID) }
@@ -437,17 +447,40 @@ struct MacThreadDetail: View {
 
     private func send() async {
         let task = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !task.isEmpty || !staged.isEmpty, !isSending, !stream.isLive, uploading == 0 else { return }
+        guard !task.isEmpty || !staged.isEmpty, !isSending, uploading == 0 else { return }
+        if stream.isLive || isSettling {
+            queued = (queued ?? QueuedMessage(text: "", attachments: [])).adding(text: task, attachments: staged)
+            draft = ""
+            staged = []
+            return
+        }
+        if await deliver(task, attachments: staged) {
+            draft = ""
+            staged = []
+        }
+    }
+
+    /// Back into the box to change it. Only offered without images: a staged image cannot be
+    /// put back into the picker.
+    private func editQueued() {
+        guard let q = queued else { return }
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = typed.isEmpty ? q.text : "\(q.text)\n\n\(draft)"
+        queued = nil
+        focusRequest += 1
+    }
+
+    @discardableResult
+    private func deliver(_ task: String, attachments: [Attachment]) async -> Bool {
+        guard !isSending else { return false }
         isSending = true
         defer { isSending = false }
         do {
             let started = try await APIClient.shared.send(
                 message: task,
                 to: conversationID,
-                attachmentIDs: staged.map(\.id)
+                attachmentIDs: attachments.map(\.id)
             )
-            draft = ""
-            staged = []
             // The server answers an image with no words as "What is this?", so the live turn
             // says that rather than show an empty bubble.
             liveTask = task.isEmpty ? "What is this?" : task
@@ -455,8 +488,10 @@ struct MacThreadDetail: View {
             stream.start(runID: started.runID)
             composerError = nil
             hub.nudge(conversationID, from: viewID)
+            return true
         } catch {
             composerError = error.localizedDescription
+            return false
         }
     }
 }
