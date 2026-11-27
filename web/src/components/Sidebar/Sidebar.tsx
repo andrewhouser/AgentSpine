@@ -87,9 +87,9 @@ export const Sidebar = ({
   waiting,
 }: SidebarProps) => {
   const [moreOpen, setMoreOpen] = useState(readMoreOpen);
-  const { order } = useNavOrder();
-  const pinned = pinnedItems(order);
-  const folded = foldedItems(order);
+  const { count, order } = useNavOrder();
+  const pinned = pinnedItems(order, count);
+  const folded = foldedItems(order, count);
   const recent = conversations.slice(0, RECENT_MAX);
   // Drag to reorder (2026-11-27, section 15, R12), as on the Mac. The order is this browser's, in
   // localStorage, the same store Settings → Menu edits. Settings itself does not move.

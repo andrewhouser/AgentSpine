@@ -7,7 +7,16 @@ import Foundation
 ///
 /// Foundation-only so that test can compile and run the real file.
 enum MenuLayout {
+    /// How many are pinned when nothing is chosen.
     static let pinnedSlots = 6
+    /// What Settings → Sidebar menu offers (Andrew, 2026-11-27). `PINNED_MIN`/`PINNED_MAX` in
+    /// web/src/lib/navLayout.ts are the same.
+    static let pinnedRange = 2...8
+    /// The `@AppStorage` key for the chosen count; 0 (nothing stored) is the default.
+    static let countKey = "sidebarPinnedCount"
+
+    /// Anything stored that is out of range falls back to the default, never clamps to an edge.
+    static func count(_ stored: Int) -> Int { pinnedRange.contains(stored) ? stored : pinnedSlots }
 
     /// Unknown names dropped (an item a later version removed), repeats dropped, and anything the
     /// saved list lacks (an item a later version added) appended in default order, so it lands
@@ -30,8 +39,8 @@ enum MenuLayout {
         return rest
     }
 
-    static func pinned(_ order: [String]) -> [String] { Array(order.prefix(pinnedSlots)) }
-    static func folded(_ order: [String]) -> [String] { Array(order.dropFirst(pinnedSlots)) }
+    static func pinned(_ order: [String], count: Int = pinnedSlots) -> [String] { Array(order.prefix(count)) }
+    static func folded(_ order: [String], count: Int = pinnedSlots) -> [String] { Array(order.dropFirst(count)) }
 
     /// `@AppStorage` holds a string, not an array. Section names never contain a comma.
     static func decode(_ stored: String) -> [String] {

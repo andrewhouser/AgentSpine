@@ -34,6 +34,8 @@ interface Spec {
   /** What `.env` says, as a level. */
   env: () => Level;
   envName: string;
+  /** How `.env` spells each level, so a locked dial can say the exact line to change (2026-11-27). */
+  envValues: Partial<Record<Level, string>>;
   feature: Feature;
   /** A guard only tightens from a screen; a feature only loosens as far as `.env`. */
   guard: boolean;
@@ -46,13 +48,13 @@ interface Spec {
 const fromMode = (m: string): Level => (m === "log" ? "watch" : m === "off" ? "off" : "on");
 
 export const SPECS: readonly Spec[] = [
-  { env: () => fromMode(CHECKIN_MODE), envName: "CHECKIN_MODE", feature: "checkin", guard: false, hint: "New mail from people, every few hours", label: "Check-in", levels: ["off", "watch", "on"] },
-  { env: () => fromMode(INBOX_SORT_MODE), envName: "INBOX_SORT_MODE", feature: "inbox-sort", guard: false, hint: "Sorts mail into urgent, reply today and FYI", label: "Inbox sort", levels: ["off", "watch", "on"] },
+  { env: () => fromMode(CHECKIN_MODE), envName: "CHECKIN_MODE", envValues: { off: "off", on: "push", watch: "log" }, feature: "checkin", guard: false, hint: "New mail from people, every few hours", label: "Check-in", levels: ["off", "watch", "on"] },
+  { env: () => fromMode(INBOX_SORT_MODE), envName: "INBOX_SORT_MODE", envValues: { off: "off", on: "on", watch: "log" }, feature: "inbox-sort", guard: false, hint: "Sorts mail into urgent, reply today and FYI", label: "Inbox sort", levels: ["off", "watch", "on"] },
   // Heads-up has no log-only mode of its own, so its dial is Off or On.
-  { env: () => (HEADSUP_ENABLED ? "on" : "off"), envName: "HEADSUP_ENABLED", feature: "headsup", guard: false, hint: "Birthdays, bills and trips", label: "Heads-up", levels: ["off", "on"] },
+  { env: () => (HEADSUP_ENABLED ? "on" : "off"), envName: "HEADSUP_ENABLED", envValues: { off: "false", on: "true" }, feature: "headsup", guard: false, hint: "Birthdays, bills and trips", label: "Heads-up", levels: ["off", "on"] },
   // Guards have no Off: with enforcement off they still record, which is Watch.
-  { env: () => (OUTBOX_ENFORCE ? "on" : "watch"), envName: "OUTBOX_ENFORCE", feature: "outbox", guard: true, hint: "Quiet hours, repeats and the daily cap on notifications", label: "Notification limits", levels: ["watch", "on"] },
-  { env: () => (OUTGOING_ENFORCE ? "on" : "watch"), envName: "OUTGOING_ENFORCE", feature: "outgoing", guard: true, hint: "Stops card numbers and secrets in text a tool sends out", label: "Outgoing text check", levels: ["watch", "on"] },
+  { env: () => (OUTBOX_ENFORCE ? "on" : "watch"), envName: "OUTBOX_ENFORCE", envValues: { on: "true", watch: "false" }, feature: "outbox", guard: true, hint: "Quiet hours, repeats and the daily cap on notifications", label: "Notification limits", levels: ["watch", "on"] },
+  { env: () => (OUTGOING_ENFORCE ? "on" : "watch"), envName: "OUTGOING_ENFORCE", envValues: { on: "true", watch: "false" }, feature: "outgoing", guard: true, hint: "Stops card numbers and secrets in text a tool sends out", label: "Outgoing text check", levels: ["watch", "on"] },
 ];
 
 const specOf = (feature: string): Spec | undefined => SPECS.find((s) => s.feature === feature);
@@ -108,6 +110,7 @@ export interface Dial {
   /** What `.env` says: the ceiling for a feature, the floor for a guard. */
   env: Level;
   envName: string;
+  envValues: Partial<Record<Level, string>>;
   feature: Feature;
   guard: boolean;
   hint: string;
@@ -121,6 +124,7 @@ export const listDials = (): Dial[] =>
     allowed: allowedLevels(s),
     env: s.env(),
     envName: s.envName,
+    envValues: s.envValues,
     feature: s.feature,
     guard: s.guard,
     hint: s.hint,
@@ -142,8 +146,8 @@ export const setMode = (feature: unknown, level: unknown): SetResult => {
   if (!allowedLevels(spec).includes(level)) {
     return {
       error: spec.guard
-        ? `${spec.label} can only be tightened from here: ${spec.envName} in .env sets the lowest it can go`
-        : `${spec.label} cannot go higher than ${spec.envName} in .env allows; change it there and restart`,
+        ? `${spec.label} can only be tightened from here: ${spec.envName} in .env sets the lowest it can go. For ${level}, set ${spec.envName}=${spec.envValues[level]} there and restart`
+        : `${spec.label} cannot go higher than ${spec.envName} in .env allows. For ${level}, set ${spec.envName}=${spec.envValues[level]} there and restart`,
       ok: false,
     };
   }

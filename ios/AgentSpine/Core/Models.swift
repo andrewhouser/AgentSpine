@@ -2601,6 +2601,8 @@ struct Dial: Codable, Hashable, Identifiable {
     let allowed: [String]
     let env: String
     let envName: String
+    /// How `.env` spells each level ("log", "push", "true"). Nil from a server older than 2026-11-27.
+    let envValues: [String: String]?
     let feature: String
     let guard_: Bool
     let hint: String
@@ -2611,7 +2613,7 @@ struct Dial: Codable, Hashable, Identifiable {
     var id: String { feature }
 
     enum CodingKeys: String, CodingKey {
-        case agreement, allowed, env, envName, feature, hint, label, levels, mode
+        case agreement, allowed, env, envName, envValues, feature, hint, label, levels, mode
         case guard_ = "guard"
     }
 }
@@ -2649,8 +2651,31 @@ enum DialWords {
         a.of == 0 ? "Nothing to judge from \(days(a.days))." : "You agreed with \(a.agreed) of \(a.of), \(days(a.days))."
     }
 
-    static func envLine(allowed: [String], env: String, envName: String, guard isGuard: Bool) -> String {
+    /// The levels `.env` keeps this dial from taking: above a feature's ceiling, below a guard's floor.
+    static func lockedLevels(allowed: [String], levels: [String]) -> [String] {
+        levels.filter { !allowed.contains($0) }
+    }
+
+    private static func list(_ words: [String]) -> String {
+        words.count < 2 ? words.joined() : words.dropLast().joined(separator: ", ") + " and " + words[words.count - 1]
+    }
+
+    /// What `.env` allows. A locked level names the exact line that would unlock it (2026-11-27):
+    /// the ceiling is on purpose (R3), so the screen says where the switch really is.
+    static func envLine(allowed: [String], env: String, envName: String, envValues: [String: String]?,
+                        guard isGuard: Bool, levels: [String]) -> String {
         let at = levelLabel(env)
+        let locked = lockedLevels(allowed: allowed, levels: levels)
+        if !locked.isEmpty, let spell = envValues {
+            let now = spell[env].map { "\(envName)=\($0)" } ?? envName
+            let which = list(locked.map(levelLabel))
+            let verb = locked.count == 1 ? "is" : "are"
+            let pairs = locked.map { "\(envName)=\(spell[$0] ?? "?") for \(levelLabel($0))" }.joined(separator: " or ")
+            let fix = "To allow \(locked.count == 1 ? "it" : "them"), set \(pairs) in .env on the server and restart."
+            return isGuard
+                ? "\(at) is the least .env allows (\(now)), so \(which) \(verb) locked: a guard cannot be loosened from here. \(fix)"
+                : "\(at) is the most .env allows (\(now)), so \(which) \(verb) locked. \(fix)"
+        }
         if isGuard {
             return allowed.count == 1
                 ? "\(at) in .env (\(envName)). A guard cannot be loosened from here."
@@ -2659,6 +2684,12 @@ enum DialWords {
         return allowed.count == 1
             ? "\(at) in .env (\(envName)). To turn it up, change it there and restart."
             : ".env (\(envName)) allows up to \(at)."
+    }
+
+    /// The accessibility hint on a locked level's button.
+    static func lockedHint(envName: String, envValues: [String: String]?, level: String) -> String {
+        if let value = envValues?[level] { return "Locked by .env. Set \(envName)=\(value) on the server and restart." }
+        return "Locked by \(envName) in .env."
     }
 }
 

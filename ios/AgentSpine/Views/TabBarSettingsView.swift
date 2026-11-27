@@ -40,7 +40,9 @@ struct TabBarSettingsView: View {
             } header: {
                 Text("Order")
             } footer: {
-                Text("Drag to reorder. The first four are in the bar; the rest are under More.")
+                // The web and Mac let you choose how many are pinned (2 to 8, 2026-11-27). On an iPhone
+                // the system's tab bar shows four and folds the rest under More, so the count is fixed.
+                Text("Drag to reorder. The first four are in the bar; the rest are under More. On iPhone the bar always holds four.")
             }
 
             Section {

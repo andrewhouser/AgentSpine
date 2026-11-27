@@ -102,3 +102,25 @@
 .dragging {
   opacity: 0.45;
 }
+
+.countRow {
+  align-items: center;
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.countRow .note {
+  margin: 0;
+}
+
+.count {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  padding: 3px 6px;
+  width: 4rem;
+}

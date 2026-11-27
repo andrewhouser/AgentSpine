@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { foldedItems, parseNavOrder, pinnedItems, PINNED_SLOTS, placeItem, reconcileOrder } from "../web/src/lib/navLayout.ts";
+import { foldedItems, parseNavOrder, parsePinnedCount, PINNED_MAX, PINNED_MIN, pinnedItems, PINNED_SLOTS, placeItem, reconcileOrder } from "../web/src/lib/navLayout.ts";
 
 const REPO = path.dirname(import.meta.dirname);
 const SOURCE = path.join(REPO, "ios/AgentSpine Mac/MacMenuLayout.swift");
@@ -34,6 +34,15 @@ const drops = [
   { name: "an unknown item changes nothing", drop: ["zz", "c", true], expect: all },
 ];
 
+// How many are pinned (2026-11-27): what is stored, and the count that results. 0 is "nothing stored" on the Mac.
+const counts = [
+  { name: "nothing stored is six", stored: 0, expect: 6 },
+  { name: "two is allowed", stored: 2, expect: 2 },
+  { name: "eight is allowed", stored: 8, expect: 8 },
+  { name: "one falls back to six, not to two", stored: 1, expect: 6 },
+  { name: "nine falls back to six, not to eight", stored: 9, expect: 6 },
+];
+
 let passed = 0;
 let failed = 0;
 const check = (name, got, want) => {
@@ -48,6 +57,10 @@ const check = (name, got, want) => {
 
 for (const c of cases) check(`web: ${c.name}`, reconcileOrder(c.saved, all).join(), c.expect.join());
 for (const d of drops) check(`web: ${d.name}`, placeItem(all, ...d.drop).join(), d.expect.join());
+for (const c of counts) check(`web: ${c.name}`, String(parsePinnedCount(c.stored === 0 ? null : String(c.stored))), String(c.expect));
+check("web: a fraction falls back to six", String(parsePinnedCount("4.5")), "6");
+check("web: the range is two to eight", `${PINNED_MIN}-${PINNED_MAX}`, "2-8");
+check("web: three pinned splits there", `${pinnedItems(all, 3).join()}|${foldedItems(all, 3).join()}`, "a,b,c|d,e,f,g");
 check("web: six pinned", pinnedItems(all).join(), "a,b,c,d,e,f");
 check("web: the rest folded", foldedItems(all).join(), "g");
 check("web: six slots", String(PINNED_SLOTS), "6");
@@ -78,6 +91,8 @@ let drops: [(String, String, Bool)] = [
 ${drops.map((d) => `  (${JSON.stringify(d.drop[0])}, ${JSON.stringify(d.drop[1])}, ${d.drop[2]})`).join(",\n")}
 ]
 for (item, target, after) in drops { print(MenuLayout.place(all, item: item, target: target, after: after).joined(separator: ",")) }
+for stored in [${counts.map((c) => c.stored).join(", ")}] { print(MenuLayout.count(stored)) }
+print("\\(MenuLayout.pinned(all, count: 3).joined(separator: ","))|\\(MenuLayout.folded(all, count: 3).joined(separator: ","))")
 print(MenuLayout.pinned(all).joined(separator: ","))
 print(MenuLayout.folded(all).joined(separator: ","))
 print(MenuLayout.pinnedSlots)
@@ -96,7 +111,10 @@ print(MenuLayout.decode("").isEmpty)
     const lines = execFileSync(bin, { encoding: "utf8" }).trim().split("\n");
     cases.forEach((c, i) => check(`mac: ${c.name}`, lines[i], c.expect.join()));
     drops.forEach((d, i) => check(`mac: ${d.name}`, lines[cases.length + i], d.expect.join()));
-    const rest = lines.slice(cases.length + drops.length);
+    const base = cases.length + drops.length;
+    counts.forEach((c, i) => check(`mac: ${c.name}`, lines[base + i], String(c.expect)));
+    check("mac: three pinned splits there", lines[base + counts.length], "a,b,c|d,e,f,g");
+    const rest = lines.slice(base + counts.length + 1);
     check("mac: six pinned", rest[0], "a,b,c,d,e,f");
     check("mac: the rest folded", rest[1], "g");
     check("mac: six slots", rest[2], "6");

@@ -10,14 +10,16 @@ struct MacSidebarMenu: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(MacSection.orderKey) private var storedOrder = ""
     @AppStorage("sidebarMoreExpanded") private var moreExpanded = false
+    @AppStorage(MenuLayout.countKey) private var storedCount = 0
     /// The section a drag is over, outlined so you can see where it will land.
     @State private var dropTarget: MacSection?
 
     private let columns = [GridItem(.flexible(), spacing: 2), GridItem(.flexible(), spacing: 2)]
 
     private var order: [MacSection] { MacSection.ordered(storedOrder) }
-    private var pinned: [MacSection] { Array(order.prefix(MenuLayout.pinnedSlots)) }
-    private var folded: [MacSection] { Array(order.dropFirst(MenuLayout.pinnedSlots)) }
+    private var pinnedCount: Int { MenuLayout.count(storedCount) }
+    private var pinned: [MacSection] { Array(order.prefix(pinnedCount)) }
+    private var folded: [MacSection] { Array(order.dropFirst(pinnedCount)) }
 
     /// With More shut, the open section has no row of its own, so More carries the highlight.
     private var openSectionIsFolded: Bool {
@@ -153,15 +155,26 @@ struct MacSidebarMenu: View {
     }
 }
 
-/// Settings → Assistant → Sidebar menu: what the six pinned items are and their order. It lives
-/// in `UserDefaults` because it describes this Mac's window, not the assistant.
+/// Settings → Assistant → Sidebar menu: how many items are pinned (2 to 8, 2026-11-27), which, and
+/// their order. It lives in `UserDefaults` because it describes this Mac's window, not the assistant.
 struct MacMenuSettingsView: View {
     @AppStorage(MacSection.orderKey) private var storedOrder = ""
+    @AppStorage(MenuLayout.countKey) private var storedCount = 0
+
+    private var pinnedCount: Int { MenuLayout.count(storedCount) }
 
     private var order: [MacSection] { MacSection.ordered(storedOrder) }
 
     var body: some View {
         List {
+            Section {
+                Picker("Items in the menu", selection: Binding(get: { pinnedCount }, set: { storedCount = $0 })) {
+                    ForEach(Array(MenuLayout.pinnedRange), id: \.self) { Text("\($0)").tag($0) }
+                }
+            } footer: {
+                Text("\(MenuLayout.pinnedRange.lowerBound) to \(MenuLayout.pinnedRange.upperBound). The rest fold under More.")
+            }
+
             Section {
                 ForEach(Array(order.enumerated()), id: \.element) { index, item in
                     row(item, index: index)
@@ -174,19 +187,22 @@ struct MacMenuSettingsView: View {
             } header: {
                 Text("Order")
             } footer: {
-                Text("Drag here or in the sidebar, or use the arrows. The first six are in the sidebar menu; the rest are under More.")
+                Text("Drag here or in the sidebar, or use the arrows. The first \(pinnedCount) are in the sidebar menu; the rest are under More.")
             }
 
             Section {
-                Button("Reset to default") { storedOrder = "" }
-                    .disabled(storedOrder.isEmpty)
+                Button("Reset to default") {
+                    storedOrder = ""
+                    storedCount = 0
+                }
+                .disabled(storedOrder.isEmpty && storedCount == 0)
             }
         }
         .navigationTitle("Sidebar menu")
     }
 
     private func row(_ item: MacSection, index: Int) -> some View {
-        let isPinned = index < MenuLayout.pinnedSlots
+        let isPinned = index < pinnedCount
         return HStack(spacing: Spine.Space.md) {
             Image(systemName: item.symbol)
                 .frame(width: 24)

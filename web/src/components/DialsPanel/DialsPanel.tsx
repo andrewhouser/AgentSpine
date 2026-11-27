@@ -4,7 +4,7 @@ import type { Dial, DialLevel, WouldHave } from "../../lib/dials.ts";
 
 import { useResource } from "../../hooks/useResource.ts";
 import { api } from "../../lib/api.ts";
-import { agreementLine, envLine, levelLabel } from "../../lib/dials.ts";
+import { agreementLine, envLine, levelLabel, lockedHint, lockedLevels } from "../../lib/dials.ts";
 import styles from "./DialsPanel.module.css";
 
 const NONE: Dial[] = [];
@@ -68,22 +68,32 @@ export const DialsPanel = () => {
                 <span className={styles.label}>{d.label}</span>
                 {d.guard && <span className={styles.guard}>guard</span>}
                 <div className={styles.hint}>{d.hint}</div>
-                <div className={styles.env}>{envLine(d)}</div>
+                <div className={lockedLevels(d).length > 0 ? styles.envLocked : styles.env}>{envLine(d)}</div>
               </div>
               <div aria-label={`${d.label} mode`} className={styles.dial} role="radiogroup">
-                {d.levels.map((l) => (
-                  <button
-                    aria-checked={d.mode === l}
-                    className={`${styles.level} ${d.mode === l ? styles.levelOn : ""}`}
-                    disabled={!d.allowed.includes(l)}
-                    key={l}
-                    onClick={() => d.mode !== l && move(d, l)}
-                    role="radio"
-                    type="button"
-                  >
-                    {levelLabel(l)}
-                  </button>
-                ))}
+                {d.levels.map((l) => {
+                  const locked = !d.allowed.includes(l);
+                  return (
+                    <button
+                      aria-checked={d.mode === l}
+                      aria-description={locked ? lockedHint(d, l) : undefined}
+                      className={`${styles.level} ${d.mode === l ? styles.levelOn : ""}`}
+                      disabled={locked}
+                      key={l}
+                      onClick={() => d.mode !== l && move(d, l)}
+                      role="radio"
+                      title={locked ? lockedHint(d, l) : undefined}
+                      type="button"
+                    >
+                      {locked && (
+                        <span aria-hidden="true" className={styles.lock}>
+                          🔒︎
+                        </span>
+                      )}
+                      {levelLabel(l)}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             {d.agreement && (

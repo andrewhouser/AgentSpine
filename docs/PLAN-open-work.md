@@ -2025,6 +2025,16 @@ leaves the machine stops and writes down what it found.
   both apps). Tests: `test/modes.test.mjs`, `test/dials-screen.test.mjs`. Not done: the Fable read of the
   mode store that the section's last paragraph asks for before shipping, and nothing has been seen running
   on the Mini.
+- **Ceiling kept, 2026-11-27.** Andrew found he could not move Check-in or Inbox sort: both are off in the
+  Mini's `.env` (the defaults), so Off was all the screen allowed and Watch and On were only greyed out. He
+  chose to keep `.env` as the ceiling and have the screen say so. Each dial now carries `envValues`, how
+  `.env` spells each level, and a locked level reads "Off is the most .env allows (INBOX_SORT_MODE=off), so
+  Watch and On are locked. To allow them, set INBOX_SORT_MODE=log for Watch or INBOX_SORT_MODE=on for On in
+  .env on the server and restart.", with a lock on the button and the same line as its hint. The refusal
+  from `POST /api/modes/:feature` names the line too. A server without `envValues` gets the old sentences.
+  Tests: `test/dials-screen.test.mjs` (web and Swift words, side by side). To switch them on, Andrew sets
+  `CHECKIN_MODE` and `INBOX_SORT_MODE` in the Mini's `.env` and restarts; the inbox sort's injection eval
+  still comes before On (`config.ts`).
 
 ### R4. Meetings on the line (Code; all three clients)
 
@@ -2187,6 +2197,11 @@ Andrew's review of the menu after R11, proposal approved as written on 2026-11-2
   before; nothing on the server). Web: drag in the sidebar and in Settings → Menu (arrows stay for the
   keyboard). Mac: drag in the sidebar as well as Settings → Sidebar menu; dropping on More unpins. One rule,
   `placeItem` / `MenuLayout.place`, tested against both in `menu-layout`.
+- **How many are pinned** (added 2026-11-27, Andrew): a setting in Settings → Menu (web, a 2 to 8 list) and
+  Settings → Sidebar menu (Mac, a picker), default six, kept per device beside the order
+  (`sidebar-pinned-count`, `sidebarPinnedCount`). Out-of-range storage falls back to six. iPhone is not
+  changed: iOS's tab bar shows four and folds the rest, so fewer than four would need a hand-built More
+  tab (and deep links that can reach into it). Yours to decide whether that is worth building.
 - **Ask is one box.** Enter asks; as you type, "Said before" lists matching past conversations under it, and
   starred replies show while it is empty. iPhone's Ask tab has the same search on its thread list; the Mac
   keeps ⌘K.
@@ -2246,7 +2261,7 @@ start beside R1 because its server half shares nothing with the spine.
 
 Yours to decide:
 - ~~The menu after R0: which of today's twelve places stay.~~ Decided 2026-11-27 (R12).
-- R3: whether `.env` is the ceiling for a dial or only its starting value.
+- ~~R3: whether `.env` is the ceiling for a dial or only its starting value.~~ Ceiling, confirmed 2026-11-27.
 - R7: whether evidence exists at all, and if so its retention. It can be left out and the rest still stands.
 - R7: whether people come from the calendar and meetings as they appear, or only when you add them.
 - Whether work material from the day job ever sits in the same database as personal mail and clients, or in

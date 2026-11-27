@@ -5,16 +5,16 @@ import { useState } from "react";
 import type { View } from "../Sidebar/Sidebar.tsx";
 
 import { useNavOrder } from "../../hooks/useNavOrder.ts";
-import { NAV_ITEMS, PINNED_SLOTS, placeItem, saveNavOrder } from "../../lib/navLayout.ts";
+import { NAV_ITEMS, PINNED_MAX, PINNED_MIN, placeItem, saveNavOrder, savePinnedCount } from "../../lib/navLayout.ts";
 import styles from "./NavOrderPanel.module.css";
 
 /**
- * Settings → Menu: which six items are pinned in the sidebar, and their order. Drag a row, as in the
+ * Settings → Menu: how many items are pinned in the sidebar (2 to 8, 2026-11-27), which, and their order. Drag a row, as in the
  * Mac's Settings → Sidebar menu, or use the arrows, which are also how a keyboard moves one. The
  * sidebar itself takes drags too.
  */
 export const NavOrderPanel = () => {
-  const { isDefault, order } = useNavOrder();
+  const { count, isDefault, order } = useNavOrder();
   const [dragging, setDragging] = useState<null | View>(null);
   const [dropAt, setDropAt] = useState<{ after: boolean; key: View } | null>(null);
 
@@ -39,11 +39,28 @@ export const NavOrderPanel = () => {
   return (
     <section>
       <h2 className={styles.subhead}>Sidebar menu</h2>
-      <p className={styles.note}>Drag, or use the arrows. The first six are in the sidebar menu; the rest are under More.</p>
+      <label className={styles.countRow}>
+        <span>Items in the menu</span>
+        <select
+          aria-label="How many items are pinned in the sidebar menu"
+          className={styles.count}
+          onChange={(e) => savePinnedCount(Number(e.target.value))}
+          value={count}
+        >
+          {Array.from({ length: PINNED_MAX - PINNED_MIN + 1 }, (_, i) => PINNED_MIN + i).map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className={styles.note}>
+        Drag, or use the arrows. The first {count} are in the sidebar menu; the rest are under More.
+      </p>
       <ol className={styles.list}>
         {order.map((key, index) => {
           const label = NAV_ITEMS.find((item) => item.key === key)?.label ?? key;
-          const pinned = index < PINNED_SLOTS;
+          const pinned = index < count;
           const drop = dropAt?.key === key && dragging !== key ? (dropAt.after ? styles.dropAfter : styles.dropBefore) : "";
           return (
             <li
@@ -89,7 +106,15 @@ export const NavOrderPanel = () => {
           );
         })}
       </ol>
-      <button className={styles.reset} disabled={isDefault} onClick={() => saveNavOrder(null)} type="button">
+      <button
+        className={styles.reset}
+        disabled={isDefault}
+        onClick={() => {
+          saveNavOrder(null);
+          savePinnedCount(null);
+        }}
+        type="button"
+      >
         Reset to default
       </button>
     </section>

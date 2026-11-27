@@ -9,7 +9,20 @@
  */
 import type { View } from "../components/Sidebar/Sidebar.tsx";
 
+/** How many items are pinned when nothing is chosen. */
 export const PINNED_SLOTS = 6;
+/**
+ * The range Settings → Menu offers (Andrew, 2026-11-27): two keeps the rail useful, eight still fits
+ * above the recent threads at a laptop's height. `MenuLayout.pinnedRange` on the Mac is the same.
+ */
+export const PINNED_MIN = 2;
+export const PINNED_MAX = 8;
+
+/** Anything saved that is not a whole number in range falls back to the default, never clamps to an edge. */
+export const parsePinnedCount = (raw: null | string): number => {
+  const n = Number(raw);
+  return raw !== null && raw !== "" && Number.isInteger(n) && n >= PINNED_MIN && n <= PINNED_MAX ? n : PINNED_SLOTS;
+};
 
 /**
  * In the order a fresh browser shows them. `hint` is the hover tooltip: what the page is for, in a line.
@@ -41,6 +54,7 @@ export const SETTINGS_ITEM = { hint: "What it may do, appearance, projects, memo
 // "-v3" since the 2026-11-27 menu review (section 15, R12): six items left the menu, and an older
 // order would pull whatever followed them up into the pinned six, so it starts again once.
 const KEY = "sidebar-nav-order-v3";
+const COUNT_KEY = "sidebar-pinned-count";
 const CHANGED = "sidebar-nav-order-changed-v3";
 
 /**
@@ -73,8 +87,8 @@ export const placeItem = <T>(order: readonly T[], item: T, target: T, after: boo
   return [...rest.slice(0, at), item, ...rest.slice(at)];
 };
 
-export const pinnedItems = <T>(order: readonly T[]): T[] => order.slice(0, PINNED_SLOTS);
-export const foldedItems = <T>(order: readonly T[]): T[] => order.slice(PINNED_SLOTS);
+export const pinnedItems = <T>(order: readonly T[], count: number = PINNED_SLOTS): T[] => order.slice(0, count);
+export const foldedItems = <T>(order: readonly T[], count: number = PINNED_SLOTS): T[] => order.slice(count);
 
 const allKeys = (): View[] => NAV_ITEMS.map((item) => item.key);
 
@@ -95,6 +109,25 @@ export const parseNavOrder = (raw: string): View[] => {
   } catch {
     return allKeys();
   }
+};
+
+export const readPinnedCount = (): number => {
+  try {
+    return parsePinnedCount(localStorage.getItem(COUNT_KEY));
+  } catch {
+    return PINNED_SLOTS;
+  }
+};
+
+/** `null` goes back to six. Same store and event as the order, so the sidebar follows at once. */
+export const savePinnedCount = (count: null | number): void => {
+  try {
+    if (count === null) localStorage.removeItem(COUNT_KEY);
+    else localStorage.setItem(COUNT_KEY, String(parsePinnedCount(String(count))));
+  } catch {
+    // storage blocked: the menu keeps its current count
+  }
+  window.dispatchEvent(new Event(CHANGED));
 };
 
 /** `null` goes back to the default order. */

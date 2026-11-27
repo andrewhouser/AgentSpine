@@ -59,9 +59,14 @@ struct DialsView: View {
             Text(dial.hint)
                 .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote))
                 .foregroundStyle(Spine.Palette.textDim)
-            Text(DialWords.envLine(allowed: dial.allowed, env: dial.env, envName: dial.envName, guard: dial.guard_))
+            let locked = !DialWords.lockedLevels(allowed: dial.allowed, levels: dial.levels).isEmpty
+            Text(DialWords.envLine(allowed: dial.allowed, env: dial.env, envName: dial.envName, envValues: dial.envValues,
+                                   guard: dial.guard_, levels: dial.levels))
                 .font(SpineFont.sans(Spine.TypeSize.caption, relativeTo: .caption))
-                .foregroundStyle(Spine.Palette.textFaint)
+                // A locked level's line answers "why won't this move?", so it is dim, not faint.
+                .foregroundStyle(locked ? Spine.Palette.textDim : Spine.Palette.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
         }
     }
 
@@ -69,10 +74,14 @@ struct DialsView: View {
         HStack(spacing: Spine.Space.xs) {
             ForEach(dial.levels, id: \.self) { level in
                 let on = dial.mode == level
+                let locked = !dial.allowed.contains(level)
                 Button {
                     Task { await move(dial, to: level) }
                 } label: {
-                    Text(DialWords.levelLabel(level))
+                    HStack(spacing: 3) {
+                        if locked { Image(systemName: "lock.fill").imageScale(.small) }
+                        Text(DialWords.levelLabel(level))
+                    }
                         .font(SpineFont.sans(Spine.TypeSize.footnote, relativeTo: .footnote).weight(.semibold))
                         .padding(.horizontal, Spine.Space.md)
                         .padding(.vertical, Spine.Space.xs)
@@ -82,8 +91,10 @@ struct DialsView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(on || !dial.allowed.contains(level))
-                .opacity(dial.allowed.contains(level) ? 1 : 0.35)
+                .opacity(locked ? 0.5 : 1)
                 .accessibilityAddTraits(on ? .isSelected : [])
+                .accessibilityHint(locked ? DialWords.lockedHint(envName: dial.envName, envValues: dial.envValues, level: level) : "")
+                .help(locked ? DialWords.lockedHint(envName: dial.envName, envValues: dial.envValues, level: level) : "")
             }
         }
     }

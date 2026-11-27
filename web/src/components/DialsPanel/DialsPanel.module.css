@@ -68,6 +68,14 @@
   margin-top: 2px;
 }
 
+/* A locked level is said in the dim colour, not the faint one: it is the line that answers "why won't this move?" */
+.envLocked {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  margin-top: 2px;
+  max-width: 46ch;
+}
+
 .dial {
   background: var(--bg-inset);
   border: 1px solid var(--border);
@@ -88,7 +96,13 @@
 }
 
 .level:disabled {
-  opacity: 0.35;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.lock {
+  font-size: 0.7em;
+  margin-right: 3px;
 }
 
 .levelOn {

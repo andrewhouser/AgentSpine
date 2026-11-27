@@ -170,7 +170,8 @@ project, so it stays on the local model.
 the foot. On the Mac the threads above the menu are Ask, so Schedules takes the sixth slot; on the
 iPhone the bar is Today, Ask, Meetings and Tasks. **Drag** an item in the sidebar (web and Mac) or in
 Settings → Menu / Sidebar menu / Tab bar to reorder it; the first six are pinned and the rest fold
-under More. The order is kept on each device, not on the server. Some screens moved rather than went:
+under More. How many are pinned is a setting there too, from 2 to 8, on web and Mac; the iPhone's tab
+bar always holds four, because iOS decides that. The order is kept on each device, not on the server. Some screens moved rather than went:
 **Projects** and **Memory** are tabs in Settings (a project's thread links to its page on web);
 **Check-in** is Heads-up's "From your mail", beside "Coming up"; the **Drop zone** is Knowledge's
 "Add files"; **Builds** is Activity's "Coding runs"; and **Search** is part of Ask.
@@ -1452,7 +1453,9 @@ inbox sort, Heads-up, the notification limits and the outgoing-text check as Off
 lets you move them without a restart. `.env` stays in charge: a feature's `.env` value is the highest
 its dial can go, and a guard's (`OUTBOX_ENFORCE`, `OUTGOING_ENFORCE`) is the lowest, so a screen can
 turn a feature down or a guard up, never the reverse. Going past `.env` is still an edit there and a
-restart. In Watch, the dial lists what the feature would have done, from the same log `npm run
+restart: a locked level shows a lock, and the line under the dial names the exact setting, for example
+`INBOX_SORT_MODE=log` for Watch. Check-in and Inbox sort are off in `.env` until you set them, so out of
+the box their dials only offer Off. In Watch, the dial lists what the feature would have done, from the same log `npm run
 checkin log` reads, with a thumbs-down per row and how many you agreed with. The choices live in
 `modes.json` at the root, which no tool may write (`src/modes.ts`).
 
