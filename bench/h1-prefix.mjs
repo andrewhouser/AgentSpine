@@ -8,25 +8,25 @@
  * of a prompt that is byte-for-byte what it saw last time, and the system prompt is ~11,000
  * tokens that sit at the very front. H1 names two things that move it between turns: the
  * friction note under a tool ("Recent failures with this tool: 3× timeout") and the per-turn
- * `notify` / `look_at_image` toggle in `settingTools`. Writing this bench turned up a third,
- * which the plan does not list: the clock on line 3 of the prompt carries seconds, so it is
- * different on every run. Nothing is restructured until these numbers exist.
+ * `notify` / `look_at_image` toggle in `settingTools`. Writing this bench turned up a third: a
+ * clock with seconds on line 3 of the prompt. The first run (2026-11-26, Qwen3.6-35B-A3B on the
+ * model host) put every one of them at the full ~29 s, against 0.6 s for an unchanged prompt,
+ * even a change that left 47% of the front untouched: this server reuses a stored prompt only
+ * when it is an exact prefix of the new one. The clock is now a date (once a day) plus a time
+ * note on the latest message, so its row here is `date`.
  *
- * Each sample is a two-turn thread. Turn 1 is sent with the base prompt so the server holds it.
+ * Each sample is a two-turn thread on a day of its own (a date line no earlier sample used,
+ * because the server keeps several prompts and would otherwise answer repeats from cache).
  * Turn 2 is the same thread one exchange later, with the system prompt changed in exactly one
  * way, and what is timed is how long turn 2 waits for its first token:
  *
- *   same            nothing changed. The floor: what a byte-stable prefix would cost.
- *   clock           only the clock line changed. What every turn pays today.
+ *   same            nothing changed. The floor: what a byte-stable prefix costs.
+ *   date            only the date changed, as on the first turn after midnight.
  *   friction        one friction line appeared under a tool in the middle of the list.
  *   friction-count  that line's count changed ("timeout" became "2× timeout").
  *   toggle-notify   `notify` left the tool list, as it does when the message stops asking for a push.
  *   toggle-image    `look_at_image` joined it, as it does once the thread holds an image.
  *   cold            the first byte changed. The ceiling: a full prefill.
- *
- * If `clock` reads like `cold`, then friction and the toggles cannot be measured against today's
- * prompt at all, because nothing after line 3 is ever reused. That is why the other variants
- * hold the clock still: they measure what each would cost ONCE the clock stops moving.
  *
  * Synthetic on purpose: no profile, memory, mail or project text is sent, the questions are
  * invented, no tool runs, and it reads and writes a throwaway database so friction notes on
@@ -51,10 +51,14 @@ const RUNS = Number(arg("runs", "3"));
 const TIER = arg("tier", "standard");
 const OUT = arg("out", "");
 
-const CLOCK = /^Current local time: .*$/m;
-const withClock = (prompt, stamp) => prompt.replace(CLOCK, `Current local time: ${stamp} (America/New_York).`);
-const T1 = "11/26/2026, 9:00:00 AM";
-const T2 = "11/26/2026, 9:03:41 AM";
+// Since H1's fix the prompt carries only the date (the time rides the latest message). Each sample gets
+// its own date, so no sample can reuse a prompt the server kept from an earlier one: the first run of
+// this bench showed it holds several, and its second and third samples read as free.
+const DATE = /^Today is .*$/m;
+const withDate = (prompt, day) => {
+  if (!DATE.test(prompt)) throw new Error("no date line in the system prompt");
+  return prompt.replace(DATE, `Today is day ${day} of the bench (America/New_York). The current time is given at the end of the latest message.`);
+};
 
 /** The chat prompt for a thread, as `settingTools` would list its tools. */
 const promptFor = ({ images = false, push = true } = {}) =>
@@ -72,15 +76,17 @@ const withFriction = (prompt, note) => {
   return `${prompt.slice(0, args)}\n    Recent failures with this tool: ${note}.${prompt.slice(args)}`;
 };
 
-const base = withClock(promptFor(), T1);
+// Each variant is [name, first, second]: functions of the sample's day giving each turn's system prompt.
+const baseFor = (day) => withDate(promptFor(), day);
+const base = baseFor(0);
 const VARIANTS = [
-  ["same", base],
-  ["clock", withClock(promptFor(), T2)],
-  ["friction", withFriction(base, "timeout")],
-  ["friction-count", withFriction(base, "2× timeout")],
-  ["toggle-notify", withClock(promptFor({ push: false }), T1)],
-  ["toggle-image", withClock(promptFor({ images: true }), T1)],
-  ["cold", `(bench) ${base}`],
+  ["same", baseFor, baseFor],
+  ["date", baseFor, (day) => withDate(promptFor(), `${day}, the next day`)],
+  ["friction", baseFor, (day) => withFriction(baseFor(day), "timeout")],
+  ["friction-count", (day) => withFriction(baseFor(day), "timeout"), (day) => withFriction(baseFor(day), "2× timeout")],
+  ["toggle-notify", baseFor, (day) => withDate(promptFor({ push: false }), day)],
+  ["toggle-image", baseFor, (day) => withDate(promptFor({ images: true }), day)],
+  ["cold", baseFor, (day) => `(bench) ${baseFor(day)}`],
 ];
 
 /** How much of the prompt, by characters, a variant shares with the base from the front. */
@@ -152,14 +158,19 @@ console.log(`\nH1: second-turn prefill on ${TIER} (${config.model}), ${RUNS} sam
 console.log(`system prompt: ${base.length} characters; friction variants edit the entry for "${MID}"\n`);
 
 const rows = [];
-for (const [name, second] of VARIANTS) {
+let day = 0;
+for (const [name, firstFor, secondFor] of VARIANTS) {
   const waits = [];
   let promptTokens = null;
   let cachedTokens = null;
   for (let i = 0; i < RUNS; i++) {
     const [q1, q2] = QUESTIONS[i % QUESTIONS.length];
-    // Turn 1 always uses the base prompt, so whatever ran before, the server holds THIS thread.
-    const one = await ask([{ content: base, role: "system" }, { content: q1, role: "user" }]);
+    // A fresh day per sample: turn 1 is a prompt the server has never seen, so it holds THIS thread
+    // and no earlier sample's copy of turn 2.
+    day += 1;
+    const first = firstFor(day);
+    const second = secondFor(day);
+    const one = await ask([{ content: first, role: "system" }, { content: q1, role: "user" }]);
     const two = await ask([
       { content: second, role: "system" },
       { content: q1, role: "user" },
@@ -170,8 +181,8 @@ for (const [name, second] of VARIANTS) {
     promptTokens = two.promptTokens;
     cachedTokens = two.cachedTokens;
   }
-  const shared = sharedPrefix(base, second);
-  rows.push({ cachedTokens, firstTokenMs: median(waits), name, promptTokens, samples: waits.map(Math.round), sharedChars: shared, sharedShare: shared / base.length });
+  const shared = sharedPrefix(firstFor(day), secondFor(day));
+  rows.push({ cachedTokens, firstTokenMs: median(waits), name, promptTokens, samples: waits.map(Math.round), sharedChars: shared, sharedShare: shared / firstFor(day).length });
   const row = rows.at(-1);
   console.log(
     `  ${name.padEnd(15)} first token ${secs(row.firstTokenMs).padStart(7)}   shares ${String(Math.round(row.sharedShare * 100)).padStart(3)}% of the prompt from the front` +
@@ -183,9 +194,8 @@ const of = (name) => rows.find((r) => r.name === name).firstTokenMs;
 console.log("\nWhat it costs over a byte-stable prefix (`same`), per turn:");
 for (const { name } of rows.filter((r) => r.name !== "same")) console.log(`  ${name.padEnd(15)} +${secs(Math.max(0, of(name) - of("same")))}`);
 console.log(
-  "\nRead it this way: if `clock` is close to `cold`, every turn already pays the whole prefix and the clock is the\n" +
-    "first thing to move out of it. The friction and toggle rows then say what each would still cost afterwards.\n" +
-    "A server that reports no cached tokens still shows the effect in the first-token time.\n",
+  "\nRead it this way: a row close to `cold` means that change throws the whole prefix away, however late in the\n" +
+    "prompt it sits. The server's cached-token count is not to be trusted; the first-token time is the measurement.\n",
 );
 
 if (OUT) {

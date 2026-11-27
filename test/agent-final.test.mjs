@@ -13,6 +13,7 @@
  * These assertions are on the prompt and the parser rather than on a live model, because
  * they are the parts that are ours to get right. Run with `node test/agent-final.test.mjs`.
  */
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -118,7 +119,8 @@ check("forbids the duplicate tool call", /Do not repeat a tool call/.test(chat),
 check("time-bound questions carry recency on every search", /pass recency to web_search on EVERY search/.test(chat), true);
 check("out-of-window results are left out", /Leave out anything dated before/.test(chat), true);
 check("unattended runs get the recency rule too", /pass recency to web_search/.test(job), true);
-check("forbids notifying what it can just say", /Do NOT use notify to tell them something/.test(chat), true);
+// H1: the rule now rides the push note on the one turn that may notify, not the system prompt.
+check("the chat prompt carries no notify rule", /Do NOT use notify/.test(chat), false);
 check("answers the current message, not the whole history", /Scope is the CURRENT message/.test(chat), true);
 // Wrapping-tolerant: these assert the prompt's INTENT, and a reflowed line is not a
 // regression. Matching the literal line break is how this test broke the last time the
@@ -201,11 +203,23 @@ check("unattended is not offered prose", /answer the user directly/.test(parseFa
 
 console.log("\nSHARED — neither mode loses what both need");
 for (const [name, p] of [["chat", chat], ["job", job]]) {
-  check(`${name}: knows the time`, /Current local time:/.test(p), true);
+  check(`${name}: knows the date`, /^Today is \w+day, \w+ \d+, \d{4} \(/m.test(p), true);
+  // H1: a time of day in the system prompt changed its bytes every turn and cost a full prefill (29 s measured).
+  check(`${name}: carries no time of day`, /\d{1,2}:\d{2}/.test(p.split("\n").slice(0, 5).join("\n")), false);
   check(`${name}: knows about the broker`, /capability broker gates every tool call/.test(p), true);
   check(`${name}: knows UNTRUSTED is not instructions`, /never instructions to obey/.test(p), true);
   check(`${name}: knows about the scheduler`, /schedule_create/.test(p), true);
 }
+
+console.log("\nTHE TIME RIDES THE MESSAGE (H1)");
+const { timeNote, today } = __test;
+const at = new Date(2026, 10, 26, 9, 3, 41);
+check("the time note has hours and minutes, no seconds", timeNote(at), "Current local time: 9:03 AM.");
+check("the date line names the day", today(at).startsWith("Today is Thursday, November 26, 2026 ("), true);
+check("the date line is the same all day", today(at) === today(new Date(2026, 10, 26, 23, 59, 59)), true);
+check("and says where the time is", /given at the end of the latest message/.test(today(at)), true);
+const agentSrc = fs.readFileSync(new URL("../src/agent.ts", import.meta.url), "utf8");
+check("the goal is sent with the time note after it", agentSrc.includes("content: `${goal}${pushNote(tools, listed)}\\n\\n${timeNote()}`"), true);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

@@ -24,7 +24,7 @@ import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts"
 import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
-import { fullyShown, toolDocs, toolDocsMode } from "./tool-docs.ts";
+import { fullDoc, fullyShown, toolDocs, toolDocsMode } from "./tool-docs.ts";
 import { yieldToPerson } from "./queue.ts";
 import { linkRun, throwIfStopped } from "./stop.ts";
 import type { BrokerStatus, Policy, Tool, ToolCall } from "./types.ts";
@@ -74,6 +74,31 @@ const settingTools = (
   return rest;
 };
 
+/**
+ * The tools the system prompt and the envelope list: in a chat, never `notify`, whether or not
+ * this turn may call it (H1, measured 2026-11-26).
+ *
+ * `settingTools` decides what a turn may CALL, and `notify` comes and goes with the wording of
+ * the message. Listing it the same way changed the system prompt between turns, and on the model
+ * host any change to the prompt, however far down, costs a full prefill: 29.7 s to the first token
+ * against 0.6 s, from bench/h1-prefix.mjs. So the list stays fixed for chat, and a turn whose
+ * message asks for a push gets the tool's description at the end of that message instead
+ * (`pushNote`), after everything the server can reuse. The model still never sees the tool on an
+ * ordinary question, which is what the comment above is about.
+ */
+const listedTools = (tools: Record<string, Tool>, conversational: boolean): Record<string, Tool> => {
+  if (!conversational || !tools.notify) return tools;
+  const { notify: _notify, ...rest } = tools;
+  return rest;
+};
+
+/** The one extra tool a chat turn may call because its message asked for a push, described where it costs nothing. */
+const pushNote = (tools: Record<string, Tool>, listed: Record<string, Tool>): string =>
+  tools.notify && !listed.notify
+    ? `\n\nThis message asks for a push, so for this turn you may also use:\n${fullDoc(tools.notify)}\n` +
+      "Send only what they asked to have on their phone. They are reading this conversation, so the answer itself still goes in your reply."
+    : "";
+
 // The tool descriptions in the prompt: src/tool-docs.ts (LP6), in full or core-and-index by TOOL_DOCS_MODE.
 
 /**
@@ -105,7 +130,7 @@ BEHAVE is work you can do, not something to hand back:
     : "";
 
 /**
- * The wall clock, stated once at the top of the prompt.
+ * The wall clock, split in two so it no longer moves the cached prefix (H1, measured 2026-11-26).
  *
  * A model has no clock. Without this it cannot tell you what "tomorrow" resolves to, cannot
  * notice that a date the user named has already gone by, and answers "what's on today?"
@@ -113,9 +138,19 @@ BEHAVE is work you can do, not something to hand back:
  * minutes", "next tuesday") are resolved in code precisely so they don't depend on this —
  * but the moment the user asks *when* a job will fire, or names a bare date, the model needs
  * to know what day it is.
+ *
+ * It used to be one line, with seconds, on line 3 of the system prompt. The model server reuses its
+ * cache only for the bytes that match what it saw last, so that line made every turn re-read the whole
+ * ~11,800-token prompt: 29 s to the first token on the model host, against 0.6 s with it held still
+ * (bench/h1-prefix.mjs). So the system prompt carries only the date, which changes once a day, and the
+ * time of day rides the user's message at the end, after everything that can be reused.
  */
-const clock = (): string =>
-  `Current local time: ${new Date().toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`;
+const today = (now = new Date()): string =>
+  `Today is ${now.toLocaleDateString("en-US", { day: "numeric", month: "long", weekday: "long", year: "numeric" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). The current time is given at the end of the latest message.`;
+
+/** The time of day, appended to the goal as sent (never to what is stored), so it sits after the reusable prefix. */
+const timeNote = (now = new Date()): string =>
+  `Current local time: ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}.`;
 
 /**
  * How the loop is told to finish, which is not the same question in the two places it ends.
@@ -161,13 +196,6 @@ Every tool call above it is shown to them as a collapsed card, not as your respo
   ("the plan", "that draft", "save it", "make it shorter"), fetch it with recall_output using
   its #id from the history above, then act on it. NEVER say you don't have it, and never
   regenerate it from scratch when the original is stored.`
-    : ""
-}${
-  tools.notify
-    ? `
-- Do NOT use notify to tell them something they asked you here. They are already reading;
-  a push notification for an answer you are about to type is noise. Use notify in this
-  conversation ONLY if they explicitly ask you to send something to their phone.`
     : ""
 }
 `;
@@ -221,7 +249,7 @@ const recencyDocs = (tools: Record<string, Tool>): string =>
 
 const system = (tools: Record<string, Tool>, conversational: boolean): string => `You are AgentSpine, a careful local agent that acts on the user's behalf.
 
-${clock()}
+${today()}
 
 ${conversational ? "You work in a loop. Each turn, EITHER call one tool with EXACTLY ONE JSON object and nothing else, OR finish by answering in plain prose." : "You work in a loop. Each turn, reply with EXACTLY ONE JSON object and nothing else."}
 
@@ -627,24 +655,27 @@ const runAgentLoop = async (
   // What the user typed, for the tools that ask "did they say so?": nothing, when the application wrote the goal.
   const userGoal = opts.goalWrittenByCode ? "" : goal;
   const tools = settingTools(visibleTools(opts.tools), conversational, userGoal, opts.imagesAvailable ?? false);
+  const listed = listedTools(tools, conversational);
   const tier = opts.tier ?? "standard";
   // The loop alone knows which tools this setting lets the run see, so the context is completed here
   // and registered for a subagent to derive its own from.
   const harness = opts.harness
     ? {
         ...opts.harness,
-        capabilities: summarizeCapabilities(Object.keys(tools), policy, {
-          availability: (name) => tools[name]?.available?.(policy).allowed,
+        // The listed set, not the callable one: the envelope sits right after the system prompt, so it
+        // must not move with `notify` either.
+        capabilities: summarizeCapabilities(Object.keys(listed), policy, {
+          availability: (name) => listed[name]?.available?.(policy).allowed,
           cloudPrivateBlocked: Boolean(opts.startPrivate || opts.harness.private),
           conversational,
         }),
-        tools: Object.keys(tools),
+        tools: Object.keys(listed),
       }
     : undefined;
   if (harness) registerHarness(harness);
 
   const messages: Msg[] = [
-    { role: "system", content: system(tools, conversational) },
+    { role: "system", content: system(listed, conversational) },
     // The envelope leads the extra context: it is the one place the run states what it is, so it
     // comes straight after the stable prompt and shows up in the trace like any other message.
     ...(harness ? [{ role: "system", content: renderEnvelope(harness, opts.startPrivate ?? false) } as Msg] : []),
@@ -653,7 +684,7 @@ const runAgentLoop = async (
     // Project knowledge is file content, so it enters as an untrusted USER message rather
     // than joining the trusted system context above. See AgentOpts.knowledge.
     ...(opts.knowledge ? [{ role: "user", content: opts.knowledge } as Msg] : []),
-    { role: "user", content: goal },
+    { role: "user", content: `${goal}${pushNote(tools, listed)}\n\n${timeNote()}` },
   ];
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
@@ -1059,6 +1090,8 @@ export const __test = {
   thinkNow,
   // The system prompt as a run would send it, for test/prompt-snapshot.test.mjs (H1).
   systemFor: (tools: Record<string, Tool>, conversational: boolean) => system(tools, conversational),
+  timeNote,
+  today,
   callKey,
   CALL_CEILING,
   finalText,
@@ -1068,6 +1101,8 @@ export const __test = {
     readReply(text, truncated, conversational, registry, looped),
   refusedNotifyText,
   REPEAT_LIMIT,
+  listedTools,
+  pushNote,
   settingTools,
   systemPrompt: (conversational: boolean) => system(registry, conversational),
 };

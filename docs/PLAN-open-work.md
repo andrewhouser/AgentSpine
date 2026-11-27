@@ -1500,6 +1500,37 @@ character 100. If the bench confirms it, every turn already pays the whole prefi
 the two toggles are secondary. Nothing was restructured. You: run the bench on a machine whose `.env` points
 at the model host, then decide on the clock, the friction notes and the toggles.
 
+**Measured 2026-11-26, and two of the three movers fixed.** `bench/h1-prefix.mjs` against the model host
+(Qwen3.6-35B-A3B, 11,800-token prompt), three independent samples each (the first run's repeats were
+answered from the server's cache of earlier prompts; each sample now gets a date of its own):
+
+| Second turn's system prompt | First token |
+|---|---|
+| unchanged | 0.6 s |
+| date changed | 29.7 s |
+| friction line added (first 47% unchanged) | 30.2 s |
+| friction count changed | 30.2 s |
+| `notify` left the list | 29.7 s |
+| `look_at_image` joined it (first 40% unchanged) | 30.6 s |
+| first byte changed | 30.3 s |
+
+So this server reuses a stored prompt only when it is an exact prefix of the new one: any change, however
+far down, costs the whole prefill. (Likely the hybrid model's recurrent layers, whose cache cannot be cut
+back; either way the numbers are the rule.) The server's cached-token count is not trustworthy.
+
+- **Clock: fixed.** The system prompt says only the date (changes once a day); the time of day,
+  hours and minutes, rides the end of the user's message as sent (`timeNote`), never what is stored, so
+  history and the thread are unchanged. Tests: `agent-final`, the refreshed `prompt-snapshot`.
+- **`notify`: fixed.** A chat turn may still call it only when the message asks for a push
+  (`settingTools`, unchanged), but the prompt and the envelope list a fixed set without it (`listedTools`),
+  and a push turn gets the tool's description and its one rule at the end of its message (`pushNote`). The
+  model still never sees it on an ordinary question. Tests: `chat-tool-visibility`.
+- **Still moving:** a friction line, each time a tool fails (move the notes to one block after the history,
+  then check SL5's signals); `look_at_image`, once per thread, when the first image arrives.
+- **Not yet measured:** a real second turn. The memory recall (`opts.context`) and the shaped history are
+  rebuilt each turn and sit after the envelope, so on this server they may break reuse too. Measure a real
+  two-turn thread before claiming the 29 s back.
+
 ### H2. Recipes are revised from use, not only created (Code; extends SL4b)
 
 Hermes runs a background review after a turn, on counters (every N user turns for memory, every N tool steps

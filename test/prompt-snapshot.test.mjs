@@ -54,9 +54,9 @@ const stub = (name) => ({
 const NAMES = ["memory_recall", "memory_save", "web_search", "web_read", "read_more", "recall_output", "draft", "notify", "schedule_create"];
 const tools = Object.fromEntries(NAMES.map((n) => [n, stub(n)]));
 
-// The clock is the one line that is meant to move. It is replaced here and counted below.
-const CLOCK = /^Current local time: .*$/m;
-const render = (conversational, set = tools) => __test.systemFor(set, conversational).replace(CLOCK, "Current local time: <clock>");
+// The date is the one line that moves, once a day (H1); the snapshot pins everything else.
+const DATE = /^Today is .*$/m;
+const render = (conversational, set = tools) => __test.systemFor(set, conversational).replace(DATE, "Today is <date>");
 
 const dir = path.join(import.meta.dirname, "fixtures", "prompt-snapshot");
 const UPDATE = process.env.UPDATE_SNAPSHOT === "1";
@@ -96,7 +96,7 @@ for (const [mode, conversational] of [["chat", true], ["job", false]]) {
 
 console.log("\nWHAT IS ALLOWED TO MOVE, AND WHAT IS NOT");
 check("the same tools render the same bytes twice", render(true) === render(true), true);
-check("exactly one line carries the clock", __test.systemFor(tools, true).split("\n").filter((l) => CLOCK.test(l)).length, 1);
+check("exactly one line carries the date", __test.systemFor(tools, true).split("\n").filter((l) => DATE.test(l)).length, 1);
 check("chat and job prompts are different contracts", render(true) === render(false), false);
 
 // The two things H1 names as moving the prefix today. Pinned as they ARE, not as they should be:

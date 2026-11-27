@@ -82,11 +82,21 @@ check("the image rule does not resurrect notify", has(chatWithImage("Is that a w
 check("both filters can apply at once", has(chatWithImage("Is that a weed? Text me."), "notify"), true);
 check("the original registry is still not mutated", has(registry, "look_at_image"), true);
 
-console.log("\nTHE PROMPT AGREES WITH THE FILTER");
-const { systemPrompt } = __test;
-// systemPrompt renders the full registry, where the chat rule about notify still appears —
-// it is the registry actually handed to the loop that decides whether the tool is listed.
-check("full-registry chat prompt keeps the notify rule", /Do NOT use notify to tell them something/.test(systemPrompt(true)), true);
+console.log("\nNOTIFY NEVER MOVES THE SYSTEM PROMPT (H1)");
+// A changed prompt costs a full prefill on the model host (29.7 s against 0.6 s), so what a chat turn
+// may call and what its prompt lists are two different things.
+const { listedTools, pushNote, systemFor } = __test;
+const pushTurn = chat("Send that to my phone.");
+const plainTurn = chat("What is the weather?");
+check("a push turn may call notify", has(pushTurn, "notify"), true);
+check("but the chat prompt never lists it", has(listedTools(pushTurn, true), "notify"), false);
+check("so a push turn and a plain turn send the same prompt bytes", systemFor(listedTools(pushTurn, true), true) === systemFor(listedTools(plainTurn, true), true), true);
+const note = pushNote(pushTurn, listedTools(pushTurn, true));
+check("the push turn's message carries notify's description", /- notify: /.test(note), true);
+check("and when to use it", /Send only what they asked to have on their phone/.test(note), true);
+check("a plain turn's message carries nothing", pushNote(plainTurn, listedTools(plainTurn, true)), "");
+check("an unattended run still lists notify in its prompt", has(listedTools(settingTools(registry, false, "nightly brief"), false), "notify"), true);
+check("and needs no note", pushNote(registry, listedTools(registry, false)), "");
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);
