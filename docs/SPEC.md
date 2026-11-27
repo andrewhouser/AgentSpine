@@ -946,6 +946,13 @@ npm run tick | loop    # legacy single-goal heartbeat
 > tools, transcript-so-far), volatile retrieved context last, immediately before the query.
 > Do not "fix" `agent.ts` to match; front-loading trusted context is right for ordinary runs.
 >
+> *Amended 2026-11-27 (PLAN-open-work H1):* the ordinary loop has since followed suit. Recalled
+> context (memories, recipes, lessons, earlier threads, refused calls, the running summary) moved
+> out of the system block to a message after the history, because a block that changed per turn
+> cost the full ~30 s prefill on every turn. A placement eval (`bench/h1-context-eval.mjs`) found
+> no loss: 20/21 after, 18/21 before. Standing context (profile, project and unit instructions)
+> stays first.
+>
 > ### Phase 0 result — run before building, and it changed the plan
 >
 > Extraction over the real transcript: summary, topics and decisions were **good**, with

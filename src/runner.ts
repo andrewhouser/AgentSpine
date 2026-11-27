@@ -146,13 +146,21 @@ export interface RunOpts {
 /**
  * Profile first, then the k memories most relevant to this specific task.
  * Never throws: if embeddings are down, a run with no recall beats no run at all.
+ *
+ * Two halves (H1, PLAN-open-work section 13). `standing` is what holds for the whole thread and joins the
+ * system block. `turn` is everything recalled for THIS message, and goes after the history: the model host
+ * reuses a stored prompt up to where it parts from the new one only at a message boundary, so a block that
+ * changes every turn inside the system message cost the whole ~30 s prefill on every turn of every thread.
+ * Measured 2026-11-27: a shared system message with a different message after it started in 1.5 s, against
+ * 49.4 s cold. Placing recall after the history was checked for answer quality first (bench/h1-context-eval.mjs).
  */
-const buildContext = async (task: string, used: string[] = [], seen?: RecallSeen): Promise<string[]> => {
+const buildContext = async (task: string, used: string[] = [], seen?: RecallSeen): Promise<{ standing: string[]; turn: string[] }> => {
+  const standing: string[] = [];
   const context: string[] = [];
 
   const profile = profileMessage();
   if (profile) {
-    context.push(profile);
+    standing.push(profile);
     used.push("your profile");
   }
 
@@ -248,7 +256,7 @@ const buildContext = async (task: string, used: string[] = [], seen?: RecallSeen
     console.warn(`[memory] conversation recall skipped: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  return context;
+  return { standing, turn: context };
 };
 
 /**
@@ -506,7 +514,11 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     /** Where this run's trusted instructions came from, for the envelope and the run inspector. */
     const instructionSources: string[] = [];
     const recalled: RecallSeen = { private: false };
-    const context = opts.noMemory ? [] : await buildContext(task, used, recalled);
+    const built = opts.noMemory ? { standing: [], turn: [] } : await buildContext(task, used, recalled);
+    // `context` joins the system block and must hold still for the whole thread; `turnContext` is recalled for
+    // this message and goes after the history (see buildContext).
+    const context = built.standing;
+    const turnContext = built.turn;
     // A unit's standing instructions lead the trusted context, as they do for a subagent (src/tools/subagent.ts).
     if (unit?.instructions) context.unshift(unit.instructions);
     // Working inside this checkout: the code map joins the trusted context (src/area-map.ts, section 10 SC3).
@@ -571,22 +583,23 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
     if (conversationId != null && !opts.noMemory) {
       const earlier = priorImagesContext(conversationId, runId);
       if (earlier) {
-        context.push(earlier);
+        turnContext.push(earlier);
         used.push("images from earlier in this conversation");
       }
     }
     const shaped = conversationId != null ? buildHistory(conversationId, task) : { anchor: [], background: "" };
-    // The background block is a digest of the user's own conversation, so it joins the
-    // trusted standing context; only the anchor turn replays as actual messages.
+    // The background block is a digest of the user's own conversation, so it is trusted, but it changes
+    // every turn, so it goes with the turn's context after the history; only the anchor turn replays as
+    // actual messages.
     if (conversationId != null && !opts.noMemory) {
       const threadState = threadSummaryContext(conversationId);
       if (threadState) {
-        context.push(threadState);
+        turnContext.push(threadState);
         used.push("running summary of this conversation");
       }
     }
     if (shaped.background) {
-      context.push(shaped.background);
+      turnContext.push(shaped.background);
       used.push("relevant earlier turns of this conversation");
     }
     if (shaped.anchor.length) used.push(`the last ${shaped.anchor.length / 2} turn(s) of this conversation`);
@@ -662,6 +675,7 @@ export const startTask = (task: string, opts: RunOpts = {}): StartedTask => {
         goalWrittenByCode: opts.taskWrittenByCode === true || kind === "approval",
         context,
         history,
+        turnContext,
         // Only a thread that actually holds an image is shown look_at_image — see
         // settingTools in agent.ts for why an always-listed tool with nothing to act on is
         // worse than no tool.

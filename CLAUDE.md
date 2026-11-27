@@ -88,8 +88,9 @@ Server code changes need a dashboard restart (see README → "Updating & restart
   limits live in code, never in a prompt.
 - **Meetings:** extracted work items are mostly false positives, so they go to the confirmation
   queue, never straight into RAG. Volatile retrieved context goes **last** in the meeting prompt.
-  Front-loading trusted context in `src/agent.ts` is correct for the ordinary loop, so don't
-  "fix" it to match.
+  The ordinary loop now does the same (H1, 2026-11-27): only what holds for the whole thread goes
+  in the system block; anything recalled per message goes in `turnContext`, after the history.
+  Putting a per-turn block back in the system message costs ~30 s on every turn.
 - **Root runtime files** (`policy.json`, `goals.md`, `profile.md`, `inbox-rules.md`) are yours and
   gitignored; their committed starting copies are the `*.example.*` files, and `npm run setup` copies
   them into place. Leave them at the root. Personal details (names, addresses, accounts, employers)

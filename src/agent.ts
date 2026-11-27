@@ -21,7 +21,7 @@ import { executeCall } from "./broker.ts";
 import { publish } from "./events.ts";
 import { registry } from "./tools/index.ts";
 import { isPinned, outputIsPrivate, pinRun, releaseRun } from "./sensitivity.ts";
-import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, summarizeCapabilities } from "./harness.ts";
+import { describeResult, harnessContract, pinNotice, renderResultEnvelope, registerHarness, releaseHarness, renderEnvelope, renderTurnNote, summarizeCapabilities } from "./harness.ts";
 import type { HarnessContext } from "./harness.ts";
 import { askedForPush } from "./tools/notify.ts";
 import { fullDoc, fullyShown, toolDocs, toolDocsMode } from "./tool-docs.ts";
@@ -149,6 +149,16 @@ const today = (now = new Date()): string =>
   `Today is ${now.toLocaleDateString("en-US", { day: "numeric", month: "long", weekday: "long", year: "numeric" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). The current time is given at the end of the latest message.`;
 
 /** The time of day, appended to the goal as sent (never to what is stored), so it sits after the reusable prefix. */
+/**
+ * The turn's recalled context, as the message just before the goal. It is a user-role message only because a
+ * system message may not follow a user turn on the local model, so it says plainly that the application, not
+ * the user, wrote it, and that it is the same trusted background the system block would have held.
+ */
+const turnContextMessage = (blocks: string[]): string =>
+  "Background for this message, from AgentSpine itself rather than the user: your own notes and records, " +
+  "trusted like the standing context in the system message, not a request. The user's message follows.\n\n" +
+  blocks.join("\n\n");
+
 const timeNote = (now = new Date()): string =>
   `Current local time: ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}.`;
 
@@ -320,6 +330,14 @@ export interface AgentOpts {
    * Anything fetched from the outside world belongs in a tool result, tagged UNTRUSTED.
    */
   context?: string[];
+  /**
+   * Trusted context recalled for THIS message (memories, recipes, lessons, earlier threads, refused calls, the
+   * running summary of the conversation), placed after the history and before the goal as one user message
+   * that says where it came from. Not in `context`, because that is the system block and the model host only
+   * reuses a prompt whose system block is unchanged (H1, see buildContext in runner.ts). Same trust rule as
+   * `context`: only locally-sourced text the application vouches for.
+   */
+  turnContext?: string[];
   /**
    * Earlier turns of the same conversation, as alternating user/assistant messages, placed
    * between the standing context and the current goal.
@@ -681,10 +699,12 @@ const runAgentLoop = async (
     ...(harness ? [{ role: "system", content: renderEnvelope(harness, opts.startPrivate ?? false) } as Msg] : []),
     ...(opts.context ?? []).map((content): Msg => ({ role: "system", content })),
     ...(opts.history ?? []),
+    ...(opts.turnContext?.length ? [{ role: "user", content: turnContextMessage(opts.turnContext) } as Msg] : []),
     // Project knowledge is file content, so it enters as an untrusted USER message rather
     // than joining the trusted system context above. See AgentOpts.knowledge.
     ...(opts.knowledge ? [{ role: "user", content: opts.knowledge } as Msg] : []),
-    { role: "user", content: `${goal}${pushNote(tools, listed)}\n\n${timeNote()}` },
+    // Everything that changes per turn goes last, after the goal (H1: the host reuses only an exact prefix).
+    { role: "user", content: `${goal}${pushNote(tools, listed)}\n\n${harness ? `${renderTurnNote(harness)} ` : ""}${timeNote()}` },
   ];
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;
@@ -1091,6 +1111,7 @@ export const __test = {
   // The system prompt as a run would send it, for test/prompt-snapshot.test.mjs (H1).
   systemFor: (tools: Record<string, Tool>, conversational: boolean) => system(tools, conversational),
   timeNote,
+  turnContextMessage,
   today,
   callKey,
   CALL_CEILING,

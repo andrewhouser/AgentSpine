@@ -64,10 +64,14 @@ console.log("\nTHE ENVELOPE");
 {
   const chat = h.buildHarnessContext({ conversationId: 7, history: true, kind: "chat", memory: true, project: { id: 3, name: "Reorg" }, projectKnowledge: true, runId: 42, tier: "deep", tools: ["write_file"], writeDir: "/docs/reorg" });
   const text = h.renderEnvelope(chat, false);
-  check("names the run, the mode and the audience", text.includes("Run 42: a live chat turn"), true);
+  check("names the mode and the audience", text.includes("Mode: a live chat turn"), true);
+  check("H1: the run id is not in the envelope", text.includes("42"), false);
+  check("H1: nor is what it draws on", text.includes("Drawing on") || text.includes("earlier turns"), false);
+  const note = h.renderTurnNote(chat);
+  check("the turn note names the run", note.startsWith("Run 42, drawing on:"), true);
   check("names the conversation and project", text.includes("Conversation #7") && text.includes('Project: "Reorg" (#3)'), true);
   check("states where a bare filename is saved", text.includes("saved in /docs/reorg"), true);
-  check("lists what it can draw on", text.includes("earlier turns, saved memories, the project's documents"), true);
+  check("lists what it can draw on", note.includes("earlier turns, saved memories, the project's documents"), true);
   check("with no capabilities recorded it still states a limit that is always true", text.includes("Cannot: permanently delete mail"), true);
   const noMac = h.summarizeCapabilities(["gmail_search"], { apps: { allow: ["com.apple.mail"] }, google: { enabled: true } }, { cloudPrivateBlocked: false });
   check("without mac_control, mail is drafted and never sent", noMac.cannot.includes("send email (mail is drafted, never sent)"), true);
@@ -87,10 +91,12 @@ console.log("\nTHE ENVELOPE");
 
   const job = h.renderEnvelope(h.buildHarnessContext({ kind: "schedule", preApproved: true, runId: 9, tier: "standard", tools: [] }), false);
   check("an unattended run names the ledger and standing approval", job.includes("run ledger") && job.includes("Standing approval"), true);
-  check("a run with nothing to draw on says so", job.includes("only this task and your tools"), true);
+  check("a run with nothing to draw on says so", h.renderTurnNote(h.buildHarnessContext({ kind: "schedule", preApproved: true, runId: 9, tier: "standard", tools: [] })).includes("only this task and your tools"), true);
   check("no write folder and no write_file: nothing claimed about saving", job.includes("saved in"), false);
 
-  const noSecrets = JSON.stringify(h.renderEnvelope(chat)) + JSON.stringify(h.harnessContract(["write_file"], true));
+  const twin = h.renderEnvelope({ ...chat, history: false, memory: false, runId: 43 }, false);
+  check("H1: two turns of one thread get the same envelope", twin, text);
+  const noSecrets = JSON.stringify(h.renderEnvelope(chat)) + JSON.stringify(note) + JSON.stringify(h.harnessContract(["write_file"], true));
   check("no token, key or raw policy field appears", /token|apikey|api_key|password|policy\.json|fetchAllowlist|readableDirs/i.test(noSecrets), false);
 }
 
@@ -154,10 +160,11 @@ console.log("\nWHAT THE MODEL IS ACTUALLY SENT");
   const out = await runAgent("say done", policy, runId, { budgetRunId: runId, harness, tier: "standard" });
   const sent = JSON.parse(bodies[0]).messages.map((m) => m.content).join("\n");
   check("the run finishes", out.summary, "done");
-  check("the request carries the envelope for this run", sent.includes(`Run ${runId}: a scheduled run`), true);
+  check("the request carries the envelope for this run", sent.includes("Mode: a scheduled run"), true);
+  check("and the run id at the end of the latest message (H1)", JSON.parse(bodies[0]).messages.at(-1).content.includes(`Run ${runId}, drawing on:`), true);
   check("and the contract", sent.includes("How AgentSpine works"), true);
   check("the envelope comes after the stable prompt", sent.indexOf("How AgentSpine works") < sent.indexOf("This run, as the application records it"), true);
-  check("the trace keeps the exact envelope", out.trace.some((m) => m.role === "system" && String(m.content).includes(`Run ${runId}:`)), true);
+  check("the trace keeps the exact envelope", out.trace.some((m) => m.role === "system" && String(m.content).includes("Mode: a scheduled run")), true);
   check("a scheduled run is not told a person is reading", sent.includes("is reading your reply as it happens"), false);
   check("the registered context is released when the run ends", h.getHarness(runId), undefined);
 
@@ -171,7 +178,30 @@ console.log("\nWHAT THE MODEL IS ACTUALLY SENT");
     return all.slice(all.indexOf("How AgentSpine works"), all.indexOf("Rules:"));
   };
   check("the contract the model was sent is byte-identical for two runs", contractIn(bodies[0]) !== "" && contractIn(bodies[0]) === contractIn(bodies[bodies.length - 1]) && bodies.length >= 1, true);
-  check("while the envelope differs by run id", JSON.parse(bodies[0]).messages.map((m) => m.content).join("\n").includes(`Run ${r2}:`), true);
+  check("and the run id is in the latest message, not the envelope", JSON.parse(bodies[0]).messages.at(-1).content.includes(`Run ${r2},`) && !JSON.parse(bodies[0]).messages.filter((m) => m.role === "system").some((m) => m.content.includes(`Run ${r2}`)), true);
+}
+
+console.log("\nH1: WHAT IS RECALLED FOR A TURN GOES AFTER THE HISTORY");
+{
+  // Two turns of one thread, with different recall each time: the system block must be byte-identical.
+  const policy = loadPolicy();
+  const harness = h.buildHarnessContext({ conversationId: 5, history: true, kind: "chat", memory: true, runId: 1, tier: "standard", tools: [] });
+  const history = [{ role: "user", content: "earlier question" }, { role: "assistant", content: "earlier answer" }];
+  const turn = async (runId, recalled) => {
+    bodies.length = 0;
+    store.beginRun(runId);
+    await runAgent("next question", policy, runId, { budgetRunId: runId, context: ["Standing: the profile."], conversational: true, harness: { ...harness, runId }, history, tier: "standard", turnContext: [recalled] });
+    return JSON.parse(bodies[0]).messages;
+  };
+  const a = await turn(store.startRun({}), "Recalled: Biscuit is the dog.");
+  const b = await turn(store.startRun({}), "Recalled: the offsite is in Lisbon.");
+  check("the system block is identical across turns with different recall", a[0].role === "system" && a[0].content === b[0].content, true);
+  check("standing context stays in the system block", a[0].content.includes("Standing: the profile."), true);
+  check("recalled context is not in it", a[0].content.includes("Biscuit"), false);
+  const at = a.findIndex((m) => m.role === "user" && m.content.includes("Biscuit"));
+  check("it comes after the history and before the goal", at > a.findIndex((m) => m.content === "earlier answer") && at === a.length - 2, true);
+  check("and says the application wrote it, not the user", a[at].content.startsWith("Background for this message, from AgentSpine itself rather than the user"), true);
+  check("the goal is still the last message", a.at(-1).content.startsWith("next question"), true);
 }
 
 console.log("\nTHE RUNNER BUILDS IT");

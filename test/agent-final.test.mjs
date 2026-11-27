@@ -219,7 +219,7 @@ check("the date line names the day", today(at).startsWith("Today is Thursday, No
 check("the date line is the same all day", today(at) === today(new Date(2026, 10, 26, 23, 59, 59)), true);
 check("and says where the time is", /given at the end of the latest message/.test(today(at)), true);
 const agentSrc = fs.readFileSync(new URL("../src/agent.ts", import.meta.url), "utf8");
-check("the goal is sent with the time note after it", agentSrc.includes("content: `${goal}${pushNote(tools, listed)}\\n\\n${timeNote()}`"), true);
+check("the goal is sent with the time note after it", agentSrc.includes("content: `${goal}${pushNote(tools, listed)}\\n\\n${harness ? `${renderTurnNote(harness)} ` : \"\"}${timeNote()}`"), true);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

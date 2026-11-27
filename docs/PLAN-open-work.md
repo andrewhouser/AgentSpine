@@ -1527,9 +1527,40 @@ back; either way the numbers are the rule.) The server's cached-token count is n
   model still never sees it on an ordinary question. Tests: `chat-tool-visibility`.
 - **Still moving:** a friction line, each time a tool fails (move the notes to one block after the history,
   then check SL5's signals); `look_at_image`, once per thread, when the first image arrives.
-- **Not yet measured:** a real second turn. The memory recall (`opts.context`) and the shaped history are
-  rebuilt each turn and sit after the envelope, so on this server they may break reuse too. Measure a real
-  two-turn thread before claiming the 29 s back.
+- **A real second turn, measured the same day** (`bench/h1-thread.mjs`: two chat turns through the real
+  runner, a proxy timing each request and checking which earlier prompt it extends): turn 1's main call
+  32.7 s, **turn 2's 31.9 s**, a later step within turn 2 1.9 s. Still a full prefill, because `src/llm.ts`
+  joins every leading system message into one, and the envelope and recalled context in it move per turn:
+  the envelope's run id ("Run 1", "Run 2"), its "Drawing on:" line, and `opts.context` (empty in the
+  bench, different for most questions on a real memory). The run id and "Drawing on" are cheap to fix.
+  Moving recalled context to the end of the message is the only way to win most turns back, and it
+  contradicts the rule that trusted context goes first in the ordinary loop: **your decision**, with an
+  eval before and after. Side calls (titling and the like) take 4 to 7 s each and share no prefix.
+- **Run id and "Drawing on" moved out (2026-11-27).** `renderTurnNote` in `src/harness.ts` now puts them at
+  the end of the latest message, next to the time note; the envelope keeps only what holds for the whole
+  thread. Re-measured with three turns: turn 1 30.0 s, turn 2 30.9 s, **turn 3 still 30.9 s**. The envelope no
+  longer moves, but three other things in the system block do:
+  - the privacy line, once per thread, when turn 1 pins it local ("normal" becomes "private");
+  - the running summary of the conversation, which `opts.context` carries and which changes every turn;
+  - the "calls the broker has already refused" list (the friction line above), also in `opts.context`.
+  So no later turn is cheap until `opts.context` moves to after the history. That is the open decision
+  above; this fix is a precondition for it, not a win by itself.
+- **Recalled context moved after the history (2026-11-27, Andrew's yes).** `buildContext` in `src/runner.ts`
+  returns `standing` (the profile; the runner adds project, workspace and unit instructions, the code map
+  and the write_file note) for the system block, and `turn` (memories, recipes, lessons, earlier threads,
+  refused calls, earlier images, the running summary, the history background), which `src/agent.ts` sends
+  as one user-role message after the history that says AgentSpine wrote it (the local model refuses a
+  system message after a user turn). First a direct test: a shared system message with a different message
+  after it started in 1.5 s, 49.4 s cold, so the host does reuse up to a message boundary.
+  - **Eval** (`bench/h1-context-eval.mjs`, 7 invented cases x 3, scored by code, each case with the same
+    blocks in both places): before 18/21, after 20/21. Both 3/3 on using a memory, the running summary, a
+    lesson and an earlier thread, on the profile outvoting an older memory, and on not treating background
+    as the request. Not retrying a refused call: before 0/3, after 2/3. A first run was spoiled by the
+    model host wedging under timed-out requests (each keeps generating after the client gives up); the
+    `standard` server needed a restart.
+  - **Thread, re-measured:** turn 1 29.3 s, turn 2 30.9 s, **turn 3 1.7 s** (was 30.9 s). Turn 2 still pays
+    once, because the privacy line flips when turn 1 pins the thread local. Left: that once-per-thread
+    flip, the image toggle once per thread, and the Mini itself, where none of this has been measured.
 
 ### H2. Recipes are revised from use, not only created (Code; extends SL4b)
 
