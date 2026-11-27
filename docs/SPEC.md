@@ -570,7 +570,8 @@ is to keep it.
 2. ~~**Push notifications** (#3 push half)~~ — ✅ done (`src/notify.ts`, ntfy + Mac fallback).
 3. ~~**API auth + remote approval** (#3 rest)~~ — ✅ done. API auth via `DASHBOARD_TOKEN`
    (enforced by a refusal to bind non-localhost without it; see MIGRATION §7), and single-purpose
-   approval tokens wired to the confirmations endpoints with rate limiting.
+   approval tokens wired to the confirmations endpoints with rate limiting. With no token, the API also
+   refuses a non-localhost Host and another site's POST (`src/http-guard.ts`, 2026-11-26).
 4. ~~**Watchers + `state` tool** (#2)~~ — ✅ done.
 5. ~~**More senses** (#4)~~ — ✅ done.
 6. ~~**Trust mechanisms** (#6)~~ — ✅ done.

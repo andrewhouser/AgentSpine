@@ -2144,9 +2144,11 @@ start beside R1 because its server half shares nothing with the spine.
     a source. Every field in `renderEvidence` is kept on one line, and a source must match its claim's text.
   - The person page's next 1:1 matched names as substrings; it now uses the spine's whole-word match.
   - The meeting audio route now sends `Cache-Control: no-store`. A fixed memory is now local-only.
-  - Not fixed, yours: with `DASHBOARD_TOKEN` empty (the localhost default) any web page can send a plain POST to
-    any route, approvals included. That predates section 15. Setting a token closes it; requiring JSON or
-    checking `Origin` would too.
+  - Fixed 2026-11-26 (it predated section 15): with `DASHBOARD_TOKEN` empty (the localhost default) any web page
+    could send a plain POST to any route, approvals included, or rebind its name to 127.0.0.1 and read the API.
+    `src/http-guard.ts` now requires a localhost Host header with no token, and refuses a change from another
+    site's `Origin` or `Sec-Fetch-Site: cross-site` with a 403; with a token set it steps aside. Test:
+    `http-guard`; checked against a live scratch server (apps and the web client pass, the rest get 403).
 
 Yours to decide:
 - The menu after R0: which of today's twelve places stay.

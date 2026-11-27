@@ -2427,6 +2427,12 @@ Drafts are unchanged otherwise: nothing is sent.
 
 ## Security notes
 
+- **With no `DASHBOARD_TOKEN`** the server binds only to localhost, and since 2026-11-26 it also
+  refuses browser requests from other sites (`src/http-guard.ts`). Any web page could otherwise send
+  a plain POST to `127.0.0.1:8787` and approve a waiting action, or rebind its own name to 127.0.0.1
+  and read the API. So with no token the API answers only to a localhost Host header, and a POST,
+  PATCH or DELETE carrying another site's `Origin` (or `Sec-Fetch-Site: cross-site`) gets a 403. The
+  apps, curl and the web client pass. With a token set the token is the guard and this steps aside.
 - Cloud is **off** unless `OPENAI_API_KEY` is set. Route private context with
   `sensitivity:"private"` to guarantee it stays on the local model.
 - **Cloud token caps.** When the cloud is on, a stuck unattended loop is the one thing that costs

@@ -132,6 +132,7 @@ import { prefsForClient } from "./headsup/prefs-view.ts";
 import { enableWatch } from "./headsup/watch/enable.ts";
 import { withdrawReminders } from "./headsup/reminders-store.ts";
 import { startSequence } from "./headsup/sequence.ts";
+import { crossSiteRefusal } from "./http-guard.ts";
 import { sweepDueCards } from "./study/sweep.ts";
 import { clientView, outreachTask, parsePastedList, rankProspects } from "./clients/prospects.ts";
 import { deleteClient, findClient, fmtMinutes, listClients, listTime, setClientAudit, timeReport, upsertClient } from "./clients/store.ts";
@@ -481,6 +482,16 @@ const handle = async (req: http.IncomingMessage, res: Res): Promise<void> => {
 
   const ip = clientIp(req);
   if (!rateOk(ip, "api")) return sendJson(res, 429, { error: "rate limited" });
+
+  // With no token, a browser page on another site must not reach the API (src/http-guard.ts says why).
+  const refusal = crossSiteRefusal({
+    host: req.headers.host,
+    method: m,
+    origin: req.headers.origin,
+    secFetchSite: req.headers["sec-fetch-site"] as string | undefined,
+    tokenSet: TOKEN !== "",
+  });
+  if (refusal) return sendJson(res, 403, { error: refusal });
 
   /**
    * Auth, in two forms.
