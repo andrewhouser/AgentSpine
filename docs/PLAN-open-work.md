@@ -1561,6 +1561,11 @@ back; either way the numbers are the rule.) The server's cached-token count is n
   - **Thread, re-measured:** turn 1 29.3 s, turn 2 30.9 s, **turn 3 1.7 s** (was 30.9 s). Turn 2 still pays
     once, because the privacy line flips when turn 1 pins the thread local. Left: that once-per-thread
     flip, the image toggle once per thread, and the Mini itself, where none of this has been measured.
+- **Privacy flip fixed (2026-11-27).** The privacy line and the tier moved from the envelope to the turn note
+  (`renderTurnNote`), and the capability list no longer adds "use the cloud for this run (it is private)", so
+  a thread that turn 1 pins local keeps the same system block. Re-measured: turn 1 29.1 s, **turn 2 1.8 s**
+  (was 30.9 s), turn 3 1.8 s. Only the first turn of a thread now pays the prefill. Left: the image toggle,
+  once per thread, and the Mini.
 
 ### H2. Recipes are revised from use, not only created (Code; extends SL4b)
 
@@ -1670,7 +1675,8 @@ of CP3's decision.
 ### Sequence and decisions
 
 Order: H1's measurement first, since it is small and the prefix is the slowest thing on the model host. H6 and
-H4 next, both plain code. H2 after SL1 has switched learning on, since revising recipes means nothing until
+H4 next, both plain code. (As of 2026-11-27, H1, H4, H5 and H6 are built; what is left of them is the Mini, H1's
+image toggle (the privacy flip was fixed the same day), and H4's clients not showing where a match was found.) H2 after SL1 has switched learning on, since revising recipes means nothing until
 recipes are recalled in real use. H3 waits on 6.0's numbers. H5 is LP3. H7 waits on CP3.
 
 Open decisions for you:

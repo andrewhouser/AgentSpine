@@ -684,7 +684,6 @@ const runAgentLoop = async (
         // must not move with `notify` either.
         capabilities: summarizeCapabilities(Object.keys(listed), policy, {
           availability: (name) => listed[name]?.available?.(policy).allowed,
-          cloudPrivateBlocked: Boolean(opts.startPrivate || opts.harness.private),
           conversational,
         }),
         tools: Object.keys(listed),
@@ -696,7 +695,7 @@ const runAgentLoop = async (
     { role: "system", content: system(listed, conversational) },
     // The envelope leads the extra context: it is the one place the run states what it is, so it
     // comes straight after the stable prompt and shows up in the trace like any other message.
-    ...(harness ? [{ role: "system", content: renderEnvelope(harness, opts.startPrivate ?? false) } as Msg] : []),
+    ...(harness ? [{ role: "system", content: renderEnvelope(harness) } as Msg] : []),
     ...(opts.context ?? []).map((content): Msg => ({ role: "system", content })),
     ...(opts.history ?? []),
     ...(opts.turnContext?.length ? [{ role: "user", content: turnContextMessage(opts.turnContext) } as Msg] : []),
@@ -704,7 +703,7 @@ const runAgentLoop = async (
     // than joining the trusted system context above. See AgentOpts.knowledge.
     ...(opts.knowledge ? [{ role: "user", content: opts.knowledge } as Msg] : []),
     // Everything that changes per turn goes last, after the goal (H1: the host reuses only an exact prefix).
-    { role: "user", content: `${goal}${pushNote(tools, listed)}\n\n${harness ? `${renderTurnNote(harness)} ` : ""}${timeNote()}` },
+    { role: "user", content: `${goal}${pushNote(tools, listed)}\n\n${harness ? `${renderTurnNote(harness, opts.startPrivate ?? false)} ` : ""}${timeNote()}` },
   ];
 
   const maxSteps = opts.maxSteps ?? MAX_STEPS;

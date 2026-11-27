@@ -83,11 +83,13 @@ console.log("\nTHE ENVELOPE");
   check("a chat that trusts drafts and schedules says they run at once", chatTrusted.can.some((x) => x.includes("this chat trusts drafts")) && chatTrusted.can.some((x) => x.includes("create schedules at once")), true);
   const unattended = h.summarizeCapabilities(["draft", "schedule_create"], trustPolicy, { cloudPrivateBlocked: false, conversational: false });
   check("an unattended run can only propose schedules", unattended.can.some((x) => x.startsWith("propose schedule changes")), true);
-  check("a normal run is not described as private", text.includes("Privacy: normal"), true);
+  check("a normal run is not described as private", note.includes("Privacy: normal"), true);
+  check("H1: privacy and tier are not in the envelope", text.includes("Privacy:") || text.includes("Sized to"), false);
 
-  const priv = h.renderEnvelope({ ...chat, private: true }, false);
+  const priv = h.renderTurnNote({ ...chat, private: true }, false);
   check("a private run says it is local and why the tier differs", priv.includes("Privacy: private") && priv.includes("running on the local model because it is private"), true);
-  check("pinned mid-run reads the same as private", h.renderEnvelope(chat, true).includes("Privacy: private"), true);
+  check("pinned mid-run reads the same as private", h.renderTurnNote(chat, true).includes("Privacy: private"), true);
+  check("H1: a thread that becomes private keeps the same envelope", h.renderEnvelope({ ...chat, private: true }), text);
 
   const job = h.renderEnvelope(h.buildHarnessContext({ kind: "schedule", preApproved: true, runId: 9, tier: "standard", tools: [] }), false);
   check("an unattended run names the ledger and standing approval", job.includes("run ledger") && job.includes("Standing approval"), true);
@@ -245,7 +247,7 @@ console.log("\nS3. THE CAPABILITY SUMMARY, FROM THE EFFECTIVE POLICY");
   const proj = h.summarizeCapabilities(all, narrowed, { cloudPrivateBlocked: true });
   check("a project that shares no domain says the browser is unavailable there", proj.cannot.some((x) => x.includes("this project allows no domain")), true);
   check("a narrowing only ever removes a capability from can", proj.can.every((x) => on.can.includes(x)), true);
-  check("a private run says the cloud is out", proj.cannot.some((x) => x.includes("cloud")), true);
+  check("H1: the capability list does not change when a run is private", proj.cannot.some((x) => x.includes("cloud")), false);
 
   const helper = h.summarizeCapabilities(["web_search"], open, { cloudPrivateBlocked: false });
   check("a helper is told only about the tools it can see", helper.can, ["search the web"]);
