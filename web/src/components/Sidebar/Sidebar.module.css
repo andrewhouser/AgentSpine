@@ -18,6 +18,11 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+
+  /* Only Recent shrinks, so pinned places, an open More list and the footer can together
+     be taller than a short window (up to 8 pinned since f76b712). The menu then scrolls on
+     its own instead of spilling past the bottom, where Settings was out of reach. */
+  overflow-y: auto;
 }
 
 .head {

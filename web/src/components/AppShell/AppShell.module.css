@@ -1,7 +1,11 @@
 .shell {
   display: flex;
   height: 100%;
-  overflow: hidden;
+
+  /* clip, not hidden: a hidden box can still be scrolled by code. When the sidebar grew
+     taller than the window (2026-11-27: More open, 874 px of menu in 671 px), the chat's
+     scrollIntoView on a new answer scrolled this box and lifted the whole app 203 px. */
+  overflow: clip;
   position: relative;
 }
 
