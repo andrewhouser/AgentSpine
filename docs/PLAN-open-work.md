@@ -19,10 +19,11 @@ section 10's LP3 and CP3 and section 4a's Phase 6. Section 14 (added 2026-11-26:
 about Hermes Agent, each one chosen by you) is decided, so it is work and not a proposal; its own "Sequence and
 decisions" gives the order. Section 15 (added 2026-11-26: the spine, a redesign around one line through the day
 and the engineering manager's work) is decided as the direction and proposed in its order; each task is marked
-for the model it needs.
+for the model it needs. Section 16 (added 2026-11-27: autonomy, and where the security posture costs it) is proposed
+and not placed; two of its items reopen settled rules and wait on a recorded decision.
 
 Section numbers are stable on purpose, because code comments and other docs point at them: 0, 8, 9, 10, 11, 12,
-13, 14 and 15 are new, and 1 to 7 and 4a are as before.
+13, 14, 15 and 16 are new, and 1 to 7 and 4a are as before.
 
 How to read the labels: **You** means it needs the Mini, a device, a real account or your decision. **Code**
 means it can be done in the repo and tested there. **Both** means code first, then a check by you.
@@ -1898,6 +1899,17 @@ Open decisions for you, each with the default the build will take:
   it came from, assembled by code from reviewed claims like every other brief (section 8, K6). It would follow
   U5 and U6. Say if you want it.
 
+Carried over from `HANDOFF.md` when it was deleted on 2026-11-27 (it was the working note for the 2026-11-26
+build; its steps are done and its other decisions are recorded where they belong: the clock under H1, forgetting
+a date under section 3 H8, the bundle ids in section 11, the builder's clone under SC7):
+- `memory_save` from an unattended run is recalled by later runs without anyone reviewing it. Proposed: hold it
+  for the weekly review. Not built.
+- U9: an accepted booking has no cancel button, and a booking moved midday can still fire its old reminder until
+  the next morning read. Say whether either is worth building.
+- U7: replies are drafted from the 300-character preview, never the body. Say if that is too thin once it has
+  run on real mail.
+- U6: a client's project cannot be set from any screen, so a client's commitments list stays empty until one can.
+
 ---
 
 ## 15. The spine: one line through the day, built for an engineering manager (added 2026-11-26)
@@ -1929,7 +1941,7 @@ which way a commitment runs (who owes whom), a use count on a memory, a place to
 run time (modes are `.env` today), and any page for a person. Not checked: whether audio is still kept when a
 quote is played back (`MEETING_KEEP_AUDIO_HOURS` prunes it), and whether a claim links to its segment.
 
-**Who does what.** Each task is marked for the model it needs, as HANDOFF.md did:
+**Who does what.** Each task is marked for the model it needs, as the 2026-11-26 build's handoff note did:
 **[Sonnet]** mechanical and fully specified; **[Opus]** needs the design understood; **[Fable]** a security or
 privacy judgement. A smaller model that finds itself changing a gate file, loosening a test or widening what
 leaves the machine stops and writes down what it found.
@@ -2243,7 +2255,7 @@ On the Mini, after `update.sh` with `0b82ac3` (R0 to R10, the security fixes, nt
 Order: R0, then R3 (so what is already built can be seen), R1, R2, R7, R4 with R5, R8, R6, R9, R10. R7 can
 start beside R1 because its server half shares nothing with the spine.
 
-- [Fable] A security read of each item before it ships, in the manner of HANDOFF.md step 7, and of the whole
+- [Fable] A security read of each item before it ships, in the manner of the 2026-11-26 build's (the gates, then each new surface), and of the whole
   section at the end. R2's "why", R3's mode store and R7's evidence rules are read before they are built.
 - **Security read of R0 to R9, 2026-11-26** (two independent reads of `4918333..18ba444`). Fixed, each with a test:
   - The card said "Nothing leaves this machine" for tools that send but declare no `outgoingText` (an Instagram
@@ -2273,6 +2285,78 @@ Yours to decide:
 - Whether work material from the day job ever sits in the same database as personal mail and clients, or in
   a second database on the work machine.
 - R10: any new Xcode target.
+
+---
+
+## 16. Autonomy: where the security posture costs it, and what to change (added 2026-11-27)
+
+Asked 2026-11-27: has the security posture, right when the project began, started to hold back an agent that acts
+for you without being asked? Answered from this plan and `CLAUDE.md`; the broker and the mode code were not read
+for it, so each item below starts by reading what is there. **Proposed and not placed in the priority order;
+nothing here is built.** Labels are local to this section: A1 to A6.
+
+**The finding.** Mostly no. What holds autonomy back today is that the proactive features are built, off, and
+have never run live (section 1; check-in, Heads-up, the outbox, inbox sorting, the learners). Until they run
+there is no count of which approvals were friction and which caught something, and loosening a gate without
+that count is a guess.
+
+**Not changing, because they are what make loosening elsewhere safe.** An agent that reads your mail, holds
+private material and can act outward is the case prompt injection is aimed at, so these matter more as it does
+more by itself:
+- No tool writes `policy.json`, `modes.json`, `profile.md`, `goals.md` or `agents/*.md`.
+- Outside content is tagged and never becomes a run's goal.
+- An unattended run cannot write standing work.
+- The Google write token has no permanent delete; a public write is approved by its exact content.
+
+### A1. Switch on what is built (You, on the Mini)
+
+Section 1, in its order: check-in and Heads-up to `log`, then `push`; the outbox; `INBOX_SORT_MODE`. The largest
+gain, and no code. A2 and A3 read the approval history this produces.
+
+### A2. Stop asking for a kind you always approve (Code; all three clients)
+
+R2's "Always allow this" already posts the promoter's proposal (`src/learn/promote.ts`), one exact shape at a
+time. Read first what shapes it proposes today. Then: when you have approved a kind of reversible card unchanged
+N times (archive, label, an all-day event, a task from a commitment), Today offers "stop asking for this kind",
+and the weekly review lists what now runs unasked, with Undo. Code owns N and the list of kinds that can ever
+qualify. Never offered for an irreversible or outward call, an `alwaysConfirm` call, or a run that read outside
+content. [Fable] for the rule and its tests; [Opus] for the screens.
+
+### A3. One card for many (Code; all three clients)
+
+Fourteen archives from one run are one card that lists all fourteen, with each row removable, not fourteen cards.
+The approval is still of the exact rows shown. Reversible tier only. [Fable]: the card must not be able to hide a
+row, and a row added after the card was read voids it.
+
+### A4. A narrow send (Decision first; reopens SPEC section 5)
+
+Today nothing sends mail, and that stays the rule for anything derived from outside content. Proposed for you to
+decide: a send only to yourself, or to an allowlist you keep in `policy.json`, only from a run that read no
+outside content, with the text on the card unless A2 has cleared that kind. It needs a new recorded decision and
+a third, separate token scope; without your yes it is not started.
+
+### A5. Which private sources may reach the cloud tier (Decision; reopens the local-first rule)
+
+A privacy rule, not a security one, and probably the largest limit on quality: any run that touches mail,
+calendar, files or meetings is pinned to the local model. Proposed for you to decide: a per-source opt-in you set
+(for example calendar yes; mail, meetings and day-job material never), read by `src/sensitivity.ts`, default
+everything local as now. Nothing changes without your choice per source.
+
+### A6. An unattended run finishes what it can (Code, after reading what happens today)
+
+When a scheduled run meets a gate, it should queue that one call, finish the rest, and say on Today what is
+waiting and why. `test/unattended-handoff.test.mjs` covers some of this; read it and `src/runner.ts` first, and
+write down what already holds before changing anything.
+
+### Sequence and decisions
+
+Order: A1, then A6 and A3 (plain code, no rule changes), then A2 once a few weeks of approvals exist. A4 and A5
+wait on you.
+
+Yours to decide:
+- A2: N, and which kinds may qualify. Proposed: 10 unchanged approvals; archive, label, all-day events and tasks.
+- A4: whether any send exists. Proposed: yourself only, to start.
+- A5: which sources, if any. Proposed: none until A1 shows the local model is the limit.
 
 ---
 
