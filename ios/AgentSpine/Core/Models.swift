@@ -527,8 +527,9 @@ struct PushTestResult: Codable {
 
 /// The API speaks ISO-8601 throughout, from `new Date().toISOString()`, so it always carries
 /// fractional seconds and a `Z`. One formatter, configured once — `ISO8601DateFormatter` is
-/// not free to create and a thread view parses a few hundred of these.
-enum SpineDate {
+/// not free to create and a thread view parses a few hundred of these. `nonisolated` so row
+/// builders off the main actor can format dates; `ISO8601DateFormatter` is thread-safe.
+nonisolated enum SpineDate {
     private static let formatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -2282,8 +2283,9 @@ struct KnowledgeHitEvidence: Codable, Hashable {
     }
 }
 
-/// Narrowing for a knowledge search. Nil fields are left off the request.
-struct KnowledgeSearchFilters: Hashable {
+/// Narrowing for a knowledge search. Nil fields are left off the request. `nonisolated` because
+/// the project defaults types to the main actor and `APIClient` builds one as a default argument.
+nonisolated struct KnowledgeSearchFilters: Hashable {
     var projectID: Int?
     var personID: Int?
     var teamID: Int?
@@ -2639,8 +2641,9 @@ struct WouldHave: Codable, Hashable, Identifiable {
 }
 
 /// The dial screen's sentences. Mirrors `web/src/lib/dials.ts`; test/dials-screen.test.mjs runs
-/// one list of cases through both and compares every line.
-enum DialWords {
+/// one list of cases through both and compares every line. Pure string work, so `nonisolated`:
+/// passing `levelLabel` to `map` otherwise warned about a main-actor call.
+nonisolated enum DialWords {
     static func levelLabel(_ level: String) -> String {
         level == "off" ? "Off" : level == "watch" ? "Watch" : "On"
     }

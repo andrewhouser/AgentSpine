@@ -1125,7 +1125,8 @@ struct MeetingCloseoutView: View {
     }
 
     /// An ISO due time as the day to show. Falls back to the text itself when it is not a time.
-    private static func dueDay(_ iso: String) -> String {
+    /// `nonisolated`: `ForEach`'s row builder is not main-actor, and this only formats text.
+    nonisolated private static func dueDay(_ iso: String) -> String {
         SpineDate.parse(iso).map { $0.formatted(date: .abbreviated, time: .omitted) } ?? iso
     }
 
